@@ -45,7 +45,7 @@ Set `ARTIFACT_SERVER_SITE_ORIGIN` to the public canonical origin and
 `PUBLIC_ARTIFACT_SERVER_APP_URL` to the trusted application origin, then run:
 
 ```sh
-pnpm --filter @artifact-server/site deploy
+pnpm --filter @artifact-server/site run deploy
 ```
 
 Nimbus is pre-1.0, so its package is pinned exactly. Review generated changes,
