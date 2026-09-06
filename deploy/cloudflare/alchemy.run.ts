@@ -2,13 +2,15 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import type * as Redacted from "effect/Redacted";
 
 import {
   cloudflareDeploymentDocumentConfig,
   parseCloudflareDeploymentInput,
 } from "./src/deployment-input.ts";
-import { defineCloudflareFoundation } from "./src/stack.ts";
+import {
+  type CloudflareAuthenticationSecrets,
+  defineCloudflareFoundation,
+} from "./src/stack.ts";
 
 export default Alchemy.Stack(
   "artifact-server-cloudflare",
@@ -20,15 +22,25 @@ export default Alchemy.Stack(
     const document = yield* cloudflareDeploymentDocumentConfig;
     const input = yield* parseCloudflareDeploymentInput(document);
     const apiToken = yield* Config.redacted("ARTIFACT_SERVER_API_TOKEN");
-    let workOsApiKey: Redacted.Redacted | undefined;
+    let authenticationSecrets: CloudflareAuthenticationSecrets = {};
     if (input.workosApiKeySecretRef !== undefined) {
-      workOsApiKey = yield* Config.redacted("ARTIFACT_SERVER_WORKOS_API_KEY");
+      authenticationSecrets = {
+        ...authenticationSecrets,
+        workOsApiKey: yield* Config.redacted("ARTIFACT_SERVER_WORKOS_API_KEY"),
+      };
+    }
+    if (input.oidcClientSecretRef !== undefined) {
+      authenticationSecrets = {
+        ...authenticationSecrets,
+        oidcClientSecret:
+          yield* Config.redacted("ARTIFACT_SERVER_OIDC_CLIENT_SECRET"),
+      };
     }
     return yield* defineCloudflareFoundation(
       input,
       apiToken,
       undefined,
-      workOsApiKey,
+      authenticationSecrets,
     );
   }),
 );

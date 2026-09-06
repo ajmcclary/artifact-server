@@ -12,6 +12,7 @@
     "/docs/deploy",
     "/docs/deploy/aws",
     "/docs/deploy/cloudflare",
+    "/docs/deploy/cloudflare-access",
     "/docs/deploy/compose",
     "/docs/deploy/google-cloud",
     "/docs/deploy/kubernetes",

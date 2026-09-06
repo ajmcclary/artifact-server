@@ -52,6 +52,39 @@ describe("shared cloud deployment contract", () => {
     });
   });
 
+  test("accepts complete Cloudflare OIDC configuration", async () => {
+    const [confidentialClient, publicClient] = await Promise.all([
+      Effect.runPromise(parseCloudDeploymentInput(cloudflareInput({
+        oidcClientId: "artifact-server-cloudflare",
+        oidcClientSecretRef:
+          "cloudflare-secrets-store://artifact-server-oidc-client-secret",
+        oidcIssuer:
+          "https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-id",
+        oidcScopes: "openid email profile",
+      }))),
+      Effect.runPromise(parseCloudDeploymentInput(cloudflareInput({
+        oidcClientId: "artifact-server-public-client",
+        oidcIssuer: "https://identity.example.com",
+      }))),
+    ]);
+
+    expect(confidentialClient).toMatchObject({
+      oidcClientId: "artifact-server-cloudflare",
+      oidcClientSecretRef:
+        "cloudflare-secrets-store://artifact-server-oidc-client-secret",
+      oidcIssuer:
+        "https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-id",
+      oidcScopes: "openid email profile",
+      target: "cloudflare",
+    });
+    expect(publicClient).toMatchObject({
+      oidcClientId: "artifact-server-public-client",
+      oidcIssuer: "https://identity.example.com",
+      target: "cloudflare",
+    });
+    expect(publicClient).not.toHaveProperty("oidcClientSecretRef");
+  });
+
   test.each([
     ["floating image tag", awsInput({imageReference: "artifact-server:latest"})],
     ["same registrable content domain", awsInput({
@@ -80,6 +113,22 @@ describe("shared cloud deployment contract", () => {
     })],
     ["incomplete WorkOS configuration", awsInput({
       workosClientId: "client_01",
+    })],
+    ["incomplete Cloudflare OIDC configuration", cloudflareInput({
+      oidcScopes: "openid email profile",
+    })],
+    ["Cloudflare OIDC configured beside WorkOS", cloudflareInput({
+      oidcClientId: "artifact-server-cloudflare",
+      oidcIssuer:
+        "https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-id",
+      workosApiKeySecretRef: "cloudflare-secrets-store://artifact-server-workos",
+      workosClientId: "client_01",
+      workosIssuer: "https://artifact-server.authkit.example",
+    })],
+    ["Cloudflare OIDC fields on AWS", awsInput({
+      oidcClientId: "artifact-server-cloudflare",
+      oidcIssuer:
+        "https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-id",
     })],
     ["credential-bearing telemetry URL", awsInput({
       otlpEndpoint: "https://collector:password@telemetry.example.org/v1/traces",
