@@ -16,6 +16,12 @@ const WEB_ASSET_DIRECTORY = new URL("../../../dist/web", import.meta.url).pathna
 export type CloudflareZoneResolver =
   typeof Cloudflare.Zone.resolveZoneId;
 
+/** Secret values supplied to the Cloudflare authentication adapters. */
+export interface CloudflareAuthenticationSecrets {
+  readonly oidcClientSecret?: Redacted.Redacted;
+  readonly workOsApiKey?: Redacted.Redacted;
+}
+
 const accountMismatch = (
   expectedAccountId: string,
   actualAccountId: string,
@@ -112,7 +118,7 @@ export const defineCloudflareFoundation = Effect.fn(
   apiToken: Redacted.Redacted,
   resolveZoneId: CloudflareZoneResolver =
     Cloudflare.Zone.resolveZoneId,
-  workOsApiKey?: Redacted.Redacted,
+  authenticationSecrets: CloudflareAuthenticationSecrets = {},
 ) {
   const manifest = buildCloudflareDeploymentManifest(input);
   const credentials = yield* yield* Cloudflare.CloudflareEnvironment;
@@ -174,17 +180,44 @@ export const defineCloudflareFoundation = Effect.fn(
     input.workosApiKeySecretRef !== undefined &&
     input.workosClientId !== undefined && input.workosIssuer !== undefined
   ) {
-    if (workOsApiKey === undefined) {
+    if (authenticationSecrets.workOsApiKey === undefined) {
       return yield* Effect.die(
         new Error("Configured WorkOS authentication requires its deployment secret."),
       );
     }
     workerEnvironment = {
       ...workerEnvironment,
-      ARTIFACT_SERVER_WORKOS_API_KEY: workOsApiKey,
+      ARTIFACT_SERVER_WORKOS_API_KEY: authenticationSecrets.workOsApiKey,
       ARTIFACT_SERVER_WORKOS_CLIENT_ID: input.workosClientId,
       ARTIFACT_SERVER_WORKOS_ISSUER: input.workosIssuer,
     };
+  }
+  if (input.oidcClientId !== undefined && input.oidcIssuer !== undefined) {
+    workerEnvironment = {
+      ...workerEnvironment,
+      ARTIFACT_SERVER_OIDC_CLIENT_ID: input.oidcClientId,
+      ARTIFACT_SERVER_OIDC_ISSUER: input.oidcIssuer,
+    };
+    if (input.oidcClientSecretRef !== undefined) {
+      const oidcClientSecret = authenticationSecrets.oidcClientSecret;
+      if (oidcClientSecret === undefined) {
+        return yield* Effect.die(
+          new Error(
+            "Configured OIDC authentication requires its deployment secret.",
+          ),
+        );
+      }
+      workerEnvironment = {
+        ...workerEnvironment,
+        ARTIFACT_SERVER_OIDC_CLIENT_SECRET: oidcClientSecret,
+      };
+    }
+    if (input.oidcScopes !== undefined) {
+      workerEnvironment = {
+        ...workerEnvironment,
+        ARTIFACT_SERVER_OIDC_SCOPES: input.oidcScopes,
+      };
+    }
   }
   const workerProps: Cloudflare.WorkerProps = {
     assets: {

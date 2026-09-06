@@ -106,6 +106,10 @@ The Cloudflare package additionally receives:
 | `cloudflareAccountId` | yes | Target account identifier |
 | `compatibilityDate` | yes | Exact date pinned by the package release |
 | `stateStore` | yes | `cloudflare`; local state is allowed only for individual development |
+| `oidcClientId` | OIDC browser login only | Non-secret OIDC client identifier for this installation |
+| `oidcIssuer` | OIDC browser login only | Exact HTTPS issuer whose discovery document and ID tokens Artifact Server verifies |
+| `oidcClientSecretRef` | no | Provider secret reference for a confidential client; omit for a public PKCE client |
+| `oidcScopes` | no | Space-separated scopes; defaults to `openid email profile` |
 
 Alchemy and the Cloudflare compatibility date are exact package dependencies.
 Team and CI deployments use `Cloudflare.state()`; the account-level state
@@ -175,8 +179,10 @@ provider secret manager. They are not plain stack outputs or task-definition
 values. The direct-cloud Pulumi packages inject the API token, database URL, and
 optional WorkOS key from their secret manager and expose typed WorkOS inputs
 only; generic OIDC runs on those deployments through container environment
-variables, with typed OIDC inputs a scoped follow-up. Compose and Kubernetes use
-the file variants below and support either browser-login family.
+variables, with typed OIDC inputs a scoped follow-up. The Cloudflare package
+exposes typed OIDC inputs and binds an optional client secret as a Worker
+secret. Compose and Kubernetes use the file variants below and support either
+browser-login family.
 
 A package supplies one browser-login family or neither. The WorkOS variables and
 the generic OIDC variables are mutually exclusive, and each family is

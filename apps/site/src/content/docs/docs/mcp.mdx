@@ -58,7 +58,15 @@ Add the exact MCP address to the client:
 https://artifacts.example.com/mcp
 ```
 
-The client opens the selected identity provider. Complete browser authorization. Then return to the client. The access token is valid only for that exact `/mcp` resource. A token for another installation or application resource is not valid.
+When the server advertises browser authorization, the client opens the selected
+identity provider. Complete browser authorization, then return to the client.
+The access token is valid only for that exact `/mcp` resource. A token for
+another installation or application resource is not valid.
+
+Generic OIDC browser login, including Cloudflare Access, does not by itself add
+MCP browser authorization. For those installations, an administrator issues a
+scoped user or service API key under **Settings → API keys**. Add the key through
+the MCP client's secret input. Do not put it in a project file.
 
 ## Install the Artifact Server skill
 

@@ -192,6 +192,10 @@ export const CloudflareCloudDeploymentInput = Schema.Struct({
   cloudflareAccountId: identifier,
   cloudflareArtifactsNamespace: Schema.optionalKey(cloudflareArtifactsNamespace),
   compatibilityDate,
+  oidcClientId: Schema.optionalKey(identifier),
+  oidcClientSecretRef: Schema.optionalKey(providerResourceIdentifier),
+  oidcIssuer: Schema.optionalKey(httpsUrl),
+  oidcScopes: Schema.optionalKey(nonEmptyString),
   stage: identifier,
   stateStore: Schema.Literals(["cloudflare", "local"]),
   target: Schema.Literal("cloudflare"),
@@ -271,6 +275,33 @@ export const CloudDeploymentInput = uncheckedCloudDeploymentInput.check(
         issue: "WorkOS issuer, client, and secret reference must be configured together",
         path: ["workosClientId"],
       });
+    }
+    if (input.target === "cloudflare") {
+      const oidcPresence = [
+        input.oidcClientId,
+        input.oidcClientSecretRef,
+        input.oidcIssuer,
+        input.oidcScopes,
+      ].map((value) => value !== undefined);
+      const oidcConfigured = oidcPresence.some((present) => present);
+      if (
+        oidcConfigured &&
+        (input.oidcClientId === undefined || input.oidcIssuer === undefined)
+      ) {
+        issues.push({
+          issue:
+            "OIDC issuer and client must be configured together; secret reference and scopes are optional",
+          path: ["oidcClientId"],
+        });
+      }
+      if (
+        oidcConfigured && workOsPresence.some((present) => present)
+      ) {
+        issues.push({
+          issue: "WorkOS and OIDC browser-login settings are mutually exclusive",
+          path: ["oidcClientId"],
+        });
+      }
     }
     if (
       input.target === "cloudflare" &&

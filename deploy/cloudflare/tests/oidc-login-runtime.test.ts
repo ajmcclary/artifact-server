@@ -26,7 +26,8 @@ let issuer: Server;
 beforeAll(async () => {
   issuer = await startDiscoveryStub();
   const address = assignedAddressSchema.parse(issuer.address());
-  issuerOrigin = `http://127.0.0.1:${address.port}`;
+  issuerOrigin =
+    `http://127.0.0.1:${address.port}/cdn-cgi/access/sso/oidc/${clientId}`;
 }, 30_000);
 
 afterAll(async () => {
@@ -36,7 +37,7 @@ afterAll(async () => {
 });
 
 describe("Cloudflare Worker browser-login provider", () => {
-  it("starts a generic OIDC login from the configured issuer", async () => {
+  it("starts generic OIDC login from a path-based issuer", async () => {
     const directory = await mkdtemp(join(tmpdir(), "artifact-server-oidc-"));
     const worker = await startWorker(directory, {
       ARTIFACT_SERVER_OIDC_CLIENT_ID: clientId,
@@ -48,8 +49,10 @@ describe("Cloudflare Worker browser-login provider", () => {
       });
       expect(started.status).toBe(302);
       const location = new URL(started.headers.get("location") ?? "");
-      expect(location.origin).toBe(issuerOrigin);
-      expect(location.pathname).toBe("/authorize");
+      expect(location.origin).toBe(new URL(issuerOrigin).origin);
+      expect(location.pathname).toBe(
+        `/cdn-cgi/access/sso/oidc/${clientId}/authorize`,
+      );
       expect(location.searchParams.get("client_id")).toBe(clientId);
       expect(location.searchParams.get("redirect_uri"))
         .toBe(`${origin}/auth/callback`);
@@ -122,16 +125,18 @@ describe("Cloudflare Worker browser-login provider", () => {
 
 function startDiscoveryStub(): Promise<Server> {
   const server = createServer((request, response) => {
-    if (request.url !== "/.well-known/openid-configuration") {
+    const issuerPath = `/cdn-cgi/access/sso/oidc/${clientId}`;
+    if (request.url !== `${issuerPath}/.well-known/openid-configuration`) {
       response.writeHead(404).end();
       return;
     }
     const host = request.headers.host ?? "127.0.0.1";
+    const requestIssuer = `http://${host}${issuerPath}`;
     const document = {
-      authorization_endpoint: `http://${host}/authorize`,
-      issuer: `http://${host}`,
-      jwks_uri: `http://${host}/jwks`,
-      token_endpoint: `http://${host}/token`,
+      authorization_endpoint: `${requestIssuer}/authorize`,
+      issuer: requestIssuer,
+      jwks_uri: `${requestIssuer}/jwks`,
+      token_endpoint: `${requestIssuer}/token`,
     };
     response.writeHead(200, {"content-type": "application/json"});
     response.end(JSON.stringify(document));

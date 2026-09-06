@@ -13,7 +13,8 @@ Cloudflare is Artifact Server's live-qualified direct-cloud target. The deployme
 | Durable records | D1 |
 | Artifact and staged-upload bytes | R2 |
 | Provisioning and lifecycle | Alchemy |
-| Hosted browser and MCP authorization | WorkOS |
+| Browser authentication | WorkOS or generic OIDC, including Cloudflare Access |
+| Hosted MCP browser authorization | WorkOS |
 | Optional private Git history | Cloudflare Artifacts |
 
 ## Current release boundary
@@ -58,6 +59,8 @@ pnpm destroy
 ```
 
 The deployment requires a Cloudflare account, two domains, D1 and R2 bindings, identity-provider settings, and Cloudflare-hosted Alchemy state. Read `deploy/cloudflare/README.md` before you create resources.
+
+For browser sign-in managed by Cloudflare, follow [Use Cloudflare Access for sign-in](/docs/deploy/cloudflare-access/). WorkOS remains available for installations that also need its hosted MCP browser-authorization flow.
 
 ## Optional Cloudflare Artifacts history
 

@@ -17,12 +17,18 @@ sharing, and API-key services as the other deployments. The Cloudflare package
 supplies D1 repositories and direct R2 bindings instead of SQLite, Postgres, or
 an S3 client.
 
-The package accepts an Artifact Server API token and can also bind one complete
-WorkOS hosted-authentication configuration: API key secret, client ID, and
-exact AuthKit issuer. The verifier, protected-resource metadata, and browser
-login wiring are implemented. Live browser approval, refresh, revocation, and
-named-client qualification remain release gates, so this package must not yet
-be advertised as the complete hosted Artifact Server service.
+The package accepts an Artifact Server API token and exactly one browser-login
+configuration. WorkOS supplies browser login and hosted MCP authorization.
+Generic OIDC supplies browser login through a compatible provider, including
+Cloudflare Access. OIDC deployments use scoped Artifact Server API keys for
+remote MCP clients and unattended agents.
+
+The WorkOS verifier, protected-resource metadata, and browser-login wiring are
+implemented. Live browser approval, refresh, revocation, and named-client
+qualification remain release gates, so this package must not yet be advertised
+as the complete hosted Artifact Server service. The generic OIDC Worker path is
+covered locally, but a live Cloudflare Access round trip is not attached to the
+release ledger.
 
 The isolated WorkOS staging environment has CIMD, compatibility DCR, the exact
 staging MCP resource, and its callback configured. The secret-free dashboard
@@ -90,7 +96,52 @@ export ARTIFACT_SERVER_API_TOKEN="$(openssl rand -base64 32)"
 ```
 
 The parser rejects unknown fields. The parser also rejects unsafe production,
-capacity, domain, DNS, WorkOS, and deletion-protection combinations.
+capacity, domain, DNS, browser-authentication, and deletion-protection
+combinations.
+
+## Choose browser authentication
+
+Configure WorkOS or generic OIDC. Do not configure both.
+
+For WorkOS, add all three non-secret fields to the configuration document:
+
+```json
+{
+  "workosApiKeySecretRef": "cloudflare-secrets-store://artifact-server-workos",
+  "workosClientId": "client_replace_me",
+  "workosIssuer": "https://replace.authkit.app"
+}
+```
+
+The deployment process resolves the referenced secret into
+`ARTIFACT_SERVER_WORKOS_API_KEY` before it runs Alchemy.
+
+For Cloudflare Access or another OIDC provider, register this callback:
+
+```text
+https://<applicationDomain>/auth/callback
+```
+
+Then add these fields:
+
+```json
+{
+  "oidcClientId": "artifact-server",
+  "oidcClientSecretRef": "cloudflare-secrets-store://artifact-server-oidc-client-secret",
+  "oidcIssuer": "https://identity.example.com",
+  "oidcScopes": "openid email profile"
+}
+```
+
+`oidcClientSecretRef` is optional for a public PKCE client. When it is present,
+the deployment process resolves the referenced secret into
+`ARTIFACT_SERVER_OIDC_CLIENT_SECRET` before it runs Alchemy. The configuration
+document contains only the stable secret reference, never the secret value.
+
+For Cloudflare Access setup and verification, read
+[`Use Cloudflare Access for sign-in`](https://artifactserver.com/docs/deploy/cloudflare-access/).
+The checked-in starting configuration is
+[`examples/cloudflare-access.config.json`](./examples/cloudflare-access.config.json).
 
 `src/deployment-input.ts` applies Cloudflare package pins after it calls the
 shared parser in `src/deployment/index.ts`.

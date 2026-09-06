@@ -250,7 +250,7 @@ describe("Alchemy foundation plan", () => {
           hostedInput,
           Redacted.make("test-only-runtime-token-value"),
           resolveZoneId,
-          Redacted.make("test-only-workos-key-value"),
+          {workOsApiKey: Redacted.make("test-only-workos-key-value")},
         ),
       ),
       options,
@@ -279,6 +279,64 @@ describe("Alchemy foundation plan", () => {
       ),
     ).rejects.toThrow(
       "Configured WorkOS authentication requires its deployment secret.",
+    );
+  });
+
+  it("binds generic OIDC settings without WorkOS", async () => {
+    const oidcInput = {
+      ...validDeploymentInput,
+      oidcClientId: "artifact-server-cloudflare",
+      oidcClientSecretRef:
+        "cloudflare-secrets-store://artifact-server-oidc-client-secret",
+      oidcIssuer:
+        "https://team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/client-id",
+      oidcScopes: "openid email profile",
+    };
+    const resolveZoneId: CloudflareZoneResolver = ({hostname}) =>
+      Effect.succeed(
+        hostname === oidcInput.applicationDomain
+          ? oidcInput.dnsZoneIds?.application ?? ""
+          : oidcInput.dnsZoneIds?.content ?? "",
+      );
+    const scratch = Test.scratchStack(options, "oidc-auth-plan");
+    const oidcClientSecret = "test-only-oidc-client-secret-value";
+    const plan = await Test.run(
+      scratch.plan(
+        defineCloudflareFoundation(
+          oidcInput,
+          Redacted.make("test-only-runtime-token-value"),
+          resolveZoneId,
+          {oidcClientSecret: Redacted.make(oidcClientSecret)},
+        ),
+      ),
+      options,
+    );
+    const worker = Object.values(plan.resources).find(
+      ({resource}) => resource.Type === "Cloudflare.Worker",
+    );
+    const environment = worker?.resource.Props.env;
+
+    expect(environment).toMatchObject({
+      ARTIFACT_SERVER_OIDC_CLIENT_ID: oidcInput.oidcClientId,
+      ARTIFACT_SERVER_OIDC_ISSUER: oidcInput.oidcIssuer,
+      ARTIFACT_SERVER_OIDC_SCOPES: oidcInput.oidcScopes,
+    });
+    expect(environment).not.toHaveProperty("ARTIFACT_SERVER_WORKOS_CLIENT_ID");
+    expect(JSON.stringify(environment)).not.toContain(oidcClientSecret);
+
+    await expect(
+      Test.run(
+        scratch.plan(
+          defineCloudflareFoundation(
+            oidcInput,
+            Redacted.make("test-only-runtime-token-value"),
+            resolveZoneId,
+          ),
+        ),
+        options,
+      ),
+    ).rejects.toThrow(
+      "Configured OIDC authentication requires its deployment secret.",
     );
   });
 
