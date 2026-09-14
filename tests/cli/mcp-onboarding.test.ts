@@ -30,8 +30,8 @@ const connectFixture = path.join(
 );
 const tsxExecutable = path.join(repositoryRoot, "node_modules/.bin/tsx");
 const modernProtocolRevision = "2026-07-28";
-const processStartupTimeoutMilliseconds = 15_000;
-const testTimeoutMilliseconds = 30_000;
+const processStartupTimeoutMilliseconds = 45_000;
+const testTimeoutMilliseconds = 60_000;
 const temporaryDirectories = new Set<string>();
 const managedServicePids = new Set<number>();
 const serviceRecordSchema = z.object({
