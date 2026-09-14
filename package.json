@@ -25,6 +25,9 @@
       "fast-uri": "3.1.6",
       "qs": "6.16.0",
       "gaxios>uuid": "11.1.1"
+    },
+    "patchedDependencies": {
+      "undici@7.29.0": "patches/undici@7.29.0.patch"
     }
   },
   "scripts": {

@@ -15,6 +15,11 @@ overrides:
   qs: 6.16.0
   gaxios>uuid: 11.1.1
 
+patchedDependencies:
+  undici@7.29.0:
+    hash: c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e
+    path: patches/undici@7.29.0.patch
+
 importers:
 
   .:
@@ -9622,7 +9627,7 @@ snapshots:
       open: 8.4.2
       picomatch: 4.0.5
       systeminformation: 5.33.1
-      undici: 7.29.0
+      undici: 7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e)
       which: 4.0.0
       yocto-spinner: 1.2.2
 
@@ -12248,7 +12253,7 @@ snapshots:
       picomatch: 4.0.5
       react: 19.2.8
       rolldown: 1.1.5
-      undici: 7.29.0
+      undici: 7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e)
       yaml: 2.9.0
     optionalDependencies:
       '@effect/platform-node': 4.0.0-rc.110(effect@4.0.0-rc.110)(redis@6.2.1(@opentelemetry/api@1.9.1))
@@ -14888,7 +14893,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.2
-      undici: 7.29.0
+      undici: 7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e)
       workerd: 1.20260811.1
       ws: 8.21.0
       youch: 4.1.0-beta.10
@@ -16101,7 +16106,7 @@ snapshots:
       tailwind-merge: 3.6.0
       ts-morph: 26.0.0
       tsconfig-paths: 4.2.0
-      undici: 7.29.0
+      undici: 7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e)
       validate-npm-package-name: 7.0.2
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
@@ -16627,7 +16632,7 @@ snapshots:
 
   undici@6.28.0: {}
 
-  undici@7.29.0: {}
+  undici@7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e): {}
 
   undici@8.10.0: {}
 

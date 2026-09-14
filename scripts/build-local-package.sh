@@ -24,6 +24,7 @@ mkdir -p -- "$artifactserver_stage" "$artifactserver_output"
 pnpm --dir "$artifactserver_repository" build
 
 cp -- "$artifactserver_repository/package.json" "$artifactserver_stage/package.json"
+cp -R -- "$artifactserver_repository/patches" "$artifactserver_stage/patches"
 # Keep the root importer's exact dependency graph without making the staged
 # package install the deployment workspaces represented by the shared lockfile.
 awk '
@@ -67,6 +68,7 @@ rm -rf -- "$artifactserver_stage/node_modules/.pnpm"
 rm -f -- \
   "$artifactserver_stage/node_modules/.modules.yaml" \
   "$artifactserver_stage/node_modules/.pnpm-workspace-state-v1.json"
+rm -rf -- "$artifactserver_stage/patches"
 rm -- "$artifactserver_stage/pnpm-lock.yaml"
 node "$artifactserver_repository/scripts/local-package-metadata.mjs" prepare \
   "$artifactserver_repository/package.json" \
