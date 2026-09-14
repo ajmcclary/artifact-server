@@ -32,7 +32,7 @@ const minioVolume = requiredEnvironment("ARTIFACT_SERVER_HELM_MINIO_VOLUME");
 
 const kindNodeImage = "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5";
 const postgresImage = "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94";
-const minioImage = "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
+const minioImage = "docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3";
 const postgresUser = "artifactserver";
 const postgresPassword = "artifactserver-helm-integration-only";
 const postgresDatabase = "artifactserver";
