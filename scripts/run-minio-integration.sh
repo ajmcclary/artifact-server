@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-readonly minio_image="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+readonly minio_image="docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3"
 readonly container_name="artifact-server-minio-${$}-${RANDOM}"
 readonly volume_name="${container_name}-data"
 readonly access_key="artifactserver"
