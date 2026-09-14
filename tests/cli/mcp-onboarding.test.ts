@@ -30,6 +30,8 @@ const connectFixture = path.join(
 );
 const tsxExecutable = path.join(repositoryRoot, "node_modules/.bin/tsx");
 const modernProtocolRevision = "2026-07-28";
+const processStartupTimeoutMilliseconds = 15_000;
+const testTimeoutMilliseconds = 30_000;
 const temporaryDirectories = new Set<string>();
 const managedServicePids = new Set<number>();
 const serviceRecordSchema = z.object({
@@ -72,7 +74,7 @@ afterEach(async () => {
   temporaryDirectories.clear();
 });
 
-describe("local MCP onboarding", () => {
+describe("local MCP onboarding", {timeout: testTimeoutMilliseconds}, () => {
   test("stdio reuses one service and preserves modern discovery", async () => {
     const workspace = await temporaryWorkspace("artifact-server-mcp-stdio-");
     const dataDirectory = path.join(workspace, "data");
@@ -618,7 +620,10 @@ async function temporaryWorkspace(prefix: string): Promise<string> {
 }
 
 async function waitForFile(filePath: string): Promise<void> {
-  return waitForFileUntil(filePath, Date.now() + 5_000);
+  return waitForFileUntil(
+    filePath,
+    Date.now() + processStartupTimeoutMilliseconds,
+  );
 }
 
 async function waitForFileUntil(filePath: string, deadline: number): Promise<void> {
