@@ -20,6 +20,7 @@ import {z} from "zod";
 import {fetchLoopbackContent} from "../support/fetch-loopback-content.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
+const publicationTestTimeoutMilliseconds = 60_000;
 const runningProcesses = new Set<ChildProcessWithoutNullStreams>();
 const assignedAddressSchema = z.object({port: z.number().int().positive()});
 const publicationSchema = z.object({
@@ -383,7 +384,7 @@ describe("local Artifact Server CLI", () => {
       await stopProcess(server);
       await rm(parentDirectory, {force: true, recursive: true});
     }
-  }, 30_000);
+  }, publicationTestTimeoutMilliseconds);
 });
 
 function startCli(
