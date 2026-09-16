@@ -148,26 +148,13 @@ function macOsCredentialStore(
           ? Effect.succeed(false)
           : Effect.fail(error)),
     ),
-    read: (account) => runCredentialProcess({
-      arguments: [
-        "find-generic-password",
-        "-a",
-        account,
-        "-s",
-        credentialService,
-        "-w",
-      ],
-      environment,
-      executable: "/usr/bin/security",
-      input: "",
-      missingCodes: new Set([44]),
-      operation: "read",
-    }).pipe(
-      Effect.map((result) => Redacted.make(result.stdout.trim(), {
-        label: "artifact-server-cli-profile",
-      })),
-    ),
+    read: readMacOsSecret(environment),
     write: (account, secret) => runCredentialProcess({
+      // security(1) has no standard-input mode for add-generic-password. A bare -w prompts on
+      // the terminal, so a piped secret answers "password data for new item:", end-of-file
+      // answers "retype password for new item:", the two disagree, and security exits 0 having
+      // stored nothing usable. The value has to be an argument, where it is visible in the
+      // process list for the lifetime of this call.
       arguments: [
         "add-generic-password",
         "-a",
@@ -176,13 +163,53 @@ function macOsCredentialStore(
         credentialService,
         "-U",
         "-w",
+        Redacted.value(secret),
       ],
       environment,
       executable: "/usr/bin/security",
-      input: `${Redacted.value(secret)}\n`,
+      input: "",
       operation: "write",
-    }).pipe(Effect.asVoid),
+    }).pipe(
+      // Read the item back rather than trusting the exit code. A write that stores nothing
+      // still exits 0, and the CLI would otherwise record a successful login over a credential
+      // it cannot retrieve, failing on every later command as "credential is invalid".
+      Effect.flatMap(() => readMacOsSecret(environment)(account).pipe(
+        Effect.catchTag("CliCredentialStoreError", () => Effect.fail(keychainWriteLost)),
+      )),
+      Effect.flatMap((stored) => Redacted.value(stored) === Redacted.value(secret)
+        ? Effect.void
+        : Effect.fail(keychainWriteLost)),
+    ),
   };
+}
+
+const keychainWriteLost = new CliCredentialStoreError({
+  message: "The macOS keychain did not store the credential it was given.",
+  operation: "write",
+  reason: "operation_failed",
+});
+
+/** Read one secret from the macOS keychain, shared by `read` and the write read-back. */
+function readMacOsSecret(environment: NodeJS.ProcessEnv) {
+  return (account: string) => runCredentialProcess({
+    arguments: [
+      "find-generic-password",
+      "-a",
+      account,
+      "-s",
+      credentialService,
+      "-w",
+    ],
+    environment,
+    executable: "/usr/bin/security",
+    input: "",
+    missingCodes: new Set([44]),
+    operation: "read",
+  }).pipe(
+    Effect.map((result) => Redacted.make(result.stdout.trim(), {
+      label: "artifact-server-cli-profile",
+    })),
+  );
 }
 
 function linuxCredentialStore(
