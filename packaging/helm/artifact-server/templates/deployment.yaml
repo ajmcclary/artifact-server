@@ -34,6 +34,13 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "artifact-server.serviceAccountName" . }}
+      # Kubernetes injects legacy Docker-style service-link variables for every
+      # Service in the namespace. The Service here is named "artifact-server",
+      # so that produces ARTIFACT_SERVER_PORT=tcp://<clusterIP>:80, which
+      # collides with Artifact Server's own ARTIFACT_SERVER_PORT setting and
+      # makes any command that does not pass --port explicitly fail with
+      # "The port must be an integer between 0 and 65535."
+      enableServiceLinks: false
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
