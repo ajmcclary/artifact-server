@@ -1,6 +1,6 @@
 version: 1
 product: Artifact Server
-updated: "2026-08-26"
+updated: "2026-09-16"
 evidence_root: "../.."
 
 source:
@@ -2398,12 +2398,12 @@ requirements:
 
   - id: CMT-014
     kind: security
-    behavior: The review viewer executes artifact HTML only inside an opaque-origin sandboxed document that holds no credential, and comment writes happen only in the signed-in application document.
+    behavior: The Review annotation viewer executes artifact HTML only inside an opaque-origin sandboxed document that holds no credential, and comment writes happen only in the signed-in application document.
     owner: artifact-comments
     source: {file: artifact-comments-spec.md, anchor: conformance-requirements-to-add}
     acceptance:
-      behavior: {id: CMT-014-B, description: "Review an artifact version in the viewer and observe artifact HTML running in an opaque-origin sandboxed document while every comment write is made by the signed-in application document."}
-      failure: {id: CMT-014-F, description: "Hostile artifact JavaScript inside the viewer cannot reach the application origin, the comment API, cookies, or storage."}
+      behavior: {id: CMT-014-B, description: "Review an artifact version in Annotate mode and observe artifact HTML running in an opaque-origin sandboxed document while every comment write is made by the signed-in application document."}
+      failure: {id: CMT-014-F, description: "Hostile artifact JavaScript inside the annotation viewer cannot reach the application origin, the comment API, cookies, or storage."}
     deployments: *all
     status: behavior_verified
     depends_on: [SEC-001, CMT-013]
@@ -2555,6 +2555,25 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-03T16:09:11.243Z"
+
+  - id: CMT-022
+    kind: security
+    behavior: Script-dependent HTML can run in an isolated Interactive preview of the exact selected version, with a reversible switch to the opaque-origin annotation viewer and no annotation bridge in Interactive preview.
+    owner: artifact-comments
+    source: {file: artifact-comments-spec.md, anchor: interactive-html-preview}
+    acceptance:
+      behavior: {id: CMT-022-B, description: "Open public current and private HTML with an external script and runtime code generation, observe a working Interactive preview on the exact version's content origin, and switch to Annotate and back."}
+      failure: {id: CMT-022-F, description: "Interactive artifact code cannot access the application document or comment API, private and historical previews cannot bypass the expiring exact-version lease, and Interactive preview has no annotation-bridge authority."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local Chromium browser evidence proves public current and private versions, and focused WebKit tests pass; the full iteration gate is blocked by unrelated CLI failures, and the deployed-browser matrix remains unrecorded.
+    depends_on: [CMT-014, CMT-018, SEC-001]
+    evidence:
+      - deployment: local
+        tests: [CMT-022-B, CMT-022-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-09-16T23:39:15.910Z"
 
   - id: ADM-001
     kind: behavior

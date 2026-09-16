@@ -4022,6 +4022,25 @@ function reviewFrameContentSecurityPolicy(contentDomain: string): string {
   ].join("; ");
 }
 
+function applicationContentSecurityPolicy(contentDomain: string): string {
+  const contentFrames = contentDomain === "localhost"
+    ? "http://*.localhost:*"
+    : `https://*.${contentDomain}`;
+  return [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    `frame-src 'self' ${contentFrames}`,
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self'",
+  ].join("; ");
+}
+
 type WebAssetKind = "application-shell" | "review-frame" | "static-asset";
 
 async function serveWebAsset(
@@ -4040,7 +4059,7 @@ async function serveWebAsset(
       : "no-cache, must-revalidate",
     "Content-Security-Policy": kind === "review-frame"
       ? reviewFrameContentSecurityPolicy(dependencies.contentDomain)
-      : "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'",
+      : applicationContentSecurityPolicy(dependencies.contentDomain),
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
   });

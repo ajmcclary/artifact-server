@@ -1,6 +1,6 @@
 # Artifact comments
 
-**Status:** Accepted; implemented — CMT-001 through CMT-015 are behavior-verified on the local deployment. CMT-014 (review-viewer containment) has focused hostile-artifact proof in `tests/browser/review-sandbox.spec.ts`; CMT-015 (artifact-first viewer shell) is proved in `tests/browser/frontend-mvp.spec.ts`. Both use the durable Playwright report at `project/evidence/browser.json`; broader deployment release gates remain separate (August 26, 2026)
+**Status:** Accepted; implemented — CMT-001 through CMT-015 are behavior-verified on the local deployment. CMT-014 (annotation-viewer containment) and CMT-022 (isolated interactive preview) have focused browser proof in `tests/browser/review-sandbox.spec.ts`; CMT-015 (artifact-first viewer shell) is proved in `tests/browser/frontend-mvp.spec.ts`. The durable Playwright report is `project/evidence/browser.json`; broader deployment release gates remain separate (September 16, 2026).
 **Date:** August 17, 2026
 **Owner:** Artifact Server product engineering
 **Companion documents:** [Product specification](./artifact-server-product-spec.md), [Plannotator and Artifact Server integration](./plannotator-artifact-server-integration-spec.md), [Conformance ledger](./conformance.yml)
@@ -370,7 +370,7 @@ an existing dispatch package to remove a deleted thread.
 
 ## 9a. Review viewer architecture
 
-The in-page experience reuses Plannotator's own HTML annotation machinery (`@plannotator/ui@0.30.0`, `components/html-viewer`: `HtmlViewer`, `bridge-script`, `srcdoc`, `useHtmlAnnotation` — a props-driven host surface since 0.29.0). Its security model transplants unchanged: the artifact document is rendered from a **`srcdoc` iframe with `sandbox="allow-scripts"` and no `allow-same-origin`** — an opaque origin holding no credential and no reachable API — with the annotation bridge script and CSS spliced into `<head>` and every bridge message source-checked and shape-validated on both sides. The page DOM is never mutated; hover and pins are fixed-position overlay layers.
+The in-page annotation experience reuses Plannotator's own HTML annotation machinery (`@plannotator/ui@0.30.0`, `components/html-viewer`: `HtmlViewer`, `bridge-script`, `srcdoc`, `useHtmlAnnotation` — a props-driven host surface since 0.29.0). Its security model transplants unchanged: the artifact document is rendered from a **`srcdoc` iframe with `sandbox="allow-scripts"` and no `allow-same-origin`** — an opaque origin holding no credential and no reachable API — with the annotation bridge script and CSS spliced into `<head>` and every bridge message source-checked and shape-validated on both sides. The page DOM is never mutated; hover and pins are fixed-position overlay layers.
 
 The frame chain solves the app-shell CSP problem without weakening it:
 
@@ -388,6 +388,12 @@ app shell (strict CSP, unchanged)
 - Host↔frame protocol (versioned, source-checked both ways): parent → frame `init {html, theme tokens, annotations, readOnly}`, `annotations-changed`, `focus {threadId}`; frame → parent `ready`, `draft {anchor, originalText, targets}`, `submit {anchor, body, targets}`, `select {threadId}`, `resize`. The frame never sees a credential; every comment API call happens in the app document.
 - Anchors ride the bridge's fail-closed `HtmlElementAnchor` builder unchanged and are stored in the Workspaces wire shape (`originalText`, `htmlAnchor`, `htmlAdditionalTargets`, top-level `point` 0..1), so the server's opaque-anchor rule needs nothing new.
 - What this does not touch: raw content sessions stay `SameSite=Strict`, host-only, and top-level only; preview leases create no cookie; content responses gain no application credential; `SEC-001`'s hostile-artifact posture is preserved because artifact JavaScript executes only inside the opaque-origin sandbox and the lease can read only the exact bytes already being reviewed.
+
+### Interactive HTML preview
+
+Some published HTML relies on external scripts, runtime code generation, or browser storage. The annotation document's inherited CSP and opaque origin prevent that code from running. Review therefore offers a distinct **Interactive preview** mode. An entry with a script URL outside its version's content origin starts in this mode; the reviewer can switch between Interactive preview and Annotate at any time. The two modes never share a document or annotation bridge.
+
+Interactive preview navigates a sandboxed iframe to the exact entry on the isolated content origin. Its sandbox permits scripts and that content origin's storage, but not top navigation, popups, or access to the application origin. The application CSP permits framing only its own origin and configured content hosts. Public current versions use their stable version origin; private and historical versions use a read-only exact-version preview lease. The lease expires, so Review warns that work in a temporary preview may be lost and directs the reviewer to Open raw artifact for work they intend to keep. Comments and annotation writes remain in the signed-in application document; page-anchored commenting is available in Annotate mode.
 
 ## 10. What is out, and how it is sliced
 
@@ -422,9 +428,10 @@ Module `artifact-comments` (new entry in `allowed_modules`). Deployments `*all`.
 | CMT-011 | behavior | Every comment mutation appends an attributed action record with the thread's artifact and version. | A mutation cannot commit without an action record (same transaction). |
 | CMT-012 | behavior | The HTTP API, MCP tools, and web application expose the same operations with the same authorization; `?since=` and cursor paging return every change at least once for a poller that resumes from the time its previous pass started. | MCP and HTTP produce identical results for the same principal; a poll resuming from the previous pass start misses no update. |
 | CMT-013 | security | The version file route serves exact manifest-entry bytes to artifact-read principals with non-renderable headers on the app origin, and never on the content domain. | Anonymous, public-link, and read-incapable-key requests are denied; the response cannot render as a document on the app origin; unknown paths 404 without disclosure. |
-| CMT-014 | security | The review viewer executes artifact HTML only inside an opaque-origin sandboxed document that holds no credential; comment writes happen only in the signed-in app document. | Hostile artifact JavaScript cannot reach the app origin, the comment API, cookies, or storage from inside the viewer. |
+| CMT-014 | security | The Review annotation viewer executes artifact HTML only inside an opaque-origin sandboxed document that holds no credential; comment writes happen only in the signed-in app document. | Hostile artifact JavaScript cannot reach the app origin, the comment API, cookies, or storage from inside the annotation viewer. |
 | CMT-015 | behavior | Review routes use the dedicated artifact-first viewport shell, with comments and version navigation closed by default, compact version and linked-source context, responsive on-demand surfaces, sharing, and reversible focus mode. | Management chrome or a permanently open side surface cannot displace the artifact, narrow screens cannot make a docked panel crush the artifact, and focus mode cannot leave the viewer without a visible way back. |
 | CMT-021 | behavior | Review downloads one original file or a path-preserving ZIP of the selected immutable version in standard and full-screen modes. | Unauthorized or mismatched artifact, project, and version requests return no archive; downloading cannot open comments, change the selected version, or leave full-screen mode. |
+| CMT-022 | security | Script-dependent HTML can run in an isolated Interactive preview of the exact selected version and switch back to the opaque-origin annotation viewer. | Interactive artifact code cannot access the application document or comment API; a private or historical preview cannot bypass its expiring exact-version lease; Interactive preview never gains annotation-bridge authority. |
 
 `SCP-003` is edited to keep notifications and workspace collaboration excluded. `PLN-003` moves comments and replies to Artifact Server's column and its acceptance tests are rewritten. `AUD-001` gains the six comment action kinds in its behavior test.
 

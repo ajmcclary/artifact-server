@@ -19,6 +19,9 @@ interface PreviewDocument {
   readonly baseHref: string;
   readonly entryPath: string;
   readonly html: string;
+  readonly interactiveUrl: string;
+  readonly prefersInteractive: boolean;
+  readonly temporarySession: boolean;
 }
 
 interface PreviewEntry {
@@ -35,16 +38,19 @@ interface PreviewActions {
 
 /** Render one exact immutable manifest entry in the Artifact Server preview surface. */
 export function ReviewPreview({
+  accessSetting,
   annotateModeActive,
   annotations,
   artifactId,
   artifactName,
   isLight,
+  isCurrentVersion,
   onOpenRawArtifact,
   onAnnotateModeChange,
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
+  onViewModeChange,
   opening,
   projectId,
   readOnly,
@@ -52,11 +58,13 @@ export function ReviewPreview({
   selectedPath,
   version,
 }: {
+  readonly accessSetting: "account_required" | "public_link";
   readonly annotateModeActive: boolean;
   readonly annotations: readonly ReviewAnnotation[];
   readonly artifactId: string;
   readonly artifactName: string;
   readonly isLight: boolean;
+  readonly isCurrentVersion: boolean;
   readonly onOpenRawArtifact: () => void;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
@@ -66,6 +74,7 @@ export function ReviewPreview({
     path: string,
   ) => Promise<boolean>;
   readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly opening: boolean;
   readonly projectId: string;
   readonly readOnly: boolean;
@@ -109,17 +118,20 @@ export function ReviewPreview({
   if (mediaType === "text/html") {
     return (
       <HtmlPreview
+        accessSetting={accessSetting}
         actions={commonActions}
         annotateModeActive={annotateModeActive}
         annotations={annotations}
         artifactId={artifactId}
         entry={entry}
         isLight={isLight}
+        isCurrentVersion={isCurrentVersion}
         key={identity}
         onAnnotateModeChange={onAnnotateModeChange}
         onSelectAnnotation={onSelectAnnotation}
         onSubmitAnnotation={onSubmitAnnotation}
         onUnanchoredChange={onUnanchoredChange}
+        onViewModeChange={onViewModeChange}
         projectId={projectId}
         readOnly={readOnly}
         selectedThreadId={selectedThreadId}
@@ -186,27 +198,32 @@ export function ReviewPreview({
 }
 
 function HtmlPreview({
+  accessSetting,
   actions,
   annotateModeActive,
   annotations,
   artifactId,
   entry,
   isLight,
+  isCurrentVersion,
   onAnnotateModeChange,
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
+  onViewModeChange,
   projectId,
   readOnly,
   selectedThreadId,
   version,
 }: {
+  readonly accessSetting: "account_required" | "public_link";
   readonly actions: PreviewActions;
   readonly annotateModeActive: boolean;
   readonly annotations: readonly ReviewAnnotation[];
   readonly artifactId: string;
   readonly entry: PreviewEntry;
   readonly isLight: boolean;
+  readonly isCurrentVersion: boolean;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
   readonly onSubmitAnnotation: (
@@ -215,12 +232,14 @@ function HtmlPreview({
     path: string,
   ) => Promise<boolean>;
   readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly projectId: string;
   readonly readOnly: boolean;
   readonly selectedThreadId: string | null;
   readonly version: ArtifactVersion;
 }) {
   const [previewDocument, setPreviewDocument] = useState<PreviewDocument | null>(null);
+  const [chosenMode, setChosenMode] = useState<"annotate" | "interactive" | null>(null);
   const [frameReady, setFrameReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -237,27 +256,32 @@ function HtmlPreview({
     let current = true;
     void (async () => {
       try {
-        const [html, resolvedBase] = await Promise.all([
+        const [html, lease] = await Promise.all([
           api.versionFile(
             projectId,
             artifactId,
             version.version.id,
             entry.path,
           ),
-          api.previewLease(projectId, artifactId, version.version.id).then(
-            (lease) => {
-              if (lease.versionId !== version.version.id) {
-                throw new Error("The preview lease resolved a different version.");
-              }
-              return lease.baseUrl;
-            },
-          ),
+          api.previewLease(projectId, artifactId, version.version.id),
         ]);
+        if (lease.versionId !== version.version.id) {
+          throw new Error("The preview lease resolved a different version.");
+        }
+        const useStableOrigin = accessSetting === "public_link" && isCurrentVersion;
+        const interactiveBase = useStableOrigin ? version.links.version : lease.baseUrl;
+        const interactiveUrl = documentEntryUrl(interactiveBase, entry.path);
+        if (!isVersionContentUrl(interactiveUrl, lease.baseUrl)) {
+          throw new Error("Interactive preview requires a separate version content origin.");
+        }
         if (current) {
           setPreviewDocument({
-            baseHref: documentBaseUrl(resolvedBase, entry.path),
+            baseHref: documentBaseUrl(lease.baseUrl, entry.path),
             entryPath: entry.path,
             html,
+            interactiveUrl,
+            prefersInteractive: hasBlockedExternalScript(html, interactiveUrl),
+            temporarySession: !useStableOrigin,
           });
         }
       } catch (cause) {
@@ -272,7 +296,19 @@ function HtmlPreview({
     return () => {
       current = false;
     };
-  }, [artifactId, entry.path, projectId, version.version.id]);
+  }, [accessSetting, artifactId, entry.path, isCurrentVersion, projectId, version.links.version, version.version.id]);
+
+  const mode = chosenMode ?? (previewDocument?.prefersInteractive === true
+    ? "interactive"
+    : "annotate");
+
+  useEffect(() => onViewModeChange(mode), [mode, onViewModeChange]);
+
+  useEffect(() => {
+    if (mode !== "interactive") return;
+    initialisedRef.current = false;
+    setFrameReady(false);
+  }, [mode]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -321,7 +357,7 @@ function HtmlPreview({
   ]);
 
   useEffect(() => {
-    if (!frameReady || previewDocument === null || initialisedRef.current) return;
+    if (mode !== "annotate" || !frameReady || previewDocument === null || initialisedRef.current) return;
     initialisedRef.current = true;
     postToFrame({
       annotateModeActive,
@@ -335,7 +371,7 @@ function HtmlPreview({
       type: "as-review-init",
       v: reviewProtocolVersion,
     });
-  }, [annotateModeActive, annotations, frameReady, isLight, postToFrame, previewDocument, readOnly]);
+  }, [annotateModeActive, annotations, frameReady, isLight, mode, postToFrame, previewDocument, readOnly]);
 
   useEffect(() => {
     if (!initialisedRef.current) return;
@@ -398,21 +434,82 @@ function HtmlPreview({
     );
   }
   return (
-    <iframe
-      className="as-artifact-frame"
-      ref={frameRef}
-      src="/review-frame"
-      title={`${version.version.artifactId} version ${version.version.number}`}
-    />
+    <div className="as-html-preview" data-mode={mode}>
+      <div aria-label="HTML preview mode" className="as-html-preview__toolbar" role="group">
+        <button aria-pressed={mode === "interactive"} onClick={() => setChosenMode("interactive")} type="button">
+          Interactive preview
+        </button>
+        <button aria-pressed={mode === "annotate"} onClick={() => setChosenMode("annotate")} type="button">
+          Annotate
+        </button>
+        {mode === "interactive" ? (
+          <span>{previewDocument?.temporarySession === true
+            ? "Preview changes may be lost. Open raw artifact to keep work."
+            : previewDocument?.prefersInteractive === true
+              ? "Annotate may not render this page's external scripts."
+              : "Use Annotate to place comments on the page."}</span>
+        ) : previewDocument?.prefersInteractive === true ? (
+          <span>This page's external scripts are blocked here. Switch to Interactive preview if blank.</span>
+        ) : null}
+      </div>
+      {mode === "interactive" && previewDocument !== null ? (
+        <iframe
+          className="as-artifact-frame"
+          referrerPolicy="no-referrer"
+          sandbox="allow-scripts allow-same-origin"
+          src={previewDocument.interactiveUrl}
+          title={`Interactive preview: ${entry.path}`}
+        />
+      ) : (
+        <iframe
+          className="as-artifact-frame"
+          ref={frameRef}
+          src="/review-frame"
+          title={`${version.version.artifactId} version ${version.version.number}`}
+        />
+      )}
+    </div>
   );
 }
 
 function documentBaseUrl(versionBaseUrl: string, entryPath: string): string {
-  const entryUrl = new URL(
+  return new URL(".", documentEntryUrl(versionBaseUrl, entryPath)).toString();
+}
+
+function documentEntryUrl(versionBaseUrl: string, entryPath: string): string {
+  return new URL(
     entryPath.split("/").map(encodeURIComponent).join("/"),
     versionBaseUrl,
-  );
-  return new URL(".", entryUrl).toString();
+  ).toString();
+}
+
+function hasBlockedExternalScript(html: string, entryUrl: string): boolean {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const contentOrigin = new URL(entryUrl).origin;
+  return [...parsed.querySelectorAll("script[src]")].some((script) => {
+    const source = script.getAttribute("src");
+    if (source === null) return false;
+    try {
+      return new URL(source, entryUrl).origin !== contentOrigin;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function isVersionContentUrl(candidate: string, leaseBase: string): boolean {
+  const target = new URL(candidate);
+  const lease = new URL(leaseBase);
+  const suffix = lease.hostname.slice(lease.hostname.indexOf("."));
+  const label = target.hostname.slice(0, -suffix.length);
+  return suffix.startsWith(".")
+    && label.length > 0
+    && !label.includes(".")
+    && target.hostname.endsWith(suffix)
+    && target.protocol === lease.protocol
+    && target.port === lease.port
+    && ["http:", "https:"].includes(target.protocol)
+    && target.origin !== window.location.origin;
 }
 
 function NativeMediaPreview({

@@ -566,6 +566,7 @@ function ArtifactReview({
   const [focusControlsHoverArmed, setFocusControlsHoverArmed] = useState(true);
   const [focusControlsInstant, setFocusControlsInstant] = useState(false);
   const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(true);
+  const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
   const [homeOpen, setHomeOpen] = useState(false);
   const focusCommentsButtonRef = useRef<HTMLButtonElement>(null);
   const focusControlsRestoreRef = useRef<HTMLButtonElement>(null);
@@ -1178,7 +1179,7 @@ function ArtifactReview({
         if (focusCommentsOpen) {
           event.preventDefault();
           setFocusCommentsOpen(false);
-        } else if (htmlAnnotateModeActive) {
+        } else if (htmlViewerMode === "annotate" && htmlAnnotateModeActive) {
           event.preventDefault();
           setHtmlAnnotateModeActive(false);
         } else if (focusMode) {
@@ -1232,6 +1233,7 @@ function ArtifactReview({
     focusMode,
     homeOpen,
     htmlAnnotateModeActive,
+    htmlViewerMode,
     selectArtifact,
     selectedIndex,
     selectedVersionId,
@@ -1297,7 +1299,7 @@ function ArtifactReview({
       className="as-app"
       data-catalog-open={catalogOpen}
       data-focus-mode={focusMode}
-      data-html-annotate-mode={htmlAnnotateModeActive}
+      data-html-annotate-mode={htmlViewerMode === "annotate" && htmlAnnotateModeActive}
       data-inspector-open={inspectorOpen}
       data-panel-resizing={catalogResize.isDragging || inspectorResize.isDragging}
     >
@@ -1630,7 +1632,7 @@ function ArtifactReview({
                   inert={focusControlsCollapsed}
                   role="toolbar"
                 >
-                  {previewKind === "html" && canComment ? (
+                  {previewKind === "html" && canComment && htmlViewerMode === "annotate" ? (
                     <button
                       aria-pressed={htmlAnnotateModeActive}
                       className="as-button as-focus-controls__button"
@@ -1757,7 +1759,7 @@ function ArtifactReview({
               <h1>{details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}</h1>
             </div>
             <div className="as-preview-header__actions">
-              {previewKind === "html" && canComment ? (
+              {previewKind === "html" && canComment && htmlViewerMode === "annotate" ? (
                 <IconButton
                   active={htmlAnnotateModeActive}
                   label={htmlAnnotateModeActive
@@ -1832,11 +1834,13 @@ function ArtifactReview({
               />
             ) : (
               <ReviewPreview
+                accessSetting={details?.artifact.accessSetting ?? "account_required"}
                 annotateModeActive={htmlAnnotateModeActive}
                 annotations={comments.annotations}
                 artifactId={selectedArtifactId}
                 artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
                 isLight={theme === "dawn"}
+                isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 onOpenRawArtifact={() => void openRawArtifact()}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}
                 onSelectAnnotation={(threadId) => {
@@ -1870,6 +1874,7 @@ function ArtifactReview({
                   }
                   return saved;
                 }}
+                onViewModeChange={setHtmlViewerMode}
                 onUnanchoredChange={comments.updateUnanchored}
                 opening={opening}
                 projectId={projectId}

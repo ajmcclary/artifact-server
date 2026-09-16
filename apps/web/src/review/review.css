@@ -2130,8 +2130,64 @@ select:focus-visible {
   background: var(--as-surface);
   border: 0;
   display: block;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   width: 100%;
+}
+
+.as-html-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.as-html-preview__toolbar {
+  align-items: center;
+  background: var(--as-surface);
+  border-bottom: 1px solid var(--as-border);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.25rem 0.55rem;
+}
+
+.as-html-preview__toolbar button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  color: var(--as-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.as-html-preview__toolbar button[aria-pressed="true"] {
+  background: var(--as-iris-soft);
+  border-color: var(--as-iris);
+  color: var(--as-text);
+}
+
+.as-html-preview__toolbar span {
+  color: var(--as-muted);
+  font-size: 0.68rem;
+  margin-left: auto;
+  text-align: right;
+}
+
+@container preview-panel (max-width: 640px) {
+  .as-html-preview__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .as-html-preview__toolbar span {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
 }
 
 .as-preview-error {
