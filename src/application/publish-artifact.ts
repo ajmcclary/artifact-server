@@ -209,7 +209,7 @@ function makePublishArtifactService(
             }),
           );
         },
-        {concurrency: 1, discard: true},
+        {concurrency: 4, discard: true},
       );
     },
   );

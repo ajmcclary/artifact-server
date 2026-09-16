@@ -13,7 +13,7 @@ import {
   publishPreparedPath,
 } from "../client/file-publication-client.js";
 import {
-  authenticatedCliHttpClientLayer,
+  publicationCliHttpClientLayer,
   resolveCliServerConnection,
   type CliServerConnection,
 } from "./cli-server-connection.js";
@@ -196,7 +196,7 @@ async function executePublication(
         onFailure: (error) => ({error, success: false} as const),
         onSuccess: (result) => ({result, success: true} as const),
       }),
-      Effect.provide(authenticatedCliHttpClientLayer),
+      Effect.provide(publicationCliHttpClientLayer),
       Effect.provide(NodeFileSystem.layer),
     ),
   );

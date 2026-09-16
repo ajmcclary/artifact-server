@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {Effect, Layer, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import {Agent} from "undici";
 import {z} from "zod";
 
 import {resolveVerifiedProfileCredential} from "./cli-auth-commands.js";
@@ -43,6 +44,24 @@ export interface CliServerConnection {
 export const authenticatedCliHttpClientLayer = Layer.merge(
   FetchHttpClient.layer,
   Layer.succeed(FetchHttpClient.RequestInit, {redirect: "error"}),
+);
+
+/** Long publication commits can exceed undici's default 300s header timeout. */
+export const publicationCliHttpClientLayer = Layer.merge(
+  FetchHttpClient.layer,
+  Layer.effect(
+    FetchHttpClient.RequestInit,
+    Effect.acquireRelease(
+      Effect.sync(() => new Agent({
+        bodyTimeout: 930_000,
+        headersTimeout: 930_000,
+      })),
+      (dispatcher) => Effect.promise(() => dispatcher.close()),
+    ).pipe(Effect.map((dispatcher) => ({
+      dispatcher,
+      redirect: "error" as const,
+    }))),
+  ),
 );
 
 /**

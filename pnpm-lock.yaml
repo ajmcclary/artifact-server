@@ -81,6 +81,9 @@ importers:
       tldts:
         specifier: 7.4.10
         version: 7.4.10
+      undici:
+        specifier: 7.29.0
+        version: 7.29.0(patch_hash=c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e)
       unicode-case-folding:
         specifier: 1.1.1
         version: 1.1.1
