@@ -2191,7 +2191,7 @@ export function createHttpApp(
 
   app.put("/api/v1/uploads/:uploadId/files/:storageToken", async (context) => {
     const body = context.req.raw.body ?? emptyByteStream();
-    const upload = await runHttpApplicationEffect(
+    const file = await runHttpApplicationEffect(
       context,
       dependencies,
       StagedUploadService.use((stagedUploads) =>
@@ -2204,16 +2204,10 @@ export function createHttpApp(
         })
       ),
     );
-    const file = upload.files.find(
-      (candidate) => candidate.storageToken === context.req.param("storageToken"),
-    );
-    if (file === undefined) {
-      throw new Error("A staged file disappeared after it was marked as uploaded.");
-    }
     return context.json({
       path: file.entry.path,
       status: "verified" as const,
-      uploadId: upload.id,
+      uploadId: context.req.param("uploadId"),
     });
   });
 

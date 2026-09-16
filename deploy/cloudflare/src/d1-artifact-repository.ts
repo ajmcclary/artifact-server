@@ -112,6 +112,7 @@ import type {
   RestoreArtifactVersion,
   SetProjectArchive,
   StagedUploadRepository,
+  StagedUploadFileSlot,
   UpdateCommentReply,
   UpdateCommentThread,
 } from "../../../src/core/ports.js";
@@ -351,6 +352,10 @@ const stagedFileSchema = z.object({
   size: z.number().int().nonnegative(),
   storageToken: z.string(),
   uploadedAt: z.string().nullable(),
+});
+const stagedUploadFileSlotHeaderSchema = z.object({
+  expiresAt: z.string(),
+  status: uploadStatusSchema,
 });
 const expiredStagedUploadRowSchema = z.object({
   id: z.string(),
@@ -2153,6 +2158,44 @@ export function createD1ArtifactRepository(
       return upload;
     },
     findStagedUpload: readStagedUploadOrNull,
+    findStagedUploadFileSlot: async (
+      projectId,
+      uploadId,
+      principalId,
+      storageToken,
+    ): Promise<StagedUploadFileSlot | null> => {
+      const headerRow = await database.prepare(`
+        SELECT status, expires_at AS expiresAt
+        FROM staged_uploads
+        WHERE project_id = ? AND id = ? AND principal_id = ?
+      `).bind(projectId, uploadId, principalId)
+        .first<z.input<typeof stagedUploadFileSlotHeaderSchema>>();
+      if (headerRow === null) return null;
+      const header = stagedUploadFileSlotHeaderSchema.parse(headerRow);
+      const fileRow = await database.prepare(`
+        SELECT storage_token AS storageToken, path, size,
+          media_type AS mediaType, sha256, disposition,
+          uploaded_at AS uploadedAt
+        FROM staged_upload_files
+        WHERE upload_id = ? AND storage_token = ?
+      `).bind(uploadId, storageToken).first<z.input<typeof stagedFileSchema>>();
+      const file = fileRow === null ? null : stagedFileSchema.parse(fileRow);
+      return {
+        expiresAt: header.expiresAt,
+        file: file === null ? null : {
+          entry: {
+            disposition: file.disposition,
+            mediaType: file.mediaType,
+            path: file.path,
+            sha256: file.sha256,
+            size: file.size,
+          },
+          storageToken: file.storageToken,
+          uploadedAt: file.uploadedAt,
+        },
+        status: header.status,
+      };
+    },
     markStagedFileUploaded: async (
       projectId,
       uploadId,
@@ -2188,9 +2231,7 @@ export function createD1ArtifactRepository(
         }
         throw new UploadFileNotFound({message: "The staged upload file does not exist."});
       }
-      const upload = await readStagedUploadOrNull(projectId, uploadId, principalId);
-      if (upload === null) throw new Error("The staged upload disappeared.");
-      return upload;
+      return undefined;
     },
 
     commitNewArtifact: async (command: CommitNewArtifact) => {

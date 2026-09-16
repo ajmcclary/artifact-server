@@ -121,6 +121,7 @@ import type {
   SourceBindingRepository,
   SourceBindingWrite,
   StagedUploadRepository,
+  StagedUploadFileSlot,
 } from "../core/ports.js";
 import {
   agentDispatchLeaseMilliseconds,
@@ -325,6 +326,10 @@ const stagedUploadFileRowSchema = z.object({
   size: z.number().int().nonnegative(),
   storageToken: z.string(),
   uploadedAt: z.string().nullable(),
+});
+const stagedUploadFileSlotHeaderSchema = z.object({
+  expiresAt: z.string(),
+  status: uploadStatusSchema,
 });
 const expiredStagedUploadRowSchema = z.object({
   id: z.string(),
@@ -2400,6 +2405,48 @@ export class SqliteArtifactRepository implements
     );
   }
 
+  findStagedUploadFileSlot(
+    projectId: string,
+    uploadId: string,
+    principalId: string,
+    storageToken: string,
+  ): Promise<StagedUploadFileSlot | null> {
+    return Promise.resolve().then(() => {
+      const header = stagedUploadFileSlotHeaderSchema.nullable().parse(
+        this.#database.prepare(`
+          SELECT status, expires_at AS expiresAt
+          FROM staged_uploads
+          WHERE project_id = ? AND id = ? AND principal_id = ?
+        `).get(projectId, uploadId, principalId) ?? null,
+      );
+      if (header === null) return null;
+      const row = stagedUploadFileRowSchema.nullable().parse(
+        this.#database.prepare(`
+          SELECT storage_token AS storageToken, path, size,
+            media_type AS mediaType, sha256, disposition,
+            uploaded_at AS uploadedAt
+          FROM staged_upload_files
+          WHERE upload_id = ? AND storage_token = ?
+        `).get(uploadId, storageToken) ?? null,
+      );
+      return {
+        expiresAt: header.expiresAt,
+        file: row === null ? null : {
+          entry: {
+            disposition: row.disposition,
+            mediaType: row.mediaType,
+            path: row.path,
+            sha256: row.sha256,
+            size: row.size,
+          },
+          storageToken: row.storageToken,
+          uploadedAt: row.uploadedAt,
+        },
+        status: header.status,
+      };
+    });
+  }
+
   listExpiredStagedUploads(
     expiredBefore: string,
     limit: number,
@@ -2454,7 +2501,7 @@ export class SqliteArtifactRepository implements
     principalId: string,
     storageToken: string,
     uploadedAt: string,
-  ): Promise<StagedUpload> {
+  ): Promise<void> {
     return Promise.resolve().then(() =>
       this.#transaction(() => {
         this.#assertProjectActive(projectId);
@@ -2504,7 +2551,7 @@ export class SqliteArtifactRepository implements
             message: "The staged upload file does not exist.",
           });
         }
-        return this.#readStagedUpload(projectId, uploadId, principalId);
+        return undefined;
       }),
     );
   }

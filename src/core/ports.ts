@@ -35,6 +35,8 @@ import type {
   SourceBindingRecord,
   SourceFreshness,
   StagedUpload,
+  StagedUploadFile,
+  UploadStatus,
   VersionRecord,
   VersionContent,
 } from "./model.js";
@@ -593,6 +595,13 @@ export interface CreateStagedUpload {
   readonly projectId: string;
 }
 
+/** The single file slot needed to authorize one staged file write. */
+export interface StagedUploadFileSlot {
+  readonly expiresAt: string;
+  readonly file: StagedUploadFile | null;
+  readonly status: UploadStatus;
+}
+
 /** Values persisted when creating one project. */
 export type CreateProject = ProjectRecord;
 
@@ -688,6 +697,12 @@ export interface ContentSessionRepository {
 
 export interface StagedUploadRepository {
   createStagedUpload(command: CreateStagedUpload): Promise<StagedUpload>;
+  findStagedUploadFileSlot(
+    projectId: string,
+    uploadId: string,
+    principalId: string,
+    storageToken: string,
+  ): Promise<StagedUploadFileSlot | null>;
   findStagedUpload(
     projectId: string,
     uploadId: string,
@@ -699,7 +714,7 @@ export interface StagedUploadRepository {
     principalId: string,
     storageToken: string,
     uploadedAt: string,
-  ): Promise<StagedUpload>;
+  ): Promise<void>;
   listExpiredStagedUploads(
     expiredBefore: string,
     limit: number,

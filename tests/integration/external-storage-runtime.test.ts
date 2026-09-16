@@ -1205,6 +1205,64 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     })).status).toBe(401);
   });
 
+  test("a large Postgres upload plan accepts exact first and last file slots", async () => {
+    const identity = {
+      apiToken: managedTestKey("large-staged-upload"),
+      installationId: "large-staged-upload-installation",
+    };
+    const server = await startInProcessExternalStorageServer(environment, identity);
+    const nonce = randomUUID();
+    const declared = Array.from({length: 3301}, (_, index) => {
+      const filePath = index === 0
+        ? "index.html"
+        : `components/part${String(index).padStart(4, "0")}.html`;
+      const bytes = new TextEncoder().encode(`<p>${nonce}-${index}</p>`);
+      return {
+        bytes,
+        mediaType: "text/html; charset=utf-8",
+        path: filePath,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    });
+    const planResponse = await fetch(`${server.baseUrl}/api/v1/uploads`, {
+      body: JSON.stringify({
+        entryPath: "index.html",
+        files: declared.map(({mediaType, path: filePath, sha256, size}) => ({
+          mediaType,
+          path: filePath,
+          sha256,
+          size,
+        })),
+      }),
+      headers: {
+        Authorization: `Bearer ${identity.apiToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+    expect(planResponse.status).toBe(201);
+    const plan = uploadResponseSchema.parse(await planResponse.json());
+    expect(plan.files).toHaveLength(declared.length);
+
+    await Promise.all([declared[0], declared.at(-1)].map(async (file) => {
+      if (file === undefined) throw new Error("A declared file is missing.");
+      const planned = plan.files.find((candidate) => candidate.path === file.path);
+      if (planned === undefined) throw new Error("An upload slot is missing.");
+      const uploaded = await fetch(planned.uploadUrl, {
+        body: copiedArrayBuffer(file.bytes),
+        headers: {Authorization: `Bearer ${identity.apiToken}`},
+        method: "PUT",
+      });
+      expect(uploaded.status).toBe(200);
+      expect(await uploaded.json()).toMatchObject({
+        path: file.path,
+        status: "verified",
+        uploadId: plan.uploadId,
+      });
+    }));
+  });
+
   test("external-storage preview lease foundation: Postgres serves management, history, comparison, idempotency, and private content", async () => {
     expect.hasAssertions();
     const repositoryIdentity = {

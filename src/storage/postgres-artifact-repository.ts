@@ -105,6 +105,7 @@ import type {
   RestoreArtifactVersion,
   SetProjectArchive,
   StagedUploadRepository,
+  StagedUploadFileSlot,
   UpdateCommentReply,
   UpdateCommentThread,
 } from "../core/ports.js";
@@ -340,6 +341,10 @@ const stagedUploadFileRowSchema = z.object({
   size: nonnegativeIntegerSchema,
   storageToken: z.string(),
   uploadedAt: z.string().nullable(),
+});
+const stagedUploadFileSlotHeaderSchema = z.object({
+  expiresAt: z.string(),
+  status: uploadStatusSchema,
 });
 const expiredStagedUploadRowSchema = z.object({
   id: z.string(),
@@ -2117,16 +2122,26 @@ export class PostgresArtifactRepository implements
           ${command.manifest.routingMode}, ${command.createdAt},
           ${command.expiresAt}, NULL
         )`;
-        for (const file of command.files) {
-          yield* sql`INSERT INTO staged_upload_files (
+        const filesJson = JSON.stringify(command.files.map((file) => ({
+          disposition: file.entry.disposition,
+          media_type: file.entry.mediaType,
+          path: file.entry.path,
+          sha256: file.entry.sha256,
+          size: file.entry.size,
+          storage_token: file.storageToken,
+        })));
+        yield* sql.unsafe<object>(
+          `INSERT INTO staged_upload_files (
             installation_id, upload_id, storage_token, path, size, media_type,
             sha256, disposition, uploaded_at
-          ) VALUES (
-            ${installationId}, ${command.id}, ${file.storageToken},
-            ${file.entry.path}, ${file.entry.size}, ${file.entry.mediaType},
-            ${file.entry.sha256}, ${file.entry.disposition}, NULL
-          )`;
-        }
+          ) SELECT $1, $2, file.storage_token, file.path, file.size,
+              file.media_type, file.sha256, file.disposition, NULL
+            FROM jsonb_to_recordset($3::jsonb) AS file(
+              storage_token TEXT, path TEXT, size BIGINT, media_type TEXT,
+              sha256 TEXT, disposition TEXT
+            )`,
+          [installationId, command.id, filesJson],
+        );
         return yield* this.#readStagedUpload(
           command.projectId,
           command.id,
@@ -2146,6 +2161,54 @@ export class PostgresArtifactRepository implements
       uploadId,
       principalId,
     ));
+  }
+
+  async findStagedUploadFileSlot(
+    projectId: string,
+    uploadId: string,
+    principalId: string,
+    storageToken: string,
+  ): Promise<StagedUploadFileSlot | null> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const headerRows = yield* sql.unsafe<object>(
+        `SELECT status, expires_at AS "expiresAt"
+         FROM staged_uploads
+         WHERE installation_id = $1 AND project_id = $2
+           AND id = $3 AND principal_id = $4`,
+        [installationId, projectId, uploadId, principalId],
+      );
+      const header = stagedUploadFileSlotHeaderSchema.nullable().parse(
+        headerRows[0] ?? null,
+      );
+      if (header === null) return null;
+      const fileRows = yield* sql.unsafe<object>(
+        `SELECT storage_token AS "storageToken", path, size,
+          media_type AS "mediaType", sha256, disposition,
+          uploaded_at AS "uploadedAt"
+         FROM staged_upload_files
+         WHERE installation_id = $1 AND upload_id = $2
+           AND storage_token = $3`,
+        [installationId, uploadId, storageToken],
+      );
+      const row = stagedUploadFileRowSchema.nullable().parse(fileRows[0] ?? null);
+      return {
+        expiresAt: header.expiresAt,
+        file: row === null ? null : {
+          entry: {
+            disposition: row.disposition,
+            mediaType: row.mediaType,
+            path: row.path,
+            sha256: row.sha256,
+            size: row.size,
+          },
+          storageToken: row.storageToken,
+          uploadedAt: row.uploadedAt,
+        },
+        status: header.status,
+      };
+    }));
   }
 
   async listExpiredStagedUploads(
@@ -2208,7 +2271,7 @@ export class PostgresArtifactRepository implements
     principalId: string,
     storageToken: string,
     uploadedAt: string,
-  ): Promise<StagedUpload> {
+  ): Promise<void> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
@@ -2252,7 +2315,7 @@ export class PostgresArtifactRepository implements
             message: "The staged upload file does not exist.",
           });
         }
-        return yield* this.#readStagedUpload(projectId, uploadId, principalId);
+        return undefined;
       }));
     }));
   }

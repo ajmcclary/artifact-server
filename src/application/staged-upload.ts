@@ -19,6 +19,7 @@ import {
   type PublishedVersion,
   type RoutingMode,
   type StagedUpload,
+  type StagedUploadFile,
 } from "../core/model.js";
 import type {
   CreateStagedUpload,
@@ -26,6 +27,7 @@ import type {
   IdGenerator,
   OpenedStagedFile,
   StagedFileWrite,
+  StagedUploadFileSlot,
   StoredBlob,
 } from "../core/ports.js";
 import type { DeclaredManifestFile } from "../manifest/create-manifest.js";
@@ -93,6 +95,12 @@ export interface StagedUploadRepositoryPort {
   createStagedUpload(
     command: CreateStagedUpload,
   ): Effect.Effect<StagedUpload, ArtifactRepositoryFailure | ProjectArchived>;
+  findStagedUploadFileSlot(
+    projectId: string,
+    uploadId: string,
+    principalId: string,
+    storageToken: string,
+  ): Effect.Effect<StagedUploadFileSlot | null, ArtifactRepositoryFailure>;
   findStagedUpload(
     projectId: string,
     uploadId: string,
@@ -105,7 +113,7 @@ export interface StagedUploadRepositoryPort {
     storageToken: string,
     uploadedAt: string,
   ): Effect.Effect<
-    StagedUpload,
+    void,
     | UploadNotFound
     | UploadClosed
     | UploadFileNotFound
@@ -170,7 +178,7 @@ interface StagedUploadOperations {
   ) => Effect.Effect<StagedUpload, StagedUploadFailure>;
   readonly uploadFile: (
     command: UploadStagedFileCommand,
-  ) => Effect.Effect<StagedUpload, StagedUploadFailure>;
+  ) => Effect.Effect<StagedUploadFile, StagedUploadFailure>;
 }
 
 /** Owns the principal-bound upload lifecycle before immutable publication. */
@@ -260,47 +268,52 @@ function makeStagedUploadService(
   const uploadFile = Effect.fn("StagedUploadService.uploadFile")(
     function*(
     command: UploadStagedFileCommand,
-  ): Effect.fn.Return<StagedUpload, StagedUploadFailure> {
+  ): Effect.fn.Return<StagedUploadFile, StagedUploadFailure> {
       yield* authorization.requirePublicationPreparation(command.principal);
       const project = yield* projects.resolveActiveProject({
         principal: command.principal,
         projectId: command.projectId ?? null,
       });
-      const upload = yield* requiredUpload(
+      const slot = yield* dependencies.uploads.findStagedUploadFileSlot(
         project.id,
         command.uploadId,
         command.principal.id,
+        command.storageToken,
       );
+      if (slot === null) {
+        return yield* new UploadNotFound({
+          message: "The staged upload does not exist.",
+        });
+      }
       const uploadStartedAt = yield* dependencies.clock.now;
-      yield* ensureUploadAcceptsFiles(upload, uploadStartedAt);
-      const file = upload.files.find(
-        (candidate) => candidate.storageToken === command.storageToken,
-      );
-      if (file === undefined) {
+      yield* ensureUploadAcceptsFiles(slot, uploadStartedAt);
+      const file = slot.file;
+      if (file === null) {
         return yield* new UploadFileNotFound({
           message: "The staged upload file does not exist.",
         });
       }
 
-      const signal = abortSignalUntil(upload.expiresAt, uploadStartedAt);
+      const signal = abortSignalUntil(slot.expiresAt, uploadStartedAt);
       yield* dependencies.staging.put({
         body: command.body,
         sha256: file.entry.sha256,
         signal,
         size: file.entry.size,
         storageToken: file.storageToken,
-        uploadId: upload.id,
+        uploadId: command.uploadId,
       }).pipe(Effect.catch((error) => Effect.fail(signal.aborted
         ? new UploadExpired({message: "The staged upload has expired."})
         : error)));
       const uploadedAt = DateTime.formatIso(yield* dependencies.clock.now);
-      return yield* dependencies.uploads.markStagedFileUploaded(
+      yield* dependencies.uploads.markStagedFileUploaded(
         project.id,
-        upload.id,
+        command.uploadId,
         command.principal.id,
         file.storageToken,
         uploadedAt,
       );
+      return {...file, uploadedAt};
     },
   );
 
@@ -442,7 +455,7 @@ function expirePublicationAtDeadline<A, E>(
 }
 
 function ensureUploadAcceptsFiles(
-  upload: StagedUpload,
+  upload: Pick<StagedUpload, "expiresAt" | "status">,
   now: DateTime.Utc,
 ): Effect.Effect<void, UploadClosed | UploadExpired> {
   if (upload.status !== uploadStatuses.open) {
@@ -454,7 +467,7 @@ function ensureUploadAcceptsFiles(
 }
 
 function ensureUploadNotExpired(
-  upload: StagedUpload,
+  upload: Pick<StagedUpload, "expiresAt">,
   now: DateTime.Utc,
 ): Effect.Effect<void, UploadExpired> {
   const expiresAt = DateTime.makeUnsafe(upload.expiresAt);
