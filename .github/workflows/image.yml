@@ -1,0 +1,48 @@
+name: image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "apps/**"
+      - "packaging/oci/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/image.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/oci/Dockerfile
+          push: true
+          tags: ghcr.io/ajmcclary/artifact-server:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            IMAGE_REVISION=${{ github.sha }}
+            IMAGE_SOURCE=https://github.com/ajmcclary/artifact-server
+            IMAGE_VERSION=0.1.0
+
+      - name: Print digest
+        run: echo "digest=${{ steps.build.outputs.digest }}"
