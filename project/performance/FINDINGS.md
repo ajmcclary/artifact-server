@@ -126,9 +126,21 @@ These fixes remove the obvious read-amplification and crash-durability problems 
 
 The client sends one verified upload request per file. Local storage syncs every
 staged file durably and records its uploaded state before commit. The measured
-2/12/48-file curve is close to linear, and doubling client concurrency did not
-remove it. A site with hundreds or thousands of small assets will therefore be
-noticeably slower even when its total byte size is small.
+2/12/48-file curve looked close to linear over that narrow range, but it missed
+a server-side scaling defect at thousands of files: each PUT reloaded the whole
+staged manifest before and after marking one file uploaded. The Postgres upload
+plan also inserted one file row per query. The VPS S3 cutover exposed this when
+a 3,301-file plan took about 24 seconds and completed PUTs still took roughly
+1–3 seconds despite successful S3 writes.
+
+The repository now reads only the requested file slot per PUT and inserts the
+Postgres plan in one batch. The immutable blob-copy stage runs four independent
+writes at a time, and the publication CLI's Undici header/body timeout exceeds
+Traefik's 900-second request limits. One fresh-content 3,301-file AWS S3 run
+completed in 523.94 seconds: plan 2.513 seconds, all 3,301 PUTs returned 200
+with a 262 ms Traefik median and 795 ms p95, and commit returned 201 in
+201.571 seconds. This is one VPS/AWS observation, not a capacity budget. The
+per-file transport and durable-write cost still matters for very large sites.
 
 Do not weaken integrity checks or filesystem durability to hide this cost. The
 next transport investigation should compare a bounded multipart small-file
