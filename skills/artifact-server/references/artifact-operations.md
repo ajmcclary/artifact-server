@@ -22,6 +22,8 @@ artifactserver publish "<path>" --profile "<profile>" --server "<origin>" --proj
 
 Optional creation flags are repeatable `--tag`, `--public`, and `--entry`. Account-required access is the default.
 
+`--entry <path>` names the file that opens first in a directory publication. `--routing` selects path handling: `static` is the default and serves only published paths; `spa` serves the entry document for unmatched paths. Use `spa` only for a single-page application, because it turns every wrong path into a 200.
+
 ### Publish a new version
 
 Obtain `artifact.currentVersionId` with `artifact_get`, then run:
@@ -34,7 +36,7 @@ The CLI owns local file inspection, symlink policy, media types, SHA-256 hashing
 
 ## MCP reads
 
-- `artifact_capabilities`: inspect limits, sharing modes, project rules, and deployment mode.
+- `artifact_capabilities`: inspect limits, sharing modes, project rules, linked-file availability, and deployment mode.
 - `project_list`: resolve a project when more than one exists.
 - `artifact_list`: list artifacts; use `projectId`, exact `tag`, cursor, and bounded limit when relevant.
 - `artifact_get`: obtain current metadata, manifest, current version ID, tags, access, `current.links.review` for exact full-screen Review, and `links.artifact` for moving latest in one call.
@@ -54,6 +56,41 @@ Call `artifact_get` immediately before a write to obtain the current version ID.
 - `artifact_delete`: use only for an explicit request to delete one artifact. Repeat the artifact name, server, and project before the destructive call. This does not delete the installation.
 
 Project creation, rename, archive, or unarchive are ordinary product actions but must be explicit. Use `project_create`, `project_rename`, `project_archive`, or `project_unarchive`. Archiving a project preserves readable history and stops new publication until it is unarchived.
+
+## Comments
+
+Review comments are threads with replies. Read before writing, and never invent a thread ID.
+
+- `comment_list`: list threads on an artifact. Threads held by a queued, claimed, or delivered agent dispatch are hidden from default listings but stay readable by ID.
+- `comment_get`: read one exact thread with its replies.
+- `comment_create`: open a new thread. `comment_reply`: add a reply to an existing thread.
+- `comment_update`: edit a comment the user owns. Do not edit another person's comment on their behalf without an explicit request.
+- `comment_resolve`: mark a thread resolved. Resolving every thread in a dispatched bundle is what closes an agent feedback loop; there is no separate completion report.
+- `comment_delete`: delete one thread or reply.
+- `comment_clear`: delete every matching thread on one artifact in bulk — `resolved`, or `all`. This is destructive and not a resolve. Name the artifact and the scope, and confirm before calling it. Threads held by queued, claimed, or delivered dispatches are skipped and counted rather than deleted; report that count instead of retrying.
+
+When replying on behalf of an agent that received a dispatched bundle, reply to each thread with what changed, then resolve it. Do not wait for confirmation between threads.
+
+## Linked files
+
+A linked artifact tracks a file that stays on the server's own machine rather than storing an uploaded snapshot. It works only on a local installation with linked files enabled, so call `artifact_capabilities` first and read `linkedArtifacts.available`.
+
+- `artifactserver link "<path>" --project "<project-id>" --name "<name>"` registers the file from the CLI.
+- `artifact_link` does the same through MCP. Pass the absolute path only. MCP never carries file bytes; the server reads the file itself.
+- `artifact_capture` saves the source file's current bytes as a new immutable version. Pass the current version ID as `expectedCurrentVersionId`. Capturing an unchanged source returns the current version rather than saving a duplicate, which is success, not a failure.
+- `artifact_relink` re-points an artifact at the same file in a new location. It is accepted only when the file at the new path hashes to `expectedSha256`, normally the current version's entry file SHA-256. Versions, comments, and the artifact ID are untouched.
+
+Never use a linked-file tool against a remote installation, and never substitute an upload when the user asked to link a file. They are different products: one tracks the file, the other freezes a copy.
+
+## Git history
+
+Optional Git-backed history is off by default and enabled one project at a time.
+
+- `project_git_history_status` and `project_git_history_estimate`: read state and a fresh copy estimate.
+- `project_set_git_history`: enable or disable it. Enabling requires a confirmed current estimate; provider configuration alone copies nothing. Report the returned state and never describe `waiting`, `degraded`, or `budget-limited` history as ready.
+- `artifact_history_clone_token`: issue a short-lived read credential for one artifact's derived repository. Use it directly for the clone. Never print it, quote it back to the user, or write it to a file.
+
+`artifactserver history clone` and `history checkout-project` clone from the CLI. `history purge` permanently deletes derived repositories; route it to server operations rather than running it as routine artifact work.
 
 ## MCP file upload
 

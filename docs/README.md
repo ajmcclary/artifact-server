@@ -6,11 +6,18 @@ Use these guides to install, connect, operate, and extend Artifact Server.
 
 - [Deployment](./deployment.md)
 - [MCP and AI agents](./mcp.md)
+- [Command-line interface](./cli.md)
+
+## Live agent feedback
+
+- [Agent bridge protocol](./agent-bridge-protocol.md)
 - [Pi live feedback extension](../integrations/pi/README.md)
+- [Oh My Pi (omp) extension](../integrations/omp/README.md)
 - [OpenCode extension](../integrations/opencode/README.md)
 - [Claude Code channel bridge](../integrations/claude-channel/README.md)
-- [Agent bridge protocol](./agent-bridge-protocol.md)
-- [Command-line interface](./cli.md)
+
+## Reference
+
 - [Claude Design Systems and Projects](./claude-design.md)
 - [Cloudflare Artifacts integration status](./cloudflare-artifacts.md)
 - [Security](../SECURITY.md)

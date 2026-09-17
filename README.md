@@ -74,7 +74,7 @@ Connect the agent and install the skill:
 
 ```sh
 artifactserver connect
-npx skills add plannotator/artifact-server
+npx skills add ajmcclary/artifact-server
 ```
 
 Then ask:
@@ -85,7 +85,7 @@ Then ask:
 
 The agent returns the full-screen review link first. [Read the MCP guide](./docs/mcp.md) for source checkouts, remote servers, permissions, and supported operations.
 
-Live session delivery is available from source for Pi and Claude Code Channels. Claude Channels require its research-preview development flag and, on managed plans, the organization policy. The OpenCode adapter is not release-qualified; live-host verification and contributions are welcome.
+Live session delivery is available from source for [Pi](./integrations/pi/README.md), [Oh My Pi (omp)](./integrations/omp/README.md), [OpenCode](./integrations/opencode/README.md), and [Claude Code Channels](./integrations/claude-channel/README.md). Claude Channels require its research-preview development flag and, on managed plans, the organization policy. The omp and OpenCode adapters typecheck against their host APIs but are not yet live-host qualified; verification and contributions are welcome. Any other harness can implement the same loop through the [agent bridge protocol](./docs/agent-bridge-protocol.md).
 
 <p align="center">
   <a href="./integrations/pi/README.md"><img src="./docs/assets/pi-live-feedback.svg" alt="Artifact Server has native Pi support for live integrated feedback" width="268"></a>
@@ -131,17 +131,19 @@ Azure teams deploy through the Helm chart on AKS; there is no separate Azure ins
 Local mode stores metadata in SQLite and files on disk. It grants owner access only from the same loopback origin. Running from source requires Node.js 24.12 or newer and pnpm 10.34.3.
 
 ```sh
-git clone https://github.com/plannotator/artifact-server.git
+git clone https://github.com/ajmcclary/artifact-server.git
 cd artifact-server
 pnpm install
 pnpm dev
 ```
 
-Open the printed URL. You can also download the portable Node.js package from the [latest GitHub release](https://github.com/plannotator/artifact-server/releases/latest). See [Get started locally](https://artifactserver.com/docs/get-started/) for package verification and startup instructions.
+Open the printed URL. You can also download the portable Node.js package from the [latest GitHub release](https://github.com/ajmcclary/artifact-server/releases/latest). Release archives and container images are built and attested by this fork's own workflows. See the [CLI guide](./docs/cli.md) for the command surface and the [deployment guide](./docs/deployment.md) for running an installation.
 
 ## Usage
 
 Most artifacts are published by an agent through the [Artifact Server Skill](./skills/artifact-server/SKILL.md) or [MCP](./docs/mcp.md). For direct access, use the `artifactserver` CLI to publish files and directories, connect to remote servers, and create new versions. [Read the CLI guide](./docs/cli.md).
+
+A local installation can also **link** a file instead of uploading a snapshot of it. The artifact tracks the file where it lives, and capturing a new version reads its current bytes — useful for a document you keep editing in place. See [linked files](./docs/cli.md#link-a-working-file).
 
 ## Security model
 

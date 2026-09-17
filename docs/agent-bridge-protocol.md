@@ -4,13 +4,11 @@ A bridge is a small process that connects one live coding-agent session to one A
 
 The protocol is five HTTP interactions plus one optional beacon. Any process that can hold an HTTP connection and hand text to an agent can implement it. This page is the whole contract. You do not need to read the Pi extension to build an adapter for another harness.
 
-Sections marked **Planned** describe contracts that are specified but not in a release yet. Do not depend on them until they ship.
-
 ## Vocabulary
 
 | Term | Meaning |
 | --- | --- |
-| Host | The coding agent the bridge feeds, such as a Pi or OpenCode session. |
+| Host | The coding agent the bridge feeds, such as a Pi, omp, or OpenCode session. |
 | Bridge | The process that speaks this protocol on the host's behalf. |
 | Registered agent | One live bridge connection known to the installation. The bridge names itself at registration. |
 | Bundle | The ordered set of comment threads a human selected for one send. |
@@ -140,7 +138,7 @@ Terminal states never transition. `failed` and `canceled` clear the thread marke
 
 ## Activity beacon
 
-**Planned.** Optional refinement on top of the claim heartbeat.
+Optional refinement on top of the claim heartbeat.
 
 ```text
 POST /api/v1/agents/:agentId/activity    {"state": "thinking" | "replying" | "idle", "dispatchId": "dsp_…"}
@@ -255,4 +253,7 @@ There is no push transport: the claim long-poll is the only delivery path. There
 - [Agent dispatch and the Pi bridge](../project/spec/agent-dispatch-spec.md) — the shipped dispatch model and its storage, routes, and conformance requirements.
 - [Agent presence, frictionless dispatch, and the reusable bridge protocol](../project/spec/agent-presence-and-bridge-spec.md) — the design this page documents.
 - [Pi live feedback extension](../integrations/pi/README.md) — the reference native bridge.
+- [Oh My Pi (omp) extension](../integrations/omp/README.md) — a native bridge for the omp fork of Pi.
+- [OpenCode extension](../integrations/opencode/README.md) — a native bridge awaiting live-host qualification.
+- [Claude Code channel bridge](../integrations/claude-channel/README.md) — the reference `channel` tier adapter.
 - [MCP and AI agents](./mcp.md) — the tool surface an agent uses to reply and resolve.

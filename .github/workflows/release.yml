@@ -224,7 +224,7 @@ jobs:
       - name: Build release image
         env:
           ARTIFACT_SERVER_IMAGE_PUSH: ${{ needs.verify.outputs.publish_image }}
-          ARTIFACT_SERVER_IMAGE_TAGS: ghcr.io/plannotator/artifact-server:${{ needs.verify.outputs.image_primary_tag }},ghcr.io/plannotator/artifact-server:${{ needs.verify.outputs.image_secondary_tag }}
+          ARTIFACT_SERVER_IMAGE_TAGS: ghcr.io/ajmcclary/artifact-server:${{ needs.verify.outputs.image_primary_tag }},ghcr.io/ajmcclary/artifact-server:${{ needs.verify.outputs.image_secondary_tag }}
         run: pnpm package:oci release/image-work
       - name: Extract verified image SPDX SBOMs
         env:
@@ -247,7 +247,7 @@ jobs:
           mkdir -p release/image-bundle
           cp -- "$manifest" \
             "release/image-bundle/artifact-server-$ARTIFACTSERVER_VERSION-oci.manifest.json"
-          printf '%s\n' "ghcr.io/plannotator/artifact-server@$digest" \
+          printf '%s\n' "ghcr.io/ajmcclary/artifact-server@$digest" \
             > release/image-bundle/image-reference.txt
       - name: Verify published image tags resolve to the built digest
         if: needs.verify.outputs.publish_image == 'true'
@@ -263,7 +263,7 @@ jobs:
             "release/image-bundle/artifact-server-$ARTIFACTSERVER_VERSION-oci.manifest.json")
           for tag in "$ARTIFACTSERVER_TAG" "$ARTIFACTSERVER_SERIES"; do
             actual="sha256:$(docker buildx imagetools inspect --raw \
-              "ghcr.io/plannotator/artifact-server:$tag" | sha256sum | cut -d ' ' -f 1)"
+              "ghcr.io/ajmcclary/artifact-server:$tag" | sha256sum | cut -d ' ' -f 1)"
             if [[ "$actual" != "$expected" ]]; then
               printf 'Published tag %s resolved to %s, expected %s.\n' \
                 "$tag" "$actual" "$expected" >&2

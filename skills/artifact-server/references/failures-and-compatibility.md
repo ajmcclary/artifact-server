@@ -26,6 +26,26 @@ Stop on uncertainty. Do not turn a failed or partial request into a success repo
 - Expired upload instructions: rerun publication so the CLI obtains a new upload plan. Artifact versions themselves do not expire.
 - Integrity failure: report the expected and observed size or fingerprint from the CLI result and stop.
 
+## Linked-file failures
+
+- Linked files are unavailable: `artifact_capabilities` reports `linkedArtifacts.available` false, or the CLI reports that the server does not link files. Linking works only on a local installation started with `ARTIFACT_SERVER_LINKED_FILES=on` and reached on its loopback address. Do not fall back to uploading a snapshot without saying that you are changing what the user asked for.
+- Path outside the configured roots: report that the path is not inside an allowed link root and stop. Do not copy the file somewhere permitted to work around the check.
+- Unchanged source on `artifact_capture`: the current version is returned and no new version is saved. This is success. Report that the source had not changed.
+- `SourceDrifted`: the file changed while it was being read, so no version was saved. Retry the same call.
+- `artifact_relink` hash mismatch: the file at the new path is not the same content. Report the expected and observed SHA-256 and stop; do not relink to different bytes.
+
+## Comment failures
+
+- `comment_clear` reports skipped threads: those threads are held by queued, claimed, or delivered agent dispatches. Report the skipped count. Cancel queued or claimed work, or resolve delivered work, before clearing them. Do not loop on the call.
+- A thread is missing from `comment_list` but readable by ID: it is dispatched to an agent, not deleted. Do not recreate it.
+
+## Git history failures
+
+- `waiting`, `degraded`, or `budget-limited`: history is not ready. Report the exact state; never describe it as ready.
+- Enabling without a confirmed fresh estimate is refused. Read `project_git_history_estimate` again and confirm before retrying.
+- `migration-required`: the account or namespace changed after repositories existed. Stop and route to server operations.
+- A clone token never appears in output. If a step seems to need the token's value in chat, the approach is wrong.
+
 ## Client behavior
 
 - A local or desktop client may open `artifact_open.reviewUrl` on the user's computer. Use `artifact_open.browserUrl` only for raw immutable content.

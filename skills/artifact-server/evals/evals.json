@@ -135,6 +135,71 @@
         "Does not print credentials",
         "Reports the exact failed health or readiness check"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "There are three open comments on art_123. Address them and close them out.",
+      "expected_output": "Reads the exact threads, replies to each with what changed, and resolves each one, without inventing thread IDs or waiting for confirmation between threads.",
+      "files": [],
+      "expectations": [
+        "Calls comment_list or comment_get before writing",
+        "Uses comment_reply on each exact thread ID",
+        "Uses comment_resolve rather than comment_delete to close a thread",
+        "Does not use comment_clear for this request",
+        "Reports which threads were answered and resolved"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Delete all the resolved comments on art_123, they are cluttering the review.",
+      "expected_output": "Confirms the destructive bulk scope, calls comment_clear with the resolved scope, and reports skipped dispatched threads instead of retrying them.",
+      "files": [],
+      "expectations": [
+        "Names the artifact and the resolved scope before the destructive call",
+        "Uses comment_clear with state resolved, not all",
+        "Does not loop or retry over threads skipped because a dispatch holds them",
+        "Reports both the deleted and skipped counts",
+        "Does not describe the deletion as resolving threads"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "I keep editing ~/notes/architecture.md. Put it on my local Artifact Server so the artifact stays current as I edit.",
+      "expected_output": "Recognizes this as a linked file rather than an upload, checks that linked files are available, links the file, and explains that a new version is captured on demand.",
+      "files": [],
+      "expectations": [
+        "Calls artifact_capabilities and reads linkedArtifacts.available",
+        "Uses artifactserver link or artifact_link rather than publish",
+        "Passes an absolute path and never file bytes through MCP",
+        "Explains that artifact_capture saves a new version from the current bytes",
+        "Does not attempt to link against a remote server"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Capture a new version of the linked artifact art_123, then clone its Git history into ./history.",
+      "expected_output": "Reads the current version, captures with an optimistic guard, treats an unchanged source as success, and clones using a token it never prints.",
+      "files": [],
+      "expectations": [
+        "Calls artifact_get and passes expectedCurrentVersionId to artifact_capture",
+        "Treats an unchanged source returning the current version as success, not a failure",
+        "Uses artifactserver history clone or artifact_history_clone_token for the clone",
+        "Never prints or quotes the clone token",
+        "Reports Git history state honestly instead of calling waiting or degraded ready"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Turn on Git history for project prj_123 so we have a backup of everything.",
+      "expected_output": "Reads current status, obtains a fresh estimate, confirms it with the user before enabling, and corrects the assumption that Git history is a backup.",
+      "files": [],
+      "expectations": [
+        "Calls project_git_history_status and project_git_history_estimate first",
+        "Confirms the estimate with the user before calling project_set_git_history",
+        "Does not enable it without a confirmed fresh estimate",
+        "Explains that Artifact Server remains the source of truth and this is not a server backup",
+        "Reports the returned project state rather than claiming it is ready"
+      ]
     }
   ]
 }

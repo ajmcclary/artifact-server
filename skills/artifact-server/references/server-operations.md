@@ -21,6 +21,32 @@ from another target:
 Use the target's native tool. Artifact Server does not provide one generic
 `artifactserver deploy` command.
 
+## Inspect with the installation commands
+
+These read or change an installation rather than an artifact. Prefer them over
+ad-hoc database or storage inspection, and prefer the read-only ones first:
+
+| Intent | Command |
+| --- | --- |
+| Parse and check one exact configuration | `artifactserver config check --mode <compact\|external-storage>` |
+| Product, schema, provider, and configuration versions | `artifactserver support manifest` |
+| Verify committed records and bytes | `artifactserver integrity check --mode <mode>` |
+| Report Postgres schema compatibility | `artifactserver migrate status` |
+| Apply migrations under the advisory lock | `artifactserver migrate apply` |
+| Initialize an empty compact data directory | `artifactserver init --admin-email <email>` |
+| Start a compact server | `artifactserver start-compact` |
+| Start a stateless external-storage process | `artifactserver start-external-storage` |
+| Remove expired uncommitted uploads | `artifactserver maintenance cleanup-staging --once` |
+| Permanently delete derived Git repositories | `artifactserver history purge --plan` then `--apply` |
+
+`config check` and `integrity check` exit `2` when the installation is not ready
+or not healthy, so read the exit code rather than assuming success. `support
+manifest` is credential-free and is the right thing to share in a bug report.
+
+`history purge --apply` requires `--confirm-installation <id>` and permanently
+deletes derived repositories. Always run `--plan` first, show the plan, and get
+explicit confirmation. Disable Git history on every project before applying.
+
 ## Plan before changing infrastructure
 
 1. Inspect the current release, deployment configuration, storage drivers,

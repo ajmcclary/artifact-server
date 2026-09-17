@@ -13,6 +13,20 @@ Build toward the contracts in `project/spec/conformance.yml`. Product prose live
 - A feature is not complete until its normal and hostile tests pass and durable evidence can be attached to the ledger.
 - Preserve immutable version bytes and IDs across retries, crashes, restarts, and restores.
 - Never let untrusted paths, hostnames, tokens, or installation IDs select raw storage locations.
+- Linked files are a local-only capability. A link path must resolve inside a configured `ARTIFACT_SERVER_LINK_ROOTS` root, and an external-storage runtime must refuse to start with linked files enabled.
+- Sanitize untrusted human text that reaches an agent's context. Comment bodies, bundle notes, and quoted selections are stripped of bidirectional overrides and zero-width characters in the bridge render path.
+
+## Agent bridge adapters
+
+The adapters in `integrations/` (Pi, omp, OpenCode, Claude Code Channels) implement the [agent bridge protocol](docs/agent-bridge-protocol.md). Its citizenship rules are binding engineering rules here:
+
+- Deliver bundles as follow-up input only. Never steer, interrupt, or preempt a host session.
+- Fail open toward the host and closed toward the server: a bridge failure goes dormant with one notice rather than degrading the host's own work, and an uncertain delivery is never reported `delivered`.
+- Never throw into the host. Contain every exception at the bridge boundary.
+- Back off from 1 second to a 30-second ceiling with jitter. No error path may spin or sleep past the ceiling.
+- Type each host's API as a narrow structural slice rather than depending on the host's own type package.
+
+An adapter that only typechecks is not qualified. Mark live-host verification status honestly in its README.
 
 ## Learning more about Effect
 

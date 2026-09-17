@@ -84,6 +84,8 @@ artifactserver history checkout-project prj_example ./project-history
 
 The project command clones provisioned repositories with bounded concurrency and writes `.artifactserver/project.json`. Artifacts that have not been provisioned are reported without failing successful clones.
 
+An agent requests the same credential through the `artifact_history_clone_token` MCP tool, which issues a short-lived read token for one artifact's derived repository. Use it directly for the clone and never quote it back to the user.
+
 ## Remove all derived history
 
 Disabling Git history is reversible and does not delete repositories. Permanent installation-wide removal is a separate operator action. Always inspect the read-only plan first:

@@ -89,19 +89,46 @@ opens its raw immutable content. Agents should hand people the Review URL.
 | Artifacts | `artifact_list`, `artifact_get`, `artifact_open`, `artifact_version_list`, `artifact_diff` |
 | Publication | `artifact_create_upload`, `artifact_commit_upload` |
 | Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_restore_version`, `artifact_delete` |
-| Comments | `comment_list`, `comment_get`, `comment_create`, `comment_reply`, `comment_update`, `comment_resolve`, `comment_delete` |
-| Git history planning | `project_git_history_status`, `project_git_history_estimate` |
+| Linked files | `artifact_link`, `artifact_relink`, `artifact_capture` |
+| Comments | `comment_list`, `comment_get`, `comment_create`, `comment_reply`, `comment_update`, `comment_resolve`, `comment_delete`, `comment_clear` |
+| Git history | `project_git_history_status`, `project_git_history_estimate`, `project_set_git_history`, `artifact_history_clone_token` |
 
-Linked-artifact tools appear only when the deployment enables linked artifacts.
+## Work with linked files
 
-`project_set_git_history` enables one project only after an authorized caller confirms a fresh estimate. Provider configuration alone copies nothing. Agents should report the returned project state and must not describe `waiting`, `degraded`, or `budget-limited` history as ready.
+A linked artifact tracks a file that stays on the server's own machine instead of storing an uploaded snapshot.
+
+- `artifact_link` registers an absolute path as an artifact and captures its current bytes as the first version.
+- `artifact_capture` saves the source file's current bytes as a new immutable version. Pass the artifact's current version ID as `expectedCurrentVersionId`. Capturing an unchanged source returns the current version rather than saving a duplicate.
+- `artifact_relink` re-points an artifact at the same file in a new location. The move is accepted only when the file at the new path hashes to `expectedSha256`, so a rename cannot silently swap in different content. Versions, comments, and the artifact ID are untouched.
+
+These tools are always listed, so call `artifact_capabilities` first and read `linkedArtifacts.available`: they work only on a local installation with linked files enabled. MCP never carries file bytes — pass the absolute path and let the server read the file itself. A source that changes mid-read fails with `SourceDrifted` and saves no version; retry the same call.
+
+## Clear comment threads in bulk
+
+`comment_clear` deletes every matching thread on one artifact — `resolved`, or `all` — together with its replies, recording one ledger action per thread. Threads held by queued, claimed, or delivered dispatches are skipped and counted rather than deleted. Cancel queued or claimed work, or resolve delivered work, before clearing those.
+
+## Enable optional Git history
+
+`project_set_git_history` enables one project only after an authorized caller confirms a fresh estimate. Provider configuration alone copies nothing. Read `project_git_history_status` and `project_git_history_estimate` first.
+
+Agents should report the returned project state and must not describe `waiting`, `degraded`, or `budget-limited` history as ready.
+
+`artifact_history_clone_token` issues a short-lived read credential for one artifact's derived repository. Use it directly for a clone; never quote it back to the user. See [Cloudflare Artifacts](./cloudflare-artifacts.md).
+
+## Receive review feedback in a live session
+
+A person can select comment threads in Review and send them to a connected coding-agent session. The agent replies to each thread and resolves it, closing the loop without copying feedback by hand.
+
+Adapters ship for Pi, Oh My Pi, OpenCode, and Claude Code Channels. Any harness can implement the same loop — see the [agent bridge protocol](./agent-bridge-protocol.md).
+
+An MCP-capable host can use `comment_reply` and `comment_resolve` for the return path instead of the HTTP comment routes. The effect is identical.
 
 ## Install the Artifact Server skill
 
 Install the portable Agent Skill:
 
 ```sh
-npx skills add plannotator/artifact-server
+npx skills add ajmcclary/artifact-server
 ```
 
 The skill routes artifact work and explicit server-administration work to separate internal instructions. It uses the CLI for files on the developer machine and MCP for server data and agent-held context.

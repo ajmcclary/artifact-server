@@ -88,6 +88,42 @@ compliant client finds the issuer without further configuration.
 Clients that cannot complete OAuth keep using administration-issued API keys.
 Tokens that name another resource, and ID tokens, are refused.
 
+### Enable linked files on a local installation
+
+Optional `ARTIFACT_SERVER_LINKED_FILES=on` lets the server register a file that
+stays on its own machine and read that file's current bytes on demand. It is
+`off` by default, and it can only be enabled on the local deployment runtime:
+an external-storage deployment that sets it refuses to start, because the
+server process and the file must share a filesystem.
+
+`ARTIFACT_SERVER_LINK_ROOTS` bounds which directories can be linked. It takes a
+colon-separated list of absolute paths and defaults to the server user's home
+directory. A path outside every configured root is refused.
+
+Reach a linked-files installation on its loopback address. See
+[`artifactserver link`](./cli.md#link-a-working-file) and the linked-file MCP
+tools in [MCP and AI agents](./mcp.md#work-with-linked-files).
+
+## Operate the installation
+
+These commands run against a deployment rather than an artifact:
+
+```sh
+artifactserver init --admin-email admin@example.com
+artifactserver config check --mode external-storage
+artifactserver migrate status
+artifactserver migrate apply
+artifactserver integrity check --mode compact
+artifactserver support manifest
+artifactserver maintenance cleanup-staging --once
+```
+
+`config check` and `integrity check` exit `2` when the installation is not
+ready or not healthy, so they work as deployment gates. `support manifest` is
+credential-free and safe to attach to a bug report. `migrate apply` takes an
+advisory lock, so a rolling deploy can run it from one process. The full
+reference is in the [CLI guide](./cli.md#operator-commands).
+
 ## Back up the installation
 
 Back up metadata and artifact files as one coordinated recovery set. Use the procedure in the selected deployment guide.

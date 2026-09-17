@@ -39,7 +39,7 @@ project ID. Do not substitute the display name or silently omit the project.
 
 ## Project configuration
 
-A project may store this non-secret file at its repository root:
+A project may store this non-secret file at its repository root. **You read this file, not the CLI.** `artifactserver` has no option that loads it: read it yourself and translate its fields into `--server`, `--profile`, and `--project` on the command you run. Never pass the file path to the CLI and never assume a command picked it up.
 
 ```json
 {
