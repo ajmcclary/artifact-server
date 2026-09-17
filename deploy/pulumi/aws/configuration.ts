@@ -34,6 +34,11 @@ export function readAwsPulumiConfiguration(): ParsedAwsPulumiConfiguration {
     stateBackendUrl: config.require("stateBackendUrl"),
     target: "aws",
   };
+  document = withOptional(
+    document,
+    "autoAdmitEmailDomains",
+    config.getObject("autoAdmitEmailDomains"),
+  );
   document = withOptional(document, "dnsZoneIds", config.getObject("dnsZoneIds"));
   document = withOptional(
     document,

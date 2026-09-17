@@ -1205,8 +1205,8 @@ export function createArtifactMcpServer(
         expiresAt: z.string(),
         files: z.array(z.object({
           authorization: z.object({
-            credential: z.literal("reuse_the_mcp_bearer_credential"),
-            scheme: z.literal("Bearer"),
+            credential: z.literal("included_in_upload_url"),
+            scheme: z.literal("none"),
           }).strict(),
           method: z.literal("PUT"),
           path: z.string(),
@@ -2324,7 +2324,7 @@ function agentInstructions(mode: "local" | "remote"): string {
     "Artifact Server stores actual files as immutable versions. It does not accept inline HTML, CSS, JavaScript, base64, or invented file contents through MCP.",
     "Start with artifact_capabilities when you do not know this installation's limits.",
     "Artifacts belong to projects. Omit projectId only when the installation has one active project; otherwise call project_list and choose explicitly.",
-    "For publishing, inspect the selected file or finished directory on the client, compute each relative path, byte length, media type, and SHA-256 fingerprint, call artifact_create_upload, PUT the exact bytes to every returned uploadUrl using the same bearer credential, then call artifact_commit_upload.",
+    "For publishing, inspect the selected file or finished directory on the client, compute each relative path, byte length, media type, and SHA-256 fingerprint, call artifact_create_upload, PUT the exact bytes to every returned uploadUrl without any Authorization header, then call artifact_commit_upload.",
     "After publishing, always give the user links.review first so they can see the exact version full screen and comment. Mention links.version second when the raw artifact is useful. Do not put content bootstrap URLs or credentials in chat.",
     "When publishing a new version, first call artifact_get and pass its current version ID as expectedCurrentVersionId. On conflict, inspect the new current version before retrying.",
     "Use a stable application idempotency key when retrying the same mutation. Use a new key only for an intentional new operation.",
@@ -2395,14 +2395,16 @@ function uploadPlan(
     expiresAt: upload.expiresAt,
     files: upload.files.map((file) => ({
       authorization: {
-        credential: "reuse_the_mcp_bearer_credential" as const,
-        scheme: "Bearer" as const,
+        credential: "included_in_upload_url" as const,
+        scheme: "none" as const,
       },
       method: "PUT" as const,
       path: file.entry.path,
       size: file.entry.size,
       uploadUrl: new URL(
-        `/api/v1/uploads/${upload.id}/files/${file.storageToken}?projectId=${encodeURIComponent(upload.projectId)}`,
+        `/api/v1/uploads/${upload.id}/files/${file.storageToken}?projectId=${
+          encodeURIComponent(upload.projectId)
+        }&owner=${encodeURIComponent(upload.principalId)}`,
         applicationUrl,
       ).toString(),
     })),

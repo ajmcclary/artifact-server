@@ -91,7 +91,8 @@ describe("staged upload lifecycle", () => {
     await expectStagedFailure(runtime, "UploadNotFound", (service) =>
       service.uploadFile({
         body: byteStream(bytes),
-        principal: testPrincipal("principal-b"),
+        ownerId: "principal-b",
+        projectId: upload.projectId,
         storageToken: slot.storageToken,
         uploadId: upload.id,
       })
@@ -143,10 +144,8 @@ describe("staged upload lifecycle", () => {
           "UploadNotFound",
           (service) => service.uploadFile({
             body: byteStream(bytes),
-            principal: testPrincipal(
-              upload.principalId,
-              "foreign-installation",
-            ),
+            ownerId: upload.principalId,
+            projectId: upload.projectId,
             storageToken: slot.storageToken,
             uploadId: upload.id,
           }),
@@ -200,7 +199,8 @@ describe("staged upload lifecycle", () => {
     await expectStagedFailure(runtime, "UploadExpired", (service) =>
       service.uploadFile({
         body: byteStream(bytes),
-        principal: testPrincipal(expired.principalId),
+        ownerId: expired.principalId,
+        projectId: expired.projectId,
         storageToken: expiredSlot.storageToken,
         uploadId: expired.id,
       })
@@ -230,7 +230,8 @@ describe("staged upload lifecycle", () => {
     if (liveSlot === undefined) throw new Error("The commit fixture has no file slot.");
     await runStaged(runtime, (service) => service.uploadFile({
       body: byteStream(bytes),
-      principal: testPrincipal(live.principalId),
+      ownerId: live.principalId,
+      projectId: "prj_default",
       storageToken: liveSlot.storageToken,
       uploadId: live.id,
     }));
@@ -287,7 +288,8 @@ describe("staged upload lifecycle", () => {
     if (expiredFile === undefined) throw new Error("The cleanup fixture has no file.");
     await runStaged(runtime, (service) => service.uploadFile({
       body: byteStream(bytes),
-      principal: testPrincipal(expired.principalId),
+      ownerId: expired.principalId,
+      projectId: "prj_default",
       storageToken: expiredFile.storageToken,
       uploadId: expired.id,
     }));
@@ -303,7 +305,8 @@ describe("staged upload lifecycle", () => {
     }
     await runStaged(runtime, (service) => service.uploadFile({
       body: byteStream(bytes),
-      principal: testPrincipal(committedUpload.principalId),
+      ownerId: committedUpload.principalId,
+      projectId: "prj_default",
       storageToken: committedFile.storageToken,
       uploadId: committedUpload.id,
     }));

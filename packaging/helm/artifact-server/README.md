@@ -46,6 +46,7 @@ image:
 configuration:
   installationId: team-example
   bootstrapAdministratorEmail: admin@example.com
+  autoAdmitEmailDomains: []
   applicationOrigin: https://artifacts.example.com
   contentDomain: content.example.net
   postgresConnectionBudget: 22
@@ -134,6 +135,12 @@ alone is valid; when set, it names a key in the existing Kubernetes Secret and
 the chart mounts it as a file. `identity.oidcScopes` overrides the default
 `openid email profile`. The chart rejects a partial OIDC configuration, and an
 OIDC client secret or scope list without an issuer and client.
+
+The same issuer also protects the MCP endpoint: agents may present an end-user
+access token instead of an API key, and the server binds each call to the person
+who obtained it. Such a token must name `configuration.applicationOrigin`
+followed by `/mcp` in `aud`, which the provider produces from an audience mapper
+or an RFC 8707 resource indicator.
 
 One installation has one browser-login provider. The chart rejects values that
 configure neither provider or configure WorkOS and OIDC together.

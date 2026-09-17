@@ -69,6 +69,7 @@ export interface ExternalStorageRuntimeConfig {
   readonly apiToken: Redacted.Redacted;
   readonly apiOAuthResource?: ApiOAuthResourceConfiguration;
   readonly applicationOrigin?: string;
+  readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
   readonly bootstrapAdministratorEmail: string;
   readonly browserAccess: Extract<BrowserAccess, {readonly mode: "private_team"}>;
   readonly clock?: Clock;
@@ -160,6 +161,7 @@ export async function createExternalStorageRuntime(
     const {blobs, staging} = connectedObjectStorage;
     const applicationAdapters: Parameters<typeof createApplicationLayer>[0] = {
       apiToken: null,
+      autoAdmitEmailDomains: config.autoAdmitEmailDomains,
       blobs,
       bootstrapAdministratorEmail: config.bootstrapAdministratorEmail,
       clock: runtimeClock,

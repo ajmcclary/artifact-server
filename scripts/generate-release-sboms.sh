@@ -58,6 +58,9 @@ case "$artifactserver_mode" in
       "$artifactserver_input/plannotator-artifact-server-opencode-$artifactserver_version.tgz" \
       "plannotator-artifact-server-opencode-$artifactserver_version"
     generate_file_sbom \
+      "$artifactserver_input/plannotator-artifact-server-omp-$artifactserver_version.tgz" \
+      "plannotator-artifact-server-omp-$artifactserver_version"
+    generate_file_sbom \
       "$artifactserver_input/plannotator-artifact-server-claude-channel-$artifactserver_version.tgz" \
       "plannotator-artifact-server-claude-channel-$artifactserver_version"
     ;;

@@ -1,6 +1,6 @@
 ---
 title: Review with coding agents
-description: Connect Pi, OpenCode, Claude Code, or any MCP client so review comments reach the agent in one click and it replies and resolves them in place.
+description: Connect Pi, Oh My Pi (omp), OpenCode, Claude Code, or any MCP client so review comments reach the agent in one click and it replies and resolves them in place.
 ---
 
 Artifact Server sends review comments to the agent that did the work. You comment on an exact version and send all open comments as one bundle. The agent can reply to each thread, resolve completed work, and publish the next version. You do not have to copy feedback into a chat window.
@@ -29,6 +29,7 @@ Each agent exposes different runtime functions. Artifact Server shows the availa
 | --- | --- | --- | --- |
 | Pi | Native | The bridge injects the bundle into the running session. The agent replies and resolves through the native `artifact_comments` tool. | Live |
 | OpenCode | Native | OpenCode uses the same bridge core as Pi. Its prompt queue delivers the bundle to the active top-level session. | Live |
+| Oh My Pi (omp) | Native | omp is a Pi fork and uses the same bridge core. The bundle is injected as follow-up work into the running session. | Experimental; live-host qualification pending |
 | Claude Code, channel | Channel | The bridge sends the bundle to the selected session as a channel event. The `artifact_comments` tool closes threads. | Live |
 | Claude Code, plain MCP | Mailbox | The bundle waits in the agent's inbox. Each MCP tool result includes a one-line reminder until the agent claims it. | Inferred from recent tool calls |
 | Codex, Cursor, Copilot | Mailbox | These clients use the same MCP inbox path. | None |
@@ -72,6 +73,45 @@ Pick the agent you use. The choice is remembered across pages.
 
     <Aside type="note" title="Before the npm release">
       Until the package is published, load it from a source checkout: `pi -e integrations/pi/index.ts`.
+    </Aside>
+  </TabItem>
+
+  <TabItem label="Oh My Pi (omp)">
+    <Steps>
+      <Step title="Install the extension">
+        omp auto-discovers extensions in `~/.omp/agent/extensions/`. Install the package and load its entry as an extension:
+
+        ```sh
+        npm install -g @plannotator/artifact-server-omp
+        ```
+
+        Add `~/.omp/agent/extensions/artifact-server-omp.ts`:
+
+        ```ts
+        export {default} from "@plannotator/artifact-server-omp";
+        ```
+      </Step>
+      <Step title="Point it at your server">
+        A local Artifact Server needs nothing: the extension reads the managed local service's discovery record. For a team server, set two variables before starting omp:
+
+        ```sh
+        export ARTIFACT_SERVER_ORIGIN=https://artifacts.example.com
+        export ARTIFACT_SERVER_AGENT_TOKEN=<token with agent:connect and comment scopes>
+        ```
+
+        `ARTIFACT_SERVER_AGENT_NAME` overrides the display name. The default is the name of the working directory.
+      </Step>
+      <Step title="Send a bundle">
+        Open a review and add comments. Then click **Send all open to ‹name›**. Restarts, `/new`, and `/resume` keep the same agent identity. Pending bundles remain available.
+      </Step>
+    </Steps>
+
+    <Aside type="note" title="Compatibility">
+      omp is a Pi fork. Its `session_shutdown` event does not carry the
+      `reason` field Pi's does, so the bridge sends the courtesy disconnect on
+      every shutdown rather than only on a confirmed quit — safe because a
+      successor session re-registers the same agent row (keyed on hostname and
+      working directory). See the integration README.
     </Aside>
   </TabItem>
 
@@ -158,6 +198,6 @@ With more than one connected agent, the send control becomes a split button. The
 
 ## Build an extension for another agent
 
-Each extension is an adapter over [@plannotator/agent-bridge](https://github.com/plannotator/agent-bridge) (MIT). The bridge handles registration, claims, bundle format, and comment operations. An adapter supplies a `HostPort` for user notifications, session messages, and compaction state. The package documents the wire protocol in `PROTOCOL.md`. The Pi, OpenCode, and Claude channel adapters are available under [`integrations/`](https://github.com/plannotator/artifact-server/tree/main/integrations).
+Each extension is an adapter over [@plannotator/agent-bridge](https://github.com/plannotator/agent-bridge) (MIT). The bridge handles registration, claims, bundle format, and comment operations. An adapter supplies a `HostPort` for user notifications, session messages, and compaction state. The package documents the wire protocol in `PROTOCOL.md`. The Pi, Oh My Pi, OpenCode, and Claude channel adapters are available under [`integrations/`](https://github.com/plannotator/artifact-server/tree/main/integrations).
 
 When MCP supports Tasks and server-initiated events, standard MCP can replace these adapters. This change affects only the transport layer.

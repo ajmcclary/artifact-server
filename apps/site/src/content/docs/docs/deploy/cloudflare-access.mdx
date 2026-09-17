@@ -8,7 +8,11 @@ sidebar:
 Cloudflare Access can provide browser sign-in for an Artifact Server deployment. You add an OIDC application record in Cloudflare Access, then give the resulting client settings to the Artifact Server deployment. You do not deploy another application.
 
 <Aside type="caution" title="Browser sign-in only">
-This configuration does not provide browser authorization for remote MCP clients. After signing in, an administrator can issue scoped API keys for remote MCP clients and unattended agents. Use WorkOS if the installation needs the currently supported hosted MCP browser-authorization flow.
+Browser login alone does not give remote MCP clients an OAuth flow. A configured
+OIDC issuer can protect `/mcp` when it offers client registration, issues
+verifiable JWT access tokens, and binds their audience to the exact application
+`/mcp` URL. If the selected Cloudflare Access configuration cannot meet those
+requirements, an administrator can issue scoped API keys for remote clients.
 </Aside>
 
 ## Before you begin

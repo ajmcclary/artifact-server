@@ -35,6 +35,8 @@ export interface ExternalIdentity {
   readonly displayName: string;
   readonly email: string;
   readonly emailVerified: boolean;
+  /** True only when the provider explicitly asserted email verification. */
+  readonly emailVerificationAsserted?: boolean;
   readonly provider: string;
   readonly subject: string;
 }

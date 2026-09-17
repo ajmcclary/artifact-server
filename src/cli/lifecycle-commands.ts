@@ -11,8 +11,14 @@ import {
   startExternalStorageServer,
   type ExternalStorageServerConfig,
 } from "../external-storage/start-external-storage-server.js";
+import {
+  createOidcHostedAuthentication,
+  type OidcHostedAuthentication,
+} from "../identity/oidc-hosted-authentication.js";
 import {createOidcIdentityProvider} from
   "../identity/oidc-identity-provider.js";
+import {parseAutoAdmitEmailDomains} from
+  "../identity/auto-admit-email-domains.js";
 import {createWorkOsHostedAuthentication} from
   "../identity/workos-hosted-authentication.js";
 import {
@@ -49,6 +55,7 @@ import {waitForProcessSignal} from "./wait-for-process-signal.js";
 import {
   assertAtMostOneBrowserLoginProvider,
   loadOidcConfiguration,
+  type OidcConfiguration,
 } from "./oidc-configuration.js";
 import {loadWorkOsConfiguration} from "./workos-configuration.js";
 import {writeGitHistoryConfigurationWarnings} from
@@ -308,6 +315,9 @@ function configureExternalStorageStart(
       const hostedAuthentication = workOs === null
         ? null
         : await createWorkOsHostedAuthentication(workOs);
+      const oidcAuthentication = oidc === null
+        ? null
+        : await oidcAuthenticationOrBrowserOnly(oidc);
       const browserAccess = hostedAuthentication !== null
         ? privateTeamBrowserAccess(browserLoginKinds.workOs)
         : oidc !== null
@@ -316,6 +326,9 @@ function configureExternalStorageStart(
       let serverConfig: ExternalStorageServerConfig = {
         apiToken: parsed.apiToken,
         applicationOrigin: parsed.applicationOrigin,
+        autoAdmitEmailDomains: parseAutoAdmitEmailDomains(
+          process.env["ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS"],
+        ),
         bootstrapAdministratorEmail: parsed.bootstrapAdministratorEmail,
         browserAccess,
         completedRequestLogSampleRate: parsed.completedRequestLogSampleRate,
@@ -338,10 +351,10 @@ function configureExternalStorageStart(
           ...hostedAuthentication,
         };
       }
-      if (oidc !== null) {
+      if (oidcAuthentication !== null) {
         serverConfig = {
           ...serverConfig,
-          interactiveIdentityProvider: createOidcIdentityProvider(oidc),
+          ...oidcAuthentication,
         };
       }
       const server = await startExternalStorageServer(serverConfig);
@@ -376,6 +389,9 @@ async function startCompactServer(
   const hostedAuthentication = workOs === null
     ? null
     : await createWorkOsHostedAuthentication(workOs);
+  const oidcAuthentication = oidc === null
+    ? null
+    : await oidcAuthenticationOrBrowserOnly(oidc);
   const browserAccess = hostedAuthentication !== null
     ? privateTeamBrowserAccess(browserLoginKinds.workOs)
     : oidc !== null
@@ -384,6 +400,9 @@ async function startCompactServer(
   let serverConfig: LocalServerConfig = {
     apiToken: Redacted.value(configuration.apiToken),
     applicationOrigin: configuration.applicationOrigin,
+    autoAdmitEmailDomains: parseAutoAdmitEmailDomains(
+      process.env["ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS"],
+    ),
     bootstrapAdministratorEmail: configuration.bootstrapAdministratorEmail,
     browserAccess,
     completedRequestLogSampleRate: configuration.completedRequestLogSampleRate,
@@ -407,13 +426,32 @@ async function startCompactServer(
       ...hostedAuthentication,
     };
   }
-  if (oidc !== null) {
+  if (oidcAuthentication !== null) {
     serverConfig = {
       ...serverConfig,
-      interactiveIdentityProvider: createOidcIdentityProvider(oidc),
+      ...oidcAuthentication,
     };
   }
   return startLocalServer(serverConfig);
+}
+
+type OidcServerAuthentication =
+  | OidcHostedAuthentication
+  | Pick<OidcHostedAuthentication, "interactiveIdentityProvider">;
+
+/** MCP OAuth needs the issuer at startup; browser login must survive it being down. */
+async function oidcAuthenticationOrBrowserOnly(
+  oidc: OidcConfiguration,
+): Promise<OidcServerAuthentication> {
+  try {
+    return await createOidcHostedAuthentication(oidc);
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : "the request failed";
+    process.stderr.write(
+      `OIDC configuration warning (discovery_failed): MCP OAuth stays off for ${oidc.issuer}: ${reason}\n`,
+    );
+    return {interactiveIdentityProvider: createOidcIdentityProvider(oidc)};
+  }
 }
 
 async function lifecycleConfiguration(

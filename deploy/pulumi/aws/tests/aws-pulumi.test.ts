@@ -129,7 +129,9 @@ describe("AWS Pulumi deployment", () => {
 
   test("defines the secure AWS resource graph and exact shared outputs", async () => {
     resources.length = 0;
-    const configuration = parseAwsPulumiConfiguration(awsInput(), "production");
+    const configuration = parseAwsPulumiConfiguration(awsInput({
+      autoAdmitEmailDomains: ["example.org"],
+    }), "production");
     const stackOutputs = await pulumi.runtime.runInPulumiStack(async () => {
       const stack = await defineAwsStack(configuration);
       return {deployment: stack.deployment};
@@ -280,6 +282,10 @@ describe("AWS Pulumi deployment", () => {
     expect(container?.environment).toContainEqual({
       name: "ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE",
       value: "external",
+    });
+    expect(container?.environment).toContainEqual({
+      name: "ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS",
+      value: "example.org",
     });
     expect(container?.environment).toContainEqual({
       name: "NODE_EXTRA_CA_CERTS",

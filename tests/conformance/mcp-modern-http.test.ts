@@ -48,8 +48,8 @@ const toolCallResultSchema = z.object({
 });
 const uploadPlanSchema = z.object({
   authorization: z.object({
-    credential: z.literal("reuse_the_mcp_bearer_credential"),
-    scheme: z.literal("Bearer"),
+    credential: z.literal("included_in_upload_url"),
+    scheme: z.literal("none"),
   }),
   method: z.literal("PUT"),
   path: z.string(),
@@ -383,6 +383,109 @@ describe("modern MCP HTTP", () => {
       jsonrpc: z.literal("2.0"),
     }).parse(await listen.json());
     expect(listenBody.error.message).toContain("Subscription limit");
+  });
+
+  test("PUB-014-B PUB-014-F: upload URL writes declared bytes without a bearer and keeps commit private", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("gateway upload proof\n");
+    const declaredFile = {
+      mediaType: "text/plain",
+      path: "gateway.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const uploadResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: declaredFile.path, files: [declaredFile]},
+      name: "artifact_create_upload",
+    });
+    const upload = createUploadResultSchema.parse(uploadResult.structuredContent);
+    const filePlan = upload.files[0];
+    if (filePlan === undefined) throw new Error("The MCP upload plan has no file.");
+    expect(filePlan.authorization).toEqual({
+      credential: "included_in_upload_url",
+      scheme: "none",
+    });
+    const planned = new URL(filePlan.uploadUrl);
+    expect(planned.searchParams.get("owner")).not.toBeNull();
+
+    const withoutOwner = new URL(planned);
+    withoutOwner.searchParams.delete("owner");
+    expect((await fetch(withoutOwner, {body: bytes, method: "PUT"})).status)
+      .toBe(400);
+
+    const foreignOwner = new URL(planned);
+    foreignOwner.searchParams.set("owner", "member_someone-else");
+    const ownerFailure = await fetch(foreignOwner, {body: bytes, method: "PUT"});
+    expect(ownerFailure.status).toBe(404);
+    const ownerError = await ownerFailure.json();
+
+    const unknownToken = new URL(planned);
+    unknownToken.pathname = unknownToken.pathname.replace(
+      /[^/]+$/u,
+      "0123456789abcdef0123456789abcdef0123",
+    );
+    const tokenFailure = await fetch(unknownToken, {body: bytes, method: "PUT"});
+    expect(tokenFailure.status).toBe(404);
+    expect(await tokenFailure.json()).toEqual(ownerError);
+
+    const wrongBytes = await fetch(filePlan.uploadUrl, {
+      body: new TextEncoder().encode("other bytes\n"),
+      method: filePlan.method,
+    });
+    expect(wrongBytes.status).toBe(422);
+    const afterRejectedBytes = await callTool(server, installation.apiToken, {
+      arguments: {
+        idempotencyKey: "gateway-upload-proof-rejected",
+        target: {kind: "new_artifact", name: "Gateway upload proof"},
+        uploadId: upload.uploadId,
+      },
+      name: "artifact_commit_upload",
+    });
+    expect(afterRejectedBytes.isError).toBe(true);
+    expect(afterRejectedBytes.content[0]?.text).toContain("verified");
+
+    // A gateway client carries a key this server cannot read.
+    const strayCredential = await fetch(filePlan.uploadUrl, {
+      body: bytes,
+      headers: {Authorization: "Bearer sk-some-other-gateway-key"},
+      method: filePlan.method,
+    });
+    expect(strayCredential.status).toBe(200);
+
+    const repeated = await fetch(filePlan.uploadUrl, {
+      body: bytes,
+      method: filePlan.method,
+    });
+    expect(repeated.status).toBe(200);
+
+    const commitUrl = new URL(
+      `/api/v1/uploads/${upload.uploadId}/commit?projectId=prj_default`,
+      filePlan.uploadUrl,
+    );
+    const anonymousCommit = await fetch(commitUrl, {
+      body: JSON.stringify({
+        target: {kind: "new_artifact", name: "Gateway upload proof"},
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "gateway-upload-proof-0001",
+      },
+      method: "POST",
+    });
+    expect(anonymousCommit.status).toBe(401);
+
+    const commitResult = await callTool(server, installation.apiToken, {
+      arguments: {
+        idempotencyKey: "gateway-upload-proof-0001",
+        target: {kind: "new_artifact", name: "Gateway upload proof"},
+        uploadId: upload.uploadId,
+      },
+      name: "artifact_commit_upload",
+    });
+    const committed = publicationCommitResultSchema.parse(
+      commitResult.structuredContent,
+    );
+    expect(committed.replayed).toBe(false);
   });
 
   test("MCP-006-B MCP-006-F MCP-007-B MCP-007-F MCP-008-B MCP-008-F MCP-015-B MCP-015-F PUB-013-B PUB-013-F: every advertised artifact operation runs over real files and shared policy", async () => {

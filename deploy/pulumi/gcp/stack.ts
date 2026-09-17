@@ -710,6 +710,13 @@ function gcpRuntimeEnvironment(
     {name: "ARTIFACT_SERVER_SHUTDOWN_DEADLINE_MS", value: "10000"},
     {name: "NODE_ENV", value: "production"},
   ];
+  if (input.autoAdmitEmailDomains !== undefined &&
+      input.autoAdmitEmailDomains.length > 0) {
+    environment.push({
+      name: "ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS",
+      value: input.autoAdmitEmailDomains.join(","),
+    });
+  }
   if (input.otlpEndpoint !== undefined) {
     environment.push(
       {name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: input.otlpEndpoint},

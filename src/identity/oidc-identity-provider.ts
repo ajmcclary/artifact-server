@@ -175,6 +175,7 @@ export class OidcIdentityProvider implements InteractiveIdentityProvider {
         displayName: displayName(claims.data),
         email: claims.data.email,
         emailVerified: claims.data.email_verified !== false,
+        emailVerificationAsserted: claims.data.email_verified === true,
         provider: `oidc:${this.#issuer}`,
         subject: claims.data.sub,
       };

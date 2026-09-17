@@ -482,13 +482,16 @@ function runCommandToExit(
   arguments_: readonly string[],
   environment: NodeJS.ProcessEnv = {},
 ): Promise<ProcessResult> {
+  const inherited = {...process.env};
+  delete inherited["ARTIFACT_SERVER_URL"];
+  delete inherited["ARTIFACT_SERVER_API_TOKEN"];
   return new Promise((resolve, reject) => {
     const child = spawn(
       path.join(repositoryRoot, "node_modules/.bin/tsx"),
       [path.join(repositoryRoot, "src/cli/main.ts"), ...arguments_],
       {
         cwd: repositoryRoot,
-        env: {...process.env, ...environment},
+        env: {...inherited, ...environment},
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

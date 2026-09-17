@@ -22,9 +22,13 @@ const backend = spawn(
   ],
   {env: developmentEnvironment, stdio: "inherit"},
 );
+const isWindows = process.platform === "win32";
+// Node cannot spawn pnpm.cmd directly on Windows (CVE-2024-27980).
 const frontend = spawn(
-  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  ["--dir", "apps/web", "dev"],
+  isWindows ? "cmd.exe" : "pnpm",
+  isWindows
+    ? ["/c", "pnpm", "--dir", "apps/web", "dev"]
+    : ["--dir", "apps/web", "dev"],
   {env: developmentEnvironment, stdio: "inherit"},
 );
 

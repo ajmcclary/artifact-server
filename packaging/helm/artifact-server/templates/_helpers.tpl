@@ -143,6 +143,10 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
   value: /run/secrets/artifact-server/api-token
 - name: ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL
   value: {{ .Values.configuration.bootstrapAdministratorEmail | quote }}
+{{- if .Values.configuration.autoAdmitEmailDomains }}
+- name: ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS
+  value: {{ join "," .Values.configuration.autoAdmitEmailDomains | quote }}
+{{- end }}
 - name: ARTIFACT_SERVER_CONTENT_DOMAIN
   value: {{ .Values.configuration.contentDomain | quote }}
 - name: ARTIFACT_SERVER_DATABASE_URL_FILE

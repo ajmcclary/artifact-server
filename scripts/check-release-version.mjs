@@ -65,6 +65,7 @@ expectEqual(rootPackage.bin?.artifactserver, "./dist/cli/main.js", "root CLI ent
 const publicPackages = [
   ["integrations/pi/package.json", "@plannotator/artifact-server-pi"],
   ["integrations/opencode/package.json", "@plannotator/artifact-server-opencode"],
+  ["integrations/omp/package.json", "@plannotator/artifact-server-omp"],
   [
     "integrations/claude-channel/package.json",
     "@plannotator/artifact-server-claude-channel",
@@ -86,6 +87,12 @@ expectEqual(
   piPackage.peerDependencies?.typebox,
   "^1.3.7",
   "Pi typebox peer range",
+);
+const ompPackage = JSON.parse(await readText("integrations/omp/package.json"));
+expectEqual(
+  ompPackage.peerDependencies?.typebox,
+  "^1.3.7",
+  "omp typebox peer range",
 );
 
 const chart = await readText("packaging/helm/artifact-server/Chart.yaml");

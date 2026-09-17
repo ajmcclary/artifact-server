@@ -798,6 +798,11 @@ export function createHttpApp(
   );
 
   app.use("/api/*", async (context, next) => {
+    // The upload URL carries its own authorization, and a gateway client never
+    // sees the credential its caller used, so a stray header must not fail it.
+    if (isStagedFileUpload(context.req.method, context.req.path)) {
+      return next();
+    }
     const authorization = context.req.header("authorization");
     if (authorization !== undefined) {
       const parsed = bearerSchema.safeParse(authorization);
@@ -2168,6 +2173,8 @@ export function createHttpApp(
     );
     const requestUrl = responseApplicationUrl(context, dependencies);
     const projectQuery = `?projectId=${encodeURIComponent(upload.projectId)}`;
+    const fileQuery =
+      `${projectQuery}&owner=${encodeURIComponent(upload.principalId)}`;
     return context.json({
       commitUrl: new URL(
         `/api/v1/uploads/${upload.id}/commit${projectQuery}`,
@@ -2179,7 +2186,7 @@ export function createHttpApp(
         path: file.entry.path,
         size: file.entry.size,
         uploadUrl: new URL(
-          `/api/v1/uploads/${upload.id}/files/${file.storageToken}${projectQuery}`,
+          `/api/v1/uploads/${upload.id}/files/${file.storageToken}${fileQuery}`,
           requestUrl,
         ).toString(),
       })),
@@ -2190,6 +2197,17 @@ export function createHttpApp(
   });
 
   app.put("/api/v1/uploads/:uploadId/files/:storageToken", async (context) => {
+    const ownerId = context.req.query("owner");
+    const projectId = requestedProjectId(context);
+    if (ownerId === undefined || projectId === null) {
+      return context.json({
+        error: {
+          code: errorCodes.invalidInput,
+          message:
+            "Use the upload URL as it was issued: its project and owner identify the staged upload.",
+        },
+      }, 400);
+    }
     const body = context.req.raw.body ?? emptyByteStream();
     const file = await runHttpApplicationEffect(
       context,
@@ -2197,8 +2215,8 @@ export function createHttpApp(
       StagedUploadService.use((stagedUploads) =>
         stagedUploads.uploadFile({
           body,
-          principal: context.get("principal"),
-          projectId: requestedProjectId(context),
+          ownerId,
+          projectId,
           storageToken: context.req.param("storageToken"),
           uploadId: context.req.param("uploadId"),
         })
@@ -2513,6 +2531,13 @@ export function createHttpApp(
   });
 
   return app;
+}
+
+const stagedFileUploadPath =
+  /^\/api\/v1\/uploads\/[^/]+\/files\/[^/]+$/u;
+
+function isStagedFileUpload(method: string, path: string): boolean {
+  return method === "PUT" && stagedFileUploadPath.test(path);
 }
 
 function apiBearerChallenge(

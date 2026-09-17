@@ -155,6 +155,7 @@ jobs:
           set -euo pipefail
           pnpm --dir integrations/pi pack --pack-destination "$ARTIFACTSERVER_OUTPUT"
           pnpm --dir integrations/opencode pack --pack-destination "$ARTIFACTSERVER_OUTPUT"
+          pnpm --dir integrations/omp pack --pack-destination "$ARTIFACTSERVER_OUTPUT"
           pnpm --dir integrations/claude-channel pack --pack-destination "$ARTIFACTSERVER_OUTPUT"
       - name: Install verified Syft
         run: scripts/install-release-syft.sh "$RUNNER_TEMP/syft"
@@ -374,6 +375,11 @@ jobs:
         with:
           subject-path: release/public/plannotator-artifact-server-opencode-${{ needs.verify.outputs.version }}.tgz
           sbom-path: release/public/plannotator-artifact-server-opencode-${{ needs.verify.outputs.version }}.spdx.json
+      - name: Attest omp adapter SBOM
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
+        with:
+          subject-path: release/public/plannotator-artifact-server-omp-${{ needs.verify.outputs.version }}.tgz
+          sbom-path: release/public/plannotator-artifact-server-omp-${{ needs.verify.outputs.version }}.spdx.json
       - name: Attest Claude channel SBOM
         uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         with:
@@ -461,6 +467,9 @@ jobs:
           publish_adapter \
             @plannotator/artifact-server-opencode \
             "release/public/plannotator-artifact-server-opencode-$ARTIFACTSERVER_VERSION.tgz"
+          publish_adapter \
+            @plannotator/artifact-server-omp \
+            "release/public/plannotator-artifact-server-omp-$ARTIFACTSERVER_VERSION.tgz"
           publish_adapter \
             @plannotator/artifact-server-claude-channel \
             "release/public/plannotator-artifact-server-claude-channel-$ARTIFACTSERVER_VERSION.tgz"

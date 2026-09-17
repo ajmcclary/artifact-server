@@ -269,8 +269,8 @@ async function publishPrivateArtifact(runtime: ApplicationRuntime) {
           controller.close();
         },
       }),
-      principal: testPrincipal,
-      projectId: null,
+      ownerId: upload.principalId,
+      projectId: upload.projectId,
       storageToken: file.storageToken,
       uploadId: upload.id,
     })),

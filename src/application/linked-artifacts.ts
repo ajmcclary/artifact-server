@@ -489,8 +489,8 @@ function makeLinkedArtifactService(
       const body = yield* runEngine(() => input.capture.openStream());
       yield* staged.uploadFile({
         body,
-        principal: input.principal,
-        projectId: input.projectId,
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
         storageToken: file.storageToken,
         uploadId: upload.id,
       });

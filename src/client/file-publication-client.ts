@@ -366,7 +366,6 @@ export const publishPreparedPath = Effect.fn(
     yield* Effect.forEach(
       upload.files,
       (plannedFile) => uploadPreparedFile(
-        config.apiToken,
         plannedFile,
         requiredPreparedFile(publication.files, plannedFile.path),
         upload.uploadId,
@@ -752,7 +751,6 @@ const validateUploadPlan = Effect.fn("FilePublicationClient.validateUploadPlan")
 
 const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")(
   function*(
-    apiToken: Redacted.Redacted,
     plannedFile: typeof createUploadResponseSchema.Type["files"][number],
     preparedFile: PreparedFile,
     uploadId: string,
@@ -772,7 +770,6 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
       )),
     );
     const request = HttpClientRequest.put(plannedFile.uploadUrl).pipe(
-      HttpClientRequest.bearerToken(apiToken),
       HttpClientRequest.setBody(body),
     );
     const uploaded = yield* executeJson(

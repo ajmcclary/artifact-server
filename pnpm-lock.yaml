@@ -362,6 +362,19 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  integrations/omp:
+    dependencies:
+      '@plannotator/agent-bridge':
+        specifier: ^0.1.1
+        version: 0.1.1
+    devDependencies:
+      typebox:
+        specifier: 1.3.7
+        version: 1.3.7
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   integrations/opencode:
     dependencies:
       '@plannotator/agent-bridge':

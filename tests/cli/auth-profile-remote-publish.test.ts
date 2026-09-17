@@ -708,8 +708,11 @@ if (operation === "read") {
 }
 `, {mode: 0o700});
   await chmod(helper, 0o700);
+  const inherited = {...process.env};
+  delete inherited["ARTIFACT_SERVER_URL"];
+  delete inherited["ARTIFACT_SERVER_API_TOKEN"];
   return {
-    ...process.env,
+    ...inherited,
     ARTIFACT_SERVER_CREDENTIAL_HELPER: helper,
     CREDENTIAL_HELPER_STATE: statePath,
   };

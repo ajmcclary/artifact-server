@@ -38,6 +38,11 @@ export function readGcpPulumiConfiguration(
     stateBackendUrl: config.require("stateBackendUrl"),
     target: "gcp",
   };
+  document = withOptional(
+    document,
+    "autoAdmitEmailDomains",
+    config.getObject("autoAdmitEmailDomains"),
+  );
   document = withOptional(document, "dnsZoneIds", config.getObject("dnsZoneIds"));
   document = withOptional(
     document,

@@ -14,6 +14,7 @@ imagePullSecrets: []
 configuration:
   installationId: ""
   bootstrapAdministratorEmail: ""
+  autoAdmitEmailDomains: []
   applicationOrigin: ""
   contentDomain: ""
   postgresConnectionBudget: 22

@@ -143,6 +143,7 @@ import type {
 /** Concrete Node adapters reused by the Effect application layer. */
 export interface ApplicationAdapters {
   readonly apiToken: Redacted.Redacted | null;
+  readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
   readonly blobs: BlobStore;
   readonly bootstrapAdministratorEmail: string;
   readonly clock: Clock;
@@ -772,6 +773,7 @@ export function createApplicationLayer(
   };
   const identityRepository = adapters.identityRepository;
   const identityLayer = InstallationAccessService.layer({
+    autoAdmitEmailDomains: adapters.autoAdmitEmailDomains,
     bootstrapAdministratorEmail: adapters.bootstrapAdministratorEmail,
     clock: adapters.clock,
     ids: {
@@ -961,7 +963,7 @@ export function createApplicationLayer(
           verified.subject,
         );
         if (principal === null) {
-          const identity = yield* verifier.resolveIdentity(verified);
+          const identity = yield* verifier.resolveIdentity(verified, credential);
           principal = yield* installationAccess.authenticateExternalIdentity(identity);
         }
         return {

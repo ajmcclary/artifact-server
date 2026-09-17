@@ -598,7 +598,7 @@ describe("complete-site publishing", () => {
     expect(response.status).toBe(422);
   });
 
-  test("foundation: HTTP upload locations reject invalid credentials and another installation", async () => {
+  test("foundation: HTTP upload locations ignore credentials and reject another installation", async () => {
     const file = {
       bytes: utf8("isolated"),
       mediaType: "text/plain",
@@ -614,13 +614,23 @@ describe("complete-site publishing", () => {
     const planned = created.body.files[0];
     if (planned === undefined) throw new Error("The isolation fixture is incomplete.");
 
-    const unauthorized = await fetch(planned.uploadUrl, {
+    // A credential this server cannot read is neither required nor fatal here.
+    const strayCredential = await fetch(planned.uploadUrl, {
       body: copiedArrayBuffer(file.bytes),
       headers: {Authorization: "Bearer another-principal-token"},
       method: "PUT",
     });
-    expect(unauthorized.status).toBe(401);
-    await unauthorized.arrayBuffer();
+    expect(strayCredential.status).toBe(200);
+    await strayCredential.arrayBuffer();
+
+    const withoutLocator = new URL(planned.uploadUrl);
+    withoutLocator.search = "";
+    const incomplete = await fetch(withoutLocator, {
+      body: copiedArrayBuffer(file.bytes),
+      method: "PUT",
+    });
+    expect(incomplete.status).toBe(400);
+    await incomplete.arrayBuffer();
 
     const otherInstallation = await createTestInstallation();
     let otherServer: RunningTestServer | undefined;
@@ -733,16 +743,21 @@ function copiedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
+function retargetUrl(value: string, baseUrl: string): string {
+  const issued = new URL(value);
+  return new URL(`${issued.pathname}${issued.search}`, baseUrl).toString();
+}
+
 function retargetPlan(
   upload: CreateUploadResponse,
   baseUrl: string,
 ): CreateUploadResponse {
   return {
     ...upload,
-    commitUrl: new URL(new URL(upload.commitUrl).pathname, baseUrl).toString(),
+    commitUrl: retargetUrl(upload.commitUrl, baseUrl),
     files: upload.files.map((file) => ({
       ...file,
-      uploadUrl: new URL(new URL(file.uploadUrl).pathname, baseUrl).toString(),
+      uploadUrl: retargetUrl(file.uploadUrl, baseUrl),
     })),
   };
 }

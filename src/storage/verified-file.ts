@@ -142,6 +142,10 @@ export function readableFileRange(
 
 /** Syncs a directory entry after an atomic installation or replacement. */
 export async function syncDirectory(directory: string): Promise<void> {
+  // Windows cannot open a directory as a file handle, so handle.sync() throws
+  // EPERM. A directory fsync is a POSIX durability barrier with no Windows
+  // equivalent; the file bytes are still synced before the rename.
+  if (process.platform === "win32") return;
   const handle = await open(directory, "r");
   try {
     await handle.sync();

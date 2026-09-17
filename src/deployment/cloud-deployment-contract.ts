@@ -1,5 +1,7 @@
 import {Effect, Schema, type Redacted} from "effect";
 import {getDomain} from "tldts";
+import {autoAdmitEmailDomainsSchema} from
+  "../identity/auto-admit-email-domains.js";
 
 import {findUnsafeCloudDeploymentValue} from
   "./cloud-deployment-secret-safety.ts";
@@ -109,6 +111,7 @@ const dnsZoneIds = Schema.Struct({
 
 const sharedInputFields = {
   applicationDomain: hostname,
+  autoAdmitEmailDomains: Schema.optionalKey(autoAdmitEmailDomainsSchema),
   backupRetentionDays: Schema.Int.check(
     Schema.isBetween({minimum: 7, maximum: 35}),
   ),

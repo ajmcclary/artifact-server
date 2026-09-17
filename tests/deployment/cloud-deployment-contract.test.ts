@@ -114,6 +114,9 @@ describe("shared cloud deployment contract", () => {
     ["incomplete WorkOS configuration", awsInput({
       workosClientId: "client_01",
     })],
+    ["invalid auto-admission domain", awsInput({
+      autoAdmitEmailDomains: ["*.example.org"],
+    })],
     ["incomplete Cloudflare OIDC configuration", cloudflareInput({
       oidcScopes: "openid email profile",
     })],

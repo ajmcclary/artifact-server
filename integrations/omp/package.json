@@ -1,0 +1,33 @@
+{
+  "name": "@plannotator/artifact-server-omp",
+  "version": "0.1.0",
+  "description": "Oh My Pi (omp) coding-agent bridge for Artifact Server: receives annotation bundles as follow-up work and closes them through the comment API.",
+  "type": "module",
+  "keywords": ["omp", "pi-package", "artifact-server"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "files": ["index.ts", "README.md", "LICENSE"],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@plannotator/agent-bridge": "^0.1.1"
+  },
+  "peerDependencies": {
+    "typebox": "^1.3.7"
+  },
+  "devDependencies": {
+    "typebox": "1.3.7",
+    "typescript": "7.0.2"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "integrations/omp",
+    "type": "git",
+    "url": "git+https://github.com/plannotator/artifact-server.git"
+  }
+}

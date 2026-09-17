@@ -389,14 +389,16 @@ URL through the team's normal channel.
 
 ### CLI, MCP, and automation
 
-Browser OIDC does not make a generic identity provider an MCP authorization
-server.
+Browser OIDC alone does not make an issuer compatible with MCP OAuth. The same
+issuer may now authorize `/mcp` when it signs JWT access tokens for that exact
+resource and offers a client registration path; see decision 0028.
 
 | Client | First-release authority |
 | --- | --- |
 | Browser | OIDC or WorkOS followed by an Artifact Server session |
-| MCP or CLI against a compatible configured OAuth server | The existing browser OAuth flow and audience-bound access token |
-| MCP or CLI against a generic OIDC-only team server | An administrator-issued, scoped user API key |
+| MCP against a compatible configured OAuth issuer | Browser OAuth and an access token bound to the exact `/mcp` resource |
+| MCP against an OIDC issuer without compatible authorization | An administrator-issued, scoped user API key |
+| CLI against an OIDC-only team server | Its own authenticated profile and scoped API key; `/api/` does not accept the MCP OAuth token |
 | CI and unattended agents | An administrator-issued, scoped service API key in the deployment's secret manager |
 
 API-key secrets are returned once, never printed at startup, and never stored

@@ -4,6 +4,8 @@ import type {ApplicationRuntime} from "../../../src/application/application-runt
 import {ExpiredStagingCleanupService} from
   "../../../src/application/expired-staging-cleanup.js";
 import {SystemClock, SystemIdGenerator} from "../../../src/core/system.js";
+import {parseAutoAdmitEmailDomains} from
+  "../../../src/identity/auto-admit-email-domains.js";
 import {
   browserLoginKinds,
   privateTeamBrowserAccess,
@@ -51,6 +53,7 @@ export interface WorkerEnvironment {
   readonly ASSETS: Fetcher;
   readonly ARTIFACTS?: ArtifactsBinding;
   readonly ARTIFACT_SERVER_API_TOKEN: string;
+  readonly ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS?: string;
   readonly ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL: string;
   readonly ARTIFACT_SERVER_CONTENT_DOMAIN: string;
   readonly ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_ACCOUNT_ID?: string;
@@ -169,6 +172,9 @@ async function createCloudflareRuntime(
     apiToken: Redacted.make(environment.ARTIFACT_SERVER_API_TOKEN, {
       label: "cloudflare-api-token",
     }),
+    autoAdmitEmailDomains: parseAutoAdmitEmailDomains(
+      environment.ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS,
+    ),
     blobs,
     bootstrapAdministratorEmail:
       environment.ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL,

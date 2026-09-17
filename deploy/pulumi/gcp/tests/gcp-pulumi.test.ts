@@ -54,7 +54,7 @@ describe("GCP Pulumi deployment", () => {
   test("defines a private-data GCP graph behind managed HTTPS", async () => {
     resources.length = 0;
     const configuration = parseGcpPulumiConfiguration(
-      gcpInput(),
+      gcpInput({autoAdmitEmailDomains: ["example.org"]}),
       "production",
       "artifact-server-production",
     );
@@ -105,6 +105,8 @@ describe("GCP Pulumi deployment", () => {
     expect(serializedService).toContain("ARTIFACT_SERVER_OBJECT_STORAGE_PROVIDER");
     expect(serializedService).toContain("ARTIFACT_SERVER_GCS_BUCKET");
     expect(serializedService).toContain("ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE");
+    expect(serializedService).toContain("ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS");
+    expect(serializedService).toContain("example.org");
     expect(serializedService).toContain("/cloudsql");
     expect(serializedService).not.toContain("generated-api-token");
     expect(serializedService).not.toContain("generated-database-password");

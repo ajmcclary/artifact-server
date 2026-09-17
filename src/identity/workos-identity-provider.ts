@@ -66,6 +66,7 @@ export class WorkOsIdentityProvider implements InteractiveIdentityProvider {
           displayName: displayName(user),
           email: user.email,
           emailVerified: user.emailVerified,
+          emailVerificationAsserted: user.emailVerified,
           provider: this.name,
           subject: user.id,
         };

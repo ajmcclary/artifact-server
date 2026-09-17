@@ -7,7 +7,7 @@ import {
   type ProjectArchived,
   UploadClosed,
   UploadExpired,
-  UploadFileNotFound,
+  type UploadFileNotFound,
   UploadIncomplete,
   UploadNotFound,
   type UploadedFileMismatch,
@@ -48,6 +48,7 @@ import {
 } from "./project-management.js";
 
 const uploadLifetimeMilliseconds = 60 * 60 * 1_000;
+const singleWriteDeadlineMilliseconds = 10 * 60 * 1_000;
 
 /** Input for creating a principal-bound staged upload. */
 export interface CreateStagedUploadCommand {
@@ -58,11 +59,11 @@ export interface CreateStagedUploadCommand {
   readonly routingMode?: RoutingMode;
 }
 
-/** Input for streaming one file into a staged upload slot. */
+/** Input for streaming one file into the staged upload slot its URL names. */
 export interface UploadStagedFileCommand {
   readonly body: ReadableStream<Uint8Array>;
-  readonly principal: Principal;
-  readonly projectId?: string | null;
+  readonly ownerId: string;
+  readonly projectId: string;
   readonly storageToken: string;
   readonly uploadId: string;
 }
@@ -269,18 +270,13 @@ function makeStagedUploadService(
     function*(
     command: UploadStagedFileCommand,
   ): Effect.fn.Return<StagedUploadFile, StagedUploadFailure> {
-      yield* authorization.requirePublicationPreparation(command.principal);
-      const project = yield* projects.resolveActiveProject({
-        principal: command.principal,
-        projectId: command.projectId ?? null,
-      });
       const slot = yield* dependencies.uploads.findStagedUploadFileSlot(
-        project.id,
+        command.projectId,
         command.uploadId,
-        command.principal.id,
+        command.ownerId,
         command.storageToken,
       );
-      if (slot === null) {
+      if (slot === null || slot.file === null) {
         return yield* new UploadNotFound({
           message: "The staged upload does not exist.",
         });
@@ -288,13 +284,16 @@ function makeStagedUploadService(
       const uploadStartedAt = yield* dependencies.clock.now;
       yield* ensureUploadAcceptsFiles(slot, uploadStartedAt);
       const file = slot.file;
-      if (file === null) {
-        return yield* new UploadFileNotFound({
-          message: "The staged upload file does not exist.",
-        });
-      }
 
-      const signal = abortSignalUntil(slot.expiresAt, uploadStartedAt);
+      // An upload stays open for an hour, but one write must not hold a
+      // connection that long.
+      const writeDeadline = DateTime.formatIso(
+        DateTime.addDuration(uploadStartedAt, singleWriteDeadlineMilliseconds),
+      );
+      const signal = abortSignalUntil(
+        writeDeadline < slot.expiresAt ? writeDeadline : slot.expiresAt,
+        uploadStartedAt,
+      );
       yield* dependencies.staging.put({
         body: command.body,
         sha256: file.entry.sha256,
@@ -307,9 +306,9 @@ function makeStagedUploadService(
         : error)));
       const uploadedAt = DateTime.formatIso(yield* dependencies.clock.now);
       yield* dependencies.uploads.markStagedFileUploaded(
-        project.id,
+        command.projectId,
         command.uploadId,
-        command.principal.id,
+        command.ownerId,
         file.storageToken,
         uploadedAt,
       );

@@ -506,21 +506,22 @@ requirements:
 
   - id: PUB-001
     kind: behavior
-    behavior: Publishing starts with an expiring upload record and a unique staging location bound to the principal and installation.
+    behavior: Publishing starts with an expiring upload record and a unique staging location bound to the principal and installation. A file write uses the upload's scoped per-file URL; reading, committing, and renewing still require the owning principal.
     owner: publishing
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
       behavior: {id: PUB-001-B, description: "Create an upload and verify its principal, installation, unique staging location, and expiration."}
-      failure: {id: PUB-001-F, description: "Another principal or installation cannot read, append, commit, or renew the staged upload."}
+      failure: {id: PUB-001-F, description: "Another principal or installation cannot read, commit, or renew the staged upload; a file write with the wrong owner or installation cannot reach its slot."}
     deployments: *all
     status: behavior_verified
+    proof_gap: Fresh local tests prove principal-bound records and scoped URL writes; the equivalent team deployment matrix remains unrecorded.
     depends_on: [AUTH-008]
     evidence:
       - deployment: local
         tests: [PUB-001-B, PUB-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-08-17T03:17:21.421Z"
+        recorded_at: "2026-09-17T02:48:43.500Z"
 
   - id: PUB-002
     kind: behavior
@@ -748,6 +749,25 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-08-25T17:52:50.473Z"
+
+  - id: PUB-014
+    kind: security
+    behavior: A per-file upload URL permits its holder to PUT only the declared bytes into the named slot without the creator's bearer credential; all other upload operations retain principal authorization.
+    owner: publishing
+    source: {file: decisions/0029-upload-urls-authorize-themselves.md, anchor: decision}
+    acceptance:
+      behavior: {id: PUB-014-B, description: "Upload the declared bytes without a bearer credential, retry the same bytes, and commit only as the owning principal."}
+      failure: {id: PUB-014-F, description: "A missing or changed owner, wrong token, wrong digest, or anonymous commit is refused, and wrong owner and token reveal no distinguishable upload state."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local HTTP tests prove URL-only PUT, digest restriction, indistinguishable wrong locator, and private commit. External ingress logging and the multi-deployment hostile matrix remain unrecorded.
+    depends_on: [PUB-001, PUB-003, MCP-013]
+    evidence:
+      - deployment: local
+        tests: [PUB-014-B, PUB-014-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-17T02:48:43.500Z"
 
   - id: CLI-001
     kind: security
@@ -1710,6 +1730,25 @@ requirements:
     depends_on: [AUTH-001, AUTH-023, AUTH-025]
     evidence: []
 
+  - id: AUTH-029
+    kind: security
+    behavior: Optional email-domain admission creates only members after the configured administrator has bootstrapped, and only when the trusted provider explicitly asserts email verification; it never broadens the default closed admission policy.
+    owner: authorization
+    source: {file: decisions/0030-verified-domain-admission.md, anchor: decision}
+    acceptance:
+      behavior: {id: AUTH-029-B, description: "Bootstrap the administrator, then admit a verified colleague on an exact configured domain as a member through external login."}
+      failure: {id: AUTH-029-F, description: "Refuse a matching colleague before bootstrap, a different domain, a malformed address, an explicitly unverified email, and an OIDC identity with no explicit verification assertion without creating a member or administrator."}
+    deployments: [local, single_server, cloudflare, kubernetes, aws, gcp]
+    status: behavior_verified
+    proof_gap: Local HTTP tests prove administrator-first admission and the hostile email matrix. Deployment-specific identity-provider and replicated admission evidence remains unrecorded.
+    depends_on: [AUTH-019, AUTH-025, AUTH-028]
+    evidence:
+      - deployment: local
+        tests: [AUTH-029-B, AUTH-029-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-17T02:48:43.500Z"
+
   - id: SEC-001
     kind: security
     behavior: Published websites are treated as untrusted arbitrary browser JavaScript.
@@ -1964,15 +2003,15 @@ requirements:
 
   - id: MCP-013
     kind: behavior
-    behavior: Local mode connects through artifactserver connect and a stdio bridge without browser OAuth or a human-visible secret; self-hosted mode uses browser OAuth when compatible authorization is configured and otherwise uses administration-issued scoped API keys.
+    behavior: Local mode connects through artifactserver connect and a stdio bridge without browser OAuth or a human-visible secret; self-hosted mode uses browser OAuth when compatible authorization is configured and otherwise uses administration-issued scoped API keys. A generic OIDC issuer is compatible authorization when it signs verifiable access-token JWTs, binds the exact <origin>/mcp audience, and offers a client registration path its clients can use; the installation registers that client and never runs an authorization server of its own.
     owner: mcp
     source: {file: artifact-server-product-spec.html, anchor: mcp}
     acceptance:
-      behavior: {id: MCP-013-B, description: "Connect locally through the stdio bridge with no visible credential, connect to a private OAuth server through browser approval, and connect to a no-OAuth server using an administration-issued revocable API key."}
+      behavior: {id: MCP-013-B, description: "Connect locally through the stdio bridge with no visible credential, connect to a private OAuth server through browser approval including a generic OIDC issuer whose access token names the exact /mcp resource, and connect to a no-OAuth server using an administration-issued revocable API key."}
       failure: {id: MCP-013-F, description: "Startup logs, diagnostics, project files, generic OIDC ID tokens, browser login cookies, and wrong-resource tokens cannot expose or substitute for a valid MCP credential."}
     deployments: [local, single_server, kubernetes, aws, gcp]
     status: implementing
-    proof_gap: Local stdio and API-key paths are implemented, but the combined private OAuth, no-OAuth, local, wrong-credential, and credential-leak matrix has no deployment-specific MCP-013 evidence.
+    proof_gap: Local stdio, API-key, and generic OIDC access-token paths are implemented and covered by the local conformance suite and the real Keycloak harness, but the combined private OAuth, no-OAuth, local, wrong-credential, and credential-leak matrix has no deployment-specific MCP-013 evidence.
     depends_on: [AUTH-009]
     evidence: []
 

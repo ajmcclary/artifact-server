@@ -6,10 +6,10 @@ import { validDeploymentInput } from "./fixtures.js";
 describe("Cloudflare deployment manifest", () => {
   it("builds deterministic named resources and runtime configuration", () => {
     const first = buildCloudflareDeploymentManifest(
-      validDeploymentInput,
+      {...validDeploymentInput, autoAdmitEmailDomains: ["example.org"]},
     );
     const second = buildCloudflareDeploymentManifest(
-      validDeploymentInput,
+      {...validDeploymentInput, autoAdmitEmailDomains: ["example.org"]},
     );
 
     expect(first).toEqual(second);
@@ -24,6 +24,7 @@ describe("Cloudflare deployment manifest", () => {
     expect(first.runtimeConfiguration).toMatchObject({
       ARTIFACT_SERVER_ORIGIN: "https://artifacts.example.com",
       ARTIFACT_SERVER_CONTENT_DOMAIN: "artifact-content.example.net",
+      ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS: "example.org",
       ARTIFACT_SERVER_OBJECT_STORAGE_PROVIDER: "r2",
       ARTIFACT_SERVER_REQUEST_LOG_SAMPLE_RATE: 0.01,
     });

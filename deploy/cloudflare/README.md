@@ -138,6 +138,12 @@ the deployment process resolves the referenced secret into
 `ARTIFACT_SERVER_OIDC_CLIENT_SECRET` before it runs Alchemy. The configuration
 document contains only the stable secret reference, never the secret value.
 
+`autoAdmitEmailDomains` is optional. First sign in as the configured bootstrap
+administrator. After that, a person whose provider explicitly asserts email
+verification on an exact configured domain is admitted as a member on first
+sign-in. An absent OIDC `email_verified` claim does not qualify for automatic
+admission. Leave the option out to keep the closed-installation default.
+
 For Cloudflare Access setup and verification, read
 [`Use Cloudflare Access for sign-in`](https://artifactserver.com/docs/deploy/cloudflare-access/).
 The checked-in starting configuration is
@@ -154,6 +160,11 @@ Log in to the approved Cloudflare account:
 pnpm exec alchemy login --profile default alchemy.run.ts
 pnpm exec wrangler login
 ```
+
+Alchemy uses its own profile rather than Wrangler's login. Its Cloudflare state
+store needs account-level Secrets Store access as well as the Worker, D1, and R2
+permissions. Confirm the operator or API token can access Secrets Store before
+bootstrap; a Worker administration role alone may be insufficient.
 
 CAUTION: Get approval before you run the next command. The command creates an
 account-level Worker and Secrets Store values.

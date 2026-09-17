@@ -139,6 +139,11 @@ environment. Partial WorkOS configuration makes startup fail.
 
 ## OIDC login
 
+For optional first-login admission after the bootstrap administrator has signed
+in, set `ARTIFACT_SERVER_AUTO_ADMIT_EMAIL_DOMAINS` to comma-separated exact
+domains. The provider must explicitly assert email verification for each new
+member. The default remains administrator-controlled admission.
+
 An installation that already runs its own OpenID Connect provider can use it
 instead of WorkOS. Set the issuer in `ARTIFACT_SERVER_OIDC_ISSUER` and the
 client in `ARTIFACT_SERVER_OIDC_CLIENT_ID`. The issuer must be an HTTPS URL

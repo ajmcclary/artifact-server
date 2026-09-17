@@ -23,6 +23,8 @@ const expectedFiles = [
   `plannotator-artifact-server-claude-channel-${version}.tgz`,
   `plannotator-artifact-server-opencode-${version}.spdx.json`,
   `plannotator-artifact-server-opencode-${version}.tgz`,
+  `plannotator-artifact-server-omp-${version}.spdx.json`,
+  `plannotator-artifact-server-omp-${version}.tgz`,
   `plannotator-artifact-server-pi-${version}.spdx.json`,
   `plannotator-artifact-server-pi-${version}.tgz`,
 ];

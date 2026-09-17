@@ -5,6 +5,10 @@
 **Owner:** Artifact Server product engineering
 **Companion documents:** [Product specification](./artifact-server-product-spec.md), [Conformance ledger](./conformance.yml), Workspaces self-host auth (`apps/rooms/src/auth/providers/oidc.ts` in the canonical Workspaces checkout)
 
+The browser-login design below records its original scope. Decision
+[0028](./decisions/0028-oidc-mcp-oauth.md) supersedes its MCP exclusion for
+issuers that provide compatible client registration and resource-bound JWTs.
+
 ## 1. What this adds and why
 
 Self-hosted Artifact Server browser login today supports exactly one identity provider: WorkOS (`src/identity/workos-identity-provider.ts`, the only implementation of the `InteractiveIdentityProvider` port). A customer who runs their own OpenID Connect provider — Okta, Microsoft Entra, Google Workspace, Keycloak — cannot point Artifact Server at it directly.
