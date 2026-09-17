@@ -33,6 +33,37 @@ Compact Compose uses one SQLite database and one file volume. Run only one appli
 
 External-storage deployments use PostgreSQL and object storage. These deployments support replaceable application processes and horizontal scaling.
 
+### Preserve delivery and storage boundaries
+
+Raw public content currently requires cache revalidation; private content and
+temporary Review preview leases use no-store. A saved version's bytes are
+immutable, but anonymous access is allowed only while that version is current
+and its artifact has public-link visibility. Do not place a cache or public
+bucket route in front of these checks that can serve bytes without reevaluating
+current access. Previously downloaded copies cannot be recalled.
+
+Normal publication currently streams binary uploads through the application
+origin and verifies staged files before immutable installation. Provider-native
+signed upload and copy-promotion optimizations need separate qualification.
+Maintenance currently removes expired uploads that were never committed; it does
+not reclaim successful staging or committed/race-left blobs. Do not add a bucket
+age-deletion rule for those objects.
+
+### Check the actual operating envelope
+
+Cloudflare's Workers/D1/R2 composition and Node's Postgres/object-storage
+composition have different CPU, query, transfer and operation limits. Existing
+R2, static-asset and Cron support does not establish that every allowed manifest
+can run within a free Worker invocation. Include retained bytes, staging,
+multipart sessions, backups, index writes, polling and CI evidence in estimates.
+Check current account limits and pricing before claiming a zero-cost deployment;
+free Pulumi software does not make the provisioned AWS/GCP resources free.
+
+The [engineering reconciliation](../project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
+records qualified source corrections. [T08–T12 and T20–T21](../NEXT-STEPS.md)
+track workload qualification and future changes. These tasks do not add new
+runtime switches or change the current deployment contract.
+
 ## Configure authentication
 
 Local-owner access works only on an exact loopback origin. Do not use it for remote access.

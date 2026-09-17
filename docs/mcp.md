@@ -55,6 +55,19 @@ An agent uses this sequence:
 
 When the agent publishes a new version, it first reads the current version ID. It sends that ID as `expectedCurrentVersionId`.
 
+The current upload URLs are scoped binary PUTs on the application origin.
+Provider-native signed transfers and operation-status/file-resume tools are
+planned work, not current capabilities. Retain the publication idempotency key
+when reconciling an uncertain commit; do not assume a lost response means no
+version was saved.
+
+`artifact_get` currently returns the complete manifest, and
+`artifact_version_list` returns all saved versions. Large histories can produce
+large responses; compact projections and pagination are tracked in
+[T15](../NEXT-STEPS.md). Modern stateless MCP HTTP and legacy compatibility
+already exist. Subscriptions remain unavailable until a shared event service
+has its own replay, authorization, and recovery proof.
+
 ## Use the publication result
 
 Every successful publication returns structured data and a short text summary.

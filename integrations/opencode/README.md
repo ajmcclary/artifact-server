@@ -99,7 +99,7 @@ Verified by the fake plugin context against a real spawned Artifact Server:
   dispatch fail and releases its comments. Selecting another session lets the
   same bridge deliver the next dispatch without restarting OpenCode.
 
-Assumed (recorded honestly, not proven against a live OpenCode):
+Not fully qualified against the current live OpenCode host:
 
 - Cross-instance zod interop: this package ships zod `4.4.3` argument
   schemas; OpenCode composes them with its own zod (`4.1.8` at the pinned
@@ -108,9 +108,13 @@ Assumed (recorded honestly, not proven against a live OpenCode):
 - The `experimental.*` hook names are marked experimental by OpenCode and
   may change in later versions; the bridge degrades to "no compaction
   hold" if they stop firing.
-- No live OpenCode smoke test exists here: the adapter is proven through a
-  fake plugin context driving the real bridge core against a real spawned
-  Artifact Server (`tests/client/opencode-bridge.test.ts`).
+- No automated live OpenCode smoke test is wired here. The automated adapter
+  test uses a scripted plugin context driving the real bridge core against a
+  real spawned Artifact Server (`tests/client/opencode-bridge.test.ts`). The
+  [August 27 staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md)
+  separately records a bounded live pass on OpenCode 1.18.23. It does not prove
+  every compaction or session-deletion race, or current-host compatibility.
+  Remaining live qualification is tracked in [T17](../../NEXT-STEPS.md).
 
 ## Compatibility
 

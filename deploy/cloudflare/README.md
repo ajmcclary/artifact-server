@@ -24,9 +24,11 @@ Cloudflare Access. OIDC deployments use scoped Artifact Server API keys for
 remote MCP clients and unattended agents.
 
 The WorkOS verifier, protected-resource metadata, and browser-login wiring are
-implemented. Live browser approval, refresh, revocation, and named-client
-qualification remain release gates, so this package must not yet be advertised
-as the complete hosted Artifact Server service. The generic OIDC Worker path is
+implemented. Selected live browser approval, refresh and provider-revocation
+flows are recorded in the [staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md).
+The complete release-named client and hostile-flow matrix remains a release gate,
+so this package must not yet be advertised as the complete hosted Artifact Server
+service. The generic OIDC Worker path is
 covered locally, but a live Cloudflare Access round trip is not attached to the
 release ledger.
 

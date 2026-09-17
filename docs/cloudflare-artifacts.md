@@ -16,6 +16,22 @@
 
 Disabling a project stops new copies but preserves its repositories and mappings. Re-enabling the same project resumes and backfills missing versions. Deleting an artifact queues deletion of that artifact's repository.
 
+### Current qualification limits
+
+The intended oldest-first, bounded backfill contract is not yet fully met.
+Equal-time backfill jobs currently sort by job ID rather than saved version
+number, and enablement queues all missing versions in one foreground operation.
+An isolated eight-version probe selected version 8 first. Primary saved versions
+remain authoritative and unaffected; do not use the moving Git branch as proof
+of chronological backfill or latest-version completion.
+
+[T03](../NEXT-STEPS.md) tracks ordering, bounded reconciliation, multi-worker
+ownership and stale-lease recovery. The [research intake](../project/research/immutable-artifact-engineering-2026-09-17/README.md)
+retains the probe and distinguishes it from live provider qualification. Existing
+normal clone/copy evidence does not close those failure and scale cases. Check
+the provider's current plan and beta access separately; this optional integration
+is not a guaranteed free-tier feature.
+
 ## Choose an isolated namespace
 
 Create one dedicated namespace for each Artifact Server environment. Do not reuse a namespace owned by another product or installation.

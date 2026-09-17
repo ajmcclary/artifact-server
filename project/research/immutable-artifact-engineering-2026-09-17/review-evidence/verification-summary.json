@@ -1,0 +1,155 @@
+{
+  "reviewedCommit": "572e28f4beef971b94c9864408f5c067ad499ba1",
+  "verifyIteration": {
+    "exitCode": 0,
+    "node": "v26.5.0"
+  },
+  "externalStoragePerformance": {
+    "exitCode": 0,
+    "node": "v26.5.0"
+  },
+  "initialAttempt": {
+    "node": "v24.11.1",
+    "result": "failed below the declared minimum; SQLite enableDefensive unavailable"
+  },
+  "testReports": {
+    "local-foundation": {
+      "success": true,
+      "numPassedTests": 329,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "browser": {
+      "success": true,
+      "numPassedTests": 30,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "aws-pulumi": {
+      "success": true,
+      "numPassedTests": 4,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "gcp-pulumi": {
+      "success": true,
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "s3-minio": {
+      "success": true,
+      "numPassedTests": 10,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "native-cloud-storage": {
+      "success": true,
+      "numPassedTests": 10,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "external-storage-runtime": {
+      "success": true,
+      "numPassedTests": 19,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "local-package": {
+      "success": true,
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "compact-compose": {
+      "success": true,
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "external-storage-compose": {
+      "success": true,
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "helm-kubernetes": {
+      "success": true,
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "oidc-keycloak": {
+      "success": true,
+      "numPassedTests": 4,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  },
+  "performance": {
+    "local-performance-baseline": {
+      "generatedAt": "2026-09-17T21:25:59.667Z",
+      "environment": {
+        "availableParallelism": 10,
+        "cpu": "Apple M1 Max",
+        "node": "v26.5.0",
+        "operatingSystem": "darwin 27.0.0",
+        "platform": "darwin"
+      },
+      "warnings": [
+        "Maximum event-loop delay exceeded 100 ms."
+      ]
+    },
+    "local-capacity-baseline": {
+      "generatedAt": "2026-09-17T21:26:19.135Z",
+      "environment": {
+        "availableParallelism": 10,
+        "cpu": "Apple M1 Max",
+        "node": "v26.5.0",
+        "operatingSystem": "27.0.0",
+        "platform": "darwin",
+        "productVersion": "0.1.0"
+      },
+      "warnings": [
+        "Server peak RSS exceeded 512 MiB; do not size a production process below the measured workload without a provider-specific capacity run."
+      ]
+    },
+    "external-storage-performance-baseline": {
+      "generatedAt": "2026-09-17T21:33:34.539Z",
+      "environment": {
+        "availableParallelism": 10,
+        "cpu": "Apple M1 Max",
+        "minioImage": "docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3",
+        "node": "v26.5.0",
+        "operatingSystem": "darwin 27.0.0",
+        "platform": "darwin",
+        "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
+      },
+      "warnings": []
+    }
+  },
+  "sourceChanges": false,
+  "restoredTrackedEvidence": [
+    "project/evidence/aws-pulumi.json",
+    "project/evidence/browser.json",
+    "project/evidence/compact-compose-runtime-baseline.json",
+    "project/evidence/compact-compose.json",
+    "project/evidence/external-storage-compose-runtime-baseline.json",
+    "project/evidence/external-storage-compose.json",
+    "project/evidence/external-storage-performance-baseline.json",
+    "project/evidence/external-storage-runtime.json",
+    "project/evidence/gcp-pulumi.json",
+    "project/evidence/helm-kubernetes-runtime-baseline.json",
+    "project/evidence/helm-kubernetes.json",
+    "project/evidence/local-capacity-baseline.json",
+    "project/evidence/local-foundation.json",
+    "project/evidence/local-package-build.json",
+    "project/evidence/local-package.json",
+    "project/evidence/local-performance-baseline.json",
+    "project/evidence/native-cloud-storage.json",
+    "project/evidence/observability.json",
+    "project/evidence/oidc-keycloak.json",
+    "project/evidence/s3-minio.json"
+  ],
+  "finalGitStatus": ""
+}

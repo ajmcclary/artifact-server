@@ -4,6 +4,18 @@ There is no critical local bottleneck in the measured file sizes, but complete
 directory publication has a confirmed per-file scaling cost. This is an
 engineering baseline for regression detection, not a production capacity claim.
 
+The [September 17 research reconciliation](../research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
+and root [next steps](../../NEXT-STEPS.md) separate implemented fixes from open
+experiments. Historical timing series below are tied to their recorded machines,
+runtimes and workload. They are not interchangeable with the latest JSON report
+or proof of a paired improvement. In particular, the retained prior-review
+[Node 26.5 local run](../research/immutable-artifact-engineering-2026-09-17/review-evidence/local-performance-baseline.json)
+reported 204.079 ms maximum event-loop delay, and its
+[capacity run](../research/immutable-artifact-engineering-2026-09-17/review-evidence/local-capacity-baseline.json)
+peaked at 742,293,504 bytes RSS with 4,838,272 bytes retained heap growth. Those
+investigation warnings warrant controlled profiling, not a language-rewrite or
+memory-leak conclusion. Research import does not close them.
+
 The server-only concurrency matrix completed every browse and publication
 journey at 1, 10, 25, 50, and 100 concurrent users. Across four standalone
 complete runs, the 100-user browse p95 ranged from 847 to 924 ms and sustained
@@ -121,6 +133,27 @@ public-network capacity.
 These fixes remove the obvious read-amplification and crash-durability problems found during the foundation review.
 
 ## Remaining limits and risks
+
+### September 17 research follow-up
+
+| Current risk | Code observation and next measurement | Work |
+| --- | --- | --- |
+| Final Postgres manifest insertion remains per-file | `PostgresArtifactRepository.#insertVersion` issues one insert per entry. Upload-plan batching is already fixed. Attribute final SQL and lock time before claiming a whole-publication gain. | T01/T04 |
+| Verified cloud bytes traverse the application again at commit | The publication service opens staging and calls immutable `put`; quantify GET/HEAD/PUT/copy counts and network legs separately. Promotion requires exact source sealing and create-only destination proof. | T02/T12 |
+| Retry repeats completed transfers | Durable CLI operation identity does not persist/reconcile file transfer completion. Lost-response recovery must check a committed result before allocating new transfer work. | T05 |
+| Concurrent streams/pools multiply across publications and replicas | Measure total buffered bytes, pool wait and provider throttling; do not increase the current concurrency of four or default pool of ten from intuition. | T01/T14 |
+| Review polling and conversation reads amplify client traffic | Seven-second visible polling also leaves deleted/filtered-out records stale; revision/refetch must prove coherent multi-page snapshots and hot-project costs. | T06 |
+| Git work is not bounded by per-version file-copy limits alone | Enablement enumerates missing history in one foreground operation; claims can be out of version order; the Node provider clones accumulated history in memory. Preserve strict order before optimizing mirror throughput. | T03/T18 |
+| Cleanup bounds uploads, not file operations | One expired upload may contain many files. Successful staging remains retained, and general blob GC remains disabled. | T10/T25 |
+| Worker/D1 limits differ from Node/Postgres | Already-implemented R2/assets/Cron do not prove a free-tier many-file envelope. Qualify actual query, parameter, object-operation and CPU limits before chunked preparation. | T08/T09 |
+
+Task definitions and gates are in [NEXT-STEPS.md](../../NEXT-STEPS.md). These are
+observations and hypotheses, not completed performance changes. A 201.571-second
+commit inside the recorded 523.94-second publication occupies about 38.5% of
+the run; halving that whole stage would save about 19.2% overall, but that does
+not show which portion is SQL, hashing or provider I/O. Postgres-only changes
+cannot directly improve the SQLite local baseline. Larger research fixtures
+need a separate opt-in bounded harness rather than increased canonical caps.
 
 ### P2: Directory publication cost grows approximately with file count
 

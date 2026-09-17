@@ -35,3 +35,7 @@ Use these guides to install, connect, operate, and extend Artifact Server.
 The [`project`](../project) directory contains product contracts, evidence, performance records, prototypes, and research.
 
 These records describe how Artifact Server is built and qualified. They are not operator guides.
+
+- [Next steps and acceptance gates](../NEXT-STEPS.md)
+- [Research index](../project/research/README.md)
+- [Engineering dossier and repository reconciliation](../project/research/immutable-artifact-engineering-2026-09-17/README.md)

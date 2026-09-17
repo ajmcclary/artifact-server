@@ -107,6 +107,21 @@ artifactserver publish ./dist \
 
 The expected version prevents an old client from replacing a newer current pointer. Read the current value from `artifact_get` before publishing.
 
+### Recover an interrupted publication
+
+The CLI keeps a private pending-operation identity so an unchanged retry can
+replay the original committed result. Keep the input, selected entry, target and
+expected version unchanged while reconciling that attempt. A conflict means the
+current pointer moved; inspect the new current version before choosing a new
+publication intent.
+
+This is operation idempotency, not file-level resume. The current client creates
+a new upload plan and retransfers files before commit replay, so an interrupted
+large directory can repeat substantial work. Scoped upload URLs accept binary
+bytes at the application origin; they are not provider-native signed uploads.
+The planned recovery improvements are [T05 and T11](../NEXT-STEPS.md). Do not
+delete staged server data manually to recover a client operation.
+
 ## Link a working file
 
 `publish` uploads a snapshot. `link` registers a file that stays on this machine, so the server reads its current bytes when someone captures a new version:

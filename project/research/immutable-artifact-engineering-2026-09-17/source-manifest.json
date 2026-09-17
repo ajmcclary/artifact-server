@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "importedOn": "2026-09-17",
+  "researchDate": "2026-09-17",
+  "reviewedCommit": "572e28f4beef971b94c9864408f5c067ad499ba1",
+  "authority": "Research input, not implementation instructions or conformance proof. Reconciliation and NEXT-STEPS.md govern applicability.",
+  "files": [
+    {
+      "id": "SRC-DOCX",
+      "role": "user-supplied research; immutable source",
+      "originalFilename": "Engineering Decision Dossier for Immutable Web-Artifact Publishing, Review, and Sharing.docx",
+      "path": "sources/Engineering Decision Dossier for Immutable Web-Artifact Publishing, Review, and Sharing.docx",
+      "bytes": 66775,
+      "sha256": "574f7b96e93e68f683d0b9d373783c4720e7b9bdf5bf65c357cfa235d17fd06e"
+    },
+    {
+      "id": "SRC-MD",
+      "role": "user-supplied research; immutable source",
+      "originalFilename": "deep-research-report.md",
+      "path": "sources/deep-research-report.md",
+      "bytes": 111860,
+      "sha256": "a193d089ac211382b49893d929dde12952c91ec9ca8346eadd46553bae716521"
+    },
+    {
+      "id": "REVIEW-git-order-probe",
+      "role": "prior local review evidence; not a new qualification run",
+      "path": "review-evidence/git-order-probe.json",
+      "bytes": 424,
+      "sha256": "5bd9ba6e87b5848ca7cda17206ce79540d20d43154b6061662e2ade22463c29a"
+    },
+    {
+      "id": "REVIEW-verification-summary",
+      "role": "prior local review evidence; not a new qualification run",
+      "path": "review-evidence/verification-summary.json",
+      "bytes": 4527,
+      "sha256": "e5ae4d7efef3453ce6404d7ef0b8d40f81b2fa9fa726e4c1eb90740f130e2ea7"
+    },
+    {
+      "id": "REVIEW-local-performance-baseline",
+      "role": "prior local review evidence; not a new qualification run",
+      "path": "review-evidence/local-performance-baseline.json",
+      "bytes": 4377,
+      "sha256": "39111bdd9b91b6ad92cefb62a1398400644b6830db8b1fea9723b8e5d44b7945"
+    },
+    {
+      "id": "REVIEW-local-capacity-baseline",
+      "role": "prior local review evidence; not a new qualification run",
+      "path": "review-evidence/local-capacity-baseline.json",
+      "bytes": 17318,
+      "sha256": "25ce9397fa4e54c1556809c7ad99b0f0376004c442f2b681edb0cb10f61c31bc"
+    },
+    {
+      "id": "REVIEW-external-storage-performance-baseline",
+      "role": "prior local review evidence; not a new qualification run",
+      "path": "review-evidence/external-storage-performance-baseline.json",
+      "bytes": 3041,
+      "sha256": "e2bdf4ffefd998a8f8e02b79a790da7134694b7cf4425d0cd5401d560fa5d1d4"
+    }
+  ],
+  "researchUncertaintyIds": [
+    "U-PUB-01",
+    "U-PUB-02",
+    "U-PUB-03",
+    "U-PUB-04",
+    "U-PUB-05",
+    "U-PUB-06",
+    "U-PUB-07",
+    "U-PUB-08",
+    "U-PUB-09",
+    "U-PUB-10",
+    "U-HTTP-01",
+    "U-HTTP-02",
+    "U-HTTP-03",
+    "U-SYNC-01",
+    "U-SYNC-02",
+    "U-SYNC-03",
+    "U-GIT-01",
+    "U-GIT-02",
+    "U-GIT-03",
+    "U-MCP-01",
+    "U-MCP-02",
+    "U-MCP-03",
+    "U-ID-01",
+    "U-ID-02",
+    "U-CF-01",
+    "U-CF-02",
+    "U-CF-03",
+    "U-PUL-01",
+    "U-RUNTIME-01",
+    "U-RUNTIME-02",
+    "U-BROW-01",
+    "U-DESIGN-01",
+    "U-DESIGN-02"
+  ],
+  "citationLimitations": [
+    "Markdown contains opaque ChatGPT citation handles. They are preserved but are not independently resolvable citations.",
+    "DOCX hyperlink relationships preserve linked citation targets, including broad homepages; they do not establish complete support for multi-source citation clusters."
+  ]
+}

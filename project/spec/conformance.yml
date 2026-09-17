@@ -1221,7 +1221,7 @@ requirements:
       failure: {id: GIT-008-F, description: "Crash and restart project reconciliation and race it with a new publish without losing a version, duplicating a commit mapping, exhausting foreground work, copying another project, or changing primary data."}
     deployments: *all
     status: implementing
-    proof_gap: Project enablement inserts bounded oldest-first jobs for existing versions, leaves other projects untouched, and resumes a failed mirror after restart without a duplicate mapping. Crash timing, foreground-work bounds, and complete SQLite/Postgres/D1 concurrency coverage remain unproved.
+    proof_gap: Project selection and failed-mirror restart have focused tests, but enablement currently queues all missing versions in one foreground operation and equal-time jobs are claimed by job ID rather than version number. The retained eight-version SQLite diagnostic in project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json selected version 8 first; it is not deployment acceptance evidence. Bounded background reconciliation, strict predecessor order, stale-worker fencing, crash timing, and complete SQLite/Postgres/D1 concurrency proof remain open under NEXT-STEPS.md T03.
     depends_on: [GIT-002, GIT-007]
     evidence: []
 

@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "completedAt": "2026-09-17T22:45:39.976480+00:00",
+  "reviewedCodeCommit": "572e28f4beef971b94c9864408f5c067ad499ba1",
+  "scope": "Documentation and research integration; no runtime or dependency source changes. Full existing gate executed without promoting conformance statuses.",
+  "command": "pnpm verify:iteration",
+  "exitCode": 0,
+  "node": "v24.15.0",
+  "inheritedServerUrlAndApiTokenRemovedFromTestEnvironment": true,
+  "staticChecks": {
+    "sourceHashes": "pass",
+    "originalDownloadsUnchanged": "pass",
+    "planningTasks": 27,
+    "researchUncertaintiesMapped": 33,
+    "conformanceTestMappings": 260,
+    "ledgerSemanticChange": "Only GIT-008.proof_gap; status and acceptance contracts unchanged.",
+    "diffCheck": "pass",
+    "localLinksAndAnchors": {
+      "result": "pass",
+      "checked": 211,
+      "markdownFiles": 17
+    }
+  },
+  "testReports": {
+    "aws-pulumi": {
+      "success": true,
+      "numPassedTests": 4,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "browser": {
+      "success": true,
+      "numPassedTests": 30,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "compact-compose": {
+      "success": true,
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "external-storage-compose": {
+      "success": true,
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "external-storage-runtime": {
+      "success": true,
+      "numPassedTests": 19,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "gcp-pulumi": {
+      "success": true,
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "helm-kubernetes": {
+      "success": true,
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "local-foundation": {
+      "success": true,
+      "numPassedTests": 329,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "local-package": {
+      "success": true,
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "native-cloud-storage": {
+      "success": true,
+      "numPassedTests": 10,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "observability": {
+      "success": true,
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "oidc-keycloak": {
+      "success": true,
+      "numPassedTests": 4,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    "s3-minio": {
+      "success": true,
+      "numPassedTests": 10,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  },
+  "performanceWarnings": {
+    "local-capacity-baseline": [
+      "Server peak RSS exceeded 512 MiB; do not size a production process below the measured workload without a provider-specific capacity run."
+    ],
+    "local-performance-baseline": []
+  },
+  "performanceInterpretation": "Single full-gate observations, not a controlled optimization comparison. Prior Node 26.5 review records remain under review-evidence/. No separate external performance run was required for this documentation-only change.",
+  "generatedEvidencePolicy": "Retained these fresh reports here and restored original tracked project/evidence bytes to avoid overwriting historical measurements.",
+  "reports": [
+    {
+      "originalPath": "project/evidence/aws-pulumi.json",
+      "retainedPath": "reports/aws-pulumi.json",
+      "bytes": 1942,
+      "sha256": "554fb88bee52be9c576807f8056a9554b290d4ef026eba531117d52b2339bf0e"
+    },
+    {
+      "originalPath": "project/evidence/browser.json",
+      "retainedPath": "reports/browser.json",
+      "bytes": 14648,
+      "sha256": "4a30b9f1202d5ce3cd53395ab36c767cddfe37ccc8d1ae2cf461fbaef0583456"
+    },
+    {
+      "originalPath": "project/evidence/compact-compose-runtime-baseline.json",
+      "retainedPath": "reports/compact-compose-runtime-baseline.json",
+      "bytes": 190,
+      "sha256": "bd346db3653d5b3f5e3ab59b14504f8dec8dc8750fb97e105478db309e53d414"
+    },
+    {
+      "originalPath": "project/evidence/compact-compose.json",
+      "retainedPath": "reports/compact-compose.json",
+      "bytes": 1857,
+      "sha256": "4ca2715ccd5307a8331e7b39fece31b72f9beb5d36acb0e00992a37b01d58e43"
+    },
+    {
+      "originalPath": "project/evidence/external-storage-compose-runtime-baseline.json",
+      "retainedPath": "reports/external-storage-compose-runtime-baseline.json",
+      "bytes": 483,
+      "sha256": "8bba1327d91784ee8c75775bfc58e1fbde0e81cc04687fbf0f277146a68f2db3"
+    },
+    {
+      "originalPath": "project/evidence/external-storage-compose.json",
+      "retainedPath": "reports/external-storage-compose.json",
+      "bytes": 1445,
+      "sha256": "53116896a650c23d01e193c059f6a82de3cdae8f6cc64f31f359152612a41f08"
+    },
+    {
+      "originalPath": "project/evidence/external-storage-runtime.json",
+      "retainedPath": "reports/external-storage-runtime.json",
+      "bytes": 371942,
+      "sha256": "16266ee9450dacfd492019db0731cd47faef34e2e43da56f47de7ca9cf9f8dc2"
+    },
+    {
+      "originalPath": "project/evidence/gcp-pulumi.json",
+      "retainedPath": "reports/gcp-pulumi.json",
+      "bytes": 1536,
+      "sha256": "fe99c3ad29c91e883264801052710138a19112b74f950fda1bff00606e97df3a"
+    },
+    {
+      "originalPath": "project/evidence/helm-kubernetes-runtime-baseline.json",
+      "retainedPath": "reports/helm-kubernetes-runtime-baseline.json",
+      "bytes": 1606,
+      "sha256": "5b98daa361b44239c36bcaf87991820648833449d67c04903ed5212ad0560763"
+    },
+    {
+      "originalPath": "project/evidence/helm-kubernetes.json",
+      "retainedPath": "reports/helm-kubernetes.json",
+      "bytes": 1515,
+      "sha256": "692c6382b63ba9059549796c163f59785ba0dcf96561f8eee644e02675a06a3c"
+    },
+    {
+      "originalPath": "project/evidence/local-capacity-baseline.json",
+      "retainedPath": "reports/local-capacity-baseline.json",
+      "bytes": 17335,
+      "sha256": "90ff5619e9d34cc998a1cca5c1236544c46c87c895545b2594655eacddcf57c4"
+    },
+    {
+      "originalPath": "project/evidence/local-foundation.json",
+      "retainedPath": "reports/local-foundation.json",
+      "bytes": 144513,
+      "sha256": "21e65c76ae8295124c8a8cd084857c0e8bcb04b568523649befc603c3918ecad"
+    },
+    {
+      "originalPath": "project/evidence/local-package-build.json",
+      "retainedPath": "reports/local-package-build.json",
+      "bytes": 429,
+      "sha256": "6377b198e830768fd59fe0b97c72f33cf2c9dcaae31eee7fdc1c45a7f42c15ff"
+    },
+    {
+      "originalPath": "project/evidence/local-package.json",
+      "retainedPath": "reports/local-package.json",
+      "bytes": 1135,
+      "sha256": "95611a879010d4bc551bc567e1b0991c7eb7e093258e6892faef904133673ead"
+    },
+    {
+      "originalPath": "project/evidence/local-performance-baseline.json",
+      "retainedPath": "reports/local-performance-baseline.json",
+      "bytes": 4320,
+      "sha256": "3201d095fee3204ffb53f624802c02755d9d3492a85726f301985c7863c43616"
+    },
+    {
+      "originalPath": "project/evidence/native-cloud-storage.json",
+      "retainedPath": "reports/native-cloud-storage.json",
+      "bytes": 60037,
+      "sha256": "0a283f6191baebac6a488b961344fcaa6b0546984132427ab9541fc34a7dbbef"
+    },
+    {
+      "originalPath": "project/evidence/observability.json",
+      "retainedPath": "reports/observability.json",
+      "bytes": 1333,
+      "sha256": "5d6a6081fce3c9be6e83f7ee8337abdd9c14d83e762704fe91be0b5f8b1a77c9"
+    },
+    {
+      "originalPath": "project/evidence/oidc-keycloak.json",
+      "retainedPath": "reports/oidc-keycloak.json",
+      "bytes": 2012,
+      "sha256": "1c413a4c180360a175821836c55053ed9f9b44ce5975226aac7d95a4daf5c5b5"
+    },
+    {
+      "originalPath": "project/evidence/s3-minio.json",
+      "retainedPath": "reports/s3-minio.json",
+      "bytes": 19045,
+      "sha256": "eed561b00a06d10c7e2ab18ee38332af36264178ab4594fdcc9fec9e780f2d05"
+    }
+  ]
+}

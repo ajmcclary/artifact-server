@@ -1,0 +1,26 @@
+{
+  "reviewedCommit": "572e28f4beef971b94c9864408f5c067ad499ba1",
+  "fixtureVersions": 8,
+  "expectedOrder": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "actualQueueOrder": [
+    8,
+    4,
+    2,
+    6,
+    3,
+    1,
+    7,
+    5
+  ],
+  "firstClaimedVersion": 8,
+  "scope": "Temporary SQLite installation, real HTTP publications, production repository enablement and claim; no Git provider contacted."
+}

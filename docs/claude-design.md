@@ -16,3 +16,14 @@ A root `index.html` takes precedence. Use `--entry path/to/page.html` to open a 
 The generated catalog is an additional file in the immutable publication. Original files retain their bytes and paths; source directories are never modified. Stable inputs produce the same catalog and retry identity. Manifests larger than 4 MiB, malformed metadata, missing or unsafe preview references, empty catalogs, and generated filename collisions fail before an upload is created. Existing path, symlink, publication-size, and file-count limits still apply.
 
 This supports exported browser previews and their supplied runtimes. It does not compile JSX, reconstruct missing export files, or implement Claude Design's editor. Fonts are served with their font media types. Dependencies on remote CDNs still require network access. An existing published version remains unchanged; publish a new version to add the catalog. Review annotations inside a catalog's nested frame are not a new annotation mode: select the original HTML file in Review to annotate that document directly.
+
+The recognized layouts are observed export conventions, not a promised stable
+vendor export API. Keep representative exports as compatibility fixtures when
+updating detection. Published bytes do not freeze assets loaded from external
+URLs, and the server does not silently vendor missing dependencies.
+
+Catalog navigation, exact-file annotation handoff, supplied thumbnails, and
+template metadata improvements are tracked in [T19](../NEXT-STEPS.md). They must
+preserve entry precedence and source bytes; changes to generated catalog content
+apply to new publications. A project overview that follows current versions is
+a moving view, not an immutable multi-artifact snapshot.

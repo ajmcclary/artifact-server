@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Read-only OOXML content inspection; no layout qualification or DOCX re-authoring",
+  "paragraphCount": 1975,
+  "tableCount": 22,
+  "trackedChangeCount": 0,
+  "commentCount": 0,
+  "externalRelationships": [
+    {
+      "relationshipId": "rId84",
+      "target": "https://blog.modelcontextprotocol.io/"
+    },
+    {
+      "relationshipId": "rId10",
+      "target": "https://blog.modelcontextprotocol.io/posts/2026-07-28/"
+    },
+    {
+      "relationshipId": "rId13",
+      "target": "https://datatracker.ietf.org/"
+    },
+    {
+      "relationshipId": "rId18",
+      "target": "https://developers.cloudflare.com/artifacts/"
+    },
+    {
+      "relationshipId": "rId83",
+      "target": "https://developers.cloudflare.com/artifacts/platform/pricing/"
+    },
+    {
+      "relationshipId": "rId56",
+      "target": "https://developers.cloudflare.com/d1/platform/limits/"
+    },
+    {
+      "relationshipId": "rId16",
+      "target": "https://developers.cloudflare.com/d1/platform/pricing/"
+    },
+    {
+      "relationshipId": "rId31",
+      "target": "https://developers.cloudflare.com/r2/api/s3/api/"
+    },
+    {
+      "relationshipId": "rId23",
+      "target": "https://developers.cloudflare.com/r2/api/s3/extensions/"
+    },
+    {
+      "relationshipId": "rId11",
+      "target": "https://developers.cloudflare.com/r2/api/s3/presigned-urls/"
+    },
+    {
+      "relationshipId": "rId28",
+      "target": "https://developers.cloudflare.com/r2/api/workers/workers-api-reference/"
+    },
+    {
+      "relationshipId": "rId82",
+      "target": "https://developers.cloudflare.com/r2/buckets/cors/"
+    },
+    {
+      "relationshipId": "rId38",
+      "target": "https://developers.cloudflare.com/r2/examples/cache-api/"
+    },
+    {
+      "relationshipId": "rId17",
+      "target": "https://developers.cloudflare.com/workers/platform/limits/"
+    },
+    {
+      "relationshipId": "rId57",
+      "target": "https://developers.cloudflare.com/workers/platform/pricing/"
+    },
+    {
+      "relationshipId": "rId48",
+      "target": "https://docs.anthropic.com/en/docs/claude-code/mcp"
+    },
+    {
+      "relationshipId": "rId21",
+      "target": "https://docs.anthropic.com/en/release-notes/claude-apps"
+    },
+    {
+      "relationshipId": "rId12",
+      "target": "https://docs.aws.amazon.com/"
+    },
+    {
+      "relationshipId": "rId22",
+      "target": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html"
+    },
+    {
+      "relationshipId": "rId32",
+      "target": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html"
+    },
+    {
+      "relationshipId": "rId26",
+      "target": "https://docs.cloud.google.com/storage/docs/reference/rpc/google.storage.v2"
+    },
+    {
+      "relationshipId": "rId30",
+      "target": "https://docs.cloud.google.com/storage/docs/resumable-uploads"
+    },
+    {
+      "relationshipId": "rId29",
+      "target": "https://docs.cloud.google.com/storage/docs/xml-api/reference-headers"
+    },
+    {
+      "relationshipId": "rId64",
+      "target": "https://effect.website/"
+    },
+    {
+      "relationshipId": "rId14",
+      "target": "https://httpwg.org/specs/rfc9111.html"
+    },
+    {
+      "relationshipId": "rId46",
+      "target": "https://modelcontextprotocol.io/"
+    },
+    {
+      "relationshipId": "rId63",
+      "target": "https://nodejs.org/"
+    },
+    {
+      "relationshipId": "rId20",
+      "target": "https://playwright.dev/"
+    },
+    {
+      "relationshipId": "rId43",
+      "target": "https://sqlite.org/"
+    },
+    {
+      "relationshipId": "rId85",
+      "target": "https://ts.sdk.modelcontextprotocol.io/v2/"
+    },
+    {
+      "relationshipId": "rId52",
+      "target": "https://workos.com/"
+    },
+    {
+      "relationshipId": "rId51",
+      "target": "https://workos.com/docs/authkit/mcp"
+    },
+    {
+      "relationshipId": "rId47",
+      "target": "https://workos.com/docs/mcp"
+    },
+    {
+      "relationshipId": "rId15",
+      "target": "https://workos.com/pricing"
+    },
+    {
+      "relationshipId": "rId55",
+      "target": "https://www.cloudflare.com/"
+    },
+    {
+      "relationshipId": "rId44",
+      "target": "https://www.postgresql.org/"
+    },
+    {
+      "relationshipId": "rId19",
+      "target": "https://www.pulumi.com/docs/iac/concepts/automation-api/"
+    },
+    {
+      "relationshipId": "rId87",
+      "target": "https://www.pulumi.com/docs/iac/concepts/state-and-backends/"
+    },
+    {
+      "relationshipId": "rId86",
+      "target": "https://www.pulumi.com/docs/iac/guides/basics/pulumi-cloud-vs-oss/"
+    },
+    {
+      "relationshipId": "rId61",
+      "target": "https://www.pulumi.com/pricing/"
+    }
+  ]
+}

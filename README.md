@@ -85,7 +85,7 @@ Then ask:
 
 The agent returns the full-screen review link first. [Read the MCP guide](./docs/mcp.md) for source checkouts, remote servers, permissions, and supported operations.
 
-Live session delivery is available from source for [Pi](./integrations/pi/README.md), [Oh My Pi (omp)](./integrations/omp/README.md), [OpenCode](./integrations/opencode/README.md), and [Claude Code Channels](./integrations/claude-channel/README.md). Claude Channels require its research-preview development flag and, on managed plans, the organization policy. The omp and OpenCode adapters typecheck against their host APIs but are not yet live-host qualified; verification and contributions are welcome. Any other harness can implement the same loop through the [agent bridge protocol](./docs/agent-bridge-protocol.md).
+Live session delivery is available from source for [Pi](./integrations/pi/README.md), [Oh My Pi (omp)](./integrations/omp/README.md), [OpenCode](./integrations/opencode/README.md), and [Claude Code Channels](./integrations/claude-channel/README.md). Claude Channels require its research-preview development flag and, on managed plans, the organization policy. The omp adapter awaits live-host qualification. OpenCode has a [bounded live staging pass](./project/research/STAGING-E2E-REPORT-2026-08-27.md), while complete current-host and hostile-session qualification remains open. Any other harness can implement the same loop through the [agent bridge protocol](./docs/agent-bridge-protocol.md).
 
 <p align="center">
   <a href="./integrations/pi/README.md"><img src="./docs/assets/pi-live-feedback.svg" alt="Artifact Server has native Pi support for live integrated feedback" width="268"></a>
@@ -173,6 +173,8 @@ Repository engineering rules live in [AGENTS.md](./AGENTS.md).
 
 The [`project`](./project) directory contains specifications, conformance evidence, performance records, prototypes, and research. Start with:
 
+- [Next steps and implementation order](./NEXT-STEPS.md)
+- [Engineering research intake and reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 - [Product specification](./project/spec/artifact-server-product-spec.html)
 - [Conformance ledger](./project/spec/conformance.yml)
 - [MCP baseline](./project/spec/artifact-server-mcp-baseline.md)

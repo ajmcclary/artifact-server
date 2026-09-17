@@ -1,0 +1,19 @@
+{
+  "archive": "artifact-server-0.1.0-node.tar.gz",
+  "package": {
+    "name": "artifact-server",
+    "version": "0.1.0"
+  },
+  "runtime": {
+    "nativeNodeExtensions": false,
+    "node": ">=24.12.0"
+  },
+  "schemaVersion": 1,
+  "sha256": "bd7731f76b600ee559c305ac29c04bc147ac9b78e263bf3eef0d40e180dd27e4",
+  "sizeBytes": 34279259,
+  "verification": {
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "result": "pass"
+  }
+}
