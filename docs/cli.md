@@ -43,3 +43,7 @@ artifactserver publish ./dist \
 The expected version prevents an old client from replacing a newer current pointer.
 
 Run `artifactserver --help` or `artifactserver <command> --help` for the complete command reference.
+
+## Claude Design exports
+
+Publish complete Claude Design System and Project directories to generate a preview catalog automatically when no root `index.html` exists. An explicit `--entry` always wins. See [Claude Design exports](./claude-design.md) for supported layouts and boundaries.

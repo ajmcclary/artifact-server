@@ -280,7 +280,7 @@ function HtmlPreview({
             entryPath: entry.path,
             html,
             interactiveUrl,
-            prefersInteractive: hasBlockedExternalScript(html, interactiveUrl),
+            prefersInteractive: prefersInteractivePreview(html, interactiveUrl),
             temporarySession: !useStableOrigin,
           });
         }
@@ -483,8 +483,11 @@ function documentEntryUrl(versionBaseUrl: string, entryPath: string): string {
   ).toString();
 }
 
-function hasBlockedExternalScript(html: string, entryUrl: string): boolean {
+function prefersInteractivePreview(html: string, entryUrl: string): boolean {
   const parsed = new DOMParser().parseFromString(html, "text/html");
+  if (parsed.querySelector('meta[name="artifact-server-preview"][content="claude-design-catalog"]') !== null) {
+    return true;
+  }
   const contentOrigin = new URL(entryUrl).origin;
   return [...parsed.querySelectorAll("script[src]")].some((script) => {
     const source = script.getAttribute("src");

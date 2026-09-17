@@ -1623,6 +1623,7 @@
             <li><a href="#safety">Safety</a></li>
             <li><a href="#scope">Scope</a></li>
             <li><a href="#implementation">Implementation</a></li>
+            <li><a href="#claude-design-exports">Claude Design exports</a></li>
             <li><a href="#decisions">Decisions</a></li>
           </ul>
         </nav>
@@ -1644,6 +1645,7 @@
               <a href="#safety">Safety</a>
               <a href="#scope">Scope</a>
               <a href="#implementation">Implementation</a>
+              <a href="#claude-design-exports">Claude Design exports</a>
               <a href="#decisions">Decisions</a>
             </nav>
           </div>
@@ -3950,6 +3952,15 @@ artifact_delete</code></pre>
               </div>
             </details>
           </div>
+        </section>
+
+        <section class="section" id="claude-design-exports" aria-labelledby="claude-design-title">
+          <div class="section-heading">
+            <span class="section-label">Export support</span>
+            <h2 id="claude-design-title">Claude Design exports</h2>
+          </div>
+          <p>Directory publication recognizes Claude Design Systems from a root or project/_ds_manifest.json and Claude Design Projects from .dc.html artboards. When no root index.html or explicit entry exists, the client adds a deterministic, searchable catalog of original previews and templates. Cards retain their manifest names, groups, and bounded viewport dimensions; only one preview loads at a time.</p>
+          <p>The catalog is published through the existing staged upload and immutable version contract without rewriting source files. Manifest references must name published HTML files. Malformed, oversized, escaping, missing, or empty catalogs and generated filename collisions fail before upload. Existing entries and explicit entry selections take precedence. Export runtimes and remote dependencies remain the export's responsibility; no editor or source compilation is implied.</p>
         </section>
 
         <section class="section" id="decisions" aria-labelledby="decisions-title">

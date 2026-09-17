@@ -1,6 +1,6 @@
 version: 1
 product: Artifact Server
-updated: "2026-09-16"
+updated: "2026-09-17"
 evidence_root: "../.."
 
 source:
@@ -819,6 +819,30 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-25T18:29:58.000Z"
+
+  - id: DSN-001
+    kind: behavior
+    behavior: Directory publication recognizes Claude Design System and Project exports and adds a deterministic preview catalog when no existing or explicit entry takes precedence, preserving original bytes and paths through staged publication.
+    owner: cli
+    source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
+    acceptance:
+      behavior: {id: DSN-001-B, description: "Publish flat and nested systems and projects, replay identical inputs, preserve source bytes, browse grouped previews and templates with working relative assets, and honor existing and explicit entries."}
+      failure: {id: DSN-001-F, description: "Reject malformed, oversized, escaping, missing, non-HTML, empty, symlinked, and colliding inputs before upload; escape catalog metadata without executing it."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local staged publication, hostile-input, and interactive browser checks pass. Equivalent evidence for team deployments remains unrecorded.
+    depends_on: [CLI-002, CLI-003, MAN-001]
+    evidence:
+      - deployment: local
+        tests: [DSN-001-B, DSN-001-F]
+        result: pass
+        run: project/evidence/claude-design.json
+        recorded_at: "2026-09-17T04:15:51.060Z"
+      - deployment: local
+        tests: [DSN-001-B]
+        result: pass
+        run: project/evidence/claude-design-browser.json
+        recorded_at: "2026-09-17T04:15:53.250Z"
 
   - id: AUD-001
     kind: security

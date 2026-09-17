@@ -25,9 +25,16 @@ import {
   parseManifestPath,
 } from "../manifest/create-manifest.js";
 
+import {
+  claudeDesignCatalogPath,
+  claudeDesignManifestPath,
+  createClaudeDesignCatalog,
+} from "../manifest/claude-design.js";
+
 const maximumFileCount = 10_000;
 const maximumManifestPathLength = 1_024;
 const defaultDirectoryEntryPath = "index.html";
+const maximumDesignManifestBytes = 4 * 1024 * 1024;
 const uploadConcurrency = 4;
 
 const mediaTypesByExtension = new Map<string, string>([
@@ -38,6 +45,10 @@ const mediaTypesByExtension = new Map<string, string>([
   [".bmp", "image/bmp"],
   [".css", "text/css; charset=utf-8"],
   [".csv", "text/csv; charset=utf-8"],
+  [".woff", "font/woff"],
+  [".woff2", "font/woff2"],
+  [".ttf", "font/ttf"],
+  [".otf", "font/otf"],
   [".gif", "image/gif"],
   [".gz", "application/gzip"],
   [".htm", "text/html; charset=utf-8"],
@@ -216,7 +227,8 @@ export interface FilePublicationClientConfig {
   readonly serverOrigin: string;
 }
 
-interface PreparedFile {
+interface DiskPreparedFile {
+  readonly kind: "disk";
   readonly absolutePath: string;
   readonly device: number;
   readonly inode: number;
@@ -226,6 +238,17 @@ interface PreparedFile {
   readonly sha256: string;
   readonly size: number;
 }
+
+interface GeneratedPreparedFile {
+  readonly kind: "generated";
+  readonly content: string;
+  readonly mediaType: string;
+  readonly path: string;
+  readonly sha256: string;
+  readonly size: number;
+}
+
+type PreparedFile = DiskPreparedFile | GeneratedPreparedFile;
 
 interface PreparedPublication {
   readonly defaultName: string;
@@ -468,13 +491,71 @@ async function inspectPublicationPath(
       "The publication directory does not contain any files.",
     );
   }
+  const entryPath = requestedEntryPath
+    ?? await inferDirectoryEntry(files, absoluteInputPath);
   return canonicalPreparedPublication(
     path.basename(absoluteInputPath),
-    requestedEntryPath ?? defaultDirectoryEntryPath,
+    entryPath,
     files,
     absoluteInputPath,
     routingMode,
   );
+}
+
+async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Promise<string> {
+  const paths = files.map((file) => file.path);
+  if (paths.includes(defaultDirectoryEntryPath)) return defaultDirectoryEntryPath;
+  const manifestPath = claudeDesignManifestPath(paths);
+  const manifest = files.find((file) => file.path === manifestPath);
+  try {
+    const manifestText = manifest?.kind === "disk"
+      ? await readDesignManifest(manifest)
+      : undefined;
+    const content = createClaudeDesignCatalog(paths, manifestPath, manifestText);
+    if (content === undefined) return defaultDirectoryEntryPath;
+    if (paths.some((candidate) => candidate.toLowerCase() === claudeDesignCatalogPath)) {
+      throw new Error("The generated Claude Design catalog path already exists; choose --entry explicitly.");
+    }
+    if (files.length >= maximumFileCount) {
+      throw new Error("The Claude Design catalog would exceed the publication file limit.");
+    }
+    files.push({
+      kind: "generated",
+      content,
+      mediaType: "text/html; charset=utf-8",
+      path: claudeDesignCatalogPath,
+      sha256: createHash("sha256").update(content).digest("hex"),
+      size: Buffer.byteLength(content),
+    });
+    return claudeDesignCatalogPath;
+  } catch (cause) {
+    throw inputFailure(inputPath, "invalid_entry", cause instanceof Error
+      ? `Cannot prepare Claude Design export: ${cause.message}`
+      : "Cannot prepare Claude Design export.");
+  }
+}
+
+async function readDesignManifest(file: DiskPreparedFile): Promise<string> {
+  if (file.size > maximumDesignManifestBytes) {
+    throw new Error("Claude Design manifests must not exceed 4 MiB.");
+  }
+  const handle = await open(file.absolutePath, fileSystemConstants.O_RDONLY | fileSystemConstants.O_NOFOLLOW);
+  try {
+    const bytes = Buffer.alloc(file.size + 1);
+    let length = 0;
+    const stream = handle.createReadStream({autoClose: false, start: 0, end: file.size});
+    for await (const chunk of stream) {
+      bytes.set(chunk, length);
+      length += chunk.length;
+    }
+    const content = bytes.subarray(0, length);
+    if (length !== file.size || createHash("sha256").update(content).digest("hex") !== file.sha256) {
+      throw new Error("Claude Design manifest changed during publication preparation.");
+    }
+    return content.toString("utf8");
+  } finally {
+    await handle.close();
+  }
 }
 
 async function inspectDirectory(
@@ -537,7 +618,7 @@ async function inspectDirectoryEntry(
 async function inspectRegularFile(
   absolutePath: string,
   relativePath: string,
-): Promise<PreparedFile> {
+): Promise<DiskPreparedFile> {
   assertPortableClientPath(relativePath, absolutePath);
   const fileHandle = await open(
     absolutePath,
@@ -563,6 +644,7 @@ async function inspectRegularFile(
     const stream = fileHandle.createReadStream({autoClose: false});
     for await (const chunk of stream) fingerprint.update(chunk);
     return {
+      kind: "disk",
       absolutePath,
       device: info.dev,
       inode: info.ino,
@@ -759,16 +841,9 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
     FilePublicationInputError | FilePublicationProtocolError,
     FileSystem.FileSystem | HttpClient.HttpClient
   > {
-    yield* assertPreparedFileStable(preparedFile);
-    const body = yield* HttpBody.file(preparedFile.absolutePath, {
-      contentType: preparedFile.mediaType,
-    }).pipe(
-      Effect.mapError(() => inputFailure(
-        preparedFile.absolutePath,
-        "read_failed",
-        "The selected file could not be opened for upload.",
-      )),
-    );
+    const body = preparedFile.kind === "generated"
+      ? HttpBody.text(preparedFile.content, preparedFile.mediaType)
+      : yield* preparedDiskBody(preparedFile);
     const request = HttpClientRequest.put(plannedFile.uploadUrl).pipe(
       HttpClientRequest.setBody(body),
     );
@@ -788,9 +863,24 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
   },
 );
 
+const preparedDiskBody = Effect.fn("FilePublicationClient.preparedDiskBody")(
+  function*(preparedFile: DiskPreparedFile) {
+    yield* assertPreparedFileStable(preparedFile);
+    return yield* HttpBody.file(preparedFile.absolutePath, {
+      contentType: preparedFile.mediaType,
+    }).pipe(
+      Effect.mapError(() => inputFailure(
+        preparedFile.absolutePath,
+        "read_failed",
+        "The selected file could not be opened for upload.",
+      )),
+    );
+  },
+);
+
 const assertPreparedFileStable = Effect.fn("FilePublicationClient.assertPreparedFileStable")(
   function*(
-    preparedFile: PreparedFile,
+    preparedFile: DiskPreparedFile,
   ): Effect.fn.Return<void, FilePublicationInputError> {
     const current = yield* Effect.tryPromise({
       try: () => lstat(preparedFile.absolutePath),
