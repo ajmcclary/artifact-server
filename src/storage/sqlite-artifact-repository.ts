@@ -759,52 +759,6 @@ export class SqliteArtifactRepository implements
         setting.updatedByPrincipalId,
         setting.updatedAt,
       );
-      if (setting.enabled) {
-        this.#database.prepare(`
-          UPDATE git_history_jobs
-          SET storage_budget_bytes = ?, last_error = NULL,
-            available_at = ?, updated_at = ?
-          WHERE installation_id = ? AND project_id = ?
-            AND kind = 'mirror-version' AND state = 'queued'
-            AND last_error = 'budget_limited'
-        `).run(
-          setting.limits.storageBudgetBytes,
-          setting.updatedAt,
-          setting.updatedAt,
-          this.#installationId,
-          setting.projectId,
-        );
-        const versions = z.array(z.object({
-          artifactId: z.string(),
-          projectId: z.string(),
-          versionId: z.string(),
-        })).parse(this.#database.prepare(`
-          SELECT version.artifact_id AS artifactId,
-            version.project_id AS projectId, version.id AS versionId
-          FROM versions version
-          JOIN artifacts artifact
-            ON artifact.project_id = version.project_id
-            AND artifact.id = version.artifact_id
-          LEFT JOIN git_history_mappings mapping
-            ON mapping.installation_id = ?
-            AND mapping.project_id = version.project_id
-            AND mapping.artifact_id = version.artifact_id
-            AND mapping.version_id = version.id
-            AND mapping.status = 'recorded'
-          WHERE version.project_id = ? AND artifact.deleted_at IS NULL
-            AND mapping.version_id IS NULL
-          ORDER BY version.artifact_id, version.number
-        `).all(this.#installationId, setting.projectId));
-        for (const version of versions) {
-          this.#insertMirrorJob(
-            version.projectId,
-            version.artifactId,
-            version.versionId,
-            setting.updatedAt,
-            setting.limits,
-          );
-        }
-      }
       const stored = this.#database.prepare(`
         SELECT project_id AS projectId, enabled,
           updated_by_principal_id AS updatedByPrincipalId,
@@ -821,6 +775,89 @@ export class SqliteArtifactRepository implements
     leaseExpiresAt: string,
   ): Promise<GitHistoryJob | null> {
     return Promise.resolve().then(() => this.#transaction(() => {
+      const missing = z.array(z.object({
+        artifactId: z.string(),
+        fileCopyBytes: z.number().int().nonnegative(),
+        maximumCopiedFiles: z.number().int().positive(),
+        projectId: z.string(),
+        storageBudgetBytes: z.number().int().nonnegative().nullable(),
+        versionCopyBytes: z.number().int().nonnegative(),
+        versionId: z.string(),
+      })).parse(this.#database.prepare(`
+        SELECT version.artifact_id AS artifactId,
+          setting.file_copy_limit_bytes AS fileCopyBytes,
+          setting.maximum_copied_files AS maximumCopiedFiles,
+          version.project_id AS projectId,
+          setting.storage_budget_bytes AS storageBudgetBytes,
+          setting.version_copy_limit_bytes AS versionCopyBytes,
+          version.id AS versionId
+        FROM versions version
+        JOIN artifacts artifact ON artifact.id = version.artifact_id
+          AND artifact.project_id = version.project_id
+        JOIN git_history_project_settings setting
+          ON setting.project_id = version.project_id
+          AND setting.installation_id = ? AND setting.enabled = 1
+        LEFT JOIN git_history_mappings mapping
+          ON mapping.installation_id = setting.installation_id
+          AND mapping.project_id = version.project_id
+          AND mapping.artifact_id = version.artifact_id
+          AND mapping.version_id = version.id AND mapping.status = 'recorded'
+        WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM git_history_jobs queued
+            WHERE queued.installation_id = setting.installation_id
+              AND queued.version_id = version.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM versions predecessor
+            LEFT JOIN git_history_mappings prior_mapping
+              ON prior_mapping.installation_id = setting.installation_id
+              AND prior_mapping.project_id = predecessor.project_id
+              AND prior_mapping.artifact_id = predecessor.artifact_id
+              AND prior_mapping.version_id = predecessor.id
+              AND prior_mapping.status = 'recorded'
+            WHERE predecessor.artifact_id = version.artifact_id
+              AND predecessor.number < version.number
+              AND prior_mapping.version_id IS NULL
+          )
+        ORDER BY version.created_at, version.id LIMIT 32
+      `).all(this.#installationId));
+      for (const version of missing) {
+        this.#insertMirrorJob(
+          version.projectId,
+          version.artifactId,
+          version.versionId,
+          now,
+          {
+            fileCopyBytes: version.fileCopyBytes,
+            logicalCopiedBytes: 0,
+            logicalReservedBytes: 0,
+            storageBudgetBytes: version.storageBudgetBytes,
+            versionCopyBytes: version.versionCopyBytes,
+          },
+          version.maximumCopiedFiles,
+        );
+      }
+      this.#database.prepare(`
+        UPDATE git_history_jobs
+        SET storage_budget_bytes = (
+          SELECT setting.storage_budget_bytes
+          FROM git_history_project_settings setting
+          WHERE setting.installation_id = git_history_jobs.installation_id
+            AND setting.project_id = git_history_jobs.project_id
+        ), last_error = NULL, available_at = ?, updated_at = ?
+        WHERE id IN (
+          SELECT job.id FROM git_history_jobs job
+          JOIN git_history_project_settings setting
+            ON setting.installation_id = job.installation_id
+            AND setting.project_id = job.project_id
+          WHERE job.installation_id = ? AND setting.enabled = 1
+            AND job.kind = 'mirror-version' AND job.state = 'queued'
+            AND job.last_error = 'budget_limited'
+            AND job.storage_budget_bytes IS NOT setting.storage_budget_bytes
+          ORDER BY job.created_at, job.id LIMIT 32
+        )
+      `).run(now, now, this.#installationId);
       this.#database.prepare(`
         UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
           available_at = ?, updated_at = ?
@@ -836,6 +873,7 @@ export class SqliteArtifactRepository implements
           job.maximum_copied_files AS maximumCopiedFiles,
           job.storage_budget_bytes AS storageBudgetBytes
         FROM git_history_jobs job
+        LEFT JOIN versions version ON version.id = job.version_id
         LEFT JOIN git_history_project_settings setting
           ON setting.installation_id = job.installation_id
           AND setting.project_id = job.project_id
@@ -848,7 +886,20 @@ export class SqliteArtifactRepository implements
               AND claimed.artifact_id = job.artifact_id
               AND claimed.state = 'claimed'
           )
-        ORDER BY job.created_at, job.id LIMIT 1
+          AND (job.kind = 'delete-repository' OR NOT EXISTS (
+            SELECT 1 FROM versions predecessor
+            LEFT JOIN git_history_mappings mapped
+              ON mapped.installation_id = job.installation_id
+              AND mapped.project_id = predecessor.project_id
+              AND mapped.artifact_id = predecessor.artifact_id
+              AND mapped.version_id = predecessor.id
+              AND mapped.status = 'recorded'
+            WHERE predecessor.project_id = job.project_id
+              AND predecessor.artifact_id = job.artifact_id
+              AND predecessor.number < version.number
+              AND mapped.version_id IS NULL
+          ))
+        ORDER BY job.created_at, version.number, job.id LIMIT 1
       `).get(this.#installationId, now);
       const parsed = gitHistoryJobRowSchema.nullable().parse(row ?? null);
       if (parsed === null) return null;

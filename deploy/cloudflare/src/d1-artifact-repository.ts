@@ -1642,58 +1642,6 @@ export function createD1ArtifactRepository(
         setting.updatedByPrincipalId,
         setting.updatedAt,
       )];
-      if (setting.enabled) {
-        statements.push(database.prepare(`
-          UPDATE git_history_jobs
-          SET storage_budget_bytes = ?, last_error = NULL,
-            available_at = ?, updated_at = ?
-          WHERE installation_id = ? AND project_id = ?
-            AND kind = 'mirror-version' AND state = 'queued'
-            AND last_error = 'budget_limited'
-        `).bind(
-          setting.limits.storageBudgetBytes,
-          setting.updatedAt,
-          setting.updatedAt,
-          installationId,
-          setting.projectId,
-        ));
-        statements.push(database.prepare(`
-          INSERT OR IGNORE INTO git_history_jobs (
-            id, installation_id, project_id, artifact_id, version_id,
-            kind, state, attempts, file_copy_limit_bytes,
-            version_copy_limit_bytes, maximum_copied_files,
-            storage_budget_bytes, copy_policy_digest, lease_expires_at,
-            available_at, last_error, created_at, updated_at
-          )
-          SELECT 'ghj_d1_' || version.id, setting.installation_id,
-            version.project_id, version.artifact_id, version.id,
-            'mirror-version', 'queued', 0, setting.file_copy_limit_bytes,
-            setting.version_copy_limit_bytes, setting.maximum_copied_files,
-            setting.storage_budget_bytes,
-            'd1:' || setting.file_copy_limit_bytes || ':' ||
-              setting.version_copy_limit_bytes || ':' || setting.maximum_copied_files,
-            NULL, ?, NULL, ?, ?
-          FROM versions version
-          JOIN artifacts artifact ON artifact.project_id = version.project_id
-            AND artifact.id = version.artifact_id
-          JOIN git_history_project_settings setting
-            ON setting.installation_id = ? AND setting.project_id = version.project_id
-          LEFT JOIN git_history_mappings mapping
-            ON mapping.installation_id = setting.installation_id
-            AND mapping.project_id = version.project_id
-            AND mapping.artifact_id = version.artifact_id
-            AND mapping.version_id = version.id
-            AND mapping.status = 'recorded'
-          WHERE version.project_id = ? AND artifact.deleted_at IS NULL
-            AND mapping.version_id IS NULL AND setting.enabled = 1
-        `).bind(
-          setting.updatedAt,
-          setting.updatedAt,
-          setting.updatedAt,
-          installationId,
-          setting.projectId,
-        ));
-      }
       await database.batch(statements);
       const row = await database.prepare(`
         SELECT project_id AS projectId, enabled,
@@ -1705,6 +1653,73 @@ export function createD1ArtifactRepository(
       return projectGitHistorySettingRowSchema.parse(row);
     },
     claimGitHistoryJob: async (now: string, leaseExpiresAt: string) => {
+      await database.prepare(`
+        INSERT OR IGNORE INTO git_history_jobs (
+          id, installation_id, project_id, artifact_id, version_id,
+          kind, state, attempts, file_copy_limit_bytes,
+          version_copy_limit_bytes, maximum_copied_files,
+          storage_budget_bytes, copy_policy_digest, lease_expires_at,
+          available_at, last_error, created_at, updated_at
+        )
+        SELECT 'ghj_d1_' || version.id, setting.installation_id,
+          version.project_id, version.artifact_id, version.id,
+          'mirror-version', 'queued', 0, setting.file_copy_limit_bytes,
+          setting.version_copy_limit_bytes, setting.maximum_copied_files,
+          setting.storage_budget_bytes,
+          'd1:' || setting.file_copy_limit_bytes || ':' ||
+            setting.version_copy_limit_bytes || ':' || setting.maximum_copied_files,
+          NULL, ?, NULL, ?, ?
+        FROM versions version
+        JOIN artifacts artifact ON artifact.project_id = version.project_id
+          AND artifact.id = version.artifact_id
+        JOIN git_history_project_settings setting
+          ON setting.installation_id = ? AND setting.project_id = version.project_id
+          AND setting.enabled = 1
+        LEFT JOIN git_history_mappings mapping
+          ON mapping.installation_id = setting.installation_id
+          AND mapping.project_id = version.project_id
+          AND mapping.artifact_id = version.artifact_id
+          AND mapping.version_id = version.id AND mapping.status = 'recorded'
+        WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM git_history_jobs queued
+            WHERE queued.installation_id = setting.installation_id
+              AND queued.version_id = version.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM versions predecessor
+            LEFT JOIN git_history_mappings prior_mapping
+              ON prior_mapping.installation_id = setting.installation_id
+              AND prior_mapping.project_id = predecessor.project_id
+              AND prior_mapping.artifact_id = predecessor.artifact_id
+              AND prior_mapping.version_id = predecessor.id
+              AND prior_mapping.status = 'recorded'
+            WHERE predecessor.artifact_id = version.artifact_id
+              AND predecessor.number < version.number
+              AND prior_mapping.version_id IS NULL
+          )
+        ORDER BY version.created_at, version.id LIMIT 32
+      `).bind(now, now, now, installationId).run();
+      await database.prepare(`
+        UPDATE git_history_jobs
+        SET storage_budget_bytes = (
+          SELECT setting.storage_budget_bytes
+          FROM git_history_project_settings setting
+          WHERE setting.installation_id = git_history_jobs.installation_id
+            AND setting.project_id = git_history_jobs.project_id
+        ), last_error = NULL, available_at = ?, updated_at = ?
+        WHERE id IN (
+          SELECT job.id FROM git_history_jobs job
+          JOIN git_history_project_settings setting
+            ON setting.installation_id = job.installation_id
+            AND setting.project_id = job.project_id
+          WHERE job.installation_id = ? AND setting.enabled = 1
+            AND job.kind = 'mirror-version' AND job.state = 'queued'
+            AND job.last_error = 'budget_limited'
+            AND job.storage_budget_bytes IS NOT setting.storage_budget_bytes
+          ORDER BY job.created_at, job.id LIMIT 32
+        )
+      `).bind(now, now, installationId).run();
       await database.prepare(`
         UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
           available_at = ?, updated_at = ?
@@ -1718,6 +1733,7 @@ export function createD1ArtifactRepository(
         WHERE installation_id = ? AND state = 'queued' AND id = (
           SELECT job.id
           FROM git_history_jobs job
+          LEFT JOIN versions version ON version.id = job.version_id
           LEFT JOIN git_history_project_settings setting
             ON setting.installation_id = job.installation_id
             AND setting.project_id = job.project_id
@@ -1730,7 +1746,20 @@ export function createD1ArtifactRepository(
                 AND claimed.artifact_id = job.artifact_id
                 AND claimed.state = 'claimed'
             )
-          ORDER BY job.created_at, job.id LIMIT 1
+            AND (job.kind = 'delete-repository' OR NOT EXISTS (
+              SELECT 1 FROM versions predecessor
+              LEFT JOIN git_history_mappings mapped
+                ON mapped.installation_id = job.installation_id
+                AND mapped.project_id = predecessor.project_id
+                AND mapped.artifact_id = predecessor.artifact_id
+                AND mapped.version_id = predecessor.id
+                AND mapped.status = 'recorded'
+              WHERE predecessor.project_id = job.project_id
+                AND predecessor.artifact_id = job.artifact_id
+                AND predecessor.number < version.number
+                AND mapped.version_id IS NULL
+            ))
+          ORDER BY job.created_at, version.number, job.id LIMIT 1
         )
         RETURNING id, project_id AS projectId, artifact_id AS artifactId,
           version_id AS versionId, kind, attempts,

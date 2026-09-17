@@ -38,6 +38,8 @@ import type {NodeGitHistoryConfiguration} from
   "../../src/git-history/node-git-history-configuration.js";
 import type {GitHistoryProviderHealthProbe} from
   "../../src/git-history/git-history-provider-health.js";
+import type {GitHistoryProvider} from
+  "../../src/git-history/git-history-mirror.js";
 import {managedApiKeyCredentialPattern} from
   "../../src/core/installation-identity.js";
 import {
@@ -51,6 +53,7 @@ import {
   startStubOidcProvider,
   type RunningStubOidcProvider,
 } from "../support/stub-oidc-provider.js";
+import {RecordingGitHistoryProvider} from "../support/git-history-provider.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const externalStorageCli = path.join(repositoryRoot, "dist/cli/main.js");
@@ -459,6 +462,73 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     } finally {
       await database.close();
     }
+  });
+
+  test("GIT-008 Postgres regression: two workers preserve predecessor order", async () => {
+    const identity = {
+      apiToken: managedTestKey("postgres-ordered-history"),
+      installationId: "postgres-ordered-history",
+    };
+    const provider = new RecordingGitHistoryProvider();
+    const options = {
+      gitHistory: configuredGitHistory("postgres-ordered-history"),
+      gitHistoryHealthProbe: availableGitHistoryProbe,
+      gitHistoryProvider: provider,
+    };
+    const first = await startInProcessExternalStorageServer(
+      environment,
+      identity,
+      options,
+    );
+    const second = await startInProcessExternalStorageServer(
+      environment,
+      identity,
+      options,
+    );
+    await expect.poll(
+      () => readGitHistoryProviderState(first.baseUrl, identity.apiToken),
+      {timeout: 5_000},
+    ).toBe("available");
+
+    const initial = await publishNew(first.baseUrl, identity.apiToken, {
+      content: "ordered version 1",
+      idempotencyKey: "postgres-ordered-history-1",
+      name: "Ordered Git history",
+    });
+    expect(initial.response.status).toBe(201);
+    const publishRemaining = async (
+      number: number,
+      currentVersionId: string,
+    ): Promise<void> => {
+      if (number > 4) return;
+      const published = await publishVersion(second.baseUrl, identity.apiToken, {
+        artifactId: initial.body.artifact.id,
+        content: `ordered version ${number}`,
+        expectedCurrentVersionId: currentVersionId,
+        idempotencyKey: `postgres-ordered-history-${number}`,
+      });
+      expect(published.response.status).toBe(201);
+      await publishRemaining(
+        number + 1,
+        publishResponseSchema.parse(published.body).version.id,
+      );
+    };
+    await publishRemaining(2, initial.body.version.id);
+    const enabled = await fetch(
+      `${first.baseUrl}/api/v1/projects/${defaultProjectId}/git-history`,
+      {
+        body: JSON.stringify({confirmEstimate: true, enabled: true}),
+        headers: mutationHeaders(identity.apiToken, "postgres-ordered-history-enable"),
+        method: "PUT",
+      },
+    );
+    expect(enabled.status).toBe(200);
+    await expect.poll(() => provider.commitCalls, {timeout: 12_000}).toBe(4);
+    expect(provider.commitRequests.map((commit) => commit.metadata.versionNumber))
+      .toEqual([1, 2, 3, 4]);
+    expect(provider.commits.get(initial.body.artifact.id)?.size).toBe(4);
+    await first.stop();
+    await second.stop();
   });
 
   test("a populated Postgres v1 installation migrates without changing identity or bytes", async () => {
@@ -2689,6 +2759,7 @@ async function startInProcessExternalStorageServer(
   options: {
     readonly gitHistory?: NodeGitHistoryConfiguration;
     readonly gitHistoryHealthProbe?: GitHistoryProviderHealthProbe;
+    readonly gitHistoryProvider?: GitHistoryProvider;
   } = {},
 ): Promise<InProcessExternalStorageServer> {
   const server = await startExternalStorageServer({

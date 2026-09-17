@@ -759,53 +759,6 @@ export class PostgresArtifactRepository implements
           setting.updatedByPrincipalId,
           setting.updatedAt,
         ]);
-        if (setting.enabled) {
-          yield* sql.unsafe(`
-            UPDATE git_history_jobs
-            SET storage_budget_bytes = $1, last_error = NULL,
-              available_at = $2, updated_at = $2
-            WHERE installation_id = $3 AND project_id = $4
-              AND kind = 'mirror-version' AND state = 'queued'
-              AND last_error = 'budget_limited'
-          `, [
-            setting.limits.storageBudgetBytes,
-            setting.updatedAt,
-            installationId,
-            setting.projectId,
-          ]);
-          const versions = yield* sql.unsafe<{
-            readonly artifactId: string;
-            readonly projectId: string;
-            readonly versionId: string;
-          }>(`
-            SELECT version.artifact_id AS "artifactId",
-              version.project_id AS "projectId", version.id AS "versionId"
-            FROM versions version
-            JOIN artifacts artifact
-              ON artifact.installation_id = version.installation_id
-              AND artifact.project_id = version.project_id
-              AND artifact.id = version.artifact_id
-            LEFT JOIN git_history_mappings mapping
-              ON mapping.installation_id = version.installation_id
-              AND mapping.project_id = version.project_id
-              AND mapping.artifact_id = version.artifact_id
-              AND mapping.version_id = version.id
-              AND mapping.status = 'recorded'
-            WHERE version.installation_id = $1 AND version.project_id = $2
-              AND artifact.deleted_at IS NULL AND mapping.version_id IS NULL
-            ORDER BY version.artifact_id, version.number
-          `, [installationId, setting.projectId]);
-          for (const version of versions) {
-            yield* this.#insertGitHistoryMirrorJob(
-              version.projectId,
-              version.artifactId,
-              version.versionId,
-              setting.updatedAt,
-              setting.limits,
-              defaultGitHistoryMaximumCopiedFiles,
-            );
-          }
-        }
         return projectGitHistorySettingRowSchema.parse(rows[0]);
       }));
     }));
@@ -816,9 +769,98 @@ export class PostgresArtifactRepository implements
     leaseExpiresAt: string,
   ): Promise<GitHistoryJob | null> {
     const installationId = this.#installationId;
-    return this.#database.run(Effect.gen(function*() {
+    return this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
-      return yield* sql.withTransaction(Effect.gen(function*() {
+      return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        const missing = yield* sql.unsafe<object>(`
+          SELECT version.artifact_id AS "artifactId",
+            setting.file_copy_limit_bytes AS "fileCopyBytes",
+            setting.maximum_copied_files AS "maximumCopiedFiles",
+            version.project_id AS "projectId",
+            setting.storage_budget_bytes AS "storageBudgetBytes",
+            setting.version_copy_limit_bytes AS "versionCopyBytes",
+            version.id AS "versionId"
+          FROM versions version
+          JOIN artifacts artifact
+            ON artifact.installation_id = version.installation_id
+            AND artifact.project_id = version.project_id
+            AND artifact.id = version.artifact_id
+          JOIN git_history_project_settings setting
+            ON setting.installation_id = version.installation_id
+            AND setting.project_id = version.project_id
+            AND setting.enabled = TRUE
+          LEFT JOIN git_history_mappings mapping
+            ON mapping.installation_id = version.installation_id
+            AND mapping.project_id = version.project_id
+            AND mapping.artifact_id = version.artifact_id
+            AND mapping.version_id = version.id
+            AND mapping.status = 'recorded'
+          WHERE version.installation_id = $1 AND artifact.deleted_at IS NULL
+            AND mapping.version_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM git_history_jobs queued
+              WHERE queued.installation_id = version.installation_id
+                AND queued.version_id = version.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM versions predecessor
+              LEFT JOIN git_history_mappings prior_mapping
+                ON prior_mapping.installation_id = predecessor.installation_id
+                AND prior_mapping.project_id = predecessor.project_id
+                AND prior_mapping.artifact_id = predecessor.artifact_id
+                AND prior_mapping.version_id = predecessor.id
+                AND prior_mapping.status = 'recorded'
+              WHERE predecessor.installation_id = version.installation_id
+                AND predecessor.artifact_id = version.artifact_id
+                AND predecessor.number < version.number
+                AND prior_mapping.version_id IS NULL
+            )
+          ORDER BY version.created_at, version.id LIMIT 32
+        `, [installationId]);
+        const parsedMissing = z.array(z.object({
+          artifactId: z.string(),
+          fileCopyBytes: nonnegativeIntegerSchema,
+          maximumCopiedFiles: positiveIntegerSchema,
+          projectId: z.string(),
+          storageBudgetBytes: nonnegativeIntegerSchema.nullable(),
+          versionCopyBytes: nonnegativeIntegerSchema,
+          versionId: z.string(),
+        })).parse(missing);
+        for (const version of parsedMissing) {
+          yield* this.#insertGitHistoryMirrorJob(
+            version.projectId,
+            version.artifactId,
+            version.versionId,
+            now,
+            {
+              fileCopyBytes: version.fileCopyBytes,
+              logicalCopiedBytes: 0,
+              logicalReservedBytes: 0,
+              storageBudgetBytes: version.storageBudgetBytes,
+              versionCopyBytes: version.versionCopyBytes,
+            },
+            version.maximumCopiedFiles,
+          );
+        }
+        yield* sql.unsafe(`
+          WITH changed AS (
+            SELECT job.id, setting.storage_budget_bytes
+            FROM git_history_jobs job
+            JOIN git_history_project_settings setting
+              ON setting.installation_id = job.installation_id
+              AND setting.project_id = job.project_id
+            WHERE job.installation_id = $1 AND setting.enabled = TRUE
+              AND job.kind = 'mirror-version' AND job.state = 'queued'
+              AND job.last_error = 'budget_limited'
+              AND job.storage_budget_bytes IS DISTINCT FROM setting.storage_budget_bytes
+            ORDER BY job.created_at, job.id LIMIT 32
+            FOR UPDATE OF job SKIP LOCKED
+          )
+          UPDATE git_history_jobs job
+          SET storage_budget_bytes = changed.storage_budget_bytes,
+            last_error = NULL, available_at = $2, updated_at = $2
+          FROM changed WHERE job.installation_id = $1 AND job.id = changed.id
+        `, [installationId, now]);
         yield* sql.unsafe(`
           UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
             available_at = $1, updated_at = $1
@@ -834,6 +876,13 @@ export class PostgresArtifactRepository implements
             COALESCE(job.maximum_copied_files, 1) AS "maximumCopiedFiles",
             job.storage_budget_bytes AS "storageBudgetBytes"
           FROM git_history_jobs job
+          JOIN artifacts artifact
+            ON artifact.installation_id = job.installation_id
+            AND artifact.project_id = job.project_id
+            AND artifact.id = job.artifact_id
+          LEFT JOIN versions version
+            ON version.installation_id = job.installation_id
+            AND version.id = job.version_id
           LEFT JOIN git_history_project_settings setting
             ON setting.installation_id = job.installation_id
             AND setting.project_id = job.project_id
@@ -846,8 +895,22 @@ export class PostgresArtifactRepository implements
                 AND claimed.artifact_id = job.artifact_id
                 AND claimed.state = 'claimed'
             )
-          ORDER BY job.created_at, job.id
-          FOR UPDATE OF job SKIP LOCKED LIMIT 1
+            AND (job.kind = 'delete-repository' OR NOT EXISTS (
+              SELECT 1 FROM versions predecessor
+              LEFT JOIN git_history_mappings mapped
+                ON mapped.installation_id = job.installation_id
+                AND mapped.project_id = predecessor.project_id
+                AND mapped.artifact_id = predecessor.artifact_id
+                AND mapped.version_id = predecessor.id
+                AND mapped.status = 'recorded'
+              WHERE predecessor.installation_id = job.installation_id
+                AND predecessor.project_id = job.project_id
+                AND predecessor.artifact_id = job.artifact_id
+                AND predecessor.number < version.number
+                AND mapped.version_id IS NULL
+            ))
+          ORDER BY job.created_at, version.number, job.id
+          FOR UPDATE OF job, artifact SKIP LOCKED LIMIT 1
         `, [installationId, now]);
         const job = gitHistoryJobRowSchema.nullable().parse(rows[0] ?? null);
         if (job === null) return null;

@@ -33,6 +33,7 @@ import {
   commitStagedUpload,
   createStagedUpload,
   publishNew,
+  publishVersion,
   uploadEveryStagedFile,
   type TestSiteFile,
 } from "../support/publishing.js";
@@ -79,6 +80,137 @@ describe("simple per-project Git history setting", () => {
     if (server !== null) await server.stop();
     server = null;
     await removeTestInstallation(installation);
+  });
+
+  test("GIT-008 order regression: backfill commits existing versions in number order", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    const runningServer = server;
+    await waitForAvailable(server, installation.apiToken);
+
+    const first = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "version 1",
+      idempotencyKey: "git-history-ordered-backfill-1",
+      projectId: "prj_default",
+    });
+    const publishRemaining = async (
+      number: number,
+      currentVersionId: string,
+    ): Promise<void> => {
+      if (number > 8) return;
+      const published = await publishVersion(runningServer, installation, {
+        artifactId: first.body.artifact.id,
+        content: `version ${number}`,
+        expectedCurrentVersionId: currentVersionId,
+        idempotencyKey: `git-history-ordered-backfill-${number}`,
+        projectId: "prj_default",
+      });
+      await publishRemaining(number + 1, published.body.version.id);
+    };
+    await publishRemaining(2, first.body.version.id);
+    expect(provider.commitCalls).toBe(0);
+
+    await enableGitHistory(server, installation, "prj_default");
+    await expect.poll(() => provider.commitCalls, {timeout: 15_000}).toBe(8);
+    expect(provider.commitRequests.map((request) => request.metadata.versionNumber))
+      .toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  test("GIT-008 queue regression: enabling history defers a large backfill to bounded worker passes", async () => {
+    server = await startTestServer(installation);
+    const runningServer = server;
+    const publications = await Promise.all(Array.from({length: 40}, (_, number) =>
+      publishNew(runningServer, installation, {
+        accessSetting: "account_required",
+        content: `artifact ${number}`,
+        idempotencyKey: `git-history-bounded-backfill-${number}`,
+        projectId: "prj_default",
+      })));
+    for (const published of publications) {
+      expect(published.response.status).toBe(201);
+    }
+    await server.stop();
+    server = null;
+
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    try {
+      const now = new Date().toISOString();
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: configuredGitHistory().capability.limits,
+        projectId: "prj_default",
+        updatedAt: now,
+        updatedByPrincipalId: "test-backfill-operator",
+      });
+      expect((await store.readProjectGitHistoryProgress("prj_default")).pendingJobs)
+        .toBe(0);
+
+      const first = await store.claimGitHistoryJob(
+        now,
+        new Date(Date.parse(now) + 45_000).toISOString(),
+      );
+      expect(first?.kind).toBe("mirror-version");
+      expect((await store.readProjectGitHistoryProgress("prj_default")).pendingJobs)
+        .toBe(32);
+
+      const second = await store.claimGitHistoryJob(
+        now,
+        new Date(Date.parse(now) + 45_000).toISOString(),
+      );
+      expect(second?.artifactId).not.toBe(first?.artifactId);
+      expect((await store.readProjectGitHistoryProgress("prj_default")).pendingJobs)
+        .toBe(40);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("GIT-008 retry regression: a delayed predecessor blocks later and newly published versions", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    provider.failCommits = 1;
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    await waitForAvailable(server, installation.apiToken);
+    const first = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "version 1",
+      idempotencyKey: "git-history-predecessor-retry-1",
+      projectId: "prj_default",
+    });
+    const second = await publishVersion(server, installation, {
+      artifactId: first.body.artifact.id,
+      content: "version 2",
+      expectedCurrentVersionId: first.body.version.id,
+      idempotencyKey: "git-history-predecessor-retry-2",
+      projectId: "prj_default",
+    });
+
+    await enableGitHistory(server, installation, "prj_default");
+    await expect.poll(() => provider.commitCalls, {timeout: 8_000}).toBe(1);
+    expect(provider.commitRequests.map((request) => request.metadata.versionNumber))
+      .toEqual([1]);
+    await publishVersion(server, installation, {
+      artifactId: first.body.artifact.id,
+      content: "version 3",
+      expectedCurrentVersionId: second.body.version.id,
+      idempotencyKey: "git-history-predecessor-retry-3",
+      projectId: "prj_default",
+    });
+
+    await expect.poll(() => provider.commitCalls, {timeout: 12_000}).toBe(4);
+    expect(provider.commitRequests.map((request) => request.metadata.versionNumber))
+      .toEqual([1, 1, 2, 3]);
   });
 
   test("GIT-008-B GIT-012-B: an explicitly enabled project backfills while every other project stays off", async () => {

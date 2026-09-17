@@ -116,6 +116,20 @@ promotion from research or a single local green run.
   inside one foreground transaction; D1 has an unbounded insert-select. Claims
   order equal-time jobs by ID. See [mirror](./src/git-history/git-history-mirror.ts)
   and [Postgres repository](./src/storage/postgres-artifact-repository.ts).
+- **Progress, September 17:** SQLite, Postgres and D1 now claim only versions
+  whose earlier versions have recorded mappings. Enabling a project saves the
+  setting without inserting the entire backfill; each worker claim queues at
+  most 32 earliest missing versions across artifacts. Budget-limit wake-ups
+  also move to bounded worker passes. Focused SQLite tests cover ordered
+  eight-version backfill, retry-delayed predecessors, new publication during
+  backfill and a 40-artifact queue limit. A two-worker Postgres integration
+  test covers ordered claims. T03 remains open: lease renewal/fencing, remote
+  predecessor/ref checks, D1 Git-active concurrency proof, and controlled
+  large-backlog measurements are still required.
+- **Current-run checks:** `pnpm verify:iteration`, `pnpm smoke`, and
+  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
+  external-storage baseline reported no investigation warnings. There is no
+  same-environment pre-change measurement, so this change makes no speed claim.
 - **Do:** introduce durable bounded reconciliation progress and semantic
   predecessor ordering. Serialize ownership per artifact across processes; prove
   lease renewal/fencing and remote predecessor/ref comparison. Keep optional Git

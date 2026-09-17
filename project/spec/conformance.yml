@@ -1221,7 +1221,7 @@ requirements:
       failure: {id: GIT-008-F, description: "Crash and restart project reconciliation and race it with a new publish without losing a version, duplicating a commit mapping, exhausting foreground work, copying another project, or changing primary data."}
     deployments: *all
     status: implementing
-    proof_gap: Project selection and failed-mirror restart have focused tests, but enablement currently queues all missing versions in one foreground operation and equal-time jobs are claimed by job ID rather than version number. The retained eight-version SQLite diagnostic in project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json selected version 8 first; it is not deployment acceptance evidence. Bounded background reconciliation, strict predecessor order, stale-worker fencing, crash timing, and complete SQLite/Postgres/D1 concurrency proof remain open under NEXT-STEPS.md T03.
+    proof_gap: Focused SQLite tests now cover ordered eight-version backfill, retry-delayed predecessors, a new publish during backfill, and bounded 40-artifact queue insertion; a two-worker Postgres integration test covers ordered claims. Worker passes queue at most 32 earliest missing versions and wake budget-limited jobs in bounded batches. Durable cursor/index performance at large backlog, lease renewal and stale-worker fencing, remote predecessor/ref checks, crash timing, D1 Git-active concurrency, and live provider proof remain open under NEXT-STEPS.md T03. The retained earlier SQLite diagnostic in project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json is regression context, not deployment acceptance evidence.
     depends_on: [GIT-002, GIT-007]
     evidence: []
 
