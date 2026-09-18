@@ -127,6 +127,7 @@ import {
   publicLinkPageFromRows,
 } from "../../../src/storage/public-link-inventory-row.js";
 import {
+  GitHistoryLeaseLost,
   gitHistoryJobId,
   gitHistoryJobKinds,
   type GitHistoryBudgetReservation,
@@ -1786,7 +1787,7 @@ export function createD1ArtifactRepository(
       `).bind(installationId, projectId, artifactId).first();
       return gitHistoryRepositoryRowSchema.nullable().parse(row);
     },
-    recordGitHistoryRepository: async (coordinates, recordedAt) => {
+    recordGitHistoryRepository: async (job, coordinates, recordedAt) => {
       await database.prepare(`
         INSERT OR IGNORE INTO git_history_repositories (
           installation_id, project_id, artifact_id, provider,
@@ -1796,6 +1797,10 @@ export function createD1ArtifactRepository(
           CASE WHEN artifact.deleted_at IS NULL THEN 'provisioned' ELSE 'deleting' END,
           ?, ?
         FROM artifacts artifact
+        JOIN git_history_jobs claimed
+          ON claimed.installation_id = ? AND claimed.id = ?
+          AND claimed.state = 'claimed' AND claimed.attempts = ?
+          AND claimed.lease_expires_at > ?
         WHERE artifact.project_id = ? AND artifact.id = ?
       `).bind(
         installationId,
@@ -1807,9 +1812,19 @@ export function createD1ArtifactRepository(
         coordinates.defaultBranch,
         recordedAt,
         recordedAt,
+        installationId,
+        job.id,
+        job.attempts,
+        recordedAt,
         coordinates.projectId,
         coordinates.artifactId,
       ).run();
+      const claim = await database.prepare(`
+        SELECT 1 FROM git_history_jobs
+        WHERE installation_id = ? AND id = ? AND state = 'claimed'
+          AND attempts = ? AND lease_expires_at > ?
+      `).bind(installationId, job.id, job.attempts, recordedAt).first();
+      if (claim === null) throw new GitHistoryLeaseLost();
       const row = await database.prepare(`
         SELECT project_id AS projectId, artifact_id AS artifactId,
           provider, repository_name AS repositoryName,
@@ -1847,7 +1862,7 @@ export function createD1ArtifactRepository(
       return gitHistoryMappingRowSchema.nullable().parse(row);
     },
     reserveGitHistoryBudget: async (
-      jobId,
+      job,
       logicalBytes,
       storageBudgetBytes,
       updatedAt,
@@ -1856,43 +1871,54 @@ export function createD1ArtifactRepository(
         const inserted = await database.prepare(`
           INSERT OR IGNORE INTO git_history_budget_reservations (
             job_id, installation_id, logical_bytes, state, updated_at
-          ) VALUES (?, ?, ?, 'reserved', ?)
-        `).bind(jobId, installationId, logicalBytes, updatedAt).run();
-        return inserted.meta.changes === 1
-          ? {_tag: "Reserved"}
-          : {_tag: "AlreadyReserved"};
+          ) SELECT ?, ?, ?, 'reserved', ?
+          FROM git_history_jobs claimed
+          WHERE claimed.installation_id = ? AND claimed.id = ?
+            AND claimed.state = 'claimed' AND claimed.attempts = ?
+            AND claimed.lease_expires_at > ?
+        `).bind(
+          job.id, installationId, logicalBytes, updatedAt,
+          installationId, job.id, job.attempts, updatedAt,
+        ).run();
+        if (inserted.meta.changes === 1) return {_tag: "Reserved"};
+      } else {
+        const inserted = await database.prepare(`
+          INSERT OR IGNORE INTO git_history_budget_reservations (
+            job_id, installation_id, logical_bytes, state, updated_at
+          )
+          SELECT ?, ?, ?, 'reserved', ?
+          FROM git_history_jobs claimed
+          WHERE claimed.installation_id = ? AND claimed.id = ?
+            AND claimed.state = 'claimed' AND claimed.attempts = ?
+            AND claimed.lease_expires_at > ?
+            AND (
+              SELECT COALESCE(SUM(logical_bytes), 0)
+              FROM git_history_budget_reservations
+              WHERE installation_id = ? AND state IN ('reserved', 'committed')
+            ) + ? <= ?
+        `).bind(
+          job.id, installationId, logicalBytes, updatedAt,
+          installationId, job.id, job.attempts, updatedAt,
+          installationId, logicalBytes, storageBudgetBytes,
+        ).run();
+        if (inserted.meta.changes === 1) return {_tag: "Reserved"};
       }
-      const inserted = await database.prepare(`
-        INSERT OR IGNORE INTO git_history_budget_reservations (
-          job_id, installation_id, logical_bytes, state, updated_at
-        )
-        SELECT ?, ?, ?, 'reserved', ?
-        WHERE ? IS NULL OR (
-          SELECT COALESCE(SUM(logical_bytes), 0)
-          FROM git_history_budget_reservations
-          WHERE installation_id = ? AND state IN ('reserved', 'committed')
-        ) + ? <= ?
-      `).bind(
-        jobId,
-        installationId,
-        logicalBytes,
-        updatedAt,
-        storageBudgetBytes,
-        installationId,
-        logicalBytes,
-        storageBudgetBytes,
-      ).run();
-      if (inserted.meta.changes === 1) return {_tag: "Reserved"};
+      const claim = await database.prepare(`
+        SELECT 1 FROM git_history_jobs
+        WHERE installation_id = ? AND id = ? AND state = 'claimed'
+          AND attempts = ? AND lease_expires_at > ?
+      `).bind(installationId, job.id, job.attempts, updatedAt).first();
+      if (claim === null) throw new GitHistoryLeaseLost();
       const existing = await database.prepare(`
         SELECT state FROM git_history_budget_reservations
         WHERE installation_id = ? AND job_id = ?
-      `).bind(installationId, jobId).first();
+      `).bind(installationId, job.id).first();
       return existing === null
         ? {_tag: "BudgetLimited"}
         : {_tag: "AlreadyReserved"};
     },
     completeGitHistoryMirror: async (job, mapping, completedAt) => {
-      await database.batch([
+      const results = await database.batch([
         database.prepare(`
           INSERT OR IGNORE INTO git_history_mappings (
             installation_id, project_id, artifact_id, version_id,
@@ -1905,6 +1931,7 @@ export function createD1ArtifactRepository(
               ON claimed.installation_id = ? AND claimed.id = ?
             WHERE artifact.project_id = ? AND artifact.id = ?
               AND artifact.deleted_at IS NULL AND claimed.state = 'claimed'
+              AND claimed.attempts = ? AND claimed.lease_expires_at > ?
           )
         `).bind(
           installationId,
@@ -1920,6 +1947,8 @@ export function createD1ArtifactRepository(
           job.id,
           mapping.projectId,
           mapping.artifactId,
+          job.attempts,
+          completedAt,
         ),
         database.prepare(`
           UPDATE git_history_budget_reservations
@@ -1930,6 +1959,12 @@ export function createD1ArtifactRepository(
               WHERE installation_id = ? AND project_id = ?
                 AND artifact_id = ? AND version_id = ? AND status = 'recorded'
             )
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs claimed
+              WHERE claimed.installation_id = ? AND claimed.id = ?
+                AND claimed.state = 'claimed' AND claimed.attempts = ?
+                AND claimed.lease_expires_at > ?
+            )
         `).bind(
           completedAt,
           installationId,
@@ -1938,6 +1973,10 @@ export function createD1ArtifactRepository(
           mapping.projectId,
           mapping.artifactId,
           mapping.versionId,
+          installationId,
+          job.id,
+          job.attempts,
+          completedAt,
         ),
         database.prepare(`
           UPDATE git_history_budget_reservations
@@ -1948,6 +1987,12 @@ export function createD1ArtifactRepository(
               WHERE installation_id = ? AND project_id = ?
                 AND artifact_id = ? AND version_id = ? AND status = 'recorded'
             )
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs claimed
+              WHERE claimed.installation_id = ? AND claimed.id = ?
+                AND claimed.state = 'claimed' AND claimed.attempts = ?
+                AND claimed.lease_expires_at > ?
+            )
         `).bind(
           completedAt,
           installationId,
@@ -1956,12 +2001,11 @@ export function createD1ArtifactRepository(
           mapping.projectId,
           mapping.artifactId,
           mapping.versionId,
+          installationId,
+          job.id,
+          job.attempts,
+          completedAt,
         ),
-        database.prepare(`
-          UPDATE git_history_jobs SET state = 'done', lease_expires_at = NULL,
-            last_error = NULL, updated_at = ?
-          WHERE installation_id = ? AND id = ?
-        `).bind(completedAt, installationId, job.id),
         database.prepare(`
           INSERT OR IGNORE INTO git_history_jobs (
             id, installation_id, project_id, artifact_id, version_id,
@@ -1972,6 +2016,10 @@ export function createD1ArtifactRepository(
           FROM git_history_repositories repository
           JOIN artifacts artifact ON artifact.project_id = repository.project_id
             AND artifact.id = repository.artifact_id
+          JOIN git_history_jobs claimed
+            ON claimed.installation_id = repository.installation_id
+            AND claimed.id = ? AND claimed.state = 'claimed'
+            AND claimed.attempts = ? AND claimed.lease_expires_at > ?
           WHERE repository.installation_id = ? AND repository.project_id = ?
             AND repository.artifact_id = ? AND repository.status <> 'deleted'
             AND artifact.deleted_at IS NOT NULL
@@ -1983,6 +2031,9 @@ export function createD1ArtifactRepository(
           ),
           completedAt,
           completedAt,
+          completedAt,
+          job.id,
+          job.attempts,
           completedAt,
           installationId,
           mapping.projectId,
@@ -1996,6 +2047,12 @@ export function createD1ArtifactRepository(
               WHERE artifact.project_id = ? AND artifact.id = ?
                 AND artifact.deleted_at IS NOT NULL
             )
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs claimed
+              WHERE claimed.installation_id = ? AND claimed.id = ?
+                AND claimed.state = 'claimed' AND claimed.attempts = ?
+                AND claimed.lease_expires_at > ?
+            )
         `).bind(
           completedAt,
           installationId,
@@ -2003,8 +2060,21 @@ export function createD1ArtifactRepository(
           mapping.artifactId,
           mapping.projectId,
           mapping.artifactId,
+          installationId,
+          job.id,
+          job.attempts,
+          completedAt,
+        ),
+        database.prepare(`
+          UPDATE git_history_jobs SET state = 'done', lease_expires_at = NULL,
+            last_error = NULL, updated_at = ?
+          WHERE installation_id = ? AND id = ? AND state = 'claimed'
+            AND attempts = ? AND lease_expires_at > ?
+        `).bind(
+          completedAt, installationId, job.id, job.attempts, completedAt,
         ),
       ]);
+      if (results[5]?.meta.changes !== 1) throw new GitHistoryLeaseLost();
       const recorded = await database.prepare(`
         SELECT 1 FROM git_history_mappings
         WHERE installation_id = ? AND project_id = ? AND artifact_id = ?
@@ -2022,24 +2092,60 @@ export function createD1ArtifactRepository(
         UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
           last_error = ?, available_at = ?, updated_at = ?
         WHERE installation_id = ? AND id = ? AND state = 'claimed'
+          AND attempts = ?
       `).bind(
         classification,
         availableAt,
         availableAt,
         installationId,
         job.id,
+        job.attempts,
       ).run();
     },
+    renewGitHistoryJob: async (job, now, leaseExpiresAt) => {
+      const renewed = await database.prepare(`
+        UPDATE git_history_jobs SET lease_expires_at = ?, updated_at = ?
+        WHERE installation_id = ? AND id = ? AND state = 'claimed'
+          AND attempts = ? AND lease_expires_at > ?
+      `).bind(
+        leaseExpiresAt, now, installationId, job.id, job.attempts, now,
+      ).run();
+      return renewed.meta.changes === 1;
+    },
     completeGitHistoryDeletion: async (job, completedAt) => {
-      await database.batch([
+      const results = await database.batch([
+        database.prepare(`
+          UPDATE git_history_jobs SET state = 'done', lease_expires_at = NULL,
+            last_error = NULL, updated_at = ?
+          WHERE installation_id = ? AND id = ? AND state = 'claimed'
+            AND attempts = ? AND lease_expires_at > ?
+        `).bind(
+          completedAt, installationId, job.id, job.attempts, completedAt,
+        ),
         database.prepare(`
           UPDATE git_history_repositories SET status = 'deleted', updated_at = ?
           WHERE installation_id = ? AND artifact_id = ?
-        `).bind(completedAt, installationId, job.artifactId),
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs completed
+              WHERE completed.installation_id = ? AND completed.id = ?
+                AND completed.state = 'done' AND completed.attempts = ?
+            )
+        `).bind(
+          completedAt, installationId, job.artifactId,
+          installationId, job.id, job.attempts,
+        ),
         database.prepare(`
           UPDATE git_history_mappings SET status = 'deleted'
           WHERE installation_id = ? AND artifact_id = ?
-        `).bind(installationId, job.artifactId),
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs completed
+              WHERE completed.installation_id = ? AND completed.id = ?
+                AND completed.state = 'done' AND completed.attempts = ?
+            )
+        `).bind(
+          installationId, job.artifactId,
+          installationId, job.id, job.attempts,
+        ),
         database.prepare(`
           UPDATE git_history_budget_reservations
           SET state = 'released', updated_at = ?
@@ -2047,18 +2153,22 @@ export function createD1ArtifactRepository(
             SELECT id FROM git_history_jobs
             WHERE installation_id = ? AND artifact_id = ?
           )
+            AND EXISTS (
+              SELECT 1 FROM git_history_jobs completed
+              WHERE completed.installation_id = ? AND completed.id = ?
+                AND completed.state = 'done' AND completed.attempts = ?
+            )
         `).bind(
           completedAt,
           installationId,
           installationId,
           job.artifactId,
+          installationId,
+          job.id,
+          job.attempts,
         ),
-        database.prepare(`
-          UPDATE git_history_jobs SET state = 'done', lease_expires_at = NULL,
-            last_error = NULL, updated_at = ?
-          WHERE installation_id = ? AND id = ?
-        `).bind(completedAt, installationId, job.id),
       ]);
+      if (results[0]?.meta.changes !== 1) throw new GitHistoryLeaseLost();
     },
     readGitHistoryPurgePlan: async () => {
       const row = await database.prepare(`

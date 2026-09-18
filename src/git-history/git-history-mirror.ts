@@ -114,6 +114,14 @@ export type GitHistoryBudgetReservation =
 
 export type GitHistoryMirrorCompletion = "mirrored" | "artifact-deleted";
 
+/** The durable claim changed owners or expired before this worker could act. */
+export class GitHistoryLeaseLost extends Error {
+  constructor() {
+    super("git_history_lease_lost");
+    this.name = "GitHistoryLeaseLost";
+  }
+}
+
 /** Durable product state used by every mirror worker and persistence backend. */
 export interface GitHistoryMirrorStore {
   claimGitHistoryJob(
@@ -144,6 +152,7 @@ export interface GitHistoryMirrorStore {
     versionId: string,
   ): Promise<ArtifactVersion | null>;
   recordGitHistoryRepository(
+    job: GitHistoryJob,
     coordinates: GitRepositoryCoordinates,
     recordedAt: string,
   ): Promise<GitRepositoryCoordinates>;
@@ -152,8 +161,13 @@ export interface GitHistoryMirrorStore {
     classification: string,
     availableAt: string,
   ): Promise<void>;
+  renewGitHistoryJob(
+    job: GitHistoryJob,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean>;
   reserveGitHistoryBudget(
-    jobId: string,
+    job: GitHistoryJob,
     logicalBytes: number,
     storageBudgetBytes: number | null,
     updatedAt: string,
@@ -175,6 +189,7 @@ export interface GitHistoryMirrorPass {
 
 const utf8 = new TextEncoder();
 const jobLease = Duration.seconds(45);
+const renewalInterval = Duration.seconds(15);
 const retrySchedule = Schedule.exponential("1 second", 2).pipe(Schedule.jittered);
 
 /** Create the provider-neutral, one-job-at-a-time mirror worker. */
@@ -194,7 +209,10 @@ export function makeGitHistoryMirrorWorker(
       )
     );
     if (job === null) return {claimed: false, outcome: "idle"} as const;
-    const result = yield* processJob(dependencies, job, claimedAt).pipe(
+    const result = yield* Effect.raceFirst(
+      processJob(dependencies, job),
+      renewClaim(dependencies.store, job),
+    ).pipe(
       Effect.match({
         onFailure: (cause) => ({_tag: "Failure" as const, cause}),
         onSuccess: (outcome) => ({_tag: "Success" as const, outcome}),
@@ -203,16 +221,38 @@ export function makeGitHistoryMirrorWorker(
     if (result._tag === "Success") {
       return {claimed: true, outcome: result.outcome};
     }
-    const delay = yield* retryDelay(job.attempts, now);
+    // A failed renewal cannot establish that an in-flight provider promise
+    // stopped. Let the durable lease expire before another worker may claim it.
+    if (result.cause instanceof GitHistoryLeaseLost) {
+      return {claimed: true, outcome: "retry"} as const;
+    }
+    const failedAt = yield* Clock.currentTimeMillis;
+    const delay = yield* retryDelay(job.attempts, failedAt);
     yield* Effect.tryPromise(() => dependencies.store.releaseGitHistoryJob(
       job,
       classifyMirrorFailure(result.cause),
-      new Date(now + Math.max(delay, 1_000)).toISOString(),
+      new Date(failedAt + Math.max(delay, 1_000)).toISOString(),
     ));
     return {claimed: true, outcome: "retry"} as const;
   });
   return {runPass};
 }
+
+const renewClaim = Effect.fn("GitHistoryMirrorWorker.renewClaim")(function*(
+  store: GitHistoryMirrorStore,
+  job: GitHistoryJob,
+): Effect.fn.Return<never, unknown> {
+  for (;;) {
+    yield* Effect.sleep(renewalInterval);
+    const now = yield* Clock.currentTimeMillis;
+    const renewed = yield* Effect.tryPromise(() => store.renewGitHistoryJob(
+      job,
+      new Date(now).toISOString(),
+      new Date(now + Duration.toMillis(jobLease)).toISOString(),
+    )).pipe(Effect.catch(() => Effect.fail(new GitHistoryLeaseLost())));
+    if (!renewed) return yield* Effect.fail(new GitHistoryLeaseLost());
+  }
+});
 
 /** Start a bounded background drain. Closing interrupts it without touching jobs. */
 export async function startGitHistoryMirrorWorker(
@@ -249,7 +289,6 @@ export async function startGitHistoryMirrorWorker(
 const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   dependencies: GitHistoryMirrorWorkerDependencies,
   job: GitHistoryJob,
-  now: string,
 ) {
   if (job.kind === gitHistoryJobKinds.deleteRepository) {
     const coordinates = yield* Effect.tryPromise(() =>
@@ -260,8 +299,9 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
         dependencies.provider.deleteRepository(coordinates)
       );
     }
+    const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     yield* Effect.tryPromise(() =>
-      dependencies.store.completeGitHistoryDeletion(job, now)
+      dependencies.store.completeGitHistoryDeletion(job, completedAt)
     );
     return "deleted" as const;
   }
@@ -278,8 +318,9 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     )
   );
   if (existing !== null) {
+    const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     const completion = yield* Effect.tryPromise(() =>
-      dependencies.store.completeGitHistoryMirror(job, existing, now)
+      dependencies.store.completeGitHistoryMirror(job, existing, completedAt)
     );
     return completion === "artifact-deleted" ? "deleted" as const : "mirrored" as const;
   }
@@ -294,19 +335,21 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     return yield* Effect.fail(new Error("version-unavailable"));
   }
   const plan = yield* buildCommitPlan(dependencies.blobs, version, limits);
+  const reservedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const reservation = yield* Effect.tryPromise(() =>
     dependencies.store.reserveGitHistoryBudget(
-      job.id,
+      job,
       plan.copiedBytes,
       limits.storageBudgetBytes,
-      now,
+      reservedAt,
     )
   );
   if (reservation._tag === "BudgetLimited") {
+    const budgetLimitedAt = yield* Clock.currentTimeMillis;
     yield* Effect.tryPromise(() => dependencies.store.releaseGitHistoryJob(
       job,
       "budget_limited",
-      new Date(Date.parse(now) + 60_000).toISOString(),
+      new Date(budgetLimitedAt + 60_000).toISOString(),
     ));
     return "budget-limited" as const;
   }
@@ -317,8 +360,9 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     const created = yield* Effect.tryPromise(() =>
       dependencies.provider.createRepository(job.projectId, job.artifactId)
     );
+    const recordedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     coordinates = yield* Effect.tryPromise(() =>
-      dependencies.store.recordGitHistoryRepository(created, now)
+      dependencies.store.recordGitHistoryRepository(job, created, recordedAt)
     );
   }
   const repositoryCoordinates = coordinates;
@@ -326,9 +370,10 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     yield* Effect.tryPromise(() => dependencies.provider.deleteRepository(
       repositoryCoordinates,
     ));
+    const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryDeletion(
       job,
-      now,
+      completedAt,
     ));
     return "deleted" as const;
   }
@@ -353,6 +398,7 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
       pointers: plan.pointers,
     })
   ));
+  const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const completion = yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryMirror(
     job,
     {
@@ -363,15 +409,16 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
       repositoryName: repositoryCoordinates.repositoryName,
       versionId,
     },
-    now,
+    completedAt,
   ));
   if (completion === "artifact-deleted") {
     yield* Effect.tryPromise(() => dependencies.provider.deleteRepository(
       repositoryCoordinates,
     ));
+    const deletedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryDeletion(
       job,
-      now,
+      deletedAt,
     ));
     return "deleted" as const;
   }
@@ -495,6 +542,7 @@ async function readExactBytes(
 }
 
 function classifyMirrorFailure(cause: unknown): string {
+  if (cause instanceof GitHistoryLeaseLost) return "lease_lost";
   if (cause instanceof Error && cause.message === "version-unavailable") {
     return "version_unavailable";
   }

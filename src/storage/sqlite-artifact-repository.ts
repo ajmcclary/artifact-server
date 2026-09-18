@@ -139,6 +139,7 @@ import {
   publicLinkPageFromRows,
 } from "./public-link-inventory-row.js";
 import {
+  GitHistoryLeaseLost,
   gitHistoryJobId,
   gitHistoryJobKinds,
   gitHistoryCopyPolicyDigest,
@@ -928,10 +929,12 @@ export class SqliteArtifactRepository implements
   }
 
   recordGitHistoryRepository(
+    job: GitHistoryJob,
     coordinates: GitRepositoryCoordinates,
     recordedAt: string,
   ): Promise<GitRepositoryCoordinates> {
     return Promise.resolve().then(() => this.#transaction(() => {
+      this.#assertGitHistoryClaim(job, recordedAt);
       const deleted = z.object({deletedAt: z.string().nullable()}).parse(
         this.#database.prepare(`
           SELECT deleted_at AS deletedAt FROM artifacts
@@ -1000,17 +1003,18 @@ export class SqliteArtifactRepository implements
   }
 
   reserveGitHistoryBudget(
-    jobId: string,
+    job: GitHistoryJob,
     logicalBytes: number,
     storageBudgetBytes: number | null,
     updatedAt: string,
   ): Promise<GitHistoryBudgetReservation> {
     return Promise.resolve().then(() => this.#transaction(() => {
+      this.#assertGitHistoryClaim(job, updatedAt);
       const existing = z.object({state: z.string()}).nullable().parse(
         this.#database.prepare(`
           SELECT state FROM git_history_budget_reservations
           WHERE installation_id = ? AND job_id = ?
-        `).get(this.#installationId, jobId) ?? null,
+        `).get(this.#installationId, job.id) ?? null,
       );
       if (existing !== null) return {_tag: "AlreadyReserved"} as const;
       if (storageBudgetBytes !== null) {
@@ -1029,7 +1033,7 @@ export class SqliteArtifactRepository implements
         INSERT INTO git_history_budget_reservations (
           job_id, installation_id, logical_bytes, state, updated_at
         ) VALUES (?, ?, ?, 'reserved', ?)
-      `).run(jobId, this.#installationId, logicalBytes, updatedAt);
+      `).run(job.id, this.#installationId, logicalBytes, updatedAt);
       return {_tag: "Reserved"} as const;
     }));
   }
@@ -1040,6 +1044,7 @@ export class SqliteArtifactRepository implements
     completedAt: string,
   ): Promise<"mirrored" | "artifact-deleted"> {
     return Promise.resolve().then(() => this.#transaction(() => {
+      this.#assertGitHistoryClaim(job, completedAt);
       const eligible = z.object({eligible: z.number().int()}).parse(
         this.#database.prepare(`
           SELECT EXISTS(
@@ -1117,15 +1122,36 @@ export class SqliteArtifactRepository implements
         UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
           last_error = ?, available_at = ?, updated_at = ?
         WHERE installation_id = ? AND id = ? AND state = 'claimed'
+          AND attempts = ?
       `).run(
         classification,
         availableAt,
         availableAt,
         this.#installationId,
         job.id,
+        job.attempts,
       );
       return undefined;
     });
+  }
+
+  renewGitHistoryJob(
+    job: GitHistoryJob,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean> {
+    return Promise.resolve().then(() => this.#database.prepare(`
+      UPDATE git_history_jobs SET lease_expires_at = ?, updated_at = ?
+      WHERE installation_id = ? AND id = ? AND state = 'claimed'
+        AND attempts = ? AND lease_expires_at > ?
+    `).run(
+      leaseExpiresAt,
+      now,
+      this.#installationId,
+      job.id,
+      job.attempts,
+      now,
+    ).changes === 1);
   }
 
   completeGitHistoryDeletion(
@@ -1133,6 +1159,7 @@ export class SqliteArtifactRepository implements
     completedAt: string,
   ): Promise<void> {
     return Promise.resolve().then(() => this.#transaction(() => {
+      this.#assertGitHistoryClaim(job, completedAt);
       this.#completeGitHistoryRepositoryRemoval(job.artifactId, completedAt);
       this.#database.prepare(`
         UPDATE git_history_jobs SET state = 'done', lease_expires_at = NULL,
@@ -5784,6 +5811,15 @@ export class SqliteArtifactRepository implements
         last_error = NULL, updated_at = ?
       WHERE installation_id = ? AND artifact_id = ?
     `).run(completedAt, this.#installationId, artifactId);
+  }
+
+  #assertGitHistoryClaim(job: GitHistoryJob, now: string): void {
+    const current = this.#database.prepare(`
+      SELECT 1 FROM git_history_jobs
+      WHERE installation_id = ? AND id = ? AND state = 'claimed'
+        AND attempts = ? AND lease_expires_at > ?
+    `).get(this.#installationId, job.id, job.attempts, now);
+    if (current === undefined) throw new GitHistoryLeaseLost();
   }
 
   #transaction<Result>(operation: () => Result): Result {

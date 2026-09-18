@@ -132,6 +132,7 @@ import {
   publicLinkPageFromRows,
 } from "./public-link-inventory-row.js";
 import {
+  GitHistoryLeaseLost,
   gitHistoryCopyPolicyDigest,
   gitHistoryJobId,
   gitHistoryJobKinds,
@@ -942,13 +943,22 @@ export class PostgresArtifactRepository implements
   }
 
   async recordGitHistoryRepository(
+    job: GitHistoryJob,
     coordinates: GitRepositoryCoordinates,
     recordedAt: string,
   ): Promise<GitRepositoryCoordinates> {
     const installationId = this.#installationId;
     const rows = await this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
-      return yield* sql.unsafe<object>(`
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        const claim = yield* sql.unsafe(`
+          SELECT 1 FROM git_history_jobs
+          WHERE installation_id = $1 AND id = $2 AND state = 'claimed'
+            AND attempts = $3 AND lease_expires_at > $4
+          FOR UPDATE
+        `, [installationId, job.id, job.attempts, recordedAt]);
+        if (claim.length === 0) throw new GitHistoryLeaseLost();
+        return yield* sql.unsafe<object>(`
         INSERT INTO git_history_repositories (
           installation_id, project_id, artifact_id, provider,
           repository_name, remote_url, default_branch, status,
@@ -969,6 +979,7 @@ export class PostgresArtifactRepository implements
         coordinates.provider, coordinates.repositoryName,
         coordinates.remoteUrl, coordinates.defaultBranch, recordedAt,
       ]);
+      }));
     }));
     const stored = gitHistoryRepositoryRowSchema.parse(rows[0]);
     if (stored.repositoryName !== coordinates.repositoryName ||
@@ -999,7 +1010,7 @@ export class PostgresArtifactRepository implements
   }
 
   async reserveGitHistoryBudget(
-    jobId: string,
+    job: GitHistoryJob,
     logicalBytes: number,
     storageBudgetBytes: number | null,
     updatedAt: string,
@@ -1008,6 +1019,13 @@ export class PostgresArtifactRepository implements
     return this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
       return yield* sql.withTransaction(Effect.gen(function*() {
+        const claim = yield* sql.unsafe(`
+          SELECT 1 FROM git_history_jobs
+          WHERE installation_id = $1 AND id = $2 AND state = 'claimed'
+            AND attempts = $3 AND lease_expires_at > $4
+          FOR UPDATE
+        `, [installationId, job.id, job.attempts, updatedAt]);
+        if (claim.length === 0) throw new GitHistoryLeaseLost();
         if (storageBudgetBytes !== null) {
           yield* sql.unsafe(
             "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -1017,7 +1035,7 @@ export class PostgresArtifactRepository implements
         const existing = yield* sql.unsafe<{readonly state: string}>(`
           SELECT state FROM git_history_budget_reservations
           WHERE installation_id = $1 AND job_id = $2
-        `, [installationId, jobId]);
+        `, [installationId, job.id]);
         if (existing.length > 0) return {_tag: "AlreadyReserved"} as const;
         if (storageBudgetBytes !== null) {
           const usedRows = yield* sql.unsafe<{readonly logicalBytes: number}>(`
@@ -1036,7 +1054,7 @@ export class PostgresArtifactRepository implements
           INSERT INTO git_history_budget_reservations (
             installation_id, job_id, logical_bytes, state, updated_at
           ) VALUES ($1, $2, $3, 'reserved', $4)
-        `, [installationId, jobId, logicalBytes, updatedAt]);
+        `, [installationId, job.id, logicalBytes, updatedAt]);
         return {_tag: "Reserved"} as const;
       }));
     }));
@@ -1051,16 +1069,20 @@ export class PostgresArtifactRepository implements
     return this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
       return yield* sql.withTransaction(Effect.gen(function*() {
-        const eligible = yield* sql.unsafe<object>(`
-          SELECT 1 FROM artifacts artifact
+        const claimed = yield* sql.unsafe<{readonly deletedAt: string | null}>(`
+          SELECT artifact.deleted_at AS "deletedAt" FROM artifacts artifact
           JOIN git_history_jobs job
             ON job.installation_id = $1 AND job.id = $2
           WHERE artifact.installation_id = $1 AND artifact.project_id = $3
-            AND artifact.id = $4 AND artifact.deleted_at IS NULL
-            AND job.state = 'claimed'
+            AND artifact.id = $4 AND job.state = 'claimed'
+            AND job.attempts = $5 AND job.lease_expires_at > $6
           FOR UPDATE OF artifact, job
-        `, [installationId, job.id, mapping.projectId, mapping.artifactId]);
-        if (eligible.length === 0) {
+        `, [
+          installationId, job.id, mapping.projectId, mapping.artifactId,
+          job.attempts, completedAt,
+        ]);
+        if (claimed.length === 0) throw new GitHistoryLeaseLost();
+        if (claimed[0]?.deletedAt !== null) {
           yield* sql.unsafe(`
             UPDATE git_history_budget_reservations
             SET state = 'released', updated_at = $1
@@ -1135,8 +1157,26 @@ export class PostgresArtifactRepository implements
         UPDATE git_history_jobs SET state = 'queued', lease_expires_at = NULL,
           last_error = $1, available_at = $2, updated_at = $2
         WHERE installation_id = $3 AND id = $4 AND state = 'claimed'
-      `, [classification, availableAt, installationId, job.id]);
+          AND attempts = $5
+      `, [classification, availableAt, installationId, job.id, job.attempts]);
     }));
+  }
+
+  async renewGitHistoryJob(
+    job: GitHistoryJob,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean> {
+    const rows = await this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.unsafe(`
+        UPDATE git_history_jobs SET lease_expires_at = $1, updated_at = $2
+        WHERE installation_id = $3 AND id = $4 AND state = 'claimed'
+          AND attempts = $5 AND lease_expires_at > $2
+        RETURNING id
+      `, [leaseExpiresAt, now, this.#installationId, job.id, job.attempts]);
+    }));
+    return rows.length === 1;
   }
 
   async completeGitHistoryDeletion(
@@ -1147,6 +1187,13 @@ export class PostgresArtifactRepository implements
     await this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
       yield* sql.withTransaction(Effect.gen(function*() {
+        const claimed = yield* sql.unsafe(`
+          SELECT 1 FROM git_history_jobs
+          WHERE installation_id = $1 AND id = $2 AND state = 'claimed'
+            AND attempts = $3 AND lease_expires_at > $4
+          FOR UPDATE
+        `, [installationId, job.id, job.attempts, completedAt]);
+        if (claimed.length === 0) throw new GitHistoryLeaseLost();
         yield* sql.unsafe(`
           UPDATE git_history_repositories SET status = 'deleted', updated_at = $1
           WHERE installation_id = $2 AND artifact_id = $3

@@ -4,12 +4,14 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from "@modelcontextprotocol/server";
 import {Effect, Redacted} from "effect";
+import {join} from "node:path";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
 import {
   defaultGitHistoryFileCopyBytes,
   defaultGitHistoryVersionCopyBytes,
+  fixedGitHistoryCapabilityReader,
   type GitHistoryLimits,
 } from "../../src/git-history/git-history-capability.js";
 import {
@@ -20,6 +22,9 @@ import {SqliteArtifactRepository} from
   "../../src/storage/sqlite-artifact-repository.js";
 import type {GitHistoryProviderHealthProbe} from
   "../../src/git-history/git-history-provider-health.js";
+import {makeGitHistoryMirrorWorker, type GitHistoryCommitRequest} from
+  "../../src/git-history/git-history-mirror.js";
+import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
 import type {NodeGitHistoryConfiguration} from
   "../../src/git-history/node-git-history-configuration.js";
 import {
@@ -212,6 +217,219 @@ describe("simple per-project Git history setting", () => {
     expect(provider.commitRequests.map((request) => request.metadata.versionNumber))
       .toEqual([1, 1, 2, 3]);
   });
+
+  test("GIT-008 lease regression: a reclaimed worker cannot complete or release its successor's claim", async () => {
+    server = await startTestServer(installation);
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "lease generation",
+      idempotencyKey: "git-history-lease-generation",
+      projectId: "prj_default",
+    });
+    await server.stop();
+    server = null;
+
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    try {
+      const enabledAt = new Date().toISOString();
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: configuredGitHistory().capability.limits,
+        projectId: "prj_default",
+        updatedAt: enabledAt,
+        updatedByPrincipalId: "test-lease-operator",
+      });
+      const claimedAt = new Date(Date.parse(enabledAt) + 1_000).toISOString();
+      const expiresAt = new Date(Date.parse(claimedAt) + 45_000).toISOString();
+      const first = await store.claimGitHistoryJob(claimedAt, expiresAt);
+      expect(first).toMatchObject({attempts: 1, versionId: published.body.version.id});
+      if (first === null) throw new Error("The first Git job was not claimed.");
+
+      const reclaimedAt = new Date(Date.parse(expiresAt) + 1_000).toISOString();
+      const second = await store.claimGitHistoryJob(
+        reclaimedAt,
+        new Date(Date.parse(reclaimedAt) + 45_000).toISOString(),
+      );
+      expect(second).toMatchObject({attempts: 2, id: first.id});
+      if (second === null) throw new Error("The expired Git job was not reclaimed.");
+      const mapping = {
+        artifactId: published.body.artifact.id,
+        commitId: "commit-from-current-owner",
+        copiedBytes: 0,
+        projectId: "prj_default",
+        repositoryName: published.body.artifact.id,
+        versionId: published.body.version.id,
+      };
+      const coordinates = {
+        artifactId: published.body.artifact.id,
+        defaultBranch: "main" as const,
+        projectId: "prj_default",
+        provider: "cloudflare-artifacts" as const,
+        remoteUrl: `https://git.example.test/${published.body.artifact.id}`,
+        repositoryName: published.body.artifact.id,
+        status: "provisioned" as const,
+      };
+
+      await expect(store.recordGitHistoryRepository(first, coordinates, reclaimedAt))
+        .rejects.toThrow("git_history_lease_lost");
+      await expect(store.completeGitHistoryMirror(first, mapping, reclaimedAt))
+        .rejects.toThrow("git_history_lease_lost");
+      await store.releaseGitHistoryJob(first, "stale_failure", reclaimedAt);
+      expect(await store.claimGitHistoryJob(
+        reclaimedAt,
+        new Date(Date.parse(reclaimedAt) + 45_000).toISOString(),
+      )).toBeNull();
+      expect(await store.findGitHistoryMapping(
+        "prj_default",
+        published.body.artifact.id,
+        published.body.version.id,
+      )).toBeNull();
+
+      expect(await store.recordGitHistoryRepository(second, coordinates, reclaimedAt))
+        .toMatchObject({repositoryName: coordinates.repositoryName});
+      expect(await store.completeGitHistoryMirror(second, mapping, reclaimedAt))
+        .toBe("mirrored");
+      expect(await store.findGitHistoryMapping(
+        "prj_default",
+        published.body.artifact.id,
+        published.body.version.id,
+      )).toMatchObject({commitId: mapping.commitId});
+    } finally {
+      store.close();
+    }
+  });
+
+  test("GIT-008 renewal regression: work beyond the 45-second lease keeps one owner", async () => {
+    class DelayedGitProvider extends RecordingGitHistoryProvider {
+      readonly resume = Promise.withResolvers<void>();
+      started = false;
+
+      override async commitVersion(request: GitHistoryCommitRequest) {
+        this.started = true;
+        await this.resume.promise;
+        return super.commitVersion(request);
+      }
+    }
+    const provider = new DelayedGitProvider();
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    await waitForAvailable(server, installation.apiToken);
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "long-running Git version",
+      idempotencyKey: "git-history-long-running-lease",
+      projectId: "prj_default",
+    });
+    await enableGitHistory(server, installation, "prj_default");
+
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    try {
+      await expect.poll(() => provider.started, {timeout: 8_000}).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 46_200));
+      const now = Date.now();
+      expect(await store.claimGitHistoryJob(
+        new Date(now).toISOString(),
+        new Date(now + 45_000).toISOString(),
+      )).toBeNull();
+      provider.resume.resolve();
+      await expect.poll(() => provider.commitCalls, {timeout: 8_000}).toBe(1);
+      await expect.poll(() => store.findGitHistoryMapping(
+        "prj_default",
+        published.body.artifact.id,
+        published.body.version.id,
+      ), {timeout: 8_000}).toMatchObject({versionId: published.body.version.id});
+    } finally {
+      provider.resume.resolve();
+      store.close();
+    }
+  }, 75_000);
+
+  test("GIT-008 lost-lease regression: an in-flight provider call cannot release a successor", async () => {
+    class PausedGitProvider extends RecordingGitHistoryProvider {
+      readonly entered = Promise.withResolvers<void>();
+      readonly resume = Promise.withResolvers<void>();
+
+      override async commitVersion(request: GitHistoryCommitRequest) {
+        this.entered.resolve();
+        await this.resume.promise;
+        return super.commitVersion(request);
+      }
+    }
+    server = await startTestServer(installation);
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "uncertain provider write",
+      idempotencyKey: "git-history-lost-lease",
+      projectId: "prj_default",
+    });
+    await server.stop();
+    server = null;
+
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    const contender = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    const provider = new PausedGitProvider();
+    try {
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: configuredGitHistory().capability.limits,
+        projectId: "prj_default",
+        updatedAt: new Date().toISOString(),
+        updatedByPrincipalId: "test-lease-operator",
+      });
+      const worker = makeGitHistoryMirrorWorker({
+        blobs: new LocalBlobStore(join(installation.dataDirectory, "blobs")),
+        capability: fixedGitHistoryCapabilityReader({
+          ...configuredGitHistory().capability,
+          providerState: "available",
+        }),
+        installationId: "local",
+        provider,
+        store,
+      });
+      const pass = Effect.runPromise(worker.runPass());
+      await provider.entered.promise;
+      const future = Date.now() + 60_000;
+      const successor = await contender.claimGitHistoryJob(
+        new Date(future).toISOString(),
+        new Date(future + 45_000).toISOString(),
+      );
+      expect(successor).toMatchObject({attempts: 2, versionId: published.body.version.id});
+      if (successor === null) throw new Error("The Git job was not reclaimed.");
+
+      await expect(pass).resolves.toMatchObject({outcome: "retry"});
+      expect(await contender.renewGitHistoryJob(
+        successor,
+        new Date().toISOString(),
+        new Date(future + 45_000).toISOString(),
+      )).toBe(true);
+      provider.resume.resolve();
+      await expect.poll(() => provider.commitCalls, {timeout: 5_000}).toBe(1);
+      expect(await store.findGitHistoryMapping(
+        "prj_default",
+        published.body.artifact.id,
+        published.body.version.id,
+      )).toBeNull();
+    } finally {
+      provider.resume.resolve();
+      contender.close();
+      store.close();
+    }
+  }, 25_000);
 
   test("GIT-008-B GIT-012-B: an explicitly enabled project backfills while every other project stays off", async () => {
     const provider = new RecordingGitHistoryProvider();

@@ -1,0 +1,11 @@
+{
+  "name": "artifact-server-git-store-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{
+    "binding": "ARTIFACT_SERVER_D1_DATABASE",
+    "database_name": "artifact-server-git-store-test",
+    "database_id": "00000000-0000-4000-8000-000000000002"
+  }]
+}

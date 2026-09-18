@@ -111,7 +111,7 @@ promotion from research or a single local green run.
 
 ### T03 Repair Git order, reconciliation bounds and worker ownership
 
-- **Current:** the [retained probe](./project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json)
+- **Starting evidence:** the [retained probe](./project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json)
   claimed version 8 first. SQLite/Postgres enablement inserts all missing jobs
   inside one foreground transaction; D1 has an unbounded insert-select. Claims
   order equal-time jobs by ID. See [mirror](./src/git-history/git-history-mirror.ts)
@@ -123,10 +123,20 @@ promotion from research or a single local green run.
   also move to bounded worker passes. Focused SQLite tests cover ordered
   eight-version backfill, retry-delayed predecessors, new publication during
   backfill and a 40-artifact queue limit. A two-worker Postgres integration
-  test covers ordered claims. T03 remains open: lease renewal/fencing, remote
-  predecessor/ref checks, D1 Git-active concurrency proof, and controlled
-  large-backlog measurements are still required.
-- **Current-run checks:** `pnpm verify:iteration`, `pnpm smoke`, and
+  test covers ordered claims.
+- **Ownership progress, September 17:** claim attempts now fence repository
+  recording, budget reservation, mirror/deletion completion and release across
+  SQLite, Postgres and D1. The worker renews its 45-second lease every 15
+  seconds; a real-time test keeps one owner while a commit runs beyond the
+  original lease. SQLite and Postgres takeover tests reject stale writes;
+  D1 claim and deletion fencing is exercised against Wrangler's local D1 binding.
+  A forced takeover during a paused provider call leaves the successor claimed
+  and prevents the old worker from recording a local mapping or releasing it.
+  T03 remains open for remote predecessor/ref checks, stale in-flight provider
+  writes, live D1 multi-worker and provider concurrency proof, crash timing, and
+  controlled large-backlog measurements.
+- **Current-run checks:** Following the ownership changes,
+  `pnpm verify:iteration`, `pnpm smoke`, and
   `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
   external-storage baseline reported no investigation warnings. There is no
   same-environment pre-change measurement, so this change makes no speed claim.

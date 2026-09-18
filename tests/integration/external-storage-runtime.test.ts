@@ -531,6 +531,106 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     await second.stop();
   });
 
+  test("GIT-008 Postgres lease regression: a reclaimed owner cannot mutate the new claim", async () => {
+    const identity = {
+      apiToken: managedTestKey("postgres-fenced-history"),
+      installationId: "postgres-fenced-history",
+    };
+    const server = await startInProcessExternalStorageServer(environment, identity);
+    const published = await publishNew(server.baseUrl, identity.apiToken, {
+      content: "Postgres lease generation",
+      idempotencyKey: "postgres-fenced-history-publish",
+      name: "Fenced Git history",
+    });
+    expect(published.response.status).toBe(201);
+    await server.stop();
+
+    const database = await PostgresDatabase.inspect({
+      applicationName: "artifact-server-git-lease-test",
+      maxConnections: 2,
+      url: Redacted.make(environment.databaseUrl),
+    });
+    try {
+      const store = await PostgresArtifactRepository.open(
+        database,
+        identity.installationId,
+      );
+      const enabledAt = new Date().toISOString();
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: {
+          fileCopyBytes: 10 * 1024 * 1024,
+          logicalCopiedBytes: 0,
+          logicalReservedBytes: 0,
+          storageBudgetBytes: null,
+          versionCopyBytes: 50 * 1024 * 1024,
+        },
+        projectId: defaultProjectId,
+        updatedAt: enabledAt,
+        updatedByPrincipalId: "test-lease-operator",
+      });
+      const claimedAt = new Date(Date.parse(enabledAt) + 1_000).toISOString();
+      const expiresAt = new Date(Date.parse(claimedAt) + 45_000).toISOString();
+      const first = await store.claimGitHistoryJob(claimedAt, expiresAt);
+      expect(first).toMatchObject({attempts: 1, versionId: published.body.version.id});
+      if (first === null) throw new Error("The first Postgres Git job was not claimed.");
+
+      const reclaimedAt = new Date(Date.parse(expiresAt) + 1_000).toISOString();
+      const second = await store.claimGitHistoryJob(
+        reclaimedAt,
+        new Date(Date.parse(reclaimedAt) + 45_000).toISOString(),
+      );
+      expect(second).toMatchObject({attempts: 2, id: first.id});
+      if (second === null) throw new Error("The Postgres Git job was not reclaimed.");
+      const mapping = {
+        artifactId: published.body.artifact.id,
+        commitId: "current-owner-commit",
+        copiedBytes: 0,
+        projectId: defaultProjectId,
+        repositoryName: published.body.artifact.id,
+        versionId: published.body.version.id,
+      };
+      const coordinates = {
+        artifactId: published.body.artifact.id,
+        defaultBranch: "main" as const,
+        projectId: defaultProjectId,
+        provider: "cloudflare-artifacts" as const,
+        remoteUrl: `https://git.example.test/${published.body.artifact.id}`,
+        repositoryName: published.body.artifact.id,
+        status: "provisioned" as const,
+      };
+
+      expect(await store.renewGitHistoryJob(
+        first,
+        reclaimedAt,
+        new Date(Date.parse(reclaimedAt) + 60_000).toISOString(),
+      )).toBe(false);
+      await expect(store.reserveGitHistoryBudget(
+        first, 0, null, reclaimedAt,
+      )).rejects.toThrow("git_history_lease_lost");
+      await expect(store.completeGitHistoryMirror(first, mapping, reclaimedAt))
+        .rejects.toThrow("git_history_lease_lost");
+      await expect(store.recordGitHistoryRepository(first, coordinates, reclaimedAt))
+        .rejects.toThrow("git_history_lease_lost");
+      await store.releaseGitHistoryJob(first, "stale_failure", reclaimedAt);
+      expect(await store.claimGitHistoryJob(
+        reclaimedAt,
+        new Date(Date.parse(reclaimedAt) + 45_000).toISOString(),
+      )).toBeNull();
+      expect(await store.recordGitHistoryRepository(second, coordinates, reclaimedAt))
+        .toMatchObject({repositoryName: coordinates.repositoryName});
+      expect(await store.completeGitHistoryMirror(second, mapping, reclaimedAt))
+        .toBe("mirrored");
+      expect(await store.findGitHistoryMapping(
+        defaultProjectId,
+        published.body.artifact.id,
+        published.body.version.id,
+      )).toMatchObject({commitId: mapping.commitId});
+    } finally {
+      await database.close();
+    }
+  });
+
   test("a populated Postgres v1 installation migrates without changing identity or bytes", async () => {
     const databaseName = `artifactserver_project_migration_${randomUUID().replaceAll("-", "")}`;
     await createPostgresDatabase(environment, databaseName);
