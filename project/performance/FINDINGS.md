@@ -19,9 +19,20 @@ Node 24.15.0 and Apple M1 Max measured 2.60 ms median for deep history and
 7.31 ms for many artifacts. Exact samples and fixture digests are in the
 [before](../evidence/git-history-backlog-before.json) and
 [after](../evidence/git-history-backlog-after.json) reports. This is one paired
-local diagnostic, not a regression budget or tail-latency claim. Large Postgres
-and D1 workloads, history growth, real Git provider work and controlled
-repetitions remain open.
+local diagnostic, not a regression budget or tail-latency claim. History
+growth, real Git provider work and controlled repetitions remain open.
+
+The same 3,301-version, 30-pass shapes also completed against disposable
+Postgres and local Wrangler D1. Postgres median claim time was 59.57 ms for
+many artifacts and 18.85 ms for deep history; the first deep-history claim
+took 834.25 ms. Local D1 medians were 46.75 ms and 48.84 ms. The reports
+record setup separately: Postgres fixture insertion took 167–212 ms, while
+D1 fixture insertion took about 50–51 seconds per shape. See the
+[Postgres](../evidence/git-history-postgres-backlog.json) and
+[D1](../evidence/git-history-d1-backlog.json) reports for every claim pass.
+These are bounded local-provider observations. Deployed D1 limits, managed
+Postgres, full history-growth curves, live Git calls and controlled repeated
+baselines remain unqualified.
 
 The [September 17 research reconciliation](../research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
 and root [next steps](../../NEXT-STEPS.md) separate implemented fixes from open

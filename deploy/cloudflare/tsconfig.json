@@ -23,6 +23,7 @@
   "include": [
     "alchemy.run.ts",
     "src/**/*.ts",
+    "scripts/run-git-history-backlog.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
   ]

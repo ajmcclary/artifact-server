@@ -22,23 +22,31 @@ export async function startGitSmartHttpServer() {
     "--git-dir", barePath, "config", "receive.denyNonFastForwards", "true",
   ]);
   let receivePackCalls = 0;
+  let receivePackDiscoveryCalls = 0;
   const droppedResponses = new Set<number>();
   let advanceBeforeDiscovery: string | null = null;
   let heldDiscovery: {
+    readonly call: number;
+    readonly entered: PromiseWithResolvers<void>;
+    readonly resume: PromiseWithResolvers<void>;
+  } | null = null;
+  let heldResponse: {
+    readonly call: number;
     readonly entered: PromiseWithResolvers<void>;
     readonly resume: PromiseWithResolvers<void>;
   } | null = null;
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      if (
-        heldDiscovery !== null && request.method === "GET" &&
-        url.searchParams.get("service") === "git-receive-pack"
-      ) {
-        const held = heldDiscovery;
-        heldDiscovery = null;
-        held.entered.resolve();
-        await held.resume.promise;
+      if (request.method === "GET" &&
+        url.searchParams.get("service") === "git-receive-pack") {
+        receivePackDiscoveryCalls += 1;
+        if (heldDiscovery?.call === receivePackDiscoveryCalls) {
+          const held = heldDiscovery;
+          heldDiscovery = null;
+          held.entered.resolve();
+          await held.resume.promise;
+        }
       }
       if (
         advanceBeforeDiscovery !== null && request.method === "GET" &&
@@ -80,6 +88,12 @@ export async function startGitSmartHttpServer() {
       }
       if (request.method === "POST" && url.pathname.endsWith("/git-receive-pack")) {
         receivePackCalls += 1;
+        if (heldResponse?.call === receivePackCalls) {
+          const held = heldResponse;
+          heldResponse = null;
+          held.entered.resolve();
+          await held.resume.promise;
+        }
         if (droppedResponses.delete(receivePackCalls)) {
           response.destroy();
           return;
@@ -101,12 +115,25 @@ export async function startGitSmartHttpServer() {
     },
     dropReceivePackResponseAt: (call: number) => droppedResponses.add(call),
     nextReceivePackCall: () => receivePackCalls + 1,
+    holdReceivePackResponseAt: (call: number) => {
+      const entered = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      heldResponse = {call, entered, resume};
+      return {entered: entered.promise, release: () => resume.resolve()};
+    },
     holdNextReceivePackDiscovery: () => {
       const entered = Promise.withResolvers<void>();
       const resume = Promise.withResolvers<void>();
-      heldDiscovery = {entered, resume};
+      heldDiscovery = {call: receivePackDiscoveryCalls + 1, entered, resume};
       return {entered: entered.promise, release: () => resume.resolve()};
     },
+    holdReceivePackDiscoveryAt: (call: number) => {
+      const entered = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      heldDiscovery = {call, entered, resume};
+      return {entered: entered.promise, release: () => resume.resolve()};
+    },
+    nextReceivePackDiscoveryCall: () => receivePackDiscoveryCalls + 1,
     advanceMainBeforeNextPush: (commitId: string) => {
       advanceBeforeDiscovery = commitId;
     },

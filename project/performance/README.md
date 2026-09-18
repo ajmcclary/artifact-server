@@ -91,6 +91,20 @@ CPU, operating system and current commit. Compare equivalent fixtures on the
 same machine. Thirty passes describe this bounded workload; they do not prove
 tail latency, remote-provider capacity or a general speedup.
 
+The matching opt-in provider diagnostics use disposable pinned Postgres and
+MinIO containers or a nonpersistent local Wrangler D1 binding:
+
+```sh
+pnpm perf:git-history-postgres-backlog --count 3301 --passes 30
+pnpm perf:git-history-d1-backlog --count 3301 --passes 30
+```
+
+Both use the same saved-version shapes and count, pass and claim-time caps.
+Their reports separately record provider or proxy startup, migration, fixture
+preparation, enablement and claim passes. They do not contact a Git remote.
+Local D1 execution does not establish deployed Worker CPU, subrequest or
+account limits.
+
 ## External-storage Postgres and S3 baseline
 
 `pnpm verify:external-storage-performance` builds the production CLI, creates disposable pinned Postgres and MinIO containers, and starts two independent compiled Artifact Server processes against one installation and bucket. The harness uses the real file-first client and records:

@@ -144,8 +144,14 @@ promotion from research or a single local green run.
   renews the durable claim; a real remote push paused during discovery cannot
   proceed after that claim is revoked. T03 remains open for the race between
   this last ownership check and remote ref update, live D1 multi-worker and
-  provider concurrency proof, real process crash timing, and controlled
-  large-backlog measurements.
+  provider concurrency proof, live-provider crash recovery, and controlled
+  repeated provider backlog measurements.
+- **Crash progress, September 18:** separate local worker processes are killed
+  after a disposable smart-HTTP remote accepts the branch push, both before
+  the tag push and after the tag push but before its response. A restarted
+  worker reclaims the expired SQLite lease, validates the exact commit,
+  repairs or adopts its tag and records one mapping. Live-provider crash
+  recovery remains open.
 - **Backlog progress, September 18:** a dedicated opt-in 3,301-version SQLite
   diagnostic found 3,062 ms median idle claims with a deep history and 107 ms
   with many one-version artifacts. Bounded reconciliation now selects one
@@ -154,20 +160,21 @@ promotion from research or a single local green run.
   Postgres and D1. The same 30-pass local fixture measured 2.60 ms and 7.31 ms
   medians. A D1 binding regression and local HTTP test preserve cross-artifact
   fairness and per-artifact order. These are single paired local observations;
-  provider-specific large-backlog and controlled repeated baselines remain open.
-- **Backlog iteration checks:** `pnpm verify:iteration`, `pnpm smoke`, and
-  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
-  external-storage baseline reported no investigation warnings. The opt-in
-  Git fixture is separate from the canonical timing gates.
-- **September 18 checks:** `pnpm verify:iteration`, `pnpm smoke`, and
-  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
-  external-storage baseline reported no investigation warnings. No controlled
-  before/after Git history workload was run, so no speed claim is made.
-- **September 17 checks:** Following the ownership changes,
-  `pnpm verify:iteration`, `pnpm smoke`, and
-  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
-  external-storage baseline reported no investigation warnings. There is no
-  same-environment pre-change measurement, so this change makes no speed claim.
+  live-provider backlog and controlled repeated baselines remain open.
+- **Provider backlog progress, September 18:** the same opt-in 3,301-version,
+  30-pass shapes completed against disposable pinned Postgres and local
+  Wrangler D1. Postgres claim medians were 59.57 ms (many artifacts) and
+  18.85 ms (deep history), with one 834.25 ms first deep-history pass. D1
+  medians were 46.75 ms and 48.84 ms; its fixture setup took about 50–51
+  seconds per shape. Reports separate setup from claims and preserve all pass
+  samples. These local runs do not qualify managed Postgres, deployed Worker
+  limits, full history growth or live Git traffic.
+- **Iteration checks, September 18:** `pnpm verify:iteration`, `pnpm smoke`,
+  and `pnpm verify:external-storage-performance` passed on Node 24.15.0.
+  The external-storage baseline reported no investigation warnings. The
+  Postgres and local D1 Git fixtures remain opt-in and outside canonical
+  timing gates. The single paired SQLite before/after run does not establish
+  a controlled speed claim.
 - **Do:** introduce durable bounded reconciliation progress and semantic
   predecessor ordering. Serialize ownership per artifact across processes; prove
   lease renewal/fencing and remote predecessor/ref comparison. Keep optional Git
