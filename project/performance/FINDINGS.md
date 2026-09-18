@@ -4,6 +4,25 @@ There is no critical local bottleneck in the measured file sizes, but complete
 directory publication has a confirmed per-file scaling cost. This is an
 engineering baseline for regression detection, not a production capacity claim.
 
+## September 18 Git history backlog diagnostic
+
+A bounded opt-in SQLite fixture with 3,301 saved versions and 30 claim passes
+exposed a repeated historical-scan cost. With one artifact and only its final
+version unmapped, the pre-change median idle claim was 3,062 ms. With 3,301
+one-version artifacts, the pre-change median was 107 ms while 960 jobs were
+queued over the 30 passes. Project enablement itself remained below 1 ms.
+
+The candidate removes a predecessor scan from queue insertion while retaining
+the predecessor guard at claim, queues only the earliest unmapped version per
+artifact, and indexes jobs by installation and version ID. The same fixture,
+Node 24.15.0 and Apple M1 Max measured 2.60 ms median for deep history and
+7.31 ms for many artifacts. Exact samples and fixture digests are in the
+[before](../evidence/git-history-backlog-before.json) and
+[after](../evidence/git-history-backlog-after.json) reports. This is one paired
+local diagnostic, not a regression budget or tail-latency claim. Large Postgres
+and D1 workloads, history growth, real Git provider work and controlled
+repetitions remain open.
+
 The [September 17 research reconciliation](../research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
 and root [next steps](../../NEXT-STEPS.md) separate implemented fixes from open
 experiments. Historical timing series below are tied to their recorded machines,

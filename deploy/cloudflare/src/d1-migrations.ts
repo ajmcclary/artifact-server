@@ -8,7 +8,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 9;
+export const requiredD1SchemaVersion = 10;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -279,6 +279,9 @@ const schemaSql = `
 
   CREATE INDEX IF NOT EXISTS git_history_jobs_artifact
     ON git_history_jobs (installation_id, artifact_id, state);
+
+  CREATE INDEX IF NOT EXISTS git_history_jobs_version
+    ON git_history_jobs (installation_id, version_id);
 
   CREATE TABLE IF NOT EXISTS managed_api_keys (
     id TEXT PRIMARY KEY,

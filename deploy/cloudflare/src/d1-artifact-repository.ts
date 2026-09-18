@@ -1662,44 +1662,45 @@ export function createD1ArtifactRepository(
           storage_budget_bytes, copy_policy_digest, lease_expires_at,
           available_at, last_error, created_at, updated_at
         )
-        SELECT 'ghj_d1_' || version.id, setting.installation_id,
-          version.project_id, version.artifact_id, version.id,
-          'mirror-version', 'queued', 0, setting.file_copy_limit_bytes,
-          setting.version_copy_limit_bytes, setting.maximum_copied_files,
-          setting.storage_budget_bytes,
-          'd1:' || setting.file_copy_limit_bytes || ':' ||
-            setting.version_copy_limit_bytes || ':' || setting.maximum_copied_files,
+        SELECT 'ghj_d1_' || candidate.versionId, candidate.installationId,
+          candidate.projectId, candidate.artifactId, candidate.versionId,
+          'mirror-version', 'queued', 0, candidate.fileCopyBytes,
+          candidate.versionCopyBytes, candidate.maximumCopiedFiles,
+          candidate.storageBudgetBytes,
+          'd1:' || candidate.fileCopyBytes || ':' ||
+            candidate.versionCopyBytes || ':' || candidate.maximumCopiedFiles,
           NULL, ?, NULL, ?, ?
-        FROM versions version
-        JOIN artifacts artifact ON artifact.project_id = version.project_id
-          AND artifact.id = version.artifact_id
-        JOIN git_history_project_settings setting
-          ON setting.installation_id = ? AND setting.project_id = version.project_id
-          AND setting.enabled = 1
-        LEFT JOIN git_history_mappings mapping
-          ON mapping.installation_id = setting.installation_id
-          AND mapping.project_id = version.project_id
-          AND mapping.artifact_id = version.artifact_id
-          AND mapping.version_id = version.id AND mapping.status = 'recorded'
-        WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM git_history_jobs queued
-            WHERE queued.installation_id = setting.installation_id
-              AND queued.version_id = version.id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM versions predecessor
-            LEFT JOIN git_history_mappings prior_mapping
-              ON prior_mapping.installation_id = setting.installation_id
-              AND prior_mapping.project_id = predecessor.project_id
-              AND prior_mapping.artifact_id = predecessor.artifact_id
-              AND prior_mapping.version_id = predecessor.id
-              AND prior_mapping.status = 'recorded'
-            WHERE predecessor.artifact_id = version.artifact_id
-              AND predecessor.number < version.number
-              AND prior_mapping.version_id IS NULL
-          )
-        ORDER BY version.created_at, version.id LIMIT 32
+        FROM (
+          SELECT version.artifact_id AS artifactId,
+            setting.installation_id AS installationId,
+            setting.file_copy_limit_bytes AS fileCopyBytes,
+            setting.maximum_copied_files AS maximumCopiedFiles,
+            version.project_id AS projectId,
+            setting.storage_budget_bytes AS storageBudgetBytes,
+            setting.version_copy_limit_bytes AS versionCopyBytes,
+            version.id AS versionId, version.created_at AS createdAt,
+            queued.id AS existingJobId,
+            ROW_NUMBER() OVER (
+              PARTITION BY version.artifact_id ORDER BY version.number
+            ) AS artifactRank
+          FROM versions version
+          JOIN artifacts artifact ON artifact.project_id = version.project_id
+            AND artifact.id = version.artifact_id
+          JOIN git_history_project_settings setting
+            ON setting.installation_id = ? AND setting.project_id = version.project_id
+            AND setting.enabled = 1
+          LEFT JOIN git_history_mappings mapping
+            ON mapping.installation_id = setting.installation_id
+            AND mapping.project_id = version.project_id
+            AND mapping.artifact_id = version.artifact_id
+            AND mapping.version_id = version.id AND mapping.status = 'recorded'
+          LEFT JOIN git_history_jobs queued
+            ON queued.installation_id = setting.installation_id
+            AND queued.version_id = version.id
+          WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+        ) candidate
+        WHERE candidate.artifactRank = 1 AND candidate.existingJobId IS NULL
+        ORDER BY candidate.createdAt, candidate.versionId LIMIT 32
       `).bind(now, now, now, installationId).run();
       await database.prepare(`
         UPDATE git_history_jobs

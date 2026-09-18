@@ -7,6 +7,7 @@ import {DatabaseSync} from "node:sqlite";
 import {z} from "zod";
 import {unstable_dev, type Unstable_DevWorker} from "wrangler";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {requiredD1SchemaVersion} from "../src/d1-migrations.js";
 
 const apiToken = "cloudflare-comment-test-api-token-00000001";
 const origin = "https://artifacts.example.test";
@@ -497,7 +498,7 @@ describe("Cloudflare D1 comments", () => {
       try {
         expect(schemaVersionRowSchema.parse(upgraded.prepare(
           "SELECT version FROM artifact_server_schema WHERE component = 'runtime'",
-        ).get()).version).toBe(9);
+        ).get()).version).toBe(requiredD1SchemaVersion);
         const columns = z.array(tableColumnRowSchema)
           .parse(upgraded.prepare("PRAGMA table_info(login_attempts)").all())
           .map(({name}) => name);

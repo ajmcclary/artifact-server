@@ -71,6 +71,26 @@ the command safe to repeat on a development machine. It remains a same-machine
 Compact-mode baseline, not a production capacity claim for Postgres, S3,
 Kubernetes, or a managed cloud.
 
+## Opt-in Git history backlog diagnostic
+
+`pnpm perf:git-history-backlog` measures enabled-setting latency and bounded
+claim passes over two synthetic SQLite fixtures: one version in many artifacts,
+and many versions in one artifact with all but the last already mapped. It
+creates temporary real databases, calls the production Git repository methods,
+and removes the fixtures afterward. It does not contact a Git provider or read
+blob bytes. The ordinary gate does not run this larger fixture.
+
+```sh
+pnpm perf:git-history-backlog --count 3301 --passes 30 \
+  --output project/evidence/git-history-backlog-after.json
+```
+
+The explicit caps are 3,301 versions, 104 passes and 120 seconds of claim-pass
+time. The report records every pass, fixture digest, Node and SQLite versions,
+CPU, operating system and current commit. Compare equivalent fixtures on the
+same machine. Thirty passes describe this bounded workload; they do not prove
+tail latency, remote-provider capacity or a general speedup.
+
 ## External-storage Postgres and S3 baseline
 
 `pnpm verify:external-storage-performance` builds the production CLI, creates disposable pinned Postgres and MinIO containers, and starts two independent compiled Artifact Server processes against one installation and bucket. The harness uses the real file-first client and records:

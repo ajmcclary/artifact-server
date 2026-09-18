@@ -126,6 +126,55 @@ describe("simple per-project Git history setting", () => {
       .toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
+  test("GIT-008 fairness regression: a long history does not hide another artifact's first version", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    const runningServer = server;
+    await waitForAvailable(runningServer, installation.apiToken);
+    const first = await publishNew(runningServer, installation, {
+      accessSetting: "account_required",
+      content: "history version 1",
+      idempotencyKey: "git-history-fairness-1",
+      projectId: "prj_default",
+    });
+    const publishHistory = async (
+      number: number,
+      currentVersionId: string,
+    ): Promise<void> => {
+      if (number > 33) return;
+      const published = await publishVersion(runningServer, installation, {
+        artifactId: first.body.artifact.id,
+        content: `history version ${number}`,
+        expectedCurrentVersionId: currentVersionId,
+        idempotencyKey: `git-history-fairness-${number}`,
+        projectId: "prj_default",
+      });
+      await publishHistory(number + 1, published.body.version.id);
+    };
+    await publishHistory(2, first.body.version.id);
+    const other = await publishNew(runningServer, installation, {
+      accessSetting: "account_required",
+      content: "another artifact's first version",
+      idempotencyKey: "git-history-fairness-other",
+      projectId: "prj_default",
+    });
+
+    await enableGitHistory(runningServer, installation, "prj_default");
+    await expect.poll(() => provider.commitRequests.length, {timeout: 8_000})
+      .toBeGreaterThanOrEqual(2);
+    expect(provider.commitRequests.slice(0, 2).map((request) =>
+      request.metadata.versionNumber)).toEqual([1, 1]);
+    expect(new Set(provider.commitRequests.slice(0, 2).map((request) =>
+      request.metadata.artifactId))).toEqual(new Set([
+      first.body.artifact.id,
+      other.body.artifact.id,
+    ]));
+  });
+
   test("GIT-008 queue regression: enabling history defers a large backfill to bounded worker passes", async () => {
     server = await startTestServer(installation);
     const runningServer = server;

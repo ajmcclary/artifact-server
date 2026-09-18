@@ -655,6 +655,12 @@ const addArtifactSearchName = Effect.gen(function*() {
   );
 });
 
+const indexGitHistoryReconciliation = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`CREATE INDEX git_history_jobs_version
+    ON git_history_jobs (installation_id, version_id)`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -667,10 +673,11 @@ const migrationLoader = Migrator.fromRecord({
   "0009_git_history_mirror": addGitHistoryMirror,
   "0010_agent_capabilities": widenRegisteredAgentKind,
   "0011_artifact_search_name": addArtifactSearchName,
+  "0012_git_history_reconciliation_index": indexGitHistoryReconciliation,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 11;
+export const requiredPostgresSchemaVersion = 12;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -758,6 +765,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 11,
     name: "artifact_search_name",
+  }, {
+    migration_id: 12,
+    name: "git_history_reconciliation_index",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

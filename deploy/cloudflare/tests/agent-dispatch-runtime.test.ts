@@ -20,6 +20,7 @@ import {DatabaseSync} from "node:sqlite";
 import {z} from "zod";
 import {unstable_dev, type Unstable_DevWorker} from "wrangler";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {requiredD1SchemaVersion} from "../src/d1-migrations.js";
 
 /**
  * The harness answers with its own runtime's Response, which is not the
@@ -502,7 +503,7 @@ describe("Cloudflare D1 agent dispatch", () => {
       try {
         expect(schemaVersionRowSchema.parse(upgraded.prepare(
           "SELECT version FROM artifact_server_schema WHERE component = 'runtime'",
-        ).get()).version).toBe(9);
+        ).get()).version).toBe(requiredD1SchemaVersion);
         expect(z.array(tableColumnRowSchema)
           .parse(upgraded.prepare("PRAGMA table_info(comment_threads)").all())
           .map(({name}) => name)).toContain("dispatch_id");

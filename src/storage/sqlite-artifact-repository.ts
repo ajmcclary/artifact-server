@@ -785,43 +785,40 @@ export class SqliteArtifactRepository implements
         versionCopyBytes: z.number().int().nonnegative(),
         versionId: z.string(),
       })).parse(this.#database.prepare(`
-        SELECT version.artifact_id AS artifactId,
-          setting.file_copy_limit_bytes AS fileCopyBytes,
-          setting.maximum_copied_files AS maximumCopiedFiles,
-          version.project_id AS projectId,
-          setting.storage_budget_bytes AS storageBudgetBytes,
-          setting.version_copy_limit_bytes AS versionCopyBytes,
-          version.id AS versionId
-        FROM versions version
-        JOIN artifacts artifact ON artifact.id = version.artifact_id
-          AND artifact.project_id = version.project_id
-        JOIN git_history_project_settings setting
-          ON setting.project_id = version.project_id
-          AND setting.installation_id = ? AND setting.enabled = 1
-        LEFT JOIN git_history_mappings mapping
-          ON mapping.installation_id = setting.installation_id
-          AND mapping.project_id = version.project_id
-          AND mapping.artifact_id = version.artifact_id
-          AND mapping.version_id = version.id AND mapping.status = 'recorded'
-        WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM git_history_jobs queued
-            WHERE queued.installation_id = setting.installation_id
-              AND queued.version_id = version.id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM versions predecessor
-            LEFT JOIN git_history_mappings prior_mapping
-              ON prior_mapping.installation_id = setting.installation_id
-              AND prior_mapping.project_id = predecessor.project_id
-              AND prior_mapping.artifact_id = predecessor.artifact_id
-              AND prior_mapping.version_id = predecessor.id
-              AND prior_mapping.status = 'recorded'
-            WHERE predecessor.artifact_id = version.artifact_id
-              AND predecessor.number < version.number
-              AND prior_mapping.version_id IS NULL
-          )
-        ORDER BY version.created_at, version.id LIMIT 32
+        SELECT candidate.artifactId, candidate.fileCopyBytes,
+          candidate.maximumCopiedFiles, candidate.projectId,
+          candidate.storageBudgetBytes, candidate.versionCopyBytes,
+          candidate.versionId
+        FROM (
+          SELECT version.artifact_id AS artifactId,
+            setting.file_copy_limit_bytes AS fileCopyBytes,
+            setting.maximum_copied_files AS maximumCopiedFiles,
+            version.project_id AS projectId,
+            setting.storage_budget_bytes AS storageBudgetBytes,
+            setting.version_copy_limit_bytes AS versionCopyBytes,
+            version.id AS versionId, version.created_at AS createdAt,
+            queued.id AS existingJobId,
+            ROW_NUMBER() OVER (
+              PARTITION BY version.artifact_id ORDER BY version.number
+            ) AS artifactRank
+          FROM versions version
+          JOIN artifacts artifact ON artifact.id = version.artifact_id
+            AND artifact.project_id = version.project_id
+          JOIN git_history_project_settings setting
+            ON setting.project_id = version.project_id
+            AND setting.installation_id = ? AND setting.enabled = 1
+          LEFT JOIN git_history_mappings mapping
+            ON mapping.installation_id = setting.installation_id
+            AND mapping.project_id = version.project_id
+            AND mapping.artifact_id = version.artifact_id
+            AND mapping.version_id = version.id AND mapping.status = 'recorded'
+          LEFT JOIN git_history_jobs queued
+            ON queued.installation_id = setting.installation_id
+            AND queued.version_id = version.id
+          WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+        ) candidate
+        WHERE candidate.artifactRank = 1 AND candidate.existingJobId IS NULL
+        ORDER BY candidate.createdAt, candidate.versionId LIMIT 32
       `).all(this.#installationId));
       for (const version of missing) {
         this.#insertMirrorJob(
@@ -5172,6 +5169,8 @@ export class SqliteArtifactRepository implements
         ON git_history_jobs (installation_id, state, available_at, created_at);
       CREATE INDEX IF NOT EXISTS git_history_jobs_artifact
         ON git_history_jobs (installation_id, artifact_id, state);
+      CREATE INDEX IF NOT EXISTS git_history_jobs_version
+        ON git_history_jobs (installation_id, version_id);
       CREATE INDEX IF NOT EXISTS git_history_mappings_artifact
         ON git_history_mappings (installation_id, artifact_id, status);
     `);

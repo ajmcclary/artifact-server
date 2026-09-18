@@ -774,49 +774,46 @@ export class PostgresArtifactRepository implements
       const sql = yield* SqlClient;
       return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
         const missing = yield* sql.unsafe<object>(`
-          SELECT version.artifact_id AS "artifactId",
-            setting.file_copy_limit_bytes AS "fileCopyBytes",
-            setting.maximum_copied_files AS "maximumCopiedFiles",
-            version.project_id AS "projectId",
-            setting.storage_budget_bytes AS "storageBudgetBytes",
-            setting.version_copy_limit_bytes AS "versionCopyBytes",
-            version.id AS "versionId"
-          FROM versions version
-          JOIN artifacts artifact
-            ON artifact.installation_id = version.installation_id
-            AND artifact.project_id = version.project_id
-            AND artifact.id = version.artifact_id
-          JOIN git_history_project_settings setting
-            ON setting.installation_id = version.installation_id
-            AND setting.project_id = version.project_id
-            AND setting.enabled = TRUE
-          LEFT JOIN git_history_mappings mapping
-            ON mapping.installation_id = version.installation_id
-            AND mapping.project_id = version.project_id
-            AND mapping.artifact_id = version.artifact_id
-            AND mapping.version_id = version.id
-            AND mapping.status = 'recorded'
-          WHERE version.installation_id = $1 AND artifact.deleted_at IS NULL
-            AND mapping.version_id IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM git_history_jobs queued
-              WHERE queued.installation_id = version.installation_id
-                AND queued.version_id = version.id
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM versions predecessor
-              LEFT JOIN git_history_mappings prior_mapping
-                ON prior_mapping.installation_id = predecessor.installation_id
-                AND prior_mapping.project_id = predecessor.project_id
-                AND prior_mapping.artifact_id = predecessor.artifact_id
-                AND prior_mapping.version_id = predecessor.id
-                AND prior_mapping.status = 'recorded'
-              WHERE predecessor.installation_id = version.installation_id
-                AND predecessor.artifact_id = version.artifact_id
-                AND predecessor.number < version.number
-                AND prior_mapping.version_id IS NULL
-            )
-          ORDER BY version.created_at, version.id LIMIT 32
+          SELECT candidate."artifactId", candidate."fileCopyBytes",
+            candidate."maximumCopiedFiles", candidate."projectId",
+            candidate."storageBudgetBytes", candidate."versionCopyBytes",
+            candidate."versionId"
+          FROM (
+            SELECT version.artifact_id AS "artifactId",
+              setting.file_copy_limit_bytes AS "fileCopyBytes",
+              setting.maximum_copied_files AS "maximumCopiedFiles",
+              version.project_id AS "projectId",
+              setting.storage_budget_bytes AS "storageBudgetBytes",
+              setting.version_copy_limit_bytes AS "versionCopyBytes",
+              version.id AS "versionId", version.created_at AS "createdAt",
+              queued.id AS "existingJobId",
+              ROW_NUMBER() OVER (
+                PARTITION BY version.artifact_id ORDER BY version.number
+              ) AS "artifactRank"
+            FROM versions version
+            JOIN artifacts artifact
+              ON artifact.installation_id = version.installation_id
+              AND artifact.project_id = version.project_id
+              AND artifact.id = version.artifact_id
+            JOIN git_history_project_settings setting
+              ON setting.installation_id = version.installation_id
+              AND setting.project_id = version.project_id
+              AND setting.enabled = TRUE
+            LEFT JOIN git_history_mappings mapping
+              ON mapping.installation_id = version.installation_id
+              AND mapping.project_id = version.project_id
+              AND mapping.artifact_id = version.artifact_id
+              AND mapping.version_id = version.id
+              AND mapping.status = 'recorded'
+            LEFT JOIN git_history_jobs queued
+              ON queued.installation_id = version.installation_id
+              AND queued.version_id = version.id
+            WHERE version.installation_id = $1 AND artifact.deleted_at IS NULL
+              AND mapping.version_id IS NULL
+          ) candidate
+          WHERE candidate."artifactRank" = 1
+            AND candidate."existingJobId" IS NULL
+          ORDER BY candidate."createdAt", candidate."versionId" LIMIT 32
         `, [installationId]);
         const parsedMissing = z.array(z.object({
           artifactId: z.string(),

@@ -10,16 +10,18 @@ import {
 import {createD1ArtifactRepository} from "../src/d1-artifact-repository.js";
 import {migrateD1} from "../src/d1-migrations.js";
 
+const openLocalD1 = () => getPlatformProxy<{
+  ARTIFACT_SERVER_D1_DATABASE: D1Database;
+}>({
+  configPath: fileURLToPath(new URL("../wrangler.git-store.test.jsonc", import.meta.url)),
+  envFiles: [],
+  persist: false,
+  remoteBindings: false,
+});
+
 describe("D1 Git history claim ownership", () => {
   it("GIT-008 D1 lease regression: stale claims cannot record a repository or mapping", async () => {
-    const proxy = await getPlatformProxy<{
-      ARTIFACT_SERVER_D1_DATABASE: D1Database;
-    }>({
-      configPath: fileURLToPath(new URL("../wrangler.git-store.test.jsonc", import.meta.url)),
-      envFiles: [],
-      persist: false,
-      remoteBindings: false,
-    });
+    const proxy = await openLocalD1();
     const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
     try {
       await migrateD1(binding, "d1-git-lease-test");
@@ -171,6 +173,77 @@ describe("D1 Git history claim ownership", () => {
       expect(await store.findGitHistoryMapping(
         "prj_default", "art_d1_git_lease", "ver_d1_git_lease",
       )).toBeNull();
+    } finally {
+      await proxy.dispose();
+    }
+  });
+
+  it("GIT-008 D1 fairness regression: backfill queues one first version per artifact", async () => {
+    const proxy = await openLocalD1();
+    const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+    try {
+      await migrateD1(binding, "d1-git-fairness-test");
+      const createdAt = new Date(0).toISOString();
+      const versionStatement = `
+        INSERT INTO versions (
+          id, project_id, artifact_id, number, manifest_digest,
+          entry_path, routing_mode, content_token,
+          publisher_principal_id, created_at
+        ) VALUES (?, 'prj_default', ?, ?, ?, 'index.html',
+          'static', ?, 'test-principal', ?)
+      `;
+      await binding.batch([
+        binding.prepare(`
+          INSERT INTO artifacts (
+            id, project_id, name, search_name, access_setting,
+            current_version_id, created_at, deleted_at
+          ) VALUES (?, 'prj_default', ?, ?, 'account_required', NULL, ?, NULL)
+        `).bind("art_d1_long", "Long", "long", createdAt),
+        binding.prepare(`
+          INSERT INTO artifacts (
+            id, project_id, name, search_name, access_setting,
+            current_version_id, created_at, deleted_at
+          ) VALUES (?, 'prj_default', ?, ?, 'account_required', NULL, ?, NULL)
+        `).bind("art_d1_other", "Other", "other", createdAt),
+        ...Array.from({length: 33}, (_, index) => {
+          const number = index + 1;
+          return binding.prepare(versionStatement).bind(
+            `ver_d1_long_${number}`,
+            "art_d1_long",
+            number,
+            "0".repeat(64),
+            `token_d1_long_${number}`,
+            createdAt,
+          );
+        }),
+        binding.prepare(versionStatement).bind(
+          "ver_d1_other_1", "art_d1_other", 1,
+          "0".repeat(64), "token_d1_other_1", createdAt,
+        ),
+      ]);
+      const store = createD1ArtifactRepository(binding, "d1-git-fairness-test");
+      const now = new Date(1_000).toISOString();
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: {
+          fileCopyBytes: 1024,
+          logicalCopiedBytes: 0,
+          logicalReservedBytes: 0,
+          storageBudgetBytes: null,
+          versionCopyBytes: 1024,
+        },
+        projectId: "prj_default",
+        updatedAt: now,
+        updatedByPrincipalId: "test-principal",
+      });
+      const lease = new Date(46_000).toISOString();
+      const first = await store.claimGitHistoryJob(now, lease);
+      const second = await store.claimGitHistoryJob(now, lease);
+      expect(new Set([first?.versionId, second?.versionId])).toEqual(new Set([
+        "ver_d1_long_1", "ver_d1_other_1",
+      ]));
+      expect((await store.readProjectGitHistoryProgress("prj_default")).pendingJobs)
+        .toBe(2);
     } finally {
       await proxy.dispose();
     }

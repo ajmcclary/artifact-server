@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 17, 2026. This is the implementation backlog resulting from
+Updated September 18, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -146,6 +146,19 @@ promotion from research or a single local green run.
   this last ownership check and remote ref update, live D1 multi-worker and
   provider concurrency proof, real process crash timing, and controlled
   large-backlog measurements.
+- **Backlog progress, September 18:** a dedicated opt-in 3,301-version SQLite
+  diagnostic found 3,062 ms median idle claims with a deep history and 107 ms
+  with many one-version artifacts. Bounded reconciliation now selects one
+  earliest unmapped version per artifact without repeating the predecessor
+  scan; an installation/version job index supports that lookup across SQLite,
+  Postgres and D1. The same 30-pass local fixture measured 2.60 ms and 7.31 ms
+  medians. A D1 binding regression and local HTTP test preserve cross-artifact
+  fairness and per-artifact order. These are single paired local observations;
+  provider-specific large-backlog and controlled repeated baselines remain open.
+- **Backlog iteration checks:** `pnpm verify:iteration`, `pnpm smoke`, and
+  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
+  external-storage baseline reported no investigation warnings. The opt-in
+  Git fixture is separate from the canonical timing gates.
 - **September 18 checks:** `pnpm verify:iteration`, `pnpm smoke`, and
   `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
   external-storage baseline reported no investigation warnings. No controlled
