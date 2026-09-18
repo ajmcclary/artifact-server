@@ -126,17 +126,19 @@ async function qualify(manifestFile: string): Promise<void> {
       "An idempotent repository create did not adopt the same coordinates.",
     );
 
-    const first = commitRequest(coordinates, 1, "ver_live_1", "first");
+    const first = commitRequest(coordinates, 1, "ver_live_1", "first", null);
     const firstCommit = await provider.commitVersion(first);
     manifest = incrementOperations(manifest, 3);
-    const firstLookup = await provider.lookupCommit(coordinates, first.metadata.versionId);
+    const firstLookup = await provider.lookupCommit(first);
     manifest = incrementOperations(manifest, 2);
     requireCondition(
       firstLookup?.commitId === firstCommit.commitId,
       "The exact version tag did not resolve to its committed ID.",
     );
 
-    const second = commitRequest(coordinates, 2, "ver_live_2", "second");
+    const second = commitRequest(
+      coordinates, 2, "ver_live_2", "second", firstCommit.commitId,
+    );
     const secondCommit = await provider.commitVersion(second);
     manifest = incrementOperations(manifest, 3);
     requireCondition(
@@ -312,12 +314,15 @@ function commitRequest(
   versionNumber: number,
   versionId: string,
   marker: string,
+  expectedParentCommitId: string | null,
 ): GitHistoryCommitRequest {
   const createdAt = new Date(Date.UTC(2026, 7, 25, 12, versionNumber)).toISOString();
   const bytes = new TextEncoder().encode(`<!doctype html><title>${marker}</title>`);
   requireCondition(bytes.byteLength <= maximumCopiedBytes, "Fixture exceeds the live byte bound.");
   return {
+    assertOwner: async () => {},
     coordinates,
+    expectedParentCommitId,
     files: [{bytes, path: "index.html"}],
     metadata: {
       artifactId: coordinates.artifactId,

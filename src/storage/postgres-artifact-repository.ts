@@ -1009,6 +1009,34 @@ export class PostgresArtifactRepository implements
     return gitHistoryMappingRowSchema.nullable().parse(rows[0] ?? null);
   }
 
+  async findGitHistoryPredecessorMapping(
+    projectId: string,
+    artifactId: string,
+    versionNumber: number,
+  ): Promise<GitHistoryMapping | null> {
+    const rows = await this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.unsafe<object>(`
+        SELECT mapping.project_id AS "projectId",
+          mapping.artifact_id AS "artifactId",
+          mapping.version_id AS "versionId",
+          mapping.repository_name AS "repositoryName",
+          mapping.commit_id AS "commitId",
+          mapping.copied_bytes AS "copiedBytes"
+        FROM versions version
+        JOIN git_history_mappings mapping
+          ON mapping.installation_id = version.installation_id
+          AND mapping.project_id = version.project_id
+          AND mapping.artifact_id = version.artifact_id
+          AND mapping.version_id = version.id
+          AND mapping.status = 'recorded'
+        WHERE version.installation_id = $1 AND version.project_id = $2
+          AND version.artifact_id = $3 AND version.number = $4
+      `, [this.#installationId, projectId, artifactId, versionNumber]);
+    }));
+    return gitHistoryMappingRowSchema.nullable().parse(rows[0] ?? null);
+  }
+
   async reserveGitHistoryBudget(
     job: GitHistoryJob,
     logicalBytes: number,

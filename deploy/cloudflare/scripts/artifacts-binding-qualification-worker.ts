@@ -42,12 +42,10 @@ export default {
         1,
         `ver_binding_${runId}_1`,
         "Workers binding qualification one",
+        null,
       );
       const first = await provider.commitVersion(requestOne);
-      const adopted = await provider.lookupCommit(
-        coordinates,
-        requestOne.metadata.versionId,
-      );
+      const adopted = await provider.lookupCommit(requestOne);
       if (adopted?.commitId !== first.commitId) {
         throw new Error("binding_exact_version_lookup_failed");
       }
@@ -56,6 +54,7 @@ export default {
         2,
         `ver_binding_${runId}_2`,
         "Workers binding qualification two",
+        first.commitId,
       );
       const second = await provider.commitVersion(requestTwo);
       if (first.commitId === second.commitId) {
@@ -91,9 +90,12 @@ function commitRequest(
   versionNumber: number,
   versionId: string,
   content: string,
+  expectedParentCommitId: string | null,
 ): GitHistoryCommitRequest {
   return {
+    assertOwner: async () => {},
     coordinates,
+    expectedParentCommitId,
     files: [{bytes: utf8.encode(content), path: "index.html"}],
     metadata: {
       artifactId: coordinates.artifactId,

@@ -1861,6 +1861,30 @@ export function createD1ArtifactRepository(
       ).first();
       return gitHistoryMappingRowSchema.nullable().parse(row);
     },
+    findGitHistoryPredecessorMapping: async (
+      projectId,
+      artifactId,
+      versionNumber,
+    ) => {
+      const row = await database.prepare(`
+        SELECT mapping.project_id AS projectId,
+          mapping.artifact_id AS artifactId,
+          mapping.version_id AS versionId,
+          mapping.repository_name AS repositoryName,
+          mapping.commit_id AS commitId,
+          mapping.copied_bytes AS copiedBytes
+        FROM versions version
+        JOIN git_history_mappings mapping
+          ON mapping.installation_id = ?
+          AND mapping.project_id = version.project_id
+          AND mapping.artifact_id = version.artifact_id
+          AND mapping.version_id = version.id
+          AND mapping.status = 'recorded'
+        WHERE version.project_id = ? AND version.artifact_id = ?
+          AND version.number = ?
+      `).bind(installationId, projectId, artifactId, versionNumber).first();
+      return gitHistoryMappingRowSchema.nullable().parse(row);
+    },
     reserveGitHistoryBudget: async (
       job,
       logicalBytes,

@@ -62,20 +62,27 @@ export interface GitHistoryCommitFile {
   readonly path: string;
 }
 
-export interface GitHistoryCommitRequest {
+export interface GitHistoryVersionMetadata {
+  readonly artifactId: string;
+  readonly createdAt: string;
+  readonly entryPath: string;
+  readonly installationId: string;
+  readonly manifestDigest: string;
+  readonly projectId: string;
+  readonly publisherPrincipalId: string;
+  readonly versionId: string;
+  readonly versionNumber: number;
+}
+
+export interface GitHistoryCommitIdentity {
+  readonly assertOwner: () => Promise<void>;
   readonly coordinates: GitRepositoryCoordinates;
+  readonly expectedParentCommitId: string | null;
+  readonly metadata: GitHistoryVersionMetadata;
+}
+
+export interface GitHistoryCommitRequest extends GitHistoryCommitIdentity {
   readonly files: readonly GitHistoryCommitFile[];
-  readonly metadata: {
-    readonly artifactId: string;
-    readonly createdAt: string;
-    readonly entryPath: string;
-    readonly installationId: string;
-    readonly manifestDigest: string;
-    readonly projectId: string;
-    readonly publisherPrincipalId: string;
-    readonly versionId: string;
-    readonly versionNumber: number;
-  };
   readonly pointers: readonly GitHistoryPointer[];
 }
 
@@ -102,8 +109,7 @@ export interface GitHistoryProvider {
     ttlSeconds: number,
   ): Promise<GitCloneCredential>;
   lookupCommit(
-    coordinates: GitRepositoryCoordinates,
-    versionId: string,
+    request: GitHistoryCommitRequest,
   ): Promise<{readonly commitId: string} | null>;
 }
 
@@ -141,6 +147,11 @@ export interface GitHistoryMirrorStore {
     projectId: string,
     artifactId: string,
     versionId: string,
+  ): Promise<GitHistoryMapping | null>;
+  findGitHistoryPredecessorMapping(
+    projectId: string,
+    artifactId: string,
+    versionNumber: number,
   ): Promise<GitHistoryMapping | null>;
   findGitHistoryRepository(
     projectId: string,
@@ -334,6 +345,16 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   if (version === null) {
     return yield* Effect.fail(new Error("version-unavailable"));
   }
+  const predecessor = version.version.number === 1
+    ? null
+    : yield* Effect.tryPromise(() => dependencies.store.findGitHistoryPredecessorMapping(
+      job.projectId,
+      job.artifactId,
+      version.version.number - 1,
+    ));
+  if (version.version.number > 1 && predecessor === null) {
+    return yield* Effect.fail(new Error("predecessor-unavailable"));
+  }
   const plan = yield* buildCommitPlan(dependencies.blobs, version, limits);
   const reservedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const reservation = yield* Effect.tryPromise(() =>
@@ -366,6 +387,12 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     );
   }
   const repositoryCoordinates = coordinates;
+  if (
+    predecessor !== null &&
+    predecessor.repositoryName !== repositoryCoordinates.repositoryName
+  ) {
+    return yield* Effect.fail(new Error("predecessor-repository-mismatch"));
+  }
   if (repositoryCoordinates.status !== "provisioned") {
     yield* Effect.tryPromise(() => dependencies.provider.deleteRepository(
       repositoryCoordinates,
@@ -377,26 +404,40 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     ));
     return "deleted" as const;
   }
+  const identity: GitHistoryCommitIdentity = {
+    assertOwner: async () => {
+      const now = Date.now();
+      const renewed = await dependencies.store.renewGitHistoryJob(
+        job,
+        new Date(now).toISOString(),
+        new Date(now + Duration.toMillis(jobLease)).toISOString(),
+      );
+      if (!renewed) throw new GitHistoryLeaseLost();
+    },
+    coordinates: repositoryCoordinates,
+    expectedParentCommitId: predecessor?.commitId ?? null,
+    metadata: {
+      artifactId: version.version.artifactId,
+      createdAt: version.version.createdAt,
+      entryPath: version.version.entryPath,
+      installationId: dependencies.installationId,
+      manifestDigest: version.version.manifestDigest,
+      projectId: version.version.projectId,
+      publisherPrincipalId: version.version.publisherPrincipalId,
+      versionId: version.version.id,
+      versionNumber: version.version.number,
+    },
+  };
+  const request: GitHistoryCommitRequest = {
+    ...identity,
+    files: plan.files,
+    pointers: plan.pointers,
+  };
   const adopted = yield* Effect.tryPromise(() =>
-    dependencies.provider.lookupCommit(repositoryCoordinates, versionId)
+    dependencies.provider.lookupCommit(request)
   );
   const commit = adopted ?? (yield* Effect.tryPromise(() =>
-    dependencies.provider.commitVersion({
-      coordinates: repositoryCoordinates,
-      files: plan.files,
-      metadata: {
-        artifactId: version.version.artifactId,
-        createdAt: version.version.createdAt,
-        entryPath: version.version.entryPath,
-        installationId: dependencies.installationId,
-        manifestDigest: version.version.manifestDigest,
-        projectId: version.version.projectId,
-        publisherPrincipalId: version.version.publisherPrincipalId,
-        versionId: version.version.id,
-        versionNumber: version.version.number,
-      },
-      pointers: plan.pointers,
-    })
+    dependencies.provider.commitVersion(request)
   ));
   const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const completion = yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryMirror(
@@ -545,6 +586,9 @@ function classifyMirrorFailure(cause: unknown): string {
   if (cause instanceof GitHistoryLeaseLost) return "lease_lost";
   if (cause instanceof Error && cause.message === "version-unavailable") {
     return "version_unavailable";
+  }
+  if (cause instanceof Error && cause.message === "predecessor-unavailable") {
+    return "predecessor_unavailable";
   }
   return "provider_or_storage_failure";
 }

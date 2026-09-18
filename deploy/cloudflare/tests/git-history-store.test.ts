@@ -119,6 +119,9 @@ describe("D1 Git history claim ownership", () => {
       expect(await store.findGitHistoryMapping(
         "prj_default", "art_d1_git_lease", "ver_d1_git_lease",
       )).toMatchObject({commitId: mapping.commitId});
+      expect(await store.findGitHistoryPredecessorMapping(
+        "prj_default", "art_d1_git_lease", 1,
+      )).toMatchObject({commitId: mapping.commitId});
 
       await binding.prepare(`
         UPDATE artifacts SET deleted_at = ? WHERE id = ?

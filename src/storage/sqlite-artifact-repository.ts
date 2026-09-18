@@ -1002,6 +1002,32 @@ export class SqliteArtifactRepository implements
     ));
   }
 
+  findGitHistoryPredecessorMapping(
+    projectId: string,
+    artifactId: string,
+    versionNumber: number,
+  ): Promise<GitHistoryMapping | null> {
+    return Promise.resolve().then(() => gitHistoryMappingRowSchema.nullable().parse(
+      this.#database.prepare(`
+        SELECT mapping.project_id AS projectId,
+          mapping.artifact_id AS artifactId,
+          mapping.version_id AS versionId,
+          mapping.repository_name AS repositoryName,
+          mapping.commit_id AS commitId,
+          mapping.copied_bytes AS copiedBytes
+        FROM versions version
+        JOIN git_history_mappings mapping
+          ON mapping.installation_id = ?
+          AND mapping.project_id = version.project_id
+          AND mapping.artifact_id = version.artifact_id
+          AND mapping.version_id = version.id
+          AND mapping.status = 'recorded'
+        WHERE version.project_id = ? AND version.artifact_id = ?
+          AND version.number = ?
+      `).get(this.#installationId, projectId, artifactId, versionNumber) ?? null,
+    ));
+  }
+
   reserveGitHistoryBudget(
     job: GitHistoryJob,
     logicalBytes: number,

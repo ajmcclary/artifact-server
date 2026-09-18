@@ -218,6 +218,108 @@ describe("simple per-project Git history setting", () => {
       .toEqual([1, 1, 2, 3]);
   });
 
+  test("GIT-008 remote regression: a lost commit response is adopted before the next version", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    provider.failAfterCommits = 1;
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    await waitForAvailable(server, installation.apiToken);
+    const first = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "committed before the acknowledgement was lost",
+      idempotencyKey: "git-history-lost-commit-response-1",
+      projectId: "prj_default",
+    });
+    await enableGitHistory(server, installation, "prj_default");
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    try {
+      await expect.poll(() => store.findGitHistoryMapping(
+        "prj_default", first.body.artifact.id, first.body.version.id,
+      ), {timeout: 10_000}).toMatchObject({versionId: first.body.version.id});
+      expect(provider.commitCalls).toBe(1);
+      const firstCommit = provider.commits.get(first.body.artifact.id)
+        ?.get(first.body.version.id)?.commitId;
+      expect(firstCommit).toBeDefined();
+
+      const second = await publishVersion(server, installation, {
+        artifactId: first.body.artifact.id,
+        content: "the next version",
+        expectedCurrentVersionId: first.body.version.id,
+        idempotencyKey: "git-history-lost-commit-response-2",
+        projectId: "prj_default",
+      });
+      await expect.poll(() => store.findGitHistoryMapping(
+        "prj_default", first.body.artifact.id, second.body.version.id,
+      ), {timeout: 10_000}).toMatchObject({versionId: second.body.version.id});
+      expect(provider.commitRequests.map((request) => ({
+        number: request.metadata.versionNumber,
+        parent: request.expectedParentCommitId,
+      }))).toEqual([
+        {number: 1, parent: null},
+        {number: 2, parent: firstCommit},
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("GIT-008 remote regression: a foreign branch tip cannot mirror the next version", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    await waitForAvailable(server, installation.apiToken);
+    const first = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "first remote version",
+      idempotencyKey: "git-history-foreign-tip-1",
+      projectId: "prj_default",
+    });
+    await enableGitHistory(server, installation, "prj_default");
+    await expect.poll(() => provider.commitCalls, {timeout: 8_000}).toBe(1);
+    const store = new SqliteArtifactRepository(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    try {
+      await expect.poll(() => store.findGitHistoryMapping(
+        "prj_default", first.body.artifact.id, first.body.version.id,
+      ), {timeout: 8_000}).toMatchObject({versionId: first.body.version.id});
+      provider.remoteHeads.set(first.body.artifact.id, "foreign-commit");
+      const second = await publishVersion(server, installation, {
+        artifactId: first.body.artifact.id,
+        content: "primary publication remains available",
+        expectedCurrentVersionId: first.body.version.id,
+        idempotencyKey: "git-history-foreign-tip-2",
+        projectId: "prj_default",
+      });
+      await expect.poll(() => provider.commitRequests.some((request) =>
+        request.metadata.versionId === second.body.version.id),
+      {timeout: 8_000}).toBe(true);
+      expect(await store.findGitHistoryMapping(
+        "prj_default", first.body.artifact.id, second.body.version.id,
+      )).toBeNull();
+      const primary = await fetch(new URL(
+        `/api/v1/artifacts/${first.body.artifact.id}?projectId=prj_default`,
+        server.baseUrl,
+      ), {headers: apiHeaders(installation)});
+      expect(primary.status).toBe(200);
+      expect(await primary.json()).toMatchObject({
+        artifact: {currentVersionId: second.body.version.id},
+      });
+    } finally {
+      store.close();
+    }
+  });
+
   test("GIT-008 lease regression: a reclaimed worker cannot complete or release its successor's claim", async () => {
     server = await startTestServer(installation);
     const published = await publishNew(server, installation, {

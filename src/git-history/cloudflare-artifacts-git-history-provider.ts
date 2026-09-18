@@ -12,6 +12,7 @@ import {
   listServerRefs,
   push,
   readBlob,
+  readCommit,
   remove,
   resolveRef,
   writeRef,
@@ -33,6 +34,7 @@ import {
 const apiOrigin = new URL("https://api.cloudflare.com/client/v4/");
 const maximumControlPlaneResponseBytes = 64 * 1024;
 const writeTokenTtlSeconds = 300;
+const zeroOid = "0".repeat(40);
 
 const repositorySchema = Schema.Struct({
   default_branch: Schema.String,
@@ -43,6 +45,17 @@ const issuedTokenSchema = Schema.Struct({
   expires_at: Schema.String,
   plaintext: Schema.String,
   scope: Schema.Literals(["read", "write"]),
+});
+const versionMetadataSchema = Schema.Struct({
+  artifactId: Schema.String,
+  createdAt: Schema.String,
+  entryPath: Schema.String,
+  installationId: Schema.String,
+  manifestDigest: Schema.String,
+  projectId: Schema.String,
+  publisherPrincipalId: Schema.String,
+  versionId: Schema.String,
+  versionNumber: Schema.Number,
 });
 export interface CloudflareArtifactsProviderConfig {
   readonly apiOrigin?: URL;
@@ -124,13 +137,12 @@ export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider
   }
 
   async lookupCommit(
-    coordinates: GitRepositoryCoordinates,
-    versionId: string,
+    request: GitHistoryCommitRequest,
   ): Promise<{readonly commitId: string} | null> {
     // Reconciliation may need to repair the immutable tag after a branch push
     // succeeded but the following tag push response was lost.
-    const credential = await this.issueCredential(coordinates, "write", 60);
-    return lookupGitHistoryCommit(coordinates, versionId, credential.token);
+    const credential = await this.issueCredential(request.coordinates, "write", 60);
+    return lookupGitHistoryCommit(request, credential.token);
   }
 
   async issueCredential(
@@ -211,6 +223,10 @@ export async function commitGitHistoryVersion(
       request.coordinates.remoteUrl,
       writeToken,
     );
+    const currentTip = await localMainCommit(workspace);
+    if (currentTip !== request.expectedParentCommitId) {
+      throw new Error("git_history_predecessor_mismatch");
+    }
     await replaceWorkingTree(workspace.fs, workspace.dir, [
       ...request.files,
       ...gitHistoryMetadataFiles(request),
@@ -226,6 +242,16 @@ export async function commitGitHistoryVersion(
         `Artifact Server version ${request.metadata.versionNumber} ` +
         `(${request.metadata.versionId})`,
     });
+    await assertVersionCommit(workspace, commitId, request);
+    const tagRef = `refs/tags/v/${request.metadata.versionId}`;
+    const existingTag = await remoteRefOid(
+      request.coordinates,
+      tagRef,
+      writeToken,
+    );
+    if (existingTag !== null && existingTag !== commitId) {
+      throw new Error("git_history_tag_conflict");
+    }
     await writeRef({
       dir: workspace.dir,
       force: true,
@@ -237,7 +263,7 @@ export async function commitGitHistoryVersion(
       dir: workspace.dir,
       force: true,
       fs: workspace.fs,
-      ref: `refs/tags/v/${request.metadata.versionId}`,
+      ref: tagRef,
       value: commitId,
     });
     await push({
@@ -248,47 +274,71 @@ export async function commitGitHistoryVersion(
       ref: "main",
       remote: "origin",
       remoteRef: "refs/heads/main",
+      onPrePush: async ({remoteRef}) => {
+        await request.assertOwner();
+        if (remoteRef.oid !== (request.expectedParentCommitId ?? zeroOid)) {
+          throw new Error("git_history_predecessor_mismatch");
+        }
+        return true;
+      },
     });
     await push({
       dir: workspace.dir,
       fs: workspace.fs,
       headers: authorizationHeaders(writeToken),
       http,
-      ref: `refs/tags/v/${request.metadata.versionId}`,
+      ref: tagRef,
       remote: "origin",
-      remoteRef: `refs/tags/v/${request.metadata.versionId}`,
+      remoteRef: tagRef,
+      onPrePush: async ({remoteRef}) => {
+        await request.assertOwner();
+        if (remoteRef.oid !== zeroOid && remoteRef.oid !== commitId) {
+          throw new Error("git_history_tag_conflict");
+        }
+        return true;
+      },
     });
     return {commitId};
 }
 
 /** Resolve an exact mirrored version without trusting a moving branch name. */
 export async function lookupGitHistoryCommit(
-  coordinates: GitRepositoryCoordinates,
-  versionId: string,
+  request: GitHistoryCommitRequest,
   writeToken: string,
 ): Promise<{readonly commitId: string} | null> {
-  const exact = await readGitHistoryCommit(coordinates, versionId, writeToken);
-  if (exact !== null) return exact;
+  const {coordinates, metadata} = request;
+  const exact = await readGitHistoryCommit(
+    coordinates,
+    metadata.versionId,
+    writeToken,
+  );
   const workspace = await openWorkspace(coordinates.remoteUrl, writeToken);
+  if (exact !== null) {
+    await assertVersionCommit(workspace, exact.commitId, request);
+    return exact;
+  }
   try {
       const branch = await currentBranch({dir: workspace.dir, fs: workspace.fs});
       if (branch !== "main") return null;
-      const tip = await resolveRef({dir: workspace.dir, fs: workspace.fs, ref: "main"});
-      const metadata = await readBlob({
+      const tip = await localMainCommit(workspace);
+      if (tip === null) return null;
+      const saved = await readBlob({
         dir: workspace.dir,
         filepath: ".artifactserver/version.json",
         fs: workspace.fs,
         oid: tip,
       });
       const parsed = Schema.decodeUnknownSync(Schema.Struct({versionId: Schema.String}))(
-        JSON.parse(new TextDecoder().decode(metadata.blob)),
+        JSON.parse(new TextDecoder().decode(saved.blob)),
       );
-      if (parsed.versionId !== versionId) return null;
+      if (parsed.versionId !== metadata.versionId) return null;
+      await assertVersionCommit(workspace, tip, request);
+      const tagRef = `refs/tags/v/${metadata.versionId}`;
       await writeRef({
         dir: workspace.dir,
         force: true,
         fs: workspace.fs,
-        ref: `refs/tags/v/${versionId}`,
+        ref: tagRef,
         value: tip,
       });
       await push({
@@ -296,13 +346,29 @@ export async function lookupGitHistoryCommit(
         fs: workspace.fs,
         headers: authorizationHeaders(writeToken),
         http,
-        ref: `refs/tags/v/${versionId}`,
+        ref: tagRef,
         remote: "origin",
-        remoteRef: `refs/tags/v/${versionId}`,
+        remoteRef: tagRef,
+        onPrePush: async ({remoteRef}) => {
+          await request.assertOwner();
+          if (remoteRef.oid !== zeroOid && remoteRef.oid !== tip) {
+            throw new Error("git_history_tag_conflict");
+          }
+          return true;
+        },
       });
-      return await readGitHistoryCommit(coordinates, versionId, writeToken);
-  } catch {
-    return null;
+      const repaired = await readGitHistoryCommit(
+        coordinates,
+        metadata.versionId,
+        writeToken,
+      );
+      if (repaired?.commitId !== tip) {
+        throw new Error("git_history_tag_repair_mismatch");
+      }
+      return repaired;
+  } catch (cause) {
+    if (isEmptyRemoteFailure(cause)) return null;
+    throw cause;
   }
 }
 
@@ -321,6 +387,105 @@ export async function readGitHistoryCommit(
   });
   const exact = refs.find((candidate) => candidate.ref === tagRef);
   return exact === undefined ? null : {commitId: exact.oid};
+}
+
+async function remoteRefOid(
+  coordinates: GitRepositoryCoordinates,
+  ref: string,
+  token: string,
+): Promise<string | null> {
+  const refs = await listServerRefs({
+    headers: authorizationHeaders(token),
+    http,
+    prefix: ref,
+    url: coordinates.remoteUrl,
+  });
+  return refs.find((candidate) => candidate.ref === ref)?.oid ?? null;
+}
+
+async function localMainCommit(workspace: MemoryWorkspace): Promise<string | null> {
+  try {
+    return await resolveRef({
+      dir: workspace.dir,
+      fs: workspace.fs,
+      ref: "refs/heads/main",
+    });
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === "NotFoundError") return null;
+    throw cause;
+  }
+}
+
+async function assertVersionCommit(
+  workspace: MemoryWorkspace,
+  commitId: string,
+  request: GitHistoryCommitRequest,
+): Promise<void> {
+  const {commit: savedCommit} = await readCommit({
+    dir: workspace.dir,
+    fs: workspace.fs,
+    oid: commitId,
+  });
+  const expectedParents = request.expectedParentCommitId === null
+    ? []
+    : [request.expectedParentCommitId];
+  if (
+    savedCommit.parent.length !== expectedParents.length ||
+    savedCommit.parent.some((parent, index) => parent !== expectedParents[index])
+  ) {
+    throw new Error("git_history_commit_parent_mismatch");
+  }
+  const metadataFile = await readBlob({
+    dir: workspace.dir,
+    filepath: ".artifactserver/version.json",
+    fs: workspace.fs,
+    oid: commitId,
+  });
+  const saved = Schema.decodeUnknownSync(versionMetadataSchema)(
+    JSON.parse(new TextDecoder().decode(metadataFile.blob)),
+  );
+  const expected = request.metadata;
+  if (
+    saved.artifactId !== expected.artifactId ||
+    saved.createdAt !== expected.createdAt ||
+    saved.entryPath !== expected.entryPath ||
+    saved.installationId !== expected.installationId ||
+    saved.manifestDigest !== expected.manifestDigest ||
+    saved.projectId !== expected.projectId ||
+    saved.publisherPrincipalId !== expected.publisherPrincipalId ||
+    saved.versionId !== expected.versionId ||
+    saved.versionNumber !== expected.versionNumber
+  ) {
+    throw new Error("git_history_commit_metadata_mismatch");
+  }
+  const expectedFiles = [...request.files, ...gitHistoryMetadataFiles(request)];
+  const paths = await listFiles({
+    dir: workspace.dir,
+    fs: workspace.fs,
+    ref: commitId,
+  });
+  if (
+    JSON.stringify(paths.toSorted()) !== JSON.stringify(
+      expectedFiles.map((file) => file.path).toSorted(),
+    )
+  ) {
+    throw new Error("git_history_commit_files_mismatch");
+  }
+  const verifyFile = async (index: number): Promise<void> => {
+    const file = expectedFiles[index];
+    if (file === undefined) return;
+    const savedFile = await readBlob({
+      dir: workspace.dir,
+      filepath: file.path,
+      fs: workspace.fs,
+      oid: commitId,
+    });
+    if (!Buffer.from(savedFile.blob).equals(Buffer.from(file.bytes))) {
+      throw new Error("git_history_commit_bytes_mismatch");
+    }
+    await verifyFile(index + 1);
+  };
+  await verifyFile(0);
 }
 
 interface MemoryWorkspace {

@@ -132,10 +132,25 @@ promotion from research or a single local green run.
   D1 claim and deletion fencing is exercised against Wrangler's local D1 binding.
   A forced takeover during a paused provider call leaves the successor claimed
   and prevents the old worker from recording a local mapping or releasing it.
-  T03 remains open for remote predecessor/ref checks, stale in-flight provider
-  writes, live D1 multi-worker and provider concurrency proof, crash timing, and
-  controlled large-backlog measurements.
-- **Current-run checks:** Following the ownership changes,
+- **Remote progress, September 18:** each mirror job reads the recorded prior
+  version's commit. The smart-HTTP provider checks the cloned `main` tip and
+  the advertised remote OID before a non-force branch push. Exact tags are
+  adopted only after their commit parent, version metadata, full file list,
+  copied bytes and pointer metadata match; an
+  interrupted branch push can repair its missing tag. A disposable bare Git
+  remote proves conflicting tags, forged metadata and copied bytes, lost
+  branch/tag acknowledgements, a branch advance during push discovery, and
+  two divergent concurrent successors. Before branch/tag push, the provider
+  renews the durable claim; a real remote push paused during discovery cannot
+  proceed after that claim is revoked. T03 remains open for the race between
+  this last ownership check and remote ref update, live D1 multi-worker and
+  provider concurrency proof, real process crash timing, and controlled
+  large-backlog measurements.
+- **September 18 checks:** `pnpm verify:iteration`, `pnpm smoke`, and
+  `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
+  external-storage baseline reported no investigation warnings. No controlled
+  before/after Git history workload was run, so no speed claim is made.
+- **September 17 checks:** Following the ownership changes,
   `pnpm verify:iteration`, `pnpm smoke`, and
   `pnpm verify:external-storage-performance` passed on Node 24.15.0. The
   external-storage baseline reported no investigation warnings. There is no

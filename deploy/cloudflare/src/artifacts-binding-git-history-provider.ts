@@ -112,11 +112,10 @@ export class ArtifactsBindingGitHistoryProvider implements GitHistoryProvider {
   }
 
   async lookupCommit(
-    coordinates: GitRepositoryCoordinates,
-    versionId: string,
+    request: GitHistoryCommitRequest,
   ): Promise<{readonly commitId: string} | null> {
-    const credential = await this.issueCredential(coordinates, "write", 60);
-    return lookupGitHistoryCommit(coordinates, versionId, credential.token);
+    const credential = await this.issueCredential(request.coordinates, "write", 60);
+    return lookupGitHistoryCommit(request, credential.token);
   }
 
   async issueCredential(
