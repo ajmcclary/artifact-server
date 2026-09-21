@@ -1,7 +1,7 @@
 import {Readable} from "node:stream";
 import {pipeline} from "node:stream/promises";
 
-import {Storage, type Bucket, type FileMetadata} from "@google-cloud/storage";
+import {Storage, type Bucket, type CreateWriteStreamOptions, type FileMetadata} from "@google-cloud/storage";
 import {Option, Schema} from "effect";
 
 import type {
@@ -26,9 +26,14 @@ import type {
   ObjectStorageProvider,
   ObjectStorageProviderFactory,
 } from "./object-storage-provider.js";
-import {verifiedBlobStream} from "./verified-file.js";
+import {drainVerifiedBlobWrite, verifiedBlobStream} from "./verified-file.js";
 
 const resumableUploadThresholdBytes = 10 * 1024 * 1024;
+
+const gcsFailureSchema = Schema.Struct({
+  code: Schema.optional(Schema.Number),
+});
+const parseGcsFailure = Schema.decodeUnknownOption(gcsFailureSchema);
 
 /** GCS settings using Google Application Default Credentials. */
 export interface GcsObjectStorageProviderConfig {
@@ -194,11 +199,15 @@ class GcsObjects {
     kind: StoredObjectKind,
   ): Promise<StoredBlob> {
     const file = this.#bucket.file(key);
-    await pipeline(
-      Readable.from(verifiedBlobStream(write, expectedDigest), {
-        objectMode: false,
-      }),
-      file.createWriteStream({
+    if (kind === "blob") {
+      const existing = await this.#inspectIfPresent(key, expectedDigest);
+      if (existing !== null) {
+        await drainVerifiedBlobWrite(write, expectedDigest);
+        return verifyCloudObjectWriteSize(existing, write.size, "GCS", kind);
+      }
+    }
+    try {
+      const options: CreateWriteStreamOptions = {
         metadata: {
           contentType: "application/octet-stream",
           metadata: {
@@ -208,15 +217,45 @@ class GcsObjects {
         },
         resumable: write.size >= resumableUploadThresholdBytes,
         validation: "crc32c",
-      }),
-      write.signal === undefined ? {} : {signal: write.signal},
-    );
+      };
+      // Immutable blobs install only into an unused generation; staging slots
+      // stay rewritable for resumed uploads.
+      if (kind === "blob") options.preconditionOpts = {ifGenerationMatch: 0};
+      await pipeline(
+        Readable.from(verifiedBlobStream(write, expectedDigest), {
+          objectMode: false,
+        }),
+        file.createWriteStream(options),
+        write.signal === undefined ? {} : {signal: write.signal},
+      );
+    } catch (error) {
+      // A create-only rejection means a concurrent verified writer won; the
+      // failed body already passed the stream verifier, so the stored object
+      // only needs its metadata and size re-inspected before reuse.
+      const failure = parseGcsFailure(error);
+      if (kind !== "blob" || Option.isNone(failure) || failure.value.code !== 412) {
+        throw error;
+      }
+    }
     return verifyCloudObjectWriteSize(
       await this.inspect(key, expectedDigest, kind),
       write.size,
       "GCS",
       kind,
     );
+  }
+
+  async #inspectIfPresent(
+    key: string,
+    expectedDigest: string,
+  ): Promise<StoredBlob | null> {
+    try {
+      return await this.inspect(key, expectedDigest, "blob");
+    } catch (error) {
+      const failure = parseGcsFailure(error);
+      if (Option.isNone(failure) || failure.value.code !== 404) throw error;
+      return null;
+    }
   }
 }
 

@@ -1,6 +1,8 @@
 import type { FileHandle } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
+import { Readable, Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import type { BlobWrite } from "../core/ports.js";
 
@@ -54,6 +56,25 @@ export function verifiedBlobStream(
   return write.signal === undefined
     ? write.body.pipeThrough(verified)
     : write.body.pipeThrough(verified, {signal: write.signal});
+}
+
+/**
+ * Drains a caller stream through the verifier without storing the bytes.
+ *
+ * Used when a content-addressed destination already exists: the caller still
+ * proves possession of the declared bytes, but no second upload is started.
+ */
+export async function drainVerifiedBlobWrite(
+  write: BlobWrite,
+  expectedDigest: string,
+): Promise<void> {
+  await pipeline(
+    Readable.from(verifiedBlobStream(write, expectedDigest), {objectMode: false}),
+    new Writable({
+      write: (_chunk, _encoding, callback) => callback(),
+    }),
+    write.signal === undefined ? {} : {signal: write.signal},
+  );
 }
 
 /** Writes and verifies one incoming stream without buffering the complete file. */

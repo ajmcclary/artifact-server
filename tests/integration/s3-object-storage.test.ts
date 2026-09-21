@@ -205,6 +205,134 @@ describe.sequential("S3-compatible object storage", () => {
     ).rejects.toThrow(/matching the RegExp/u);
   }, integrationTestTimeoutMs);
 
+  test("concurrent multipart installations converge without leftover sessions", async () => {
+    const storage = createStorage(client, "installation-multipart-race");
+    const bytes = patternedBytes(multipartBytes);
+    const fingerprint = digest(bytes);
+    const stored = {sha256: fingerprint, size: bytes.byteLength};
+    const results = await Promise.all(Array.from({length: 3}, (_, index) =>
+      storage.blobs.put({
+        body: chunkedBody(bytes, (64 + index) * 1024),
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      })));
+    expect(results).toEqual([stored, stored, stored]);
+    await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+    const multipartUploads = await client.send(
+      new ListMultipartUploadsCommand({Bucket: bucket}),
+    );
+    expect(multipartUploads.Uploads ?? []).toEqual([]);
+  }, integrationTestTimeoutMs);
+
+  test("a proven existing blob is reused without re-installation", async () => {
+    const storage = createStorage(client, "installation-create-only-reuse");
+    const bytes = patternedBytes(2 * 1024 * 1024);
+    const fingerprint = digest(bytes);
+    const stored = {sha256: fingerprint, size: bytes.byteLength};
+    await expect(storage.blobs.put({
+      body: chunkedBody(bytes, 64 * 1024),
+      sha256: fingerprint,
+      size: bytes.byteLength,
+    })).resolves.toEqual(stored);
+    await expect(storage.blobs.put({
+      body: chunkedBody(bytes, 31 * 1024),
+      sha256: fingerprint,
+      size: bytes.byteLength,
+    })).resolves.toEqual(stored);
+    await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+  }, integrationTestTimeoutMs);
+
+  test("losing the create-only race reuses the winner and aborts the doomed session", async () => {
+    const installationId = "installation-create-only-race";
+    const storage = createStorage(client, installationId);
+    const bytes = patternedBytes(multipartBytes);
+    const fingerprint = digest(bytes);
+    const key = blobKey(installationId, fingerprint);
+    const adapterPartBytes = 8 * 1024 * 1024;
+    const gate = Promise.withResolvers<void>();
+    let firstServed = false;
+    const gatedBody = new ReadableStream<Uint8Array>({
+      pull: async (controller) => {
+        if (!firstServed) {
+          firstServed = true;
+          controller.enqueue(bytes.subarray(0, adapterPartBytes + 1));
+          return;
+        }
+        await gate.promise;
+        controller.enqueue(bytes.subarray(adapterPartBytes + 1));
+        controller.close();
+      },
+    });
+    const write = storage.blobs.put({
+      body: gatedBody,
+      sha256: fingerprint,
+      size: bytes.byteLength,
+    });
+    const deadline = Date.now() + 15_000;
+    for (;;) {
+      // Session polling must stay ordered to avoid flooding the provider.
+      // eslint-disable-next-line no-await-in-loop
+      const sessions = await client.send(
+        new ListMultipartUploadsCommand({Bucket: bucket, Prefix: key}),
+      );
+      if ((sessions.Uploads ?? []).some((upload) => upload.Key === key)) break;
+      if (Date.now() > deadline) {
+        gate.resolve();
+        throw new Error("The adapter multipart session never appeared.");
+      }
+      // Each delay belongs to the preceding poll.
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await putRawObject(client, key, bytes, {
+      "artifact-kind": "blob",
+      "artifact-sha256": fingerprint,
+    });
+    gate.resolve();
+    await expect(write).resolves.toEqual({sha256: fingerprint, size: bytes.byteLength});
+    await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+    const remaining = await client.send(
+      new ListMultipartUploadsCommand({Bucket: bucket}),
+    );
+    expect(remaining.Uploads ?? []).toEqual([]);
+  }, integrationTestTimeoutMs);
+
+  test("the provider enforces the create-only precondition", async () => {
+    const installationId = "installation-precondition";
+    const storage = createStorage(client, installationId);
+    const bytes = new TextEncoder().encode("create-only precondition bytes");
+    const fingerprint = digest(bytes);
+    await storage.blobs.put({
+      body: chunkedBody(bytes, 5),
+      sha256: fingerprint,
+      size: bytes.byteLength,
+    });
+    await expect(client.send(new PutObjectCommand({
+      Body: bytes,
+      Bucket: bucket,
+      IfNoneMatch: "*",
+      Key: blobKey(installationId, fingerprint),
+      Metadata: {"artifact-kind": "blob", "artifact-sha256": fingerprint},
+    }))).rejects.toMatchObject({$metadata: {httpStatusCode: 412}});
+    await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+  }, integrationTestTimeoutMs);
+
+  test("a metadata-corrupted existing blob fails closed on put", async () => {
+    const installationId = "installation-corrupt-existing";
+    const storage = createStorage(client, installationId);
+    const bytes = new TextEncoder().encode("corrupt existing blob bytes");
+    const fingerprint = digest(bytes);
+    await putRawObject(client, blobKey(installationId, fingerprint), bytes, {
+      "artifact-kind": "blob",
+      "artifact-sha256": digest(new TextEncoder().encode("another object")),
+    });
+    await expect(storage.blobs.put({
+      body: chunkedBody(bytes, 3),
+      sha256: fingerprint,
+      size: bytes.byteLength,
+    })).rejects.toThrow(/wrong fingerprint/u);
+  }, integrationTestTimeoutMs);
+
   test("provider metadata corruption fails closed", async () => {
     const installationId = "installation-metadata-corruption";
     const storage = createStorage(client, installationId);

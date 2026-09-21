@@ -23,9 +23,15 @@ export async function startGitSmartHttpServer() {
   ]);
   let receivePackCalls = 0;
   let receivePackDiscoveryCalls = 0;
+  let receivePackUpdateCalls = 0;
   const droppedResponses = new Set<number>();
   let advanceBeforeDiscovery: string | null = null;
   let heldDiscovery: {
+    readonly call: number;
+    readonly entered: PromiseWithResolvers<void>;
+    readonly resume: PromiseWithResolvers<void>;
+  } | null = null;
+  let heldUpdate: {
     readonly call: number;
     readonly entered: PromiseWithResolvers<void>;
     readonly resume: PromiseWithResolvers<void>;
@@ -57,6 +63,15 @@ export async function startGitSmartHttpServer() {
           advanceBeforeDiscovery,
         ]);
         advanceBeforeDiscovery = null;
+      }
+      if (request.method === "POST" && url.pathname.endsWith("/git-receive-pack")) {
+        receivePackUpdateCalls += 1;
+        if (heldUpdate?.call === receivePackUpdateCalls) {
+          const held = heldUpdate;
+          heldUpdate = null;
+          held.entered.resolve();
+          await held.resume.promise;
+        }
       }
       const body = await readBoundedRequest(request);
       const child = spawn("git", ["http-backend"], {
@@ -133,7 +148,14 @@ export async function startGitSmartHttpServer() {
       heldDiscovery = {call, entered, resume};
       return {entered: entered.promise, release: () => resume.resolve()};
     },
+    holdReceivePackUpdateAt: (call: number) => {
+      const entered = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      heldUpdate = {call, entered, resume};
+      return {entered: entered.promise, release: () => resume.resolve()};
+    },
     nextReceivePackDiscoveryCall: () => receivePackDiscoveryCalls + 1,
+    nextReceivePackUpdateCall: () => receivePackUpdateCalls + 1,
     advanceMainBeforeNextPush: (commitId: string) => {
       advanceBeforeDiscovery = commitId;
     },

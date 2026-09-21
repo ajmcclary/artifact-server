@@ -98,6 +98,18 @@ promotion from research or a single local green run.
   [GCS](./src/storage/gcs-object-storage.ts) lack destination create-only
   preconditions; [R2](./deploy/cloudflare/src/r2-object-storage.ts) already uses
   a conditional create. Existing bad-declaration tests preserve original bytes.
+- **Progress, September 21:** the S3 and GCS blob adapters now match the R2 and
+  Azure semantics: a proven existing blob is inspected and reused after the
+  caller re-proves its bytes through the stream verifier, and new installations
+  are create-only (`If-None-Match: *` at PutObject or CompleteMultipartUpload
+  for S3, `ifGenerationMatch: 0` for GCS). A lost S3 create-only race aborts the
+  doomed multipart sessions for that key before reuse; staging slots stay
+  unconditionally rewritable. New tests cover sequential and concurrent
+  identical writes at multipart/resumable scale, a gated-stream create-only
+  race loser with no leftover sessions, provider enforcement of the
+  precondition against pinned MinIO and fake-gcs-server, and metadata-corrupted
+  existing blobs failing closed. Live AWS/GCS qualification remains open under
+  the L gate.
 - **Do:** add provider-native create-only behavior behind the blob port, including
   multipart completion and verified reuse of a pre-existing destination. Separate
   immutable-blob semantics from reusable staging slots. Never treat a metadata
@@ -152,6 +164,18 @@ promotion from research or a single local green run.
   worker reclaims the expired SQLite lease, validates the exact commit,
   repairs or adopts its tag and records one mapping. Live-provider crash
   recovery remains open.
+- **Race progress, September 21:** the provider re-asserts the durable claim
+  after the final ref update and verifies that remote main and the immutable
+  tag both name the pushed commit before reporting success; tag repair
+  re-asserts ownership after its push. The disposable smart-HTTP remote gained
+  a pre-backend receive-pack hold. New tests cover a claim lost during the
+  branch update (the successor adopts the landed commit and repairs the tag),
+  a claim lost during the final tag update (failure is reported instead of a
+  commit the worker no longer owns), and a foreign branch advance between
+  discovery and the ref update (rejected by the remote compare-and-swap, tip
+  preserved). Live D1 multi-worker and provider concurrency proof,
+  live-provider crash recovery, and controlled repeated provider backlog
+  measurements remain open.
 - **Backlog progress, September 18:** a dedicated opt-in 3,301-version SQLite
   diagnostic found 3,062 ms median idle claims with a deep history and 107 ms
   with many one-version artifacts. Bounded reconciliation now selects one

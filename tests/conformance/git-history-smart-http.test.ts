@@ -243,6 +243,147 @@ test("GIT-008 remote lease regression: a claim lost during push discovery cannot
   }
 }, 30_000);
 
+test("GIT-008 remote lease regression: a claim lost during the branch update still converges through adoption", async () => {
+  const remote = await startGitSmartHttpServer();
+  const coordinates: GitRepositoryCoordinates = {
+    artifactId: "art_git_http_branch_lease",
+    defaultBranch: "main",
+    projectId: "prj_git_http_test",
+    provider: "cloudflare-artifacts",
+    remoteUrl: remote.remoteUrl,
+    repositoryName: "repository.git",
+    status: "provisioned",
+  };
+  const git = async (...arguments_: string[]): Promise<string> => {
+    const {stdout} = await execute("git", ["--git-dir", remote.barePath, ...arguments_]);
+    return stdout.trim();
+  };
+  try {
+    const first = versionRequest(coordinates, 1, "ver_git_branch_lease_1", null);
+    const firstCommit = await commitGitHistoryVersion(first, testToken);
+    let owned = true;
+    let ownershipChecks = 0;
+    const second: GitHistoryCommitRequest = {
+      ...versionRequest(coordinates, 2, "ver_git_branch_lease_2", firstCommit.commitId),
+      assertOwner: async () => {
+        ownershipChecks += 1;
+        if (!owned) throw new Error("git_history_lease_lost");
+      },
+    };
+    const held = remote.holdReceivePackUpdateAt(remote.nextReceivePackUpdateCall());
+    const attempted = commitGitHistoryVersion(second, testToken);
+    await held.entered;
+    owned = false;
+    held.release();
+    await expect(attempted).rejects.toThrow("git_history_lease_lost");
+    expect(ownershipChecks).toBe(2);
+    const tip = await git("rev-parse", "refs/heads/main");
+    expect(tip).not.toBe(firstCommit.commitId);
+    expect(await git("show-ref", "--verify", `refs/tags/v/${second.metadata.versionId}`)
+      .catch(() => null)).toBeNull();
+    owned = true;
+    await expect(lookupGitHistoryCommit(second, testToken))
+      .resolves.toEqual({commitId: tip});
+    expect(await git("rev-parse", `refs/tags/v/${second.metadata.versionId}`))
+      .toBe(tip);
+  } finally {
+    await remote.close();
+  }
+}, 30_000);
+
+test("GIT-008 remote lease regression: a claim lost during the final ref update is never reported committed", async () => {
+  const remote = await startGitSmartHttpServer();
+  const coordinates: GitRepositoryCoordinates = {
+    artifactId: "art_git_http_final_lease",
+    defaultBranch: "main",
+    projectId: "prj_git_http_test",
+    provider: "cloudflare-artifacts",
+    remoteUrl: remote.remoteUrl,
+    repositoryName: "repository.git",
+    status: "provisioned",
+  };
+  const git = async (...arguments_: string[]): Promise<string> => {
+    const {stdout} = await execute("git", ["--git-dir", remote.barePath, ...arguments_]);
+    return stdout.trim();
+  };
+  try {
+    const first = versionRequest(coordinates, 1, "ver_git_final_lease_1", null);
+    const firstCommit = await commitGitHistoryVersion(first, testToken);
+    let owned = true;
+    let ownershipChecks = 0;
+    const second: GitHistoryCommitRequest = {
+      ...versionRequest(coordinates, 2, "ver_git_final_lease_2", firstCommit.commitId),
+      assertOwner: async () => {
+        ownershipChecks += 1;
+        if (!owned) throw new Error("git_history_lease_lost");
+      },
+    };
+    const held = remote.holdReceivePackUpdateAt(remote.nextReceivePackUpdateCall() + 1);
+    const attempted = commitGitHistoryVersion(second, testToken);
+    await held.entered;
+    owned = false;
+    held.release();
+    await expect(attempted).rejects.toThrow("git_history_lease_lost");
+    expect(ownershipChecks).toBe(3);
+    const tip = await git("rev-parse", "refs/heads/main");
+    expect(tip).not.toBe(firstCommit.commitId);
+    expect(await git("rev-parse", `refs/tags/v/${second.metadata.versionId}`))
+      .toBe(tip);
+    owned = true;
+    await expect(lookupGitHistoryCommit(second, testToken))
+      .resolves.toEqual({commitId: tip});
+  } finally {
+    await remote.close();
+  }
+}, 30_000);
+
+test("GIT-008 remote race regression: an advance between push discovery and the ref update is rejected", async () => {
+  const remote = await startGitSmartHttpServer();
+  const coordinates: GitRepositoryCoordinates = {
+    artifactId: "art_git_http_update_race",
+    defaultBranch: "main",
+    projectId: "prj_git_http_test",
+    provider: "cloudflare-artifacts",
+    remoteUrl: remote.remoteUrl,
+    repositoryName: "repository.git",
+    status: "provisioned",
+  };
+  const git = async (...arguments_: string[]): Promise<string> => {
+    const {stdout} = await execute("git", ["--git-dir", remote.barePath, ...arguments_]);
+    return stdout.trim();
+  };
+  try {
+    const first = versionRequest(coordinates, 1, "ver_git_update_race_1", null);
+    const firstCommit = await commitGitHistoryVersion(first, testToken);
+    const tree = await git("rev-parse", `${firstCommit.commitId}^{tree}`);
+    const foreign = await execute("git", [
+      "--git-dir", remote.barePath, "commit-tree", tree,
+      "-p", firstCommit.commitId, "-m", "foreign advance",
+    ], {env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Git test",
+      GIT_AUTHOR_EMAIL: "git-test@invalid.example",
+      GIT_COMMITTER_NAME: "Git test",
+      GIT_COMMITTER_EMAIL: "git-test@invalid.example",
+    }});
+    const foreignCommit = foreign.stdout.trim();
+    const second = versionRequest(
+      coordinates, 2, "ver_git_update_race_2", firstCommit.commitId,
+    );
+    const held = remote.holdReceivePackUpdateAt(remote.nextReceivePackUpdateCall());
+    const attempted = commitGitHistoryVersion(second, testToken);
+    await held.entered;
+    await git("update-ref", "refs/heads/main", foreignCommit);
+    held.release();
+    await expect(attempted).rejects.toBeInstanceOf(Error);
+    expect(await git("rev-parse", "refs/heads/main")).toBe(foreignCommit);
+    expect(await git("show-ref", "--verify", `refs/tags/v/${second.metadata.versionId}`)
+      .catch(() => null)).toBeNull();
+  } finally {
+    await remote.close();
+  }
+}, 30_000);
+
 function versionRequest(
   coordinates: GitRepositoryCoordinates,
   versionNumber: number,

@@ -127,6 +127,39 @@ export function defineNativeObjectStorageContract(
         .rejects.toThrow(/matching the RegExp/u);
     });
 
+    test("a proven existing blob is reused without replacing its bytes", async () => {
+      const storage = contract.create("installation-create-only-reuse");
+      const bytes = patternedBytes(3 * 1024 * 1024);
+      const fingerprint = digest(bytes);
+      const stored = {sha256: fingerprint, size: bytes.byteLength};
+      await expect(storage.blobs.put({
+        body: chunkedBody(bytes, 64 * 1024),
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      })).resolves.toEqual(stored);
+      await expect(storage.blobs.put({
+        body: chunkedBody(bytes, 17 * 1024),
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      })).resolves.toEqual(stored);
+      await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+    });
+
+    test("concurrent resumable-scale writes converge on one verified object", async () => {
+      const storage = contract.create("installation-create-only-race");
+      const bytes = patternedBytes(11 * 1024 * 1024);
+      const fingerprint = digest(bytes);
+      const stored = {sha256: fingerprint, size: bytes.byteLength};
+      const results = await Promise.all(Array.from({length: 3}, (_, index) =>
+        storage.blobs.put({
+          body: chunkedBody(bytes, (64 + index) * 1024),
+          sha256: fingerprint,
+          size: bytes.byteLength,
+        })));
+      expect(results).toEqual([stored, stored, stored]);
+      await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+    }, NATIVE_PROVIDER_IO_TEST_TIMEOUT_MS);
+
     test("an interrupted staging write settles before cleanup removes it", async () => {
       const storage = contract.create("installation-interrupted-staging");
       const declaredBytes = patternedBytes(16 * 1024 * 1024);

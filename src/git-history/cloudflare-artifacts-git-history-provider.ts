@@ -298,6 +298,11 @@ export async function commitGitHistoryVersion(
         return true;
       },
     });
+    // The ref update is the last action whose success we report; re-assert
+    // ownership and confirm both refs landed so a claim lost during the final
+    // receive-pack call can never be reported as a successful commit.
+    await request.assertOwner();
+    await assertPushedRefs(request.coordinates, tagRef, commitId, writeToken);
     return {commitId};
 }
 
@@ -357,6 +362,7 @@ export async function lookupGitHistoryCommit(
           return true;
         },
       });
+      await request.assertOwner();
       const repaired = await readGitHistoryCommit(
         coordinates,
         metadata.versionId,
@@ -401,6 +407,23 @@ async function remoteRefOid(
     url: coordinates.remoteUrl,
   });
   return refs.find((candidate) => candidate.ref === ref)?.oid ?? null;
+}
+
+/**
+ * Confirm a reported push actually owns both remote refs. While this worker
+ * holds the durable claim no successor can advance main past this version, so
+ * any mismatch means the update lost a race and must surface as a failure.
+ */
+async function assertPushedRefs(
+  coordinates: GitRepositoryCoordinates,
+  tagRef: string,
+  commitId: string,
+  token: string,
+): Promise<void> {
+  const branch = await remoteRefOid(coordinates, "refs/heads/main", token);
+  if (branch !== commitId) throw new Error("git_history_branch_update_mismatch");
+  const tag = await remoteRefOid(coordinates, tagRef, token);
+  if (tag !== commitId) throw new Error("git_history_tag_update_mismatch");
 }
 
 async function localMainCommit(workspace: MemoryWorkspace): Promise<string | null> {

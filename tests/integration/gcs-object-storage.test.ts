@@ -1,5 +1,7 @@
+import {createHash} from "node:crypto";
+
 import {Storage} from "@google-cloud/storage";
-import {beforeAll} from "vitest";
+import {beforeAll, expect, test} from "vitest";
 
 import {createGcsObjectStorageAdapters} from
   "../../src/storage/gcs-object-storage.js";
@@ -41,6 +43,28 @@ defineNativeObjectStorageContract({
     });
   },
 });
+
+test("the provider enforces the zero-generation precondition", async () => {
+  const installationId = "installation-gcs-precondition";
+  const adapters = createGcsObjectStorageAdapters({bucket, installationId});
+  const bytes = new TextEncoder().encode("gcs create-only precondition bytes");
+  const fingerprint = createHash("sha256").update(bytes).digest("hex");
+  await adapters.blobs.put({
+    body: new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    }),
+    sha256: fingerprint,
+    size: bytes.byteLength,
+  });
+  await expect(bucket.file(nativeBlobKey(installationId, fingerprint)).save(bytes, {
+    preconditionOpts: {ifGenerationMatch: 0},
+    resumable: false,
+    validation: false,
+  })).rejects.toMatchObject({code: 412});
+}, 30_000);
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name];

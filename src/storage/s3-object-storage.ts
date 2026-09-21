@@ -1,15 +1,18 @@
 import { Readable } from "node:stream";
 
 import {
+  AbortMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   HeadBucketCommand,
+  ListMultipartUploadsCommand,
+  type PutObjectCommandInput,
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
-import { Redacted } from "effect";
+import { Option, Redacted, Schema } from "effect";
 
 import type {
   BlobByteRange,
@@ -33,8 +36,15 @@ import {
   type StoredObjectKind,
   verifyCloudObjectWriteSize,
 } from "./cloud-object-storage.js";
-import { verifiedBlobStream } from "./verified-file.js";
+import { drainVerifiedBlobWrite, verifiedBlobStream } from "./verified-file.js";
 const multipartPartBytes = 8 * 1024 * 1024;
+
+const s3FailureSchema = Schema.Struct({
+  $metadata: Schema.optional(Schema.Struct({
+    httpStatusCode: Schema.optional(Schema.Number),
+  })),
+});
+const parseS3Failure = Schema.decodeUnknownOption(s3FailureSchema);
 
 interface S3ObjectStorageProviderConfigBase {
   readonly bucket: string;
@@ -289,25 +299,117 @@ class S3Objects {
     expectedDigest: string,
     kind: StoredObjectKind,
   ): Promise<StoredBlob> {
+    if (kind === "blob") {
+      const existing = await this.#inspectIfPresent(key, expectedDigest);
+      if (existing !== null) {
+        await drainVerifiedBlobWrite(write, expectedDigest);
+        return verifyCloudObjectWriteSize(existing, write.size, "S3", kind);
+      }
+      try {
+        await this.#upload(key, write, expectedDigest, kind, true);
+      } catch (error) {
+        // A create-only rejection means a concurrent verified writer won; the
+        // failed body already passed the stream verifier, so the stored object
+        // only needs its metadata and size re-inspected before reuse.
+        const failure = parseS3Failure(error);
+        const preconditionFailed = Option.isSome(failure) &&
+          failure.value.$metadata?.httpStatusCode === 412;
+        if (!preconditionFailed) throw error;
+        // The existing object dooms every in-flight multipart session for this
+        // key, including the rejected one, which the uploader does not abort.
+        await this.#abortDoomedMultipartUploads(key);
+      }
+    } else {
+      await this.#upload(key, write, expectedDigest, kind, false);
+    }
+    return verifyCloudObjectWriteSize(
+      await this.inspect(key, expectedDigest, kind),
+      write.size,
+      "S3",
+      kind,
+    );
+  }
+
+  async #inspectIfPresent(
+    key: string,
+    expectedDigest: string,
+  ): Promise<StoredBlob | null> {
+    try {
+      return await this.inspect(key, expectedDigest, "blob");
+    } catch (error) {
+      const failure = parseS3Failure(error);
+      const missing = Option.isSome(failure) &&
+        failure.value.$metadata?.httpStatusCode === 404;
+      if (!missing) throw error;
+      return null;
+    }
+  }
+
+  async #abortDoomedMultipartUploads(key: string): Promise<void> {
+    let keyMarker: string | undefined;
+    let uploadIdMarker: string | undefined;
+    for (;;) {
+      // Pages must stay ordered so a bounded number of sessions is listed.
+      // eslint-disable-next-line no-await-in-loop
+      const listed = await this.#client.send(new ListMultipartUploadsCommand({
+        Bucket: this.#bucket,
+        KeyMarker: keyMarker,
+        Prefix: key,
+        UploadIdMarker: uploadIdMarker,
+      }));
+      for (const session of listed.Uploads ?? []) {
+        if (session.Key !== key || session.UploadId === undefined) continue;
+        try {
+          // Aborts must stay ordered so a bounded number of sessions is active.
+          // eslint-disable-next-line no-await-in-loop
+          await this.#client.send(new AbortMultipartUploadCommand({
+            Bucket: this.#bucket,
+            Key: key,
+            UploadId: session.UploadId,
+          }));
+        } catch (error) {
+          const failure = parseS3Failure(error);
+          const alreadyGone = Option.isSome(failure) &&
+            failure.value.$metadata?.httpStatusCode === 404;
+          if (!alreadyGone) throw error;
+        }
+      }
+      if (listed.IsTruncated !== true) return;
+      keyMarker = listed.NextKeyMarker;
+      uploadIdMarker = listed.NextUploadIdMarker;
+    }
+  }
+
+  async #upload(
+    key: string,
+    write: BlobWrite,
+    expectedDigest: string,
+    kind: StoredObjectKind,
+    createOnly: boolean,
+  ): Promise<void> {
     const verifiedBody = verifiedBlobStream(write, expectedDigest);
     const abortController = new AbortController();
     const abort = () => abortController.abort(write.signal?.reason);
     if (write.signal?.aborted === true) abort();
     else write.signal?.addEventListener("abort", abort, {once: true});
+    const params: PutObjectCommandInput = {
+      Body: Readable.from(verifiedBody, {objectMode: false}),
+      Bucket: this.#bucket,
+      ContentType: "application/octet-stream",
+      Key: key,
+      Metadata: {
+        [digestMetadataName]: expectedDigest,
+        [kindMetadataName]: kind,
+      },
+    };
+    // PutObject applies the condition directly; multipart uploads apply it at
+    // CompleteMultipartUpload after every part passed verification.
+    if (createOnly) params.IfNoneMatch = "*";
     const upload = new Upload({
       abortController,
       client: this.#client,
       leavePartsOnError: false,
-      params: {
-        Body: Readable.from(verifiedBody, {objectMode: false}),
-        Bucket: this.#bucket,
-        ContentType: "application/octet-stream",
-        Key: key,
-        Metadata: {
-          [digestMetadataName]: expectedDigest,
-          [kindMetadataName]: kind,
-        },
-      },
+      params,
       partSize: multipartPartBytes,
       queueSize: 2,
     });
@@ -316,13 +418,6 @@ class S3Objects {
     } finally {
       write.signal?.removeEventListener("abort", abort);
     }
-
-    return verifyCloudObjectWriteSize(
-      await this.inspect(key, expectedDigest, kind),
-      write.size,
-      "S3",
-      kind,
-    );
   }
 }
 
