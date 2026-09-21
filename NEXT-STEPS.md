@@ -237,6 +237,22 @@ promotion from research or a single local green run.
 
 - **Current:** `#insertVersion` in the [repository](./src/storage/postgres-artifact-repository.ts)
   performs one insert per entry; upload-plan batching is already implemented.
+- **Progress, September 21:** `#insertVersion` now writes manifest entries with
+  one bounded `INSERT ... SELECT` over `jsonb_to_recordset` (three parameters
+  regardless of entry count — the representation upload-plan batching already
+  used), replacing one statement per entry; empty manifests skip the batch
+  statement. The single version/manifest/action/idempotency/current-pointer
+  transaction and the source-ready checks are unchanged. Exact manifest/bytes,
+  conflict and idempotency behavior, and transaction-stage failures remain
+  covered by the external-storage runtime suite, which passed against pinned
+  Postgres/MinIO along with `pnpm check`, `pnpm smoke`, and the
+  external-storage performance baseline (no investigation warnings). A paired
+  same-machine observation of the 48-file directory workload moved p95 from
+  344.61 ms to 388.18 ms — within single-run noise, so no speed claim is made;
+  the reduction from 1 + N statements to 2 per version is structural.
+  Controlled repeated measurements of query count, lock duration, and commit
+  time on a named workload, and live managed-Postgres qualification, remain
+  open.
 - **Do:** choose a bounded batch representation compatible with query/parameter
   limits. Preserve the single version/manifest/action/idempotency/current-pointer
   transaction and existing source-ready checks.

@@ -4011,13 +4011,26 @@ export class PostgresArtifactRepository implements
         ${manifest.digest}, ${manifest.entryPath}, ${manifest.routingMode},
         ${contentToken}, ${publisherPrincipalId}, ${createdAt}
       )`;
-      for (const entry of manifest.entries) {
-        yield* sql`INSERT INTO manifest_entries (
-          installation_id, version_id, path, size, media_type, sha256, disposition
-        ) VALUES (
-          ${installationId}, ${versionId}, ${entry.path}, ${entry.size},
-          ${entry.mediaType}, ${entry.sha256}, ${entry.disposition}
-        )`;
+      if (manifest.entries.length > 0) {
+        const entriesJson = JSON.stringify(manifest.entries.map((entry) => ({
+          disposition: entry.disposition,
+          media_type: entry.mediaType,
+          path: entry.path,
+          sha256: entry.sha256,
+          size: entry.size,
+        })));
+        yield* sql.unsafe<object>(
+          `INSERT INTO manifest_entries (
+            installation_id, version_id, path, size, media_type, sha256,
+            disposition
+          ) SELECT $1, $2, entry.path, entry.size, entry.media_type,
+              entry.sha256, entry.disposition
+            FROM jsonb_to_recordset($3::jsonb) AS entry(
+              path TEXT, size BIGINT, media_type TEXT, sha256 TEXT,
+              disposition TEXT
+            )`,
+          [installationId, versionId, entriesJson],
+        );
       }
     });
   }
