@@ -1,7 +1,6 @@
-import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
-import {cpus, platform, release, tmpdir} from "node:os";
+import {tmpdir} from "node:os";
 import path from "node:path";
 import {performance} from "node:perf_hooks";
 import {DatabaseSync} from "node:sqlite";
@@ -15,6 +14,7 @@ import {
 } from "../../src/git-history/git-history-capability.js";
 import {SqliteArtifactRepository} from
   "../../src/storage/sqlite-artifact-repository.js";
+import {captureMeasurementContext} from "./measurement-context.js";
 
 const optionsSchema = z.object({
   count: z.coerce.number().int().min(1).max(3_301),
@@ -57,12 +57,11 @@ async function main(): Promise<void> {
     await runScenario("many-artifacts", options),
     await runScenario("deep-history", options),
   ];
+  const context = await captureMeasurementContext();
   const report = {
-    commit: execFileSync("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).trim(),
+    commit: context.commit,
     environment: {
-      cpu: cpus()[0]?.model ?? "unknown",
-      node: process.version,
-      os: `${platform()} ${release()}`,
+      ...context,
       storage: "temporary SQLite on the current filesystem",
     },
     fixture: {count: options.count, passes: options.passes},

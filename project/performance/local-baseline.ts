@@ -8,13 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import {request} from "node:http";
-import {
-  availableParallelism,
-  cpus,
-  platform,
-  release,
-  tmpdir,
-} from "node:os";
+import {tmpdir} from "node:os";
 import path from "node:path";
 import {
   monitorEventLoopDelay,
@@ -27,8 +21,10 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
 } from "@modelcontextprotocol/server";
-import {Effect, Redacted} from "effect";
+import {Effect, Layer, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import {z} from "zod";
 
 import {
@@ -47,6 +43,10 @@ import {
   publishVersion,
   type PublishResponse,
 } from "../../tests/support/publishing.js";
+import {
+  captureMeasurementContext,
+  type MeasurementContext,
+} from "./measurement-context.js";
 
 const maximumMeasuredPublishBytes = 134_217_728;
 const maximumMeasuredReadBytes = 268_435_456;
@@ -133,6 +133,19 @@ export interface OperationSummary {
   readonly totalMilliseconds: number;
 }
 
+export type FileClientLeg = "plan" | "staging" | "commit" | "other";
+
+export interface FileClientLegSummary {
+  readonly bytesReceived: number;
+  readonly bytesSent: number;
+  readonly count: number;
+  readonly maximumMilliseconds: number;
+  readonly meanMilliseconds: number;
+  readonly p50Milliseconds: number;
+  readonly p95Milliseconds: number;
+  readonly totalMilliseconds: number;
+}
+
 export interface LocalBaselineReport {
   readonly checks: {
     readonly comparisonEndpoint: "passed";
@@ -145,13 +158,7 @@ export interface LocalBaselineReport {
     readonly restartPersistence: "passed";
   };
   readonly configuration: LocalBaselineConfig;
-  readonly environment: {
-    readonly availableParallelism: number;
-    readonly cpu: string;
-    readonly node: string;
-    readonly operatingSystem: string;
-    readonly platform: NodeJS.Platform;
-  };
+  readonly environment: MeasurementContext;
   readonly eventLoop: {
     readonly maximumDelayMilliseconds: number;
     readonly meanDelayMilliseconds: number;
@@ -160,6 +167,7 @@ export interface LocalBaselineReport {
   };
   readonly fileClient: {
     readonly directory: OperationSummary;
+    readonly publicationLegs: Record<FileClientLeg, FileClientLegSummary>;
     readonly singleFile: OperationSummary;
   };
   readonly generatedAt: string;
@@ -309,7 +317,7 @@ export async function runLocalBaseline(
         restartPersistence: "passed" as const,
       },
       configuration,
-      environment: environmentSummary(),
+      environment: await environmentSummary(),
       eventLoop: {
         maximumDelayMilliseconds: nanosecondsToMilliseconds(delay.max),
         meanDelayMilliseconds: nanosecondsToMilliseconds(delay.mean),
@@ -635,6 +643,7 @@ async function measureFileClient(
 
     const directoryLatencies: number[] = [];
     const singleFileLatencies: number[] = [];
+    const legSamples: FileClientLegSample[] = [];
     await runSequential(configuration.clientIterations, async (index) => {
       await writeFile(
         path.join(siteDirectory, "index.html"),
@@ -646,6 +655,7 @@ async function measureFileClient(
         apiToken,
         siteDirectory,
         `File-client directory ${index}`,
+        legSamples,
       );
       directoryLatencies.push(performance.now() - directoryStartedAt);
       await assertExactVersion(
@@ -673,6 +683,7 @@ async function measureFileClient(
         apiToken,
         singleFilePath,
         `File-client single file ${index}`,
+        legSamples,
       );
       singleFileLatencies.push(performance.now() - singleFileStartedAt);
       await assertExactVersion(
@@ -687,6 +698,7 @@ async function measureFileClient(
         directoryLatencies,
         directoryLatencies.reduce((sum, sample) => sum + sample, 0),
       ),
+      publicationLegs: summarizeFileClientLegs(legSamples),
       singleFile: summarizeOperations(
         singleFileLatencies,
         singleFileLatencies.reduce((sum, sample) => sum + sample, 0),
@@ -697,11 +709,19 @@ async function measureFileClient(
   }
 }
 
+interface FileClientLegSample {
+  readonly bytesReceived: number;
+  readonly bytesSent: number;
+  readonly leg: FileClientLeg;
+  readonly milliseconds: number;
+}
+
 function executeFileClient(
   server: RunningTestServer,
   apiToken: string,
   inputPath: string,
   name: string,
+  legSamples: FileClientLegSample[],
 ): Promise<FilePublicationResult> {
   return Effect.runPromise(
     publishPath(
@@ -720,10 +740,104 @@ function executeFileClient(
         },
       },
     ).pipe(
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(instrumentedHttpClientLayer(legSamples)),
       Effect.provide(NodeFileSystem.layer),
     ),
   );
+}
+
+function instrumentedHttpClientLayer(
+  samples: FileClientLegSample[],
+): Layer.Layer<HttpClient.HttpClient> {
+  return Layer.effect(
+    HttpClient.HttpClient,
+    Effect.gen(function*() {
+      const base = yield* HttpClient.HttpClient;
+      return HttpClient.transform(base, (effect, outgoingRequest) =>
+        Effect.gen(function*() {
+          const startedAt = performance.now();
+          const response = yield* effect;
+          const arrayBuffer = yield* response.arrayBuffer;
+          samples.push({
+            bytesReceived: arrayBuffer.byteLength,
+            bytesSent: requestBodyBytes(outgoingRequest.body),
+            leg: classifyFileClientLeg(
+              outgoingRequest.method,
+              requestPath(outgoingRequest.url),
+            ),
+            milliseconds: performance.now() - startedAt,
+          });
+          return response;
+        }));
+    }),
+  ).pipe(Layer.provide(FetchHttpClient.layer));
+}
+
+function requestBodyBytes(body: HttpBody.HttpBody): number {
+  // SAFETY: every HttpBody variant either exposes contentLength or represents
+  // an empty/form-data body with no measurable client payload size.
+  return (body as HttpBody.HttpBody.Proto).contentLength ?? 0;
+}
+
+function requestPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+}
+
+function classifyFileClientLeg(method: string, pathname: string): FileClientLeg {
+  if (method === "POST" && pathname === "/api/v1/uploads") return "plan";
+  if (
+    method === "PUT" &&
+    /^\/api\/v1\/uploads\/[^/]+\/files\/[^/]+$/u.test(pathname)
+  ) {
+    return "staging";
+  }
+  if (
+    method === "POST" &&
+    /^\/api\/v1\/uploads\/[^/]+\/commit$/u.test(pathname)
+  ) {
+    return "commit";
+  }
+  return "other";
+}
+
+function summarizeFileClientLegs(
+  samples: readonly FileClientLegSample[],
+) {
+  const byLeg = {
+    commit: samples.filter((sample) => sample.leg === "commit"),
+    other: samples.filter((sample) => sample.leg === "other"),
+    plan: samples.filter((sample) => sample.leg === "plan"),
+    staging: samples.filter((sample) => sample.leg === "staging"),
+  };
+  return {
+    commit: summarizeFileClientLegSamples(byLeg.commit),
+    other: summarizeFileClientLegSamples(byLeg.other),
+    plan: summarizeFileClientLegSamples(byLeg.plan),
+    staging: summarizeFileClientLegSamples(byLeg.staging),
+  };
+}
+
+function summarizeFileClientLegSamples(
+  legSamples: readonly FileClientLegSample[],
+): FileClientLegSummary {
+  const sorted = legSamples.map((sample) => sample.milliseconds).toSorted(
+    (left, right) => left - right,
+  );
+  const total = sorted.reduce((sum, sample) => sum + sample, 0);
+  return {
+    bytesReceived: legSamples.reduce((sum, sample) => sum + sample.bytesReceived, 0),
+    bytesSent: legSamples.reduce((sum, sample) => sum + sample.bytesSent, 0),
+    count: legSamples.length,
+    maximumMilliseconds: round(sorted.at(-1) ?? 0),
+    meanMilliseconds: round(legSamples.length === 0 ? 0 : total / legSamples.length),
+    p50Milliseconds: round(legSamples.length === 0 ? 0 : percentile(sorted, 50)),
+    p95Milliseconds: round(legSamples.length === 0 ? 0 : percentile(sorted, 95)),
+    totalMilliseconds: round(total),
+  };
 }
 
 function sizedBuffer(bytes: number, label: string): Buffer {
@@ -948,14 +1062,8 @@ async function measureStorage(directory: string): Promise<StorageUse> {
   );
 }
 
-function environmentSummary(): LocalBaselineReport["environment"] {
-  return {
-    availableParallelism: availableParallelism(),
-    cpu: cpus()[0]?.model ?? "unreported",
-    node: process.version,
-    operatingSystem: `${platform()} ${release()}`,
-    platform: process.platform,
-  };
+async function environmentSummary(): Promise<LocalBaselineReport["environment"]> {
+  return captureMeasurementContext();
 }
 
 function baselineWarnings(report: {

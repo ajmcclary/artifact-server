@@ -7,13 +7,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import {request} from "node:http";
-import {
-  availableParallelism,
-  cpus,
-  platform,
-  release,
-  tmpdir,
-} from "node:os";
+import {tmpdir} from "node:os";
 import path from "node:path";
 import {performance} from "node:perf_hooks";
 
@@ -30,6 +24,11 @@ import {
   type FilePublicationResult,
   publishPath,
 } from "../../src/client/file-publication-client.js";
+import {
+  captureContainerDetails,
+  captureMeasurementContext,
+  type MeasurementContext,
+} from "./measurement-context.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const externalStorageCli = path.join(repositoryRoot, "dist/cli/main.js");
@@ -137,13 +136,8 @@ export interface ExternalStorageBaselineReport {
   readonly concurrentPublish: ExternalStorageOperationSummary;
   readonly concurrentRead: ExternalStorageOperationSummary;
   readonly configuration: ExternalStorageBaselineConfig;
-  readonly environment: {
-    readonly availableParallelism: number;
-    readonly cpu: string;
+  readonly environment: MeasurementContext & {
     readonly minioImage: string;
-    readonly node: string;
-    readonly operatingSystem: string;
-    readonly platform: NodeJS.Platform;
     readonly postgresImage: string;
   };
   readonly fileClient: {
@@ -349,7 +343,7 @@ export async function runExternalStorageBaseline(
       concurrentPublish: publications.summary,
       concurrentRead: reads.summary,
       configuration,
-      environment: environmentSummary(environment),
+      environment: await environmentSummary(environment),
       fileClient: {
         directory: directories.summary,
         singleFile: singleFiles.summary,
@@ -758,16 +752,15 @@ function sizedBuffer(bytes: number, label: string): Buffer {
   return buffer;
 }
 
-function environmentSummary(
+async function environmentSummary(
   environment: ExternalStorageEnvironment,
-): ExternalStorageBaselineReport["environment"] {
+): Promise<ExternalStorageBaselineReport["environment"]> {
+  const context = await captureMeasurementContext(
+    captureContainerDetails(environment.postgresImage, environment.minioImage),
+  );
   return {
-    availableParallelism: availableParallelism(),
-    cpu: cpus()[0]?.model ?? "unreported",
+    ...context,
     minioImage: environment.minioImage,
-    node: process.version,
-    operatingSystem: `${platform()} ${release()}`,
-    platform: process.platform,
     postgresImage: environment.postgresImage,
   };
 }

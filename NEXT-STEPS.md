@@ -76,6 +76,24 @@ promotion from research or a single local green run.
   204 ms max event-loop delay and about 708 MiB peak capacity RSS; these do not
   establish a leak or regression against Node 24.15. Historical numbers belong
   to different runs and machines.
+- **Progress, September 21:** a shared `project/performance/measurement-context.ts`
+  now records commit, working-tree dirty flag, `pnpm-lock.yaml` digest, Node
+  version, platform, architecture, CPU model, available parallelism, operating
+  system, temporary-filesystem type, and an optional caller-supplied details
+  record. The local baseline, server-capacity baseline, external-storage
+  baseline, SQLite Git-history backlog, and Postgres Git-history backlog all
+  include these fields. The external-storage and Postgres Git-history reports
+  record pinned container image references and digests through the details
+  record. The local baseline additionally attributes each file-client request
+  to `plan`, `staging`, `commit`, or `other` legs and records per-leg request
+  count, bytes sent, bytes received, total, p50, p95, mean, and maximum
+  milliseconds without logging bodies, tokens, or signed URLs. A
+  [workload/account worksheet](./project/performance/WORKLOAD-WORKSHEET.md)
+  captures provider plan, region, RTT, proxy topology, sizes, counts, retained
+  bytes, backups, review hours, mutation rates, concurrency, durability, pool
+  sizes, fixture identity, and warm/cold state. The D1 Git-history harness
+  retains its existing environment fields because its tsconfig does not include
+  the shared Node-only measurement module.
 - **Do:** capture commit, resolved dependencies, runtime, CPU/OS/filesystem,
   provider/container digests, region/RTT, proxy topology, durability, pool size,
   fixture hash, warm/cold state, and client/server scope. Attribute walk/hash,

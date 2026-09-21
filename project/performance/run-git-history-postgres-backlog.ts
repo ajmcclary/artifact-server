@@ -1,7 +1,5 @@
-import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {mkdir, writeFile} from "node:fs/promises";
-import {cpus, platform, release} from "node:os";
 import path from "node:path";
 import {performance} from "node:perf_hooks";
 
@@ -17,6 +15,7 @@ import {
 import {PostgresArtifactRepository} from
   "../../src/storage/postgres-artifact-repository.js";
 import {PostgresDatabase} from "../../src/storage/postgres-database.js";
+import {captureMeasurementContext, imageDigest} from "./measurement-context.js";
 
 const optionsSchema = z.object({
   count: z.coerce.number().int().min(1).max(3_301),
@@ -71,16 +70,17 @@ async function main(): Promise<void> {
       await runScenario(database, "many-artifacts", options),
       await runScenario(database, "deep-history", options),
     ];
+    const context = await captureMeasurementContext({
+      connectAndMigrateMilliseconds,
+      poolMaximumConnections: 4,
+      postgresImage: environment.ARTIFACT_SERVER_TEST_POSTGRES_IMAGE,
+      postgresImageDigest: imageDigest(environment.ARTIFACT_SERVER_TEST_POSTGRES_IMAGE),
+      providerReadyMilliseconds: environment.ARTIFACT_SERVER_TEST_PROVIDER_READY_MILLISECONDS,
+    });
     const report = {
-      commit: execFileSync("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).trim(),
+      commit: context.commit,
       environment: {
-        cpu: cpus()[0]?.model ?? "unknown",
-        node: process.version,
-        os: `${platform()} ${release()}`,
-        postgresImage: environment.ARTIFACT_SERVER_TEST_POSTGRES_IMAGE,
-        providerReadyMilliseconds: environment.ARTIFACT_SERVER_TEST_PROVIDER_READY_MILLISECONDS,
-        connectAndMigrateMilliseconds,
-        poolMaximumConnections: 4,
+        ...context,
         storage: "disposable pinned Postgres container on the current machine",
       },
       fixture: {count: options.count, passes: options.passes},

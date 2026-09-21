@@ -22,6 +22,8 @@ pnpm verify:external-storage-performance
 
 The baseline writes `project/evidence/local-performance-baseline.json`. Results are machine-specific. Compare the same machine, Node version, workload, and storage class when looking for a regression. Do not treat one laptop's operations-per-second number as a production capacity claim.
 
+Use the [workload/account worksheet](./WORKLOAD-WORKSHEET.md) to record missing operating facts such as provider plan, region, RTT, proxy topology, publication sizes, retained bytes, backup counts, review hours, mutation rates, concurrency, durability settings, pool sizes, fixture identity, and warm/cold state. Attach a completed worksheet to any baseline that is used to justify a change.
+
 The JSON report records:
 
 - publish, content read, comparison, HTTP artifact-list, MCP discovery, MCP artifact-list, file-client single-file, and file-client directory p50, p95, p99, mean, maximum, and throughput;
@@ -31,7 +33,12 @@ The JSON report records:
   sample;
 - local storage bytes and file count;
 - restart time and persistence checks;
-- environment and workload details.
+- environment and workload details, including commit, lockfile digest,
+  working-tree state, runtime, CPU, OS, architecture, parallelism, and
+  temporary-filesystem type;
+- per-leg file-client attribution for `plan`, `staging`, `commit`, and `other`
+  requests: count, bytes sent, bytes received, total, p50, p95, mean, and
+  maximum milliseconds. No bodies, tokens, or signed URLs are recorded.
 
 The manual baseline reports investigation warnings but does not fail on those heuristics. The smoke test uses intentionally broad limits so ordinary CI variance does not create noise.
 

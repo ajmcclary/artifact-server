@@ -79,6 +79,7 @@ function formatSummary(
     `MCP artifact_list: ${report.mcpArtifactList.operationsPerSecond} ops/s, p95 ${report.mcpArtifactList.latency.p95Milliseconds} ms.`,
     `File client, ${report.configuration.clientDirectoryFiles}-file directory: p95 ${report.fileClient.directory.latency.p95Milliseconds} ms.`,
     `File client, ${formatMib(report.configuration.clientSingleFileBytes)} MiB file: p95 ${report.fileClient.singleFile.latency.p95Milliseconds} ms.`,
+    `File-client staging leg: ${report.fileClient.publicationLegs.staging.count} requests, p95 ${report.fileClient.publicationLegs.staging.p95Milliseconds} ms.`,
     `Restart: ${report.restartMilliseconds} ms.`,
     `Event-loop max delay: ${report.eventLoop.maximumDelayMilliseconds} ms.`,
     `RSS change: ${formatMib(report.memory.rssDeltaBytes)} MiB.`,

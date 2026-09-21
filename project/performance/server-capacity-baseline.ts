@@ -3,13 +3,7 @@ import {createHash, randomUUID} from "node:crypto";
 import {once} from "node:events";
 import {mkdtemp, readFile, rm} from "node:fs/promises";
 import {request} from "node:http";
-import {
-  availableParallelism,
-  cpus,
-  platform,
-  release,
-  tmpdir,
-} from "node:os";
+import {tmpdir} from "node:os";
 import path from "node:path";
 import {performance} from "node:perf_hooks";
 
@@ -22,6 +16,10 @@ import {z} from "zod";
 
 import {readLocalApiCredential} from "../../src/local/local-credentials.js";
 import {inspectLocalServiceRecord} from "../../src/local/local-service-record.js";
+import {
+  captureMeasurementContext,
+  type MeasurementContext,
+} from "./measurement-context.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const profiledServerEntry = path.join(
@@ -203,12 +201,7 @@ export interface ServerCapacityReport {
     readonly streamedBytesVerified: "passed";
   };
   readonly configuration: ServerCapacityConfig;
-  readonly environment: {
-    readonly availableParallelism: number;
-    readonly cpu: string;
-    readonly node: string;
-    readonly operatingSystem: string;
-    readonly platform: NodeJS.Platform;
+  readonly environment: MeasurementContext & {
     readonly productVersion: string;
   };
   readonly generatedAt: string;
@@ -882,12 +875,9 @@ async function environmentSummary(): Promise<ServerCapacityReport["environment"]
   const packageMetadata = packageMetadataSchema.parse(
     JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8")),
   );
+  const context = await captureMeasurementContext();
   return {
-    availableParallelism: availableParallelism(),
-    cpu: cpus()[0]?.model ?? "unknown",
-    node: process.version,
-    operatingSystem: release(),
-    platform: platform(),
+    ...context,
     productVersion: packageMetadata.version,
   };
 }
