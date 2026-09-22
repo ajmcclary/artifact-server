@@ -235,8 +235,61 @@ throttling. AWS S3, Cloudflare R2, managed Postgres, Kubernetes, Windows, and
 network filesystems still require their own provider evidence before their
 capacity is advertised.
 
-## Baseline policy
+## September 22 runtime ownership, archives, and Git growth (T18)
 
+### Git clone memory
+
+The Git mirror clones the full accumulated history into memfs per job
+(`cloudflare-artifacts-git-history-provider.ts` `openWorkspace`). A new bounded
+probe (`pnpm perf:git-history-clone-memory`) drives one complete
+`commitGitHistoryVersion` call (clone, checkout, commit, push) against a
+disposable local Git smart-HTTP remote seeded with N commits, sampling peak
+`process.memoryUsage()`. On Apple M1 Max / Node 24.15.0, peak heap used grew from
+about 40 MiB (0 commits) to about 54 MiB (200 commits) and peak array buffers
+from about 5 MiB to about 20 MiB — roughly linear, on the order of 70 KB/commit
+heap and 75 KB/commit array buffers for tiny one-file commits. The 500-commit
+sample fell below the 200-commit sample because memory was reclaimed between
+measurements, so this is a bounded local diagnostic, not a precise curve. The
+risk in `FINDINGS.md` (Git work clones accumulated history in memory) is
+confirmed as real and unbounded by memory, only by per-version copy limits:
+deep history or large copied files will grow each job's in-memory clone. The
+evidence is `project/evidence/git-history-clone-memory.json`.
+
+### SQL cancellation
+
+There is no request-abort-to-SQL cancellation. A client disconnect does not
+interrupt the application effect — `runPromise` runs to completion and only the
+response is discarded; the sole request-signal use is the comment-poll deadline
+check. SQLite runs synchronously on the main thread (`node:sqlite DatabaseSync`);
+Postgres runs on a separate `ManagedRuntime` (`postgres-database.ts`) whose
+queries are not tied to the request fiber. No leak is expected — the query
+finishes and the connection returns to the pool — but a disconnected-then-retried
+client can overlap two full commits on one main thread, and no test proves a
+pool closes exactly once at shutdown. This is a documented gap, not a measured
+regression.
+
+### Span continuity
+
+Request-to-service spans are continuous inside the application runtime
+(`create-http-app.ts` `http.request` root span passed as `parent` through
+`runHttpApplicationEffect`), but Postgres spans execute on the separate Postgres
+runtime and are not parented to the request span, and there is no inbound
+`traceparent`/`tracestate` extraction. `tests/integration/observability.test.ts`
+asserts signal presence, not linkage. Continuity across the separate
+ManagedRuntime/Promise boundary and inbound W3C context propagation remain open.
+
+### Archive (ZIP)
+
+`createVersionArchive` is streamed and bounded: it plans from manifest metadata
+without reading blobs, streams each entry with backpressure, and propagates
+client disconnect into the generator (`streamFromAsyncIterable` wires `cancel` to
+`iterator.return`). CRC-32 is incremental per chunk and allocation-free; entries
+use stored compression (no deflate). The byte-at-a-time CRC table lookup is a
+plausible CPU hotspot at multi-hundred-MB archives but is correct and not a
+defect; a slice-by-4/8 table is a future optimization. No archive CRC/memory
+probe exists, but the design already satisfies the bounded-memory requirement.
+
+## Baseline policy
 - `pnpm verify:iteration` is the required end-of-iteration gate. It includes correctness, a coverage report, conformance checks, and the default bounded baseline. Coverage percentage is not a test-design target.
 - `pnpm smoke` catches broken behavior and gross regressions with deliberately loose machine-timing limits.
 - `pnpm perf:baseline` records diagnostics and reports investigation warnings without failing on normal laptop variance.

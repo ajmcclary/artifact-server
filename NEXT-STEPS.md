@@ -617,6 +617,24 @@ promotion from research or a single local green run.
   archive and Git common suites. **Contracts:** ARC-001/002, OPS-009/010,
   CMT-021, GIT-002/003/004. **Dependencies:** T01; T03 before changing mirror execution.
   **Cost:** local profiling; native-helper decision remains T26.
+- **Progress, September 22:** the four probes are now either measured or
+  documented. A new bounded harness `pnpm perf:git-history-clone-memory`
+  (`project/performance/run-git-history-clone-memory.ts`) drives one complete
+  `commitGitHistoryVersion` clone/commit/push against a disposable local Git
+  smart-HTTP remote seeded with N commits and samples peak `process.memoryUsage()`;
+  peak heap used grew ~40 MiB (0 commits) to ~54 MiB (200 commits) and array
+  buffers ~5 to ~20 MiB — roughly linear, tens of KB per tiny one-file commit,
+  confirming the FINDINGS risk that the mirror clones accumulated history in
+  memory (evidence `project/evidence/git-history-clone-memory.json`). SQL
+  cancellation and span continuity are documented gaps, not regressions: a client
+  disconnect does not interrupt the application effect (SQLite is synchronous
+  main-thread; Postgres runs on a separate `ManagedRuntime` not tied to the
+  request fiber), and Postgres spans are not parented to the request span with no
+  inbound `traceparent` extraction. The ZIP archive is already streamed, bounded,
+  and cancel-safe with incremental CRC (stored compression, byte-at-a-time CRC
+  noted as a future slice-by-4/8 optimization). Full write-up in
+  `project/performance/FINDINGS.md`. Remaining: no probe yet proves pool-close-once
+  at shutdown or span linkage, and no archive CRC-throughput probe.
 
 ### T19 Improve design navigation and exact-file annotation
 

@@ -1,0 +1,83 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-22T19:34:30.558Z",
+  "commit": "fe0e814ec452fcdd75fbd5d2dc1c7de883b77257",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "5fc62bea3b5a6a8f68b414e51e257a66d4c23da9616e00af2564e483eebe1376",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-09-22T19:34:30.558Z",
+  "histories": [
+    0,
+    50,
+    100,
+    200,
+    500
+  ],
+  "measurements": [
+    {
+      "durationMilliseconds": 344.783875,
+      "historyCommits": 0,
+      "peakMemoryBytes": {
+        "arrayBuffers": 5301113,
+        "external": 9444748,
+        "heapTotal": 104808448,
+        "heapUsed": 41741792,
+        "rss": 179306496
+      }
+    },
+    {
+      "durationMilliseconds": 364.8099579999998,
+      "historyCommits": 50,
+      "peakMemoryBytes": {
+        "arrayBuffers": 11495289,
+        "external": 15642223,
+        "heapTotal": 106463232,
+        "heapUsed": 48181616,
+        "rss": 188186624
+      }
+    },
+    {
+      "durationMilliseconds": 377.79708400000027,
+      "historyCommits": 100,
+      "peakMemoryBytes": {
+        "arrayBuffers": 12198032,
+        "external": 16399643,
+        "heapTotal": 107773952,
+        "heapUsed": 46665144,
+        "rss": 190676992
+      }
+    },
+    {
+      "durationMilliseconds": 402.6324169999998,
+      "historyCommits": 200,
+      "peakMemoryBytes": {
+        "arrayBuffers": 21417097,
+        "external": 25575728,
+        "heapTotal": 107773952,
+        "heapUsed": 56791752,
+        "rss": 205881344
+      }
+    },
+    {
+      "durationMilliseconds": 471.47641699999804,
+      "historyCommits": 500,
+      "peakMemoryBytes": {
+        "arrayBuffers": 6856959,
+        "external": 10998844,
+        "heapTotal": 45121536,
+        "heapUsed": 39482696,
+        "rss": 170901504
+      }
+    }
+  ],
+  "note": "Peak process memory during one full commitGitHistoryVersion call (clone, checkout, commit, push) against a disposable local Git smart-HTTP remote seeded with that many commits. RSS is allocator high-water, not retained memory.",
+  "startedAt": "2026-09-22T19:34:13.614Z",
+  "success": true,
+  "target": "local"
+}
