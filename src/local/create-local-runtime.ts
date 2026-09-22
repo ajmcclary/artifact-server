@@ -39,6 +39,7 @@ import {
   checkSelfProtection,
   openVerifiedSource,
   refreshFreshness,
+  type CaptureHooks,
 } from "./linked-source-engine.js";
 import { mediaTypeForPath } from "../client/file-publication-client.js";
 import type {RuntimeLifecycle} from "../lifecycle/runtime-readiness.js";
@@ -104,6 +105,8 @@ export interface LocalRuntimeConfig {
   readonly linkedFiles?: "off" | "on";
   /** Canonical roots linked source paths must resolve inside. */
   readonly linkRoots?: readonly string[];
+  /** Observation seam for mid-read drift tests; never parsed from the environment. */
+  readonly linkedCaptureHooks?: CaptureHooks;
   readonly localBootstrapToken?: string;
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly observability?: boolean;
@@ -187,7 +190,7 @@ export async function createLocalRuntime(
           canonicalizeLinkPath,
           canonicalizeLinkRoots,
           captureSource: (canonicalPath, spoolDirectory) =>
-            captureSource(canonicalPath, spoolDirectory),
+            captureSource(canonicalPath, spoolDirectory, config.linkedCaptureHooks),
           checkLinkRoots,
           checkSelfProtection: (canonicalPath) =>
             checkSelfProtection(canonicalPath, selfProtectedPaths),

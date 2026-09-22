@@ -298,6 +298,11 @@ describe("AWS Pulumi deployment", () => {
     expect(container?.environment.map((entry) => entry.name)).not.toContain(
       "ARTIFACT_SERVER_S3_ACCESS_KEY_ID",
     );
+    // Linked files are a local-only capability: the AWS task definition never
+    // sets the switch, so the external-storage runtime can never enable it.
+    expect(container?.environment.map((entry) => entry.name)).not.toContain(
+      "ARTIFACT_SERVER_LINKED_FILES",
+    );
     expect(container?.secrets.map((entry) => entry.name)).toEqual([
       "ARTIFACT_SERVER_API_TOKEN",
       "ARTIFACT_SERVER_DATABASE_URL",

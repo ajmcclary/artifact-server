@@ -11,6 +11,11 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
 
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+} from "@modelcontextprotocol/server";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
@@ -67,6 +72,20 @@ const actionPageSchema = z.object({
 }).strict();
 
 const capturedBytes = "# original notes\n";
+const protocolVersion = "2026-07-28";
+const mcpToolResultSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  jsonrpc: z.literal("2.0"),
+  result: z.object({
+    isError: z.boolean().optional(),
+    resultType: z.literal("complete"),
+    structuredContent: z.unknown(),
+  }).loose(),
+});
+const mcpArtifactSchema = z.object({
+  artifact: z.object({id: z.string().min(1)}).loose(),
+  sourceBinding: sourceBindingSchema.optional(),
+}).loose();
 
 describe("linked source freshness on ordinary metadata reads", () => {
   let installation: TestInstallation;
@@ -105,6 +124,9 @@ describe("linked source freshness on ordinary metadata reads", () => {
     await writeFile(sourcePath, "# edited outside the server\n");
     const modified = await readArtifact(linked.artifact.id);
     expect(modified.sourceBinding.status).toBe("modified");
+    const mcpModified = await readArtifactOverMcp(linked.artifact.id);
+    expect(mcpModified.sourceBinding?.status).toBe("modified");
+    expect(mcpModified.sourceBinding?.path).toBe(sourcePath);
 
     // A regular file replaced by a directory is never followed; the binding
     // reports it as unreadable instead of erroring the read.
@@ -116,6 +138,8 @@ describe("linked source freshness on ordinary metadata reads", () => {
     await rm(sourcePath, {recursive: true});
     const missing = await readArtifact(linked.artifact.id);
     expect(missing.sourceBinding.status).toBe("missing");
+    expect((await readArtifactOverMcp(linked.artifact.id)).sourceBinding?.status)
+      .toBe("missing");
 
     // Restoring a readable regular file recovers the binding on the next
     // read: it reports drift again rather than staying missing.
@@ -125,6 +149,9 @@ describe("linked source freshness on ordinary metadata reads", () => {
     expect(restored.sourceBinding.path).toBe(sourcePath);
     expect(Date.parse(restored.sourceBinding.lastVerifiedAt))
       .toBeGreaterThanOrEqual(Date.parse(fresh.sourceBinding.lastVerifiedAt));
+    const mcpRestored = await readArtifactOverMcp(linked.artifact.id);
+    expect(mcpRestored.sourceBinding?.status).toBe("modified");
+    expect(mcpRestored.sourceBinding?.path).toBe(sourcePath);
 
     // Nothing about the artifact itself moved while its source did.
     for (const observed of [fresh, modified, unreadable, missing, restored]) {
@@ -240,6 +267,42 @@ describe("linked source freshness on ordinary metadata reads", () => {
     artifactId: string,
   ): Promise<z.infer<typeof artifactDetailsSchema>> {
     return readJson(`/api/v1/artifacts/${artifactId}`, artifactDetailsSchema);
+  }
+
+  async function readArtifactOverMcp(
+    artifactId: string,
+  ): Promise<z.infer<typeof mcpArtifactSchema>> {
+    const response = await fetch(new URL("/mcp", requiredServer().baseUrl), {
+      body: JSON.stringify({
+        id: crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: {artifactId},
+          name: "artifact_get",
+          _meta: {
+            [CLIENT_CAPABILITIES_META_KEY]: {},
+            [CLIENT_INFO_META_KEY]: {name: "artifact-server-test", version: "1"},
+            [PROTOCOL_VERSION_META_KEY]: protocolVersion,
+          },
+        },
+      }),
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${installation.apiToken}`,
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": protocolVersion,
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "artifact_get",
+      },
+      method: "POST",
+    });
+    if (response.status !== 200) {
+      throw new Error(`MCP artifact_get failed with ${response.status}.`);
+    }
+    const parsed = mcpToolResultSchema.parse(await response.json());
+    expect(parsed.result.isError).not.toBe(true);
+    return mcpArtifactSchema.parse(parsed.result.structuredContent);
   }
 
   async function deliveredBytes(

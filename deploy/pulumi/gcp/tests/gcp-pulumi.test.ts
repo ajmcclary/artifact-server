@@ -110,6 +110,9 @@ describe("GCP Pulumi deployment", () => {
     expect(serializedService).toContain("/cloudsql");
     expect(serializedService).not.toContain("generated-api-token");
     expect(serializedService).not.toContain("generated-database-password");
+    // Linked files are a local-only capability: the Cloud Run service never
+    // sets the switch, so the external-storage runtime can never enable it.
+    expect(serializedService).not.toContain("ARTIFACT_SERVER_LINKED_FILES");
     const cleanupJob = requireResource("gcp:cloudrunv2/job:Job");
     expect(JSON.stringify(cleanupJob.inputs)).toContain("cleanup-staging");
     expect(requireResource("gcp:cloudscheduler/job:Job").inputs).toMatchObject({

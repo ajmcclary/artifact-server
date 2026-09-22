@@ -83,6 +83,8 @@ const failureSchema = z.object({
 
 const capturedBytes = "# design review\nthe first captured state\n";
 const driftedBytes = "# design review\nedited on disk after the capture\n";
+const racedBytes = "# design review\nedited again before the comment\n";
+const hookRewrittenBytes = "# design review\nrewritten mid-read by the race\n";
 
 describe("comment threads on a linked artifact anchor to captured versions", () => {
   let installation: TestInstallation;
@@ -293,6 +295,72 @@ describe("comment threads on a linked artifact anchor to captured versions", () 
     expect(new TextDecoder().decode(
       await deliveredBytes(linked.artifact.id, recovered.thread.versionId),
     )).toBe(driftedBytes);
+
+    // A genuine mid-read drift race: the source changes between the engine's
+    // two descriptor fingerprint checks while the implicit capture is reading
+    // it. The whole comment request fails with the retryable drift error and
+    // leaves no thread, no version, and no capture action.
+    await requiredServer().stop();
+    server = await startTestServer(installation, {
+      externalApiBearerVerifier: commenterVerifier,
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+      linkedCaptureHooks: {
+        afterFirstRead: () => writeFile(sourcePath, hookRewrittenBytes),
+      },
+    });
+    await writeFile(sourcePath, racedBytes);
+    const raced = await createThread(
+      linked.artifact.id,
+      recovered.thread.versionId,
+      "This note races a rewrite of the file it reads.",
+      "lnk-008-failure-thread-drift-race",
+    );
+    expect(raced.status).toBe(409);
+    const drift = failureSchema.parse(await raced.json());
+    expect(drift.error.code).toBe("SOURCE_DRIFTED");
+    expect(drift.error.message).not.toContain(sourceRoot);
+
+    const threadsAfterRace = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/comments`,
+      threadPageSchema,
+    );
+    expect(threadsAfterRace.items.map((item) => item.id).toSorted())
+      .toEqual([anchored.thread.id, recovered.thread.id].toSorted());
+    const versionsAfterRace = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/versions`,
+      versionListSchema,
+    );
+    expect(versionsAfterRace.versions.map((saved) => saved.version.id).toSorted())
+      .toEqual([linked.version.id, recovered.thread.versionId].toSorted());
+    const ledgerAfterRace = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/actions?limit=100`,
+      actionPageSchema,
+    );
+    expect(ledgerAfterRace.actions.filter((record) =>
+      record.action === "capture"
+    )).toHaveLength(1);
+
+    // The retryable drift error really retries: with no race armed, the same
+    // comment captures the hook-rewritten bytes and anchors there.
+    await requiredServer().stop();
+    server = await startTestServer(installation, {
+      externalApiBearerVerifier: commenterVerifier,
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+    });
+    const retried = createdThreadSchema.parse(
+      await (await createThread(
+        linked.artifact.id,
+        recovered.thread.versionId,
+        "This note lands once the source settles.",
+        "lnk-008-failure-thread-race-retry",
+      )).json(),
+    );
+    expect(retried.thread.versionId).not.toBe(recovered.thread.versionId);
+    expect(new TextDecoder().decode(
+      await deliveredBytes(linked.artifact.id, retried.thread.versionId),
+    )).toBe(hookRewrittenBytes);
   });
 
   function requiredServer(): RunningTestServer {

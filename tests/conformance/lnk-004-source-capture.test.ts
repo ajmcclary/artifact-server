@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {mkdtemp, readFile, realpath, rm, writeFile} from "node:fs/promises";
+import {mkdtemp, readdir, readFile, realpath, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -261,6 +261,67 @@ describe("capturing a linked source as a new immutable version", () => {
     expect(new TextDecoder().decode(
       await deliveredBytes(linked.artifact.id, retriedBody.version.id),
     )).toBe(thirdBytes);
+
+    // A source rewritten between the engine's two descriptor fingerprint
+    // checks aborts the capture with the retryable drift error and writes
+    // nothing. The observation hook rewrites the file in place after the
+    // first read, so the post-read fingerprint on the same descriptor no
+    // longer matches the pre-read one. (The rewrite must be in place: a
+    // rename swaps the inode, and the opened descriptor would correctly keep
+    // reading the old consistent snapshot.)
+    const driftedBytes = "# revenue notes\nrewritten while being read\n";
+    await requiredServer().stop();
+    server = await startTestServer(installation, {
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+      linkedCaptureHooks: {
+        afterFirstRead: () => writeFile(sourcePath, driftedBytes),
+      },
+    });
+    await writeFile(sourcePath, "# revenue notes\nq3 is forecast\n");
+    const drifted = await captureSource(
+      linked.artifact.id,
+      retriedBody.version.id,
+      "lnk-004-failure-drift-capture",
+    );
+    expect(drifted.status).toBe(409);
+    const drift = failureSchema.parse(await drifted.json());
+    expect(drift.error.code).toBe("SOURCE_DRIFTED");
+    expect(drift.error.message).not.toContain(sourceRoot);
+
+    const afterDrift = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/versions`,
+      versionListSchema,
+    );
+    expect(afterDrift.versions).toHaveLength(3);
+    const ledgerAfterDrift = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/actions?limit=100`,
+      actionPageSchema,
+    );
+    expect(ledgerAfterDrift.actions.map((record) => record.action).toSorted())
+      .toEqual(["capture", "capture", "link"]);
+    expect(
+      await readdir(path.join(installation.dataDirectory, "capture-spool")),
+    ).toEqual([]);
+
+    // The drift error is retryable: with no race armed, the capture of the
+    // drifted bytes succeeds under the still-current version.
+    await requiredServer().stop();
+    server = await startTestServer(installation, {
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+    });
+    const afterRace = await captureSource(
+      linked.artifact.id,
+      retriedBody.version.id,
+      "lnk-004-failure-drift-retry",
+    );
+    expect(afterRace.status).toBe(201);
+    const afterRaceBody = linkedPublicationSchema.parse(await afterRace.json());
+    expect(afterRaceBody.version.number).toBe(4);
+    expect(new TextDecoder().decode(
+      await deliveredBytes(linked.artifact.id, afterRaceBody.version.id),
+    )).toBe(driftedBytes);
   });
 
   function requiredServer(): RunningTestServer {

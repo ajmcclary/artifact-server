@@ -188,6 +188,7 @@ describe.sequential("Compact Compose release", () => {
     ]);
     const startupMilliseconds = performance.now() - startedAt;
     await waitForReady(source.port);
+    await assertLinkedArtifactsAbsent(source.port, apiToken);
     const firstContainerId = await serviceContainerId(source);
     const inspection = containerInspectionSchema.parse(JSON.parse(
       (await command("docker", ["inspect", firstContainerId])).stdout,
@@ -681,6 +682,62 @@ async function fetchStateSnapshot(
     expect(response.status).toBe(200);
     return jsonValueSchema.parse(await response.json());
   }));
+}
+
+async function assertLinkedArtifactsAbsent(
+  port: number,
+  token: string,
+): Promise<void> {
+  const base = `http://127.0.0.1:${port}`;
+  const session = await fetch(`${base}/api/v1/session`, {
+    headers: {Authorization: `Bearer ${token}`},
+  });
+  expect(session.status).toBe(200);
+  const sessionBody = z.object({
+    capabilities: z.object({linkedArtifacts: z.boolean()}).loose(),
+  }).loose().parse(await session.json());
+  expect(sessionBody.capabilities.linkedArtifacts).toBe(false);
+
+  const linkedRoutes: readonly [method: "POST" | "PUT", route: string, body: unknown][] = [
+    ["POST", "/api/v1/artifacts/link", {path: "/etc/passwd"}],
+    [
+      "POST",
+      "/api/v1/artifacts/art_missing/capture",
+      {expectedCurrentVersionId: "ver_missing"},
+    ],
+    [
+      "PUT",
+      "/api/v1/artifacts/art_missing/source",
+      {expectedSha256: "a".repeat(64), path: "/etc/passwd"},
+    ],
+    ["POST", "/api/v1/artifacts/art_missing/live-sessions", {}],
+  ];
+  const results = await Promise.all(linkedRoutes.map(async ([method, route, body]) => {
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": `linked-absent-${method}-${route.length}`,
+    };
+    const response = method === "PUT"
+      ? await fetch(`${base}${route}`, {
+        body: JSON.stringify(body),
+        headers,
+        method: "PUT",
+      })
+      : await fetch(`${base}${route}`, {
+        body: JSON.stringify(body),
+        headers,
+        method: "POST",
+      });
+    const failure = z.object({
+      error: z.object({code: z.string()}).loose(),
+    }).loose().parse(await response.json());
+    return {code: failure.error.code, status: response.status};
+  }));
+  for (const result of results) {
+    expect(result.status).toBe(501);
+    expect(result.code).toBe("CAPABILITY_UNAVAILABLE");
+  }
 }
 
 function fetchContent(link: string, port: number): Promise<string> {

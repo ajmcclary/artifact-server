@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {spawn} from "node:child_process";
 import {
   chmod,
   mkdir,
@@ -12,6 +13,11 @@ import {createServer, type Server} from "node:net";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+} from "@modelcontextprotocol/server";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
@@ -110,6 +116,28 @@ const failureSchema = z.object({
 }).strict();
 
 const linkedFileBytes = "# quarterly notes\nrevenue is up\n";
+const repositoryRoot = path.resolve(import.meta.dirname, "../..");
+const protocolVersion = "2026-07-28";
+interface McpParameters {
+  readonly [key: string]: McpParameterValue;
+}
+type McpParameterValue =
+  | boolean
+  | number
+  | string
+  | null
+  | readonly McpParameterValue[]
+  | {readonly [key: string]: McpParameterValue};
+const mcpToolResultSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  jsonrpc: z.literal("2.0"),
+  result: z.object({
+    content: z.array(z.object({text: z.string(), type: z.literal("text")})),
+    isError: z.boolean().optional(),
+    resultType: z.literal("complete"),
+    structuredContent: z.unknown(),
+  }).loose(),
+});
 
 describe("linking a file publishes an ordinary first version", () => {
   let installation: TestInstallation;
@@ -217,6 +245,61 @@ describe("linking a file publishes an ordinary first version", () => {
     );
     expect(listed.artifacts.map((item) => item.artifact.id))
       .toContain(linked.artifact.id);
+
+    // The MCP surface performs the same link: artifact_link creates the
+    // artifact, its first version, manifest, and action record, and an
+    // identical retry replays because the tool derives a stable idempotency
+    // key from the arguments.
+    const mcpSourcePath = path.join(sourceRoot, "ledger.md");
+    await writeFile(mcpSourcePath, "# ledger\nbalanced\n");
+    const mcpLinked = await linkOverMcp(mcpSourcePath);
+    expect(mcpLinked.artifact.name).toBe("ledger.md");
+    expect(mcpLinked.version.number).toBe(1);
+    expect(mcpLinked.version.entryPath).toBe("ledger.md");
+    expect(mcpLinked.sourceBinding).toMatchObject({
+      path: mcpSourcePath,
+      status: "in-sync",
+    });
+    const mcpLedger = await readJson(
+      `/api/v1/artifacts/${mcpLinked.artifact.id}/actions?limit=100`,
+      actionPageSchema,
+    );
+    expect(mcpLedger.actions.map((record) => record.action)).toEqual(["link"]);
+    const mcpReplay = await linkOverMcp(mcpSourcePath);
+    expect(mcpReplay.artifact.id).toBe(mcpLinked.artifact.id);
+    expect(mcpReplay.version.id).toBe(mcpLinked.version.id);
+    expect(mcpReplay.replayed).toBe(true);
+
+    // The CLI surface performs the same link against this server and prints
+    // the linked publication with its binding, without any path disclosure.
+    const cliSourcePath = path.join(sourceRoot, "roadmap.md");
+    await writeFile(cliSourcePath, "# roadmap\nphase one\n");
+    const tokenFile = path.join(sourceRoot, "cli-token.txt");
+    await writeFile(tokenFile, installation.apiToken, {mode: 0o600});
+    const cli = await runCli([
+      "link",
+      cliSourcePath,
+      "--server",
+      requiredServer().baseUrl,
+      "--token-file",
+      tokenFile,
+    ]);
+    expect(cli.exitCode).toBe(0);
+    const cliLinked = linkedPublicationSchema.parse(JSON.parse(cli.output));
+    expect(cliLinked.artifact.name).toBe("roadmap.md");
+    expect(cliLinked.version.number).toBe(1);
+    expect(cliLinked.sourceBinding).toMatchObject({
+      path: cliSourcePath,
+      status: "in-sync",
+    });
+    const cliDetails = await readJson(
+      `/api/v1/artifacts/${cliLinked.artifact.id}/versions/${cliLinked.version.id}`,
+      versionDetailsSchema,
+    );
+    expect(cliDetails.manifest.entries).toHaveLength(1);
+    expect(cliDetails.manifest.entries[0]?.sha256).toBe(
+      digestOf("# roadmap\nphase one\n"),
+    );
   });
 
   test("LNK-002-F: a path that is not a readable regular file creates nothing, and replaying one link key returns the original artifact", async () => {
@@ -353,6 +436,78 @@ describe("linking a file publishes an ordinary first version", () => {
     expect(failure.error.code).toBe(code);
     // Server messages never disclose the filesystem layout they refused.
     expect(failure.error.message).not.toContain(sourceRoot);
+  }
+
+  async function linkOverMcp(
+    sourcePath: string,
+  ): Promise<z.infer<typeof linkedPublicationSchema>> {
+    const result = await mcpToolCall("artifact_link", {path: sourcePath});
+    expect(result.isError).not.toBe(true);
+    return linkedPublicationSchema.parse(result.structuredContent);
+  }
+
+  async function mcpToolCall(
+    name: string,
+    arguments_: McpParameters,
+  ): Promise<z.infer<typeof mcpToolResultSchema>["result"]> {
+    const response = await fetch(new URL("/mcp", requiredServer().baseUrl), {
+      body: JSON.stringify({
+        id: crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: arguments_,
+          name,
+          _meta: {
+            [CLIENT_CAPABILITIES_META_KEY]: {},
+            [CLIENT_INFO_META_KEY]: {name: "artifact-server-test", version: "1"},
+            [PROTOCOL_VERSION_META_KEY]: protocolVersion,
+          },
+        },
+      }),
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${installation.apiToken}`,
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": protocolVersion,
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": name,
+      },
+      method: "POST",
+    });
+    if (response.status !== 200) {
+      throw new Error(`MCP tools/call failed with ${response.status}.`);
+    }
+    return mcpToolResultSchema.parse(await response.json()).result;
+  }
+
+  async function runCli(
+    arguments_: readonly string[],
+  ): Promise<{readonly exitCode: number; readonly output: string}> {
+    const inherited = {...process.env};
+    delete inherited["ARTIFACT_SERVER_URL"];
+    delete inherited["ARTIFACT_SERVER_API_TOKEN"];
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        path.join(repositoryRoot, "node_modules/.bin/tsx"),
+        [path.join(repositoryRoot, "src/cli/main.ts"), ...arguments_],
+        {
+          cwd: repositoryRoot,
+          env: inherited,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      const output: Uint8Array[] = [];
+      child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+      child.stderr.on("data", (chunk: Buffer) => output.push(chunk));
+      child.on("error", reject);
+      child.on("close", (exitCode) => {
+        resolve({
+          exitCode: exitCode ?? -1,
+          output: Buffer.concat(output).toString("utf8"),
+        });
+      });
+    });
   }
 });
 

@@ -685,6 +685,27 @@ promotion from research or a single local green run.
   **Contracts:** LNK-001–008, CMT-001/002, PUB-006/008.
   **Dependencies:** T07 for browser evidence. **Effort/cost:** 2–4 days on local
   disposable files and existing providers; no external service.
+- **Progress, September 22:** the named proof gaps are closed for the local
+  boundary. A test-only observation seam (`linkedCaptureHooks` on the local
+  runtime config, never parsed from the environment) now drives a genuine
+  mid-read drift through the real HTTP and comment boundaries: LNK-004-F and
+  LNK-008-F rewrite the source in place after the engine's first read and prove
+  the retryable `SOURCE_DRIFTED` abort leaves no version, no thread, no capture
+  action, and an empty capture spool, and that a clean retry then succeeds.
+  LNK-002-B now links over MCP (`artifact_link`, stable derived idempotency
+  replay) and the CLI (`artifactserver link --server --token-file`); LNK-003-B
+  reads freshness through MCP `artifact_get`, which now mirrors the HTTP read by
+  decorating linked artifacts with `sourceBinding`. The compact-compose and Helm
+  suites and the AWS/GCP Pulumi tests assert the capability-absence shape
+  (no advertised capability, 501 `CAPABILITY_UNAVAILABLE` on every linked route,
+  no `ARTIFACT_SERVER_LINKED_FILES` in the stack), joining the existing
+  Cloudflare worker runtime test. LNK-002/003/004/006/008 are promoted to
+  `behavior_verified` with recorded local evidence; LNK-005 stays `implementing`
+  because its attachment clause depends on the undecided GATE-014 feature, and
+  LNK-001/007 stay `implementing` pending route-level live absence on deployed
+  AWS/GCP instances. Full gate `BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration`
+  exit 0, `pnpm conformance:validate` clean (behavior_verified 142→147),
+  `pnpm conformance:tests` clean (266 IDs, one claim each).
 
 ## Conditional work and policy decisions
 

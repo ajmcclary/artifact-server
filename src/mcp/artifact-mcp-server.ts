@@ -929,6 +929,7 @@ export function createArtifactMcpServer(
           version: versionRecordSchema,
         }).strict(),
         links: z.object({artifact: z.url()}).strict(),
+        sourceBinding: sourceBindingSchema.optional(),
       }).strict(),
       annotations: readOnlyAnnotations,
     },
@@ -943,7 +944,22 @@ export function createArtifactMcpServer(
           })
         ),
       );
-      return {
+      // Mirror the HTTP artifact read: a local deployment decorates linked
+      // artifacts with their freshly observed binding, and nothing else
+      // reports one. The disabled service answers null when linking is off.
+      const binding = dependencies.linkedArtifacts === true
+        ? await runMcpApplicationEffect(
+          dependencies,
+          LinkedArtifactService.use((linked) =>
+            linked.observeBinding({
+              artifactId: details.artifact.id,
+              principal: identity.principal,
+              projectId: details.artifact.projectId,
+            })
+          ),
+        )
+        : null;
+      const result = {
         artifact: details.artifact,
         current: versionProjection(
           applicationUrl,
@@ -955,6 +971,9 @@ export function createArtifactMcpServer(
           artifact: artifactBrowserUrl(applicationUrl, details.artifact.id),
         },
       };
+      return binding === null
+        ? result
+        : {...result, sourceBinding: sourceBindingProjection(binding)};
     }),
   );
 

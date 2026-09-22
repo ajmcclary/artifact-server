@@ -4658,7 +4658,7 @@ requirements:
       failure: {id: LNK-001-F, description: "With the feature off or on any non-local deployment, the capability is absent, every linked-artifact route answers the stable capability-unavailable shape, and enabling the flag outside the local runtime fails startup; no file on disk becomes an artifact without an explicit link call."}
     deployments: *all
     status: implementing
-    proof_gap: The acceptance-ID tests prove the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP, and the absence of scanning on the local deployment, and a worker runtime test proves the Cloudflare absence; the single-server, kubernetes, aws, and gcp deployment suites do not yet assert the absence shape, and no recorded run is attached to these IDs yet.
+    proof_gap: The acceptance-ID tests prove the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP, and the absence of scanning on the local deployment, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
     depends_on: [ART-001, VER-001]
     evidence: []
 
@@ -4672,7 +4672,7 @@ requirements:
       failure: {id: LNK-007-F, description: "Public-link possession, anonymous requests, non-member sessions, content-origin version routes, and every non-local deployment never receive a live disk byte, and a missing or unreadable source degrades the live view to the last captured version without an error."}
     deployments: *all
     status: implementing
-    proof_gap: The acceptance-ID tests prove no-store live delivery to an admitted local member, the 401 for anonymous and version-cookie callers, the captured-only public path under drift, and the degrade-to-captured behavior, and a worker runtime test proves the Cloudflare absence; the single-server, kubernetes, aws, and gcp deployment suites do not yet assert the absence, and no recorded run is attached to these IDs yet.
+    proof_gap: The acceptance-ID tests prove no-store live delivery to an admitted local member, the 401 for anonymous and version-cookie callers, the captured-only public path under drift, and the degrade-to-captured behavior, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
     depends_on: [LNK-001, AUTH-008]
     evidence: []
 
@@ -4685,10 +4685,14 @@ requirements:
       behavior: {id: LNK-008-B, description: "Comment on an in-sync linked artifact and observe the thread on the current version with no new version; drift the file, comment again, and observe one implicit capture attributed to the commenter with the thread anchored to the new version."}
       failure: {id: LNK-008-F, description: "An implicit capture aborted by a drift race fails the whole comment request with the retryable drift error and creates no thread, and no thread ever anchors to live bytes or to a version that was not durably captured."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests prove the in-sync anchor, the implicit capture attributed to the commenting principal, and that an aborted implicit capture creates no thread and no version; the abort is forced through the action ledger rather than a genuine mid-read drift race, so the retryable drift error on that race is unproved, and no recorded run is attached to these IDs yet.
+    status: behavior_verified
     depends_on: [LNK-004, CMT-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-008-B, LNK-008-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: LNK-002
     kind: behavior
@@ -4699,10 +4703,14 @@ requirements:
       behavior: {id: LNK-002-B, description: "Link one regular file and receive an artifact whose first version carries the file's verified bytes, canonical manifest, action record, and idempotency result."}
       failure: {id: LNK-002-F, description: "Linking a directory, symlink, special file, missing path, or unreadable file creates no artifact and no version; replaying the same link idempotency key returns the original artifact."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests drive the HTTP link route and prove the first captured version, its canonical manifest, the link action record, the refusals for a directory, symlink, socket, missing, and unreadable path, and idempotent replay; the MCP and CLI link surfaces are not exercised by these IDs, and no recorded run is attached to them yet.
+    status: behavior_verified
     depends_on: [LNK-001, PUB-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-002-B, LNK-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: LNK-003
     kind: behavior
@@ -4713,10 +4721,14 @@ requirements:
       behavior: {id: LNK-003-B, description: "Modify, remove, and restore the source file and observe the binding freshness move through modified, missing, and back while the version list and delivered bytes stay identical."}
       failure: {id: LNK-003-F, description: "A freshness refresh cannot write a version, an action record, or any artifact mutation, and a failed stat degrades only the freshness field, never the read."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests observe freshness through the authenticated artifact read while the database refuses every version and action write, and they cover modification, replacement, removal, restoration, and a failed stat; freshness reported through the MCP read surface is not exercised by these IDs, and no recorded run is attached to them yet.
+    status: behavior_verified
     depends_on: [LNK-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-003-B, LNK-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: LNK-004
     kind: behavior
@@ -4727,10 +4739,14 @@ requirements:
       behavior: {id: LNK-004-B, description: "Modify the source, capture, and receive a new version whose bytes hash-match the file read from one verified descriptor; capturing an in-sync binding replays the current version without a new one."}
       failure: {id: LNK-004-F, description: "A file that changes between fingerprint checks aborts the capture with a retryable drift error and no version, and a stale expected current version returns the publish conflict shape with the actual current version."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests prove that captured bytes hash-match the file on disk, that an in-sync capture replays the current version under a fresh key, and that a stale expected current version returns the publish conflict naming the actual current version with no version written; a file that changes between the two fingerprint checks cannot be forced deterministically through the HTTP boundary, so the retryable drift abort is unproved, and no recorded run is attached to these IDs yet.
+    status: behavior_verified
     depends_on: [LNK-002, PUB-006]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-004-B, LNK-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: LNK-005
     kind: behavior
@@ -4742,9 +4758,14 @@ requirements:
       failure: {id: LNK-005-F, description: "A relink whose target bytes do not match the expected hash is rejected and changes nothing, and a relink to a path outside the link roots or inside the data directory is refused."}
     deployments: [local]
     status: implementing
-    proof_gap: The acceptance-ID tests prove a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing; artifact attachments are not exercised by these IDs, and no recorded run is attached to them yet.
+    proof_gap: The acceptance-ID tests prove a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing. The attachment clause of the behavior is not exercised because standalone artifact attachment remains undecided under GATE-014; identity, versions, and comments preservation are the proved surface.
     depends_on: [LNK-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: LNK-006
     kind: security
@@ -4755,10 +4776,14 @@ requirements:
       behavior: {id: LNK-006-B, description: "Link inside a configured root as an admitted member over loopback and read the binding path back only through authenticated application-origin metadata."}
       failure: {id: LNK-006-F, description: "Paths outside every root, the data directory, database files, symlink escapes, anonymous or public-link callers, and non-loopback origins are all refused; no public, content-origin, or log surface reveals a source path, and no request path ever resolves against the linked filesystem."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests prove root containment, dot-dot and symlink escape refusals, data-directory and database self-protection, anonymous and non-loopback refusals, path non-disclosure on every refusal body, and manifest-only delivery; no recorded run is attached to these IDs yet.
+    status: behavior_verified
     depends_on: [LNK-001, AUTH-008]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-006-B, LNK-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T17:59:28.000Z"
 
   - id: KAN-001
     kind: behavior

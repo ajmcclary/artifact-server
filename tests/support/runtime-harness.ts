@@ -25,6 +25,7 @@ import type {
   ApiOAuthResourceConfiguration,
   McpOAuthResourceConfiguration,
 } from "../../src/http/create-http-app.js";
+import type {CaptureHooks} from "../../src/local/linked-source-engine.js";
 import type {Clock} from "../../src/core/ports.js";
 import {localOwnerBrowserAccess} from "../../src/core/browser-access.js";
 import type {BrowserAccess} from "../../src/core/browser-access.js";
@@ -101,6 +102,7 @@ export async function startTestServer(
     readonly interactiveIdentityProvider?: InteractiveIdentityProvider;
     readonly linkedFiles?: "off" | "on";
     readonly linkRoots?: readonly string[];
+    readonly linkedCaptureHooks?: CaptureHooks;
     readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
     readonly observability?: boolean;
     readonly port?: number;
@@ -182,6 +184,9 @@ export async function startTestServer(
   }
   if (options.linkRoots !== undefined) {
     config = {...config, linkRoots: options.linkRoots};
+  }
+  if (options.linkedCaptureHooks !== undefined) {
+    config = {...config, linkedCaptureHooks: options.linkedCaptureHooks};
   }
   if (options.mcpOAuthResource !== undefined) {
     config = {...config, mcpOAuthResource: options.mcpOAuthResource};
