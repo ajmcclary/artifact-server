@@ -4,6 +4,7 @@ import {
   lstat,
   open,
   readdir,
+  readFile,
 } from "node:fs/promises";
 import path from "node:path";
 
@@ -24,6 +25,10 @@ import {
   createManifest,
   parseManifestPath,
 } from "../manifest/create-manifest.js";
+import {
+  maximumBatchParts,
+  maximumBatchRequestBytes,
+} from "../core/publishing-limits.js";
 
 import {
   claudeDesignCatalogPath,
@@ -156,6 +161,18 @@ const uploadedFileResponseSchema = Schema.Struct({
   status: Schema.Literal("verified"),
   uploadId: Schema.String,
 });
+const batchUploadResponseSchema = Schema.Struct({
+  accepted: Schema.Array(Schema.Struct({
+    path: Schema.String,
+    status: Schema.Literal("verified"),
+  })),
+  rejected: Schema.Array(Schema.Struct({
+    code: Schema.String,
+    path: Schema.Union([Schema.String, Schema.Null]),
+  })),
+  truncated: Schema.Boolean,
+  uploadId: Schema.String,
+});
 
 const decodeServerError = Schema.decodeUnknownOption(serverErrorSchema);
 
@@ -195,6 +212,7 @@ export class FilePublicationProtocolError extends Schema.TaggedError<FilePublica
     operation: Schema.Literals([
       "commit_upload",
       "create_upload",
+      "upload_batch",
       "upload_file",
     ]),
     serverCode: Schema.NullOr(Schema.String),
@@ -242,6 +260,7 @@ export type FilePublicationIntent = Omit<FilePublicationCommand, "idempotencyKey
 export interface FilePublicationClientConfig {
   readonly apiToken: Redacted.Redacted;
   readonly serverOrigin: string;
+  readonly transport?: "per-file" | "batch";
 }
 
 interface DiskPreparedFile {
@@ -412,15 +431,27 @@ export const publishPreparedPath = Effect.fn(
       };
     }
     yield* validateUploadPlan(serverOrigin, publication, response);
-    yield* Effect.forEach(
-      response.files.filter((plannedFile) => !plannedFile.verified),
-      (plannedFile) => uploadPreparedFile(
-        plannedFile,
-        requiredPreparedFile(publication.files, plannedFile.path),
+    const unverified = response.files.filter((plannedFile) => !plannedFile.verified);
+    if ((config.transport ?? "per-file") === "batch" && unverified.length > 1) {
+      yield* uploadPreparedBatch(
+        serverOrigin,
         response.uploadId,
-      ),
-      {concurrency: uploadConcurrency, discard: true},
-    );
+        unverified,
+        publication.files,
+        response,
+        config,
+      );
+    } else {
+      yield* Effect.forEach(
+        unverified,
+        (plannedFile) => uploadPreparedFile(
+          plannedFile,
+          requiredPreparedFile(publication.files, plannedFile.path),
+          response.uploadId,
+        ),
+        {concurrency: uploadConcurrency, discard: true},
+      );
+    }
     return yield* commitUpload(
       config.apiToken,
       idempotencyKey,
@@ -889,6 +920,148 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
       );
     }
     return undefined;
+  },
+);
+
+const uploadPreparedBatch = Effect.fn("FilePublicationClient.uploadPreparedBatch")(
+  function*(
+    serverOrigin: URL,
+    uploadId: string,
+    unverified: typeof stagedUploadResponseSchema.Type["files"],
+    preparedFiles: readonly PreparedFile[],
+    plan: typeof stagedUploadResponseSchema.Type,
+    config: FilePublicationClientConfig,
+  ): Effect.fn.Return<
+    void,
+    FilePublicationInputError | FilePublicationProtocolError,
+    FileSystem.FileSystem | HttpClient.HttpClient
+  > {
+    const firstFile = unverified[0];
+    if (firstFile === undefined) return undefined;
+    const orderIndexByPath = new Map(
+      plan.files.map((file, index) => [file.path, index] as const),
+    );
+    if (unverified.some((file) => file.size > maximumBatchRequestBytes)) {
+      yield* Effect.forEach(
+        unverified,
+        (plannedFile) => uploadPreparedFile(
+          plannedFile,
+          requiredPreparedFile(preparedFiles, plannedFile.path),
+          uploadId,
+        ),
+        {concurrency: uploadConcurrency, discard: true},
+      );
+      return undefined;
+    }
+    const batches: (typeof unverified)[number][][] = [];
+    let current: (typeof unverified)[number][] = [];
+    let currentBytes = 0;
+    for (const plannedFile of unverified) {
+      if (
+        current.length > 0 &&
+        (current.length >= maximumBatchParts ||
+          currentBytes + plannedFile.size > maximumBatchRequestBytes)
+      ) {
+        batches.push(current);
+        current = [];
+        currentBytes = 0;
+      }
+      current.push(plannedFile);
+      currentBytes += plannedFile.size;
+    }
+    if (current.length > 0) batches.push(current);
+
+    const batchUrl = new URL(`/api/v1/uploads/${uploadId}/batch`, serverOrigin);
+    batchUrl.search = new URL(firstFile.uploadUrl).search;
+
+    for (const batch of batches) {
+      const parts: {bytes: Uint8Array; declaredSize: number; orderIndex: number}[] = [];
+      for (const plannedFile of batch) {
+        const preparedFile = requiredPreparedFile(preparedFiles, plannedFile.path);
+        const orderIndex = orderIndexByPath.get(plannedFile.path);
+        if (orderIndex === undefined) {
+          return yield* protocolFailure(
+            "upload_batch",
+            `The upload plan does not declare ${plannedFile.path}.`,
+            200,
+          );
+        }
+        // eslint-disable-next-line no-await-in-loop -- sequential per-part reads
+        const bytes = yield* preparedFileBytes(preparedFile);
+        parts.push({bytes, declaredSize: bytes.byteLength, orderIndex});
+      }
+      const frame = encodeBatchFrame(parts);
+      const request = HttpClientRequest.post(batchUrl).pipe(
+        HttpClientRequest.bearerToken(config.apiToken),
+        HttpClientRequest.setBody(HttpBody.uint8Array(frame)),
+      );
+      // eslint-disable-next-line no-await-in-loop -- sequential batch POSTs
+      const result = yield* executeJson(request, batchUploadResponseSchema, "upload_batch");
+      if (result.uploadId !== uploadId) {
+        return yield* protocolFailure(
+          "upload_batch",
+          "Artifact Server answered a different upload than the client sent.",
+          200,
+        );
+      }
+      if (result.rejected.length > 0) {
+        return yield* protocolFailure(
+          "upload_batch",
+          `Artifact Server rejected batch parts: ${
+            result.rejected.map((part) => `${part.path ?? "?"}:${part.code}`).join(", ")
+          }.`,
+          200,
+        );
+      }
+      const accepted = new Set(result.accepted.map((part) => part.path));
+      for (const plannedFile of batch) {
+        if (!accepted.has(plannedFile.path)) {
+          return yield* protocolFailure(
+            "upload_batch",
+            `Artifact Server did not verify ${plannedFile.path}.`,
+            200,
+          );
+        }
+      }
+    }
+    return undefined;
+  },
+);
+
+function encodeBatchFrame(
+  parts: readonly {bytes: Uint8Array; declaredSize: number; orderIndex: number}[],
+): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + 12 + part.bytes.byteLength, 0);
+  const frame = new Uint8Array(total);
+  const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+  let offset = 0;
+  for (const part of parts) {
+    view.setUint32(offset, part.orderIndex, true);
+    view.setFloat64(offset + 4, part.declaredSize, true);
+    frame.set(part.bytes, offset + 12);
+    offset += 12 + part.bytes.byteLength;
+  }
+  return frame;
+}
+
+const preparedFileBytes = Effect.fn("FilePublicationClient.preparedFileBytes")(
+  function*(
+    preparedFile: PreparedFile,
+  ): Effect.fn.Return<Uint8Array, FilePublicationInputError> {
+    if (preparedFile.kind === "generated") {
+      return new TextEncoder().encode(preparedFile.content);
+    }
+    yield* assertPreparedFileStable(preparedFile);
+    return yield* Effect.tryPromise({
+      try: () => readFile(preparedFile.absolutePath).then(
+        (buffer) => new Uint8Array(buffer),
+      ),
+      catch: () => inputFailure(
+        preparedFile.absolutePath,
+        "read_failed",
+        "The selected file could not be opened for upload.",
+      ),
+    });
   },
 );
 

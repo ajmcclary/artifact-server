@@ -788,6 +788,34 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-22T00:32:39.000Z"
 
+  - id: PUB-016
+    kind: behavior
+    behavior: A bounded binary small-file batch carries many staged files in one binary frame over one request while preserving authoritative per-file paths, sizes, and hashes, with the frame serving only as a transport representation.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: product}
+    acceptance:
+      behavior: {id: PUB-016-B, description: "Transport a publication's staged small files in bounded binary batches and verify every part as if it were sent per file, committing the exact same bytes and manifest."}
+      failure: {id: PUB-016-F, description: "Reject malformed, duplicate, unknown, oversized, or truncated batch frames without verifying those parts or producing a version, and accept no base64 framing."}
+    deployments: *all
+    status: implementing
+    proof_gap: Local conformance tests claim and pass PUB-016-B/F over the real batch route and service — a bounded batch verifies every part and commits exact bytes, and malformed, duplicate, unknown, size-mismatched, and truncated frames verify nothing. The paired comparison harness (project/evidence/batch-staging-comparison.json) measured a repeatable end-to-end delta BELOW the 10% bar (about +7% at 48 x 4 KiB, about 0% at 1,000 files) even though the staging leg is about 75% cheaper, because the commit-time staged-to-blob copy dominates and is unchanged. The batch transport therefore stays opt-in and unadopted (default per-file); promotion is rejected on this evidence under NEXT-STEPS.md T13.
+    depends_on: [PUB-001, PUB-003, PUB-015]
+    evidence: []
+
+  - id: PUB-017
+    kind: behavior
+    behavior: An interrupted small-file batch resumes by retransmitting only the unverified parts, preserving the per-part verified flags and the single atomic commit.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: product}
+    acceptance:
+      behavior: {id: PUB-017-B, description: "Interrupt a batch mid-frame, retry with the same operation key sending only the missing parts, observe per-part verified flags, and commit exactly one version."}
+      failure: {id: PUB-017-F, description: "A truncated or partially accepted batch cannot produce a partial version or double-verify a part on resume."}
+    deployments: *all
+    status: implementing
+    proof_gap: Local conformance tests claim and pass PUB-017-B — a truncated batch verifies only the complete prefix, a resume with the same key sends only the missing parts, and exactly one version commits. The PUB-017-F partial-version hostile test is folded into that truncated/resume flow today. The batch transport stays opt-in and unadopted after the below-threshold end-to-end verdict recorded under PUB-016 and NEXT-STEPS.md T13.
+    depends_on: [PUB-001, PUB-003, PUB-015, PUB-016]
+    evidence: []
+
   - id: CLI-001
     kind: security
     behavior: The Artifact Server CLI keeps profiles by exact server origin and account; remote interactive login uses browser authorization and operating-system credential storage, local mode uses private user-only state without visible secrets, and CI uses scoped service credentials from its secret manager.

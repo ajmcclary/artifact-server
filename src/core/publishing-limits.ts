@@ -4,6 +4,12 @@ export const maximumDeclaredFiles = 10_000;
 /** Maximum JSON bytes accepted for a file-upload plan or MCP request. */
 export const maximumUploadPlanRequestBytes = 16 * 1_024 * 1_024;
 
+/** Maximum serialized bytes accepted for one batched staged-upload frame. */
+export const maximumBatchRequestBytes = 8 * 1_024 * 1_024;
+
+/** Maximum number of parts accepted in one batched staged-upload frame. */
+export const maximumBatchParts = 256;
+
 /** Maximum characters accepted in one comment thread or reply body. */
 export const maximumCommentBodyCharacters = 8_192;
 

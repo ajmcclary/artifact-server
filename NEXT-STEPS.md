@@ -540,6 +540,25 @@ promotion from research or a single local green run.
   repeatable ≥10% end-to-end gain. **Gates:** V/H/O/E/X/P; B for browser transport.
   **Contracts:** PUB-002–006, path security; new batch/partial-retry IDs.
   **Dependencies:** T01/T02/T05; T08 budgets. **Cost:** existing local infrastructure.
+- **Progress, September 22:** the experiment is complete and the verdict is
+  **not adopted**. An opt-in batch transport (`{transport: "batch"}`, default
+  per-file) carries small files in one binary frame to a new
+  `POST /api/v1/uploads/:uploadId/batch` route, reusing the per-file staging
+  writes and per-part verified flags; PUB-016-B/F and PUB-017-B are claimed by
+  real conformance tests (exact-bytes commit; malformed, duplicate, unknown,
+  size-mismatched, and truncated frames verify nothing; truncated-batch resume
+  sends only missing parts and commits one version), and every existing PUB
+  recovery test still passes. The paired harness
+  (`pnpm perf:batch-staging-comparison`,
+  `project/evidence/batch-staging-comparison.json`) shows the staging leg about
+  75% cheaper but the end-to-end delta **below the 10% bar** — about +7% at
+  48 × 4 KiB and about 0% at 1,000 files — because the commit-time staged-to-blob
+  copy is unchanged and dominates at scale. An early sequential server loop made
+  the batch 16% slower; writing parts at the existing concurrency four restored
+  the staging win. The batch stays opt-in and unadopted; promotion is rejected on
+  this evidence (its staging win is most relevant to per-call-billed
+  Workers/R2/D1 workloads under T08, not this local Node path). Full write-up in
+  `project/performance/FINDINGS.md`.
 
 ### T14 Evaluate authorized content reuse and bounded metadata reads
 

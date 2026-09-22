@@ -11,9 +11,10 @@ import {
   type UploadFileNotFound,
   UploadIncomplete,
   UploadNotFound,
-  type UploadedFileMismatch,
+  UploadedFileMismatch,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
+import {maximumBatchRequestBytes} from "../core/publishing-limits.js";
 import {
   uploadStatuses,
   type AccessSetting,
@@ -75,6 +76,31 @@ export interface UploadStagedFileCommand {
   readonly projectId: string;
   readonly storageToken: string;
   readonly uploadId: string;
+}
+
+/** Input for one batched staged upload frame over an existing staged upload. */
+export interface UploadStagedBatchCommand {
+  readonly body: ReadableStream<Uint8Array>;
+  readonly ownerId: string;
+  readonly projectId: string;
+  readonly uploadId: string;
+}
+
+/** The accepted/rejected parts of one decoded batch frame. */
+export interface StagedUploadBatchResult {
+  readonly accepted: readonly {
+    readonly path: string;
+    readonly status: "verified";
+  }[];
+  readonly rejected: readonly {
+    readonly code:
+      | "duplicate_part"
+      | "size_mismatch"
+      | "truncated"
+      | "unknown_part";
+    readonly path: string | null;
+  }[];
+  readonly truncated: boolean;
 }
 
 /** Publication target selected when committing a staged upload. */
@@ -191,6 +217,9 @@ interface StagedUploadOperations {
   readonly createUpload: (
     command: CreateStagedUploadCommand,
   ) => Effect.Effect<CreateStagedUploadResult, StagedUploadFailure>;
+  readonly uploadBatch: (
+    command: UploadStagedBatchCommand,
+  ) => Effect.Effect<StagedUploadBatchResult, StagedUploadFailure>;
   readonly uploadFile: (
     command: UploadStagedFileCommand,
   ) => Effect.Effect<StagedUploadFile, StagedUploadFailure>;
@@ -458,6 +487,90 @@ function makeStagedUploadService(
     },
   );
 
+  const uploadBatch = Effect.fn("StagedUploadService.uploadBatch")(
+    function*(
+    command: UploadStagedBatchCommand,
+  ): Effect.fn.Return<StagedUploadBatchResult, StagedUploadFailure> {
+      const upload = yield* dependencies.uploads.findStagedUpload(
+        command.projectId,
+        command.uploadId,
+        command.ownerId,
+      );
+      if (upload === null) {
+        return yield* new UploadNotFound({
+          message: "The staged upload does not exist.",
+        });
+      }
+      const batchStartedAt = yield* dependencies.clock.now;
+      yield* ensureUploadAcceptsFiles(upload, batchStartedAt);
+      const writeDeadline = DateTime.formatIso(
+        DateTime.addDuration(batchStartedAt, singleWriteDeadlineMilliseconds),
+      );
+      const signal = abortSignalUntil(
+        writeDeadline < upload.expiresAt ? writeDeadline : upload.expiresAt,
+        batchStartedAt,
+      );
+      const frame = yield* Effect.tryPromise({
+        try: () => readBatchFrame(command.body, maximumBatchRequestBytes),
+        catch: () =>
+          new UploadedFileMismatch({
+            message: "The staged upload batch frame is malformed.",
+          }),
+      });
+      const accepted: StagedUploadBatchResult["accepted"][number][] = [];
+      const rejected: StagedUploadBatchResult["rejected"][number][] = [];
+      const seenIndices = new Set<number>();
+      // Guard deterministically first, then write the surviving parts with the
+      // same bounded concurrency the per-file PUT fan-out already relies on.
+      const writable: {part: typeof frame.parts[number]; slot: (typeof upload.files)[number]}[] = [];
+      for (const part of frame.parts) {
+        const slot: (typeof upload.files)[number] | null =
+          part.orderIndex >= 0 && part.orderIndex < upload.files.length
+            ? (upload.files[part.orderIndex] ?? null)
+            : null;
+        if (slot === null) {
+          rejected.push({code: "unknown_part", path: null});
+        } else if (seenIndices.has(part.orderIndex)) {
+          rejected.push({code: "duplicate_part", path: slot.entry.path});
+        } else if (part.declaredSize !== slot.entry.size) {
+          rejected.push({code: "size_mismatch", path: slot.entry.path});
+        } else {
+          seenIndices.add(part.orderIndex);
+          writable.push({part, slot});
+        }
+      }
+      yield* Effect.forEach(
+        writable,
+        ({part, slot}) => Effect.gen(function*() {
+          yield* dependencies.staging.put({
+            body: part.body,
+            sha256: slot.entry.sha256,
+            signal,
+            size: slot.entry.size,
+            storageToken: slot.storageToken,
+            uploadId: command.uploadId,
+          }).pipe(Effect.catch((error) => Effect.fail(signal.aborted
+            ? new UploadExpired({message: "The staged upload has expired."})
+            : error)));
+          const uploadedAt = DateTime.formatIso(yield* dependencies.clock.now);
+          yield* dependencies.uploads.markStagedFileUploaded(
+            command.projectId,
+            command.uploadId,
+            command.ownerId,
+            slot.storageToken,
+            uploadedAt,
+          );
+          accepted.push({path: slot.entry.path, status: "verified" as const});
+        }),
+        {concurrency: 4},
+      );
+      if (frame.truncated && rejected.length === 0 && frame.parts.length === 0) {
+        rejected.push({code: "truncated", path: null});
+      }
+      return {accepted, rejected, truncated: frame.truncated};
+    },
+  );
+
   const publicationSource = (
     upload: StagedUpload,
     file: StagedUpload["files"][number],
@@ -573,7 +686,7 @@ function makeStagedUploadService(
     },
   );
 
-  return StagedUploadService.of({commitUpload, createUpload, uploadFile});
+  return StagedUploadService.of({commitUpload, createUpload, uploadBatch, uploadFile});
 }
 
 function abortSignalUntil(expiresAt: string, now: DateTime.Utc): AbortSignal {
@@ -615,4 +728,100 @@ function ensureUploadNotExpired(
   return DateTime.isLessThanOrEqualTo(expiresAt, now)
     ? new UploadExpired({message: "The staged upload has expired."})
     : Effect.void;
+}
+
+interface BatchFramePart {
+  readonly body: ReadableStream<Uint8Array>;
+  readonly declaredSize: number;
+  readonly orderIndex: number;
+}
+
+interface BatchFrame {
+  readonly parts: readonly BatchFramePart[];
+  readonly truncated: boolean;
+}
+
+async function readBatchFrame(
+  body: ReadableStream<Uint8Array>,
+  maximumBytes: number,
+): Promise<BatchFrame> {
+  const reader = body.getReader();
+  let buffer = new Uint8Array(0);
+  let total = 0;
+  const parts: BatchFramePart[] = [];
+  const header = new Uint8Array(12);
+
+  const consume = async (bytes: Uint8Array): Promise<void> => {
+    total += bytes.byteLength;
+    if (total > maximumBytes) throw new Error("The staged upload batch is too large.");
+    const merged = new Uint8Array(buffer.byteLength + bytes.byteLength);
+    merged.set(buffer, 0);
+    merged.set(bytes, buffer.byteLength);
+    buffer = merged;
+  };
+
+  const take = async (count: number): Promise<Uint8Array | null> => {
+    while (buffer.byteLength < count) {
+      // eslint-disable-next-line no-await-in-loop -- read until this slice is complete
+      const {done, value} = await reader.read();
+      if (done) return null;
+      // eslint-disable-next-line no-await-in-loop -- read until this slice is complete
+      if (value !== undefined) await consume(value);
+    }
+    const slice = buffer.subarray(0, count);
+    buffer = buffer.subarray(count);
+    return slice;
+  };
+
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop -- one part at a time
+    const headerBytes = await take(12);
+    if (headerBytes === null) {
+      // Clean end of stream: no more complete parts.
+      return {parts, truncated: false};
+    }
+    header.set(headerBytes, 0);
+    const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+    const orderIndex = view.getUint32(0, true);
+    const declaredSize = view.getFloat64(4, true);
+    if (
+      !Number.isInteger(orderIndex) || orderIndex < 0 ||
+      !Number.isSafeInteger(declaredSize) || declaredSize < 0
+    ) {
+      throw new Error("The staged upload batch part header is malformed.");
+    }
+    const size = declaredSize;
+    let remaining = size;
+    const chunks: Uint8Array[] = [];
+    let complete = true;
+    while (remaining > 0) {
+      // eslint-disable-next-line no-await-in-loop -- read until this part's declared size
+      const chunk = await take(Math.min(remaining, 64 * 1024));
+      if (chunk === null) {
+        complete = false;
+        break;
+      }
+      chunks.push(chunk);
+      remaining -= chunk.byteLength;
+    }
+    if (!complete) {
+      return {parts, truncated: true};
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    parts.push({
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      declaredSize: size,
+      orderIndex,
+    });
+  }
 }

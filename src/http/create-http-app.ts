@@ -2250,6 +2250,39 @@ export function createHttpApp(
     });
   });
 
+  app.post("/api/v1/uploads/:uploadId/batch", async (context) => {
+    const ownerId = context.req.query("owner");
+    const projectId = requestedProjectId(context);
+    if (ownerId === undefined || projectId === null) {
+      return context.json({
+        error: {
+          code: errorCodes.invalidInput,
+          message:
+            "Use the upload URL as it was issued: its project and owner identify the staged upload.",
+        },
+      }, 400);
+    }
+    const body = context.req.raw.body ?? emptyByteStream();
+    const result = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      StagedUploadService.use((stagedUploads) =>
+        stagedUploads.uploadBatch({
+          body,
+          ownerId,
+          projectId,
+          uploadId: context.req.param("uploadId"),
+        })
+      ),
+    );
+    return context.json({
+      accepted: result.accepted,
+      rejected: result.rejected,
+      truncated: result.truncated,
+      uploadId: context.req.param("uploadId"),
+    });
+  });
+
   app.post(
     "/api/v1/uploads/:uploadId/commit",
     boundedJsonBody,

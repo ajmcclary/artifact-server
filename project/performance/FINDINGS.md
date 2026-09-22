@@ -235,8 +235,32 @@ throttling. AWS S3, Cloudflare R2, managed Postgres, Kubernetes, Windows, and
 network filesystems still require their own provider evidence before their
 capacity is advertised.
 
-## September 22 runtime ownership, archives, and Git growth (T18)
+## September 22 bounded small-file batch transport (T13)
 
+A new opt-in batch transport (`{transport: "batch"}` on the file client, default
+per-file) carries many small files in one binary frame to
+`POST /api/v1/uploads/:uploadId/batch`, reusing the per-file staging writes and
+per-part `uploaded_at` flags. The paired comparison harness
+(`pnpm perf:batch-staging-comparison`, `project/evidence/batch-staging-comparison.json`)
+runs the real file client end to end for both arms on the same fixture.
+
+Result: the batch makes the **staging leg about 75% cheaper** (per-file staged
+PUT wall versus one batched frame), but the **end-to-end gain stays below the
+10% bar** — about +7% at 48 x 4 KiB and about 0% at 1,000 files on this machine.
+The limiter is the commit-time staged-to-blob copy (`assertPublicationSourceReady`
+plus `storeFiles`, concurrency four), which is O(files) and unchanged by any
+transport representation, and which dominates the total at larger file counts.
+An early sequential server loop made the batch 16% **slower**; writing the
+accepted parts with the same concurrency four the per-file fan-out already uses
+recovered the staging win.
+
+Verdict: **not adopted** (default stays per-file). The staging-leg reduction is
+real and would matter most where request and operation counts are billed per
+call (the Workers/R2/D1 leg in the T08 cost envelope), not on this local Node
+end-to-end path. Do not promote the batch as a default without a workload and
+provider where the end-to-end delta clears 10%.
+
+## September 22 runtime ownership, archives, and Git growth (T18)
 ### Git clone memory
 
 The Git mirror clones the full accumulated history into memfs per job

@@ -1,0 +1,68 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-22T21:58:40.354Z",
+  "commit": "c35a6b23017b5d20c39c1b32d7947970d1f85c28",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "5fc62bea3b5a6a8f68b414e51e257a66d4c23da9616e00af2564e483eebe1376",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "arms": {
+    "batch": {
+      "endToEndMilliseconds": [
+        753.44,
+        630.46,
+        628.63,
+        661.42,
+        656.92
+      ],
+      "legTotalMilliseconds": {
+        "plan": 21.37,
+        "staging": 1986.21,
+        "commit": 1242.46
+      },
+      "meanMilliseconds": 666.17,
+      "p50Milliseconds": 656.92,
+      "p95Milliseconds": 753.44,
+      "transport": "batch"
+    },
+    "perFile": {
+      "endToEndMilliseconds": [
+        909.28,
+        653.45,
+        668.58,
+        678.56,
+        676.85
+      ],
+      "legTotalMilliseconds": {
+        "plan": 43.55,
+        "staging": 8295.12,
+        "commit": 1318.97
+      },
+      "meanMilliseconds": 717.34,
+      "p50Milliseconds": 676.85,
+      "p95Milliseconds": 909.28,
+      "transport": "per-file"
+    }
+  },
+  "comparison": {
+    "endToEndDeltaPercent": 7.13,
+    "stagingLegDeltaPercent": 76.06,
+    "threshold": 10,
+    "verdict": "below_threshold"
+  },
+  "completedAt": "2026-09-22T21:58:40.354Z",
+  "configuration": {
+    "fileBytes": 4096,
+    "files": 48,
+    "iterations": 5
+  },
+  "note": "One bounded local paired comparison of the real file client end to end. Machine-timing values are a local diagnostic, not a production capacity claim and not a regression budget.",
+  "startedAt": "2026-09-22T21:58:33.304Z",
+  "success": true,
+  "target": "local"
+}
