@@ -2557,6 +2557,7 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentCreate,
           command.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
           thread: commentThreadFromRow(yield* this.#readThreadRow(
@@ -2626,10 +2627,29 @@ export class PostgresArtifactRepository implements
           command.limit + 1,
         ],
       );
-      return pageFromRows(
+      const revisionRows = yield* sql<{readonly comment_revision: number}>`
+        SELECT comment_revision FROM artifacts
+        WHERE installation_id = ${installationId} AND id = ${command.artifactId}`;
+      const revision = revisionRows[0]?.comment_revision ?? 0;
+      const page = pageFromRows(
         z.array(commentThreadRowSchema).parse(rows).map(commentThreadFromRow),
         command.limit,
       );
+      return {...page, revision};
+    }));
+  }
+
+  async commentRevision(
+    projectId: string,
+    artifactId: string,
+  ): Promise<number | null> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql<{readonly comment_revision: number}>`
+        SELECT comment_revision FROM artifacts
+        WHERE installation_id = ${installationId} AND project_id = ${projectId} AND id = ${artifactId}`;
+      return rows[0]?.comment_revision ?? null;
     }));
   }
 
@@ -2690,6 +2710,7 @@ export class PostgresArtifactRepository implements
           commentUpdateActionKind(command),
           row.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentThreadFromRow(yield* this.#readThreadRow(
           command.projectId,
           command.artifactId,
@@ -2753,6 +2774,7 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentDelete,
           row.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.deletedAt);
         return {
           deletedReplyCount: removedReplies.length,
           thread: commentThreadFromRow(row),
@@ -2820,6 +2842,9 @@ export class PostgresArtifactRepository implements
             row.versionId,
           );
           deleted += 1;
+        }
+        if (deleted > 0) {
+          yield* this.#bumpCommentRevision(command.artifactId, command.clearedAt);
         }
         return {deleted, skippedDispatched};
       }));
@@ -2908,6 +2933,7 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentReply,
           thread.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
           reply: commentReplyFromRow(yield* this.#readReplyRow(command.id)),
@@ -2965,6 +2991,7 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentUpdate,
           thread.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentReplyFromRow(yield* this.#readReplyRow(command.replyId));
       }));
     }));
@@ -2994,6 +3021,7 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentDelete,
           thread.versionId,
         );
+        yield* this.#bumpCommentRevision(command.artifactId, command.deletedAt);
       }));
     }));
   }
@@ -3296,6 +3324,12 @@ export class PostgresArtifactRepository implements
             );
           }
         }
+        if (command.threadIds.length > 0) {
+          yield* this.#bumpCommentRevisionForThreads(
+            command.threadIds,
+            command.createdAt,
+          );
+        }
         return {
           dispatch: agentDispatchFromRow(yield* this.#readDispatchRow(command.id)),
           replayed: false,
@@ -3451,6 +3485,7 @@ export class PostgresArtifactRepository implements
             updated_at = ${command.canceledAt},
             claimed_at = NULL, lease_expires_at = NULL
           WHERE installation_id = ${installationId} AND id = ${row.id}`;
+        yield* this.#bumpCommentRevisionForDispatch(row.id, command.canceledAt);
         yield* this.#clearDispatchMarkers(row.id, command.canceledAt);
         return agentDispatchFromRow(yield* this.#readDispatchRow(row.id));
       }));
@@ -4402,6 +4437,57 @@ export class PostgresArtifactRepository implements
     });
   }
 
+  #bumpCommentRevision(
+    artifactId: string,
+    _at: string,
+  ): Effect.Effect<void, unknown, SqlClient> {
+    const installationId = this.#installationId;
+    return Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`UPDATE artifacts
+        SET comment_revision = comment_revision + 1
+        WHERE installation_id = ${installationId} AND id = ${artifactId}`;
+    });
+  }
+
+  #bumpCommentRevisionForDispatch(
+    dispatchId: string,
+    _at: string,
+  ): Effect.Effect<void, unknown, SqlClient> {
+    const installationId = this.#installationId;
+    return Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`UPDATE artifacts
+        SET comment_revision = comment_revision + 1
+        WHERE installation_id = ${installationId}
+          AND id IN (
+            SELECT DISTINCT artifact_id FROM comment_threads
+            WHERE installation_id = ${installationId} AND dispatch_id = ${dispatchId}
+          )`;
+    });
+  }
+
+  #bumpCommentRevisionForThreads(
+    threadIds: readonly string[],
+    _at: string,
+  ): Effect.Effect<void, unknown, SqlClient> {
+    const installationId = this.#installationId;
+    return Effect.gen(function*() {
+      if (threadIds.length === 0) return;
+      const sql = yield* SqlClient;
+      const placeholders = threadIds.map((_, index) => `$${index + 3}`).join(", ");
+      yield* sql.unsafe(`
+        UPDATE artifacts
+        SET comment_revision = comment_revision + 1
+        WHERE installation_id = $1
+          AND id IN (
+            SELECT DISTINCT artifact_id FROM comment_threads
+            WHERE installation_id = $2 AND id IN (${placeholders})
+          )
+      `, [installationId, installationId, ...threadIds]);
+    });
+  }
+
   #readThreadRow(
     projectId: string,
     artifactId: string,
@@ -4721,6 +4807,7 @@ export class PostgresArtifactRepository implements
           claimed_at = NULL, lease_expires_at = NULL
         WHERE installation_id = ${installationId} AND id = ${dispatchId}`;
       // A permanent failure returns the annotations to the artifact surfaces.
+      yield* this.#bumpCommentRevisionForDispatch(dispatchId, failedAt);
       yield* this.#clearDispatchMarkers(dispatchId, failedAt);
     });
   }

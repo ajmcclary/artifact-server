@@ -204,6 +204,7 @@ const replyCreationSchema = z.object({
 const commentPageSchema = z.object({
   items: z.array(commentThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 }).strict();
 
 const commentDetailsSchema = z.object({
@@ -690,6 +691,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
           "ALTER TABLE idempotency_records DROP COLUMN project_id CASCADE",
           "ALTER TABLE versions DROP COLUMN project_id CASCADE",
           "ALTER TABLE artifacts DROP COLUMN search_name",
+          "ALTER TABLE artifacts DROP COLUMN comment_revision",
           "ALTER TABLE artifacts DROP COLUMN project_id CASCADE",
           "ALTER TABLE login_attempts DROP COLUMN nonce",
           "DROP TABLE comment_replies",

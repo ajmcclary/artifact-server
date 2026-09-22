@@ -331,6 +331,8 @@ export type DispatchedThreadFilter =
 export interface CommentThreadPage {
   readonly items: readonly CommentThreadRecord[];
   readonly nextCursor: PageCursor | null;
+  /** The artifact's `comment_revision` counter at the time of the read. */
+  readonly revision: number;
 }
 
 /** One comment thread created now or replayed from its idempotency key. */

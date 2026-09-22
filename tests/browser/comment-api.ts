@@ -27,6 +27,7 @@ const threadSchema = z.object({
 const threadPageSchema = z.object({
   items: z.array(threadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 });
 
 const createdThreadSchema = z.object({
@@ -115,4 +116,25 @@ export async function listThreadsOverApi(
   );
   expect(response.status).toBe(200);
   return threadPageSchema.parse(await response.json()).items;
+}
+
+/** Delete one thread through the same HTTP contract the Review UI uses. */
+export async function deleteThreadOverApi(
+  fixture: BrowserFixture,
+  input: {
+    readonly artifactId: string;
+    readonly idempotencyKey: string;
+    readonly projectId?: string;
+    readonly threadId: string;
+  },
+): Promise<void> {
+  const projectId = input.projectId ?? "prj_default";
+  const response = await fetch(
+    `${fixture.server.baseUrl}/api/v1/artifacts/${input.artifactId}/comments/${input.threadId}?projectId=${projectId}`,
+    {
+      headers: apiHeaders(fixture.installation, input.idempotencyKey),
+      method: "DELETE",
+    },
+  );
+  expect(response.status).toBe(204);
 }

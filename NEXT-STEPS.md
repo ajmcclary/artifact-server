@@ -307,6 +307,26 @@ promotion from research or a single local green run.
 
 - **Current:** [timestamp polling](./apps/web/src/components/comments/comment-poll.ts)
   merges changes and leaves removed/filter-excluded threads stale.
+- **Progress, September 21:** artifacts now carry a `comment_revision` counter
+  incremented inside the same transaction as every listing-visible change
+  (thread create/edit/resolve/delete, reply create/edit/delete, bulk clear,
+  dispatch link/release) across SQLite (schema 15), Postgres (migration 0014),
+  and D1 (schema 12). The comment listing returns `revision` on every page and
+  accepts an optional `revision` parameter: a matching revision short-circuits
+  to an empty page without reading threads, and a stale revision returns the
+  authoritative filtered page, so deletions and dispatch removals converge. The
+  web Review poll sends its known revision, no-ops on equality, and otherwise
+  replaces the visible list through the same full-reload path; multi-page reads
+  pin to the first page's revision and restart on mismatch (bounded retries).
+  HTTP conformance tests (CMT-023-B/F) cover short-circuit, delete/dispatch
+  convergence, per-artifact isolation, and invalid revisions; store tests cover
+  the counter on SQLite and D1; a two-context Chromium test proves create and
+  delete converge on both open reviewers without reload. The 30-second AUTH-022
+  bound is untouched (revision checks are same-query integer comparisons).
+  Remaining open: Postgres revision behavior is covered only through the
+  external-storage runtime suite, hot-project contention and polling-cost
+  measurements are unrecorded, and Firefox/WebKit convergence runs await T07's
+  engine matrix.
 - **Do:** specify an authorized revision plus authoritative replacement/refetch
   contract. Increment revisions in each relevant mutation transaction across
   SQLite/Postgres/D1. Prove multi-page snapshot consistency through a coherent

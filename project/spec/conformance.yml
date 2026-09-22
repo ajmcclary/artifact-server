@@ -2657,6 +2657,25 @@ requirements:
         run: project/evidence/browser.json
         recorded_at: "2026-09-16T23:39:15.910Z"
 
+  - id: CMT-023
+    kind: behavior
+    behavior: The HTTP comment listing exposes a per-artifact comment_revision counter and short-circuits to an empty page when a client-supplied revision matches the stored value, so clients can poll for listing convergence without re-reading unchanged threads.
+    owner: artifact-comments
+    source: {file: artifact-comments-spec.md, anchor: comment-revision-polling}
+    acceptance:
+      behavior: {id: CMT-023-B, description: "List threads and observe a revision field; a poll with the current revision returns an empty page with the same revision; a poll with a stale revision after delete or dispatch release returns the authoritative filtered page; revisions are isolated per artifact."}
+      failure: {id: CMT-023-F, description: "Negative, fractional, or missing revision query values are rejected, and an unknown artifact returns not found."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local SQLite HTTP conformance tests, D1 store-level tests, a two-context Chromium convergence run, and the Postgres external-storage runtime suite pass. Deployed-team HTTP evidence and hot-project polling-cost measurements remain unrecorded under NEXT-STEPS.md T06.
+    depends_on: [CMT-001, CMT-012, DSP-003]
+    evidence:
+      - deployment: local
+        tests: [CMT-023-B, CMT-023-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T02:18:53.000Z"
+
   - id: ADM-001
     kind: behavior
     behavior: Artifact Server ships one canonical React application for Review and settings, plus the isolated Review frame; every former application route redirects to the equivalent canonical destination without serving or loading a legacy application bundle.

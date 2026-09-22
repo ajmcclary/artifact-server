@@ -1572,6 +1572,7 @@ export function createArtifactMcpServer(
       outputSchema: z.object({
         items: z.array(commentThreadSchema),
         nextCursor: z.string().nullable(),
+        revision: z.number().int().nonnegative(),
       }).strict(),
       annotations: readOnlyAnnotations,
     },
@@ -1598,6 +1599,7 @@ export function createArtifactMcpServer(
         return {
           items: page.items.map(commentThreadProjection),
           nextCursor: encodePageCursor(page.nextCursor),
+          revision: page.revision,
         };
       }),
   );

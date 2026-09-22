@@ -55,6 +55,7 @@ const httpThreadSchema = commentThreadSchema.extend({
 const httpThreadPageSchema = z.object({
   items: z.array(httpThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 }).strict();
 const httpThreadDetailsSchema = z.object({
   replies: z.array(z.object({id: z.string()}).loose()),
@@ -67,6 +68,7 @@ const httpThreadCreationSchema = z.object({
 const mcpThreadPageSchema = z.object({
   items: z.array(commentThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 }).strict();
 const mcpThreadDetailsSchema = z.object({
   replies: z.array(z.object({id: z.string()}).loose()),

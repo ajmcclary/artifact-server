@@ -670,6 +670,12 @@ const addStagedUploadIdempotencyKey = Effect.gen(function*() {
     WHERE idempotency_key IS NOT NULL`);
 });
 
+const addArtifactCommentRevision = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`ALTER TABLE artifacts
+    ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -684,10 +690,11 @@ const migrationLoader = Migrator.fromRecord({
   "0011_artifact_search_name": addArtifactSearchName,
   "0012_git_history_reconciliation_index": indexGitHistoryReconciliation,
   "0013_staged_upload_idempotency": addStagedUploadIdempotencyKey,
+  "0014_artifact_comment_revision": addArtifactCommentRevision,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 13;
+export const requiredPostgresSchemaVersion = 14;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -781,6 +788,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 13,
     name: "staged_upload_idempotency",
+  }, {
+    migration_id: 14,
+    name: "artifact_comment_revision",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

@@ -496,6 +496,7 @@ const commentReplySchema = z.object({
 const commentThreadPageSchema = z.object({
   items: z.array(commentThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 });
 
 const commentThreadDetailsSchema = z.object({
@@ -530,6 +531,8 @@ export interface CommentThreadQuery {
   /** Dispatched-thread visibility; unset leaves the server's own exclusion. */
   readonly dispatched: DispatchedThreadFilter | null;
   readonly limit: number | null;
+  /** Client-known revision; when it matches the server's value the page is empty. */
+  readonly revision: number | null;
   readonly since: string | null;
   readonly state: CommentThreadState | null;
   readonly versionId: string | null;
@@ -1182,6 +1185,7 @@ export const api = {
     if (query.cursor !== null) search.set("cursor", query.cursor);
     if (query.dispatched !== null) search.set("dispatched", query.dispatched);
     if (query.limit !== null) search.set("limit", String(query.limit));
+    if (query.revision !== null) search.set("revision", String(query.revision));
     if (query.since !== null) search.set("since", query.since);
     if (query.state !== null) search.set("state", query.state);
     if (query.versionId !== null) search.set("versionId", query.versionId);

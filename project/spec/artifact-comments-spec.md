@@ -251,6 +251,10 @@ Wire shape for a thread (camelCase, same conventions as `versionResponse`):
 
 `?since=` filters on `updatedAt` so a poller sees resolves and edits, not only new threads. Replies bump the parent thread's `updatedAt` for the same reason. The service normalizes `since` to the stored millisecond ISO form, so a second-precision instant names the second it opens rather than the instant after it. Delivery is at least once, not exactly once: the filter is inclusive (`updatedAt >= since`), and the keyset runs on `(createdAt, id)`, so an edit made to an already-paged thread during a pass belongs to the next pass. A poller therefore advances `since` to the time its pass **started**, not to the newest `updatedAt` it saw, and tolerates repeats.
 
+### Comment revision polling
+
+Each artifact carries a `comment_revision` counter that increments inside the same transaction as every listing-visible comment change: thread create, edit, resolve, delete, reply create/edit/delete, bulk clear, and dispatch link or release. `GET /artifacts/:artifactId/comments` returns the counter as `revision` on every page and accepts an optional `revision=<nonnegative integer>` query parameter. When the parameter equals the artifact's current revision, the route answers `{items: [], nextCursor: null, revision}` without reading threads; a larger returned revision means the page is the authoritative replacement for the first page of the requested filter, so deletions, resolves, and dispatch removals that a `?since=` merge cannot see still converge. A client that has paged deeper discards its extra pages when the revision changes and refetches them, restarting a multi-page read (bounded retries) when a later page reports a different revision than its first page. The revision is scoped to one artifact and is exposed only to readers authorized for that artifact's comments, so it reveals nothing about other artifacts or principals.
+
 ### Version file read for the review viewer
 
 One additional authenticated app-origin route supports the in-page review viewer (section 9a):

@@ -8,7 +8,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 11;
+export const requiredD1SchemaVersion = 12;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -46,6 +46,7 @@ const schemaSql = `
     search_name TEXT NOT NULL,
     access_setting TEXT NOT NULL CHECK (access_setting IN ('account_required', 'public_link')),
     current_version_id TEXT,
+    comment_revision INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     deleted_at TEXT
   );
@@ -625,6 +626,7 @@ export async function migrateD1(
     await widenRegisteredAgentsIfNeeded(database);
     await addArtifactSearchNameIfMissing(database);
     await addStagedUploadIdempotencyKeyIfMissing(database);
+    await addArtifactCommentRevisionIfMissing(database);
   }
   await database.batch([
     database.prepare(`
@@ -684,6 +686,18 @@ async function addStagedUploadIdempotencyKeyIfMissing(
       ON staged_uploads(project_id, principal_id, idempotency_key)
       WHERE idempotency_key IS NOT NULL
   `).run();
+}
+
+async function addArtifactCommentRevisionIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const columns = await database.prepare("PRAGMA table_info(artifacts)")
+    .all<{name: string}>();
+  if (!columns.results.some((column) => column.name === "comment_revision")) {
+    await database.prepare(`
+      ALTER TABLE artifacts ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0
+    `).run();
+  }
 }
 
 async function addGitHistoryMirrorColumnsIfMissing(

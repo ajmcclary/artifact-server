@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
 
-import type { CommentThread } from "@/api/client";
-
 /**
  * How long an open comment surface waits between asking the server for the
  * threads that changed. Short enough that a second reviewer's comment lands
@@ -9,47 +7,6 @@ import type { CommentThread } from "@/api/client";
  * small request a minute.
  */
 export const commentPollIntervalMilliseconds = 7_000;
-
-/**
- * The instant an incremental poll asks from: the newest change on screen.
- *
- * Stored instants are canonical millisecond ISO text, so the newest one is
- * also the largest in ordinary string order. The server's filter is inclusive
- * (`updated_at >= since`), so the thread that set the watermark comes back
- * with every poll and simply replaces itself.
- */
-export function threadWatermark(
-  threads: readonly CommentThread[],
-): string | null {
-  let newest: string | null = null;
-  for (const thread of threads) {
-    if (newest === null || thread.updatedAt > newest) newest = thread.updatedAt;
-  }
-  return newest;
-}
-
-/**
- * Fold one incremental page into the threads on screen: a listed id takes the
- * server's newer record, an unlisted id joins the list. The result carries the
- * listing route's own order (newest thread first), so a polled thread lands
- * where a reload would have put it.
- *
- * A poll only ever reports threads the filter still matches, so it cannot see
- * a thread leave one: an annotation another reader sends to an agent keeps its
- * card here until this surface reloads.
- */
-export function mergeThreads(
-  current: readonly CommentThread[],
-  incoming: readonly CommentThread[],
-): readonly CommentThread[] {
-  if (incoming.length === 0) return current;
-  const merged = new Map(current.map((thread) => [thread.id, thread]));
-  for (const thread of incoming) merged.set(thread.id, thread);
-  return [...merged.values()].toSorted((left, right) =>
-    right.createdAt.localeCompare(left.createdAt)
-    || right.id.localeCompare(left.id)
-  );
-}
 
 /**
  * Which writer owns the thread list. Loads, reloads, and mutations run through

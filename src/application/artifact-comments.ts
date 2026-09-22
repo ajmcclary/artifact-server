@@ -130,6 +130,8 @@ export interface ListCommentThreadsCommand extends ReadArtifactCommentsCommand {
   /** Dispatched-thread visibility; an omitted filter excludes them. */
   readonly dispatched?: DispatchedThreadFilter;
   readonly limit: number;
+  /** Client-known revision; when it matches the stored revision the server returns an empty page. */
+  readonly revision?: number;
   readonly since: string | null;
   readonly state: CommentThreadState | null;
   readonly versionId: string | null;
@@ -197,6 +199,10 @@ export interface ArtifactCommentRepository {
   readonly listThreads: (
     command: ListCommentThreads,
   ) => Effect.Effect<CommentThreadPage, CommentRepositoryFailure>;
+  readonly commentRevision: (
+    projectId: string,
+    artifactId: string,
+  ) => Effect.Effect<number | null, CommentRepositoryFailure>;
   readonly updateReply: (
     command: UpdateCommentReply,
   ) => Effect.Effect<CommentReplyRecord, CommentRepositoryFailure>;
@@ -571,6 +577,19 @@ function makeArtifactCommentService(
       );
       yield* authorization.requireCommentRead(command.principal);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      if (command.revision !== undefined) {
+        const currentRevision = yield* dependencies.repository.commentRevision(
+          project.id,
+          artifact.id,
+        );
+        if (currentRevision === command.revision) {
+          return {
+            items: [],
+            nextCursor: null,
+            revision: currentRevision,
+          };
+        }
+      }
       return yield* dependencies.repository.listThreads({
         artifactId: artifact.id,
         cursor: command.cursor,

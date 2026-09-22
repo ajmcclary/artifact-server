@@ -68,6 +68,7 @@ const threadDetailsSchema = z.object({
 const threadPageSchema = z.object({
   items: z.array(commentThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 }).strict();
 const actionListSchema = z.object({
   actions: z.array(z.object({

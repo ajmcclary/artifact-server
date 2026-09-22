@@ -24,12 +24,14 @@ import {CommentComposer} from "@/components/comments/comment-composer";
 import {useCommentDraft} from "@/components/comments/comment-drafts";
 import {maximumCommentBodyCharacters} from "@/components/comments/comment-limits";
 import {
-  mergeThreads,
-  threadWatermark,
   useCommentListOwnership,
   useCommentPoll,
 } from "@/components/comments/comment-poll";
 import {formatTimestamp} from "@/lib/presentation";
+import {
+  loadAllThreadsPaged,
+  type ThreadListingResult,
+} from "@/review/review-comments-threads";
 import {bundleOfThreads} from "@/components/dispatch/dispatch-bundle";
 import {loadDispatchIndex} from "@/components/dispatch/dispatch-index";
 import {
@@ -60,15 +62,16 @@ function agentPresenceSummary(agents: readonly AgentPresence[] | null): string {
 
 function threadQuery(
   versionId: string,
-  since: string | null,
   cursor: string | null,
   dispatched: "exclude" | "include" | "only" | null = null,
+  revision: number | null = null,
 ): CommentThreadQuery {
   return {
     cursor,
     dispatched,
     limit: threadPageSize,
-    since,
+    revision,
+    since: null,
     state: null,
     versionId,
   };
@@ -78,28 +81,18 @@ async function loadAllThreads(
   projectId: string,
   artifactId: string,
   versionId: string,
-  since: string | null,
   dispatched: "exclude" | "include" | "only" | null = null,
-  cursor: string | null = null,
-  collected: readonly CommentThread[] = [],
-): Promise<readonly CommentThread[]> {
-  const page = await api.comments(
-    projectId,
-    artifactId,
-    threadQuery(versionId, since, cursor, dispatched),
+  revision: number | null = null,
+): Promise<ThreadListingResult> {
+  return loadAllThreadsPaged(
+    async (cursor) =>
+      api.comments(
+        projectId,
+        artifactId,
+        threadQuery(versionId, cursor, dispatched, revision),
+      ),
+    revision,
   );
-  const next = [...collected, ...page.items];
-  return page.nextCursor === null
-    ? next
-    : loadAllThreads(
-      projectId,
-      artifactId,
-      versionId,
-      since,
-      dispatched,
-      page.nextCursor,
-      next,
-    );
 }
 
 function toAnnotation(thread: CommentThread): ReviewAnnotation {
@@ -186,13 +179,15 @@ export function useReviewComments({
   const [unanchoredIds, setUnanchoredIds] = useState<readonly string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const watermarkRef = useRef<string | null>(null);
+  const revisionRef = useRef<number | null>(null);
   const reloadGenerationRef = useRef(0);
-  const threadUpdatedAtRef = useRef<ReadonlyMap<string, string>>(new Map());
   const ownership = useCommentListOwnership();
   const active = artifactId !== null && projectId !== "" && versionId !== null;
 
-  const reload = useCallback(async (): Promise<void> => {
+  const replaceAllThreads = useCallback(async (
+    options: {readonly withLoading?: boolean} = {},
+  ): Promise<number | null> => {
+    const {withLoading = true} = options;
     const generation = reloadGenerationRef.current + 1;
     reloadGenerationRef.current = generation;
     if (artifactId === null || projectId === "" || versionId === null) {
@@ -201,52 +196,57 @@ export function useReviewComments({
       setSelectedThreadId(null);
       setUnanchoredIds([]);
       setError(null);
-      return;
+      return null;
     }
-    setLoading(true);
+    if (withLoading) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      await ownership.own(async () => {
-        const listedThreads = await loadAllThreads(
-          projectId,
-          artifactId,
-          versionId,
-          null,
-        );
+      return await ownership.own(async () => {
+        const listed = await loadAllThreads(projectId, artifactId, versionId);
         const conversations = await loadConversations(
           projectId,
           artifactId,
-          listedThreads,
+          listed.threads,
         );
-        if (reloadGenerationRef.current !== generation) return;
+        if (reloadGenerationRef.current !== generation) return null;
         setThreads(conversations.map(({thread}) => thread));
         setRepliesByThread(new Map(
           conversations.map(({replies, thread}) => [thread.id, replies]),
         ));
+        return listed.revision;
       });
     } catch (caught) {
-      if (reloadGenerationRef.current !== generation) return;
+      if (reloadGenerationRef.current !== generation) return null;
       setError(
         caught instanceof Error ? caught : new Error("Comment loading failed."),
       );
+      return null;
     } finally {
-      if (reloadGenerationRef.current === generation) setLoading(false);
+      if (withLoading && reloadGenerationRef.current === generation) {
+        setLoading(false);
+      }
     }
   }, [artifactId, ownership, projectId, versionId]);
+
+  const reload = useCallback(async (): Promise<void> => {
+    const revision = await replaceAllThreads({withLoading: true});
+    if (revision !== null) {
+      revisionRef.current = revision;
+    }
+  }, [replaceAllThreads]);
 
   useEffect(() => {
     setThreads([]);
     setRepliesByThread(new Map());
     setSelectedThreadId(null);
     setUnanchoredIds([]);
+    revisionRef.current = null;
     void reload();
   }, [reload]);
 
   useEffect(() => {
-    watermarkRef.current = threadWatermark(threads);
-    threadUpdatedAtRef.current = new Map(
-      threads.map((thread) => [thread.id, thread.updatedAt]),
-    );
     if (
       selectedThreadId !== null
       && !threads.some((thread) => thread.id === selectedThreadId)
@@ -260,38 +260,20 @@ export function useReviewComments({
     const token = ownership.open();
     if (token < 0) return;
     try {
-      const listedThreads = await loadAllThreads(
+      const page = await api.comments(
         projectId,
         artifactId,
-        versionId,
-        watermarkRef.current,
+        threadQuery(versionId, null, null, revisionRef.current),
       );
-      if (listedThreads.length === 0 || !ownership.settled(token)) return;
-      const changedThreads = listedThreads.filter((thread) =>
-        threadUpdatedAtRef.current.get(thread.id) !== thread.updatedAt
-      );
-      if (changedThreads.length === 0) return;
-      const conversations = await loadConversations(
-        projectId,
-        artifactId,
-        changedThreads,
-      );
-      if (!ownership.settled(token)) return;
-      setThreads((current) => mergeThreads(
-        current,
-        conversations.map(({thread}) => thread),
-      ));
-      setRepliesByThread((current) => {
-        const nextReplies = new Map(current);
-        for (const conversation of conversations) {
-          nextReplies.set(conversation.thread.id, conversation.replies);
-        }
-        return nextReplies;
-      });
+      if (page.revision === revisionRef.current || !ownership.settled(token)) return;
+      const revision = await replaceAllThreads({withLoading: false});
+      if (revision !== null) {
+        revisionRef.current = revision;
+      }
     } catch {
       // A failed background refresh leaves the last readable thread set intact.
     }
-  }, [artifactId, ownership, projectId, versionId]);
+  }, [artifactId, ownership, projectId, replaceAllThreads, versionId]);
 
   useCommentPoll(poll, active);
 
@@ -601,12 +583,11 @@ export const ReviewCommentsInspector = forwardRef<ReviewCommentsInspectorHandle,
         session.projectId,
         session.artifactId,
         versionId,
-        null,
         "only",
       );
       const [conversations, index] = await Promise.all([
-        loadConversations(session.projectId, session.artifactId, listed),
-        loadDispatchIndex(session.projectId, listed.map((thread) => thread.id)),
+        loadConversations(session.projectId, session.artifactId, listed.threads),
+        loadDispatchIndex(session.projectId, listed.threads.map((thread) => thread.id)),
       ]);
       setSentThreads(conversations.map(({thread}) => thread));
       setSentReplies(new Map(

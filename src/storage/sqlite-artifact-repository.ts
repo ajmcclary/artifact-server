@@ -3444,6 +3444,7 @@ export class SqliteArtifactRepository implements
           command.author.authorizedByPrincipalId,
           createAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
           thread: commentThreadFromRow(this.#readThreadRow(
@@ -3520,10 +3521,31 @@ export class SqliteArtifactRepository implements
           cursorId,
           command.limit + 1,
         );
-      return pageFromRows(
+      const revisionRow = z.object({comment_revision: z.number().int()}).nullable()
+        .parse(
+          this.#database
+            .prepare("SELECT comment_revision FROM artifacts WHERE id = ?")
+            .get(command.artifactId) ?? null,
+        );
+      const page = pageFromRows(
         z.array(commentThreadRowSchema).parse(rows).map(commentThreadFromRow),
         command.limit,
       );
+      return {...page, revision: revisionRow?.comment_revision ?? 0};
+    });
+  }
+
+  commentRevision(projectId: string, artifactId: string): Promise<number | null> {
+    return Promise.resolve().then(() => {
+      const row = z.object({comment_revision: z.number().int()}).nullable()
+        .parse(
+          this.#database
+            .prepare(
+              "SELECT comment_revision FROM artifacts WHERE project_id = ? AND id = ?",
+            )
+            .get(projectId, artifactId) ?? null,
+        );
+      return row?.comment_revision ?? null;
     });
   }
 
@@ -3590,6 +3612,7 @@ export class SqliteArtifactRepository implements
           command.authorizedByPrincipalId,
           commentAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentThreadFromRow(this.#readThreadRow(
           command.projectId,
           command.artifactId,
@@ -3642,6 +3665,7 @@ export class SqliteArtifactRepository implements
           command.authorizedByPrincipalId,
           commentAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.deletedAt);
         return {
           deletedReplyCount: Number(removedReplies.changes),
           thread: commentThreadFromRow(row),
@@ -3705,6 +3729,9 @@ export class SqliteArtifactRepository implements
             commentAction.actionId,
           );
           deleted += 1;
+        }
+        if (deleted > 0) {
+          this.#bumpCommentRevision(command.artifactId, command.clearedAt);
         }
         return {deleted, skippedDispatched};
       }),
@@ -3780,6 +3807,7 @@ export class SqliteArtifactRepository implements
           command.author.authorizedByPrincipalId,
           replyAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
           reply: commentReplyFromRow(this.#readReplyRow(command.id)),
@@ -3836,6 +3864,7 @@ export class SqliteArtifactRepository implements
           command.authorizedByPrincipalId,
           commentAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentReplyFromRow(this.#readReplyRow(command.replyId));
       }),
     );
@@ -3861,6 +3890,7 @@ export class SqliteArtifactRepository implements
           command.authorizedByPrincipalId,
           commentAction.actionId,
         );
+        this.#bumpCommentRevision(command.artifactId, command.deletedAt);
       }),
     );
   }
@@ -4178,6 +4208,9 @@ export class SqliteArtifactRepository implements
             );
           }
         }
+        if (command.threadIds.length > 0) {
+          this.#bumpCommentRevisionForThreads(command.threadIds, command.createdAt);
+        }
         return {
           dispatch: agentDispatchFromRow(
             this.#readDispatchRow(command.installationId, command.id),
@@ -4368,6 +4401,7 @@ export class SqliteArtifactRepository implements
              WHERE id = ?`,
           )
           .run(command.canceledAt, command.canceledAt, row.id);
+        this.#bumpCommentRevisionForDispatch(row.id, command.canceledAt);
         this.#clearDispatchMarkers(row.id, command.canceledAt);
         return agentDispatchFromRow(
           this.#readDispatchRow(command.installationId, row.id),
@@ -4474,6 +4508,7 @@ export class SqliteArtifactRepository implements
       )
       .run(failedAt, reason, failedAt, dispatchId);
     // A permanent failure returns the annotations to the artifact surfaces.
+    this.#bumpCommentRevisionForDispatch(dispatchId, failedAt);
     this.#clearDispatchMarkers(dispatchId, failedAt);
   }
 
@@ -4704,6 +4739,42 @@ export class SqliteArtifactRepository implements
     this.#database
       .prepare("UPDATE comment_threads SET updated_at = ? WHERE id = ?")
       .run(updatedAt, threadId);
+  }
+
+  #bumpCommentRevision(artifactId: string, _at: string): void {
+    this.#database
+      .prepare(
+        "UPDATE artifacts SET comment_revision = comment_revision + 1 WHERE id = ?",
+      )
+      .run(artifactId);
+  }
+
+  #bumpCommentRevisionForDispatch(dispatchId: string, _at: string): void {
+    this.#database
+      .prepare(`
+        UPDATE artifacts
+        SET comment_revision = comment_revision + 1
+        WHERE id IN (
+          SELECT DISTINCT artifact_id FROM comment_threads WHERE dispatch_id = ?
+        )
+      `)
+      .run(dispatchId);
+  }
+
+  #bumpCommentRevisionForThreads(
+    threadIds: readonly string[],
+    _at: string,
+  ): void {
+    const placeholders = threadIds.map(() => "?").join(", ");
+    this.#database
+      .prepare(`
+        UPDATE artifacts
+        SET comment_revision = comment_revision + 1
+        WHERE id IN (
+          SELECT DISTINCT artifact_id FROM comment_threads WHERE id IN (${placeholders})
+        )
+      `)
+      .run(...threadIds);
   }
 
   #readThreadRow(
@@ -4964,6 +5035,7 @@ export class SqliteArtifactRepository implements
         search_name TEXT NOT NULL,
         access_setting TEXT NOT NULL CHECK (access_setting IN ('account_required', 'public_link')),
         current_version_id TEXT,
+        comment_revision INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         deleted_at TEXT
       ) STRICT;
@@ -5129,6 +5201,7 @@ export class SqliteArtifactRepository implements
     this.#addSourceBindingColumnsIfMissing();
     this.#addGitHistoryMirrorTablesIfMissing();
     this.#addStagedUploadIdempotencyKeyIfMissing();
+    this.#addArtifactCommentRevisionIfMissing();
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS projects_active_created
         ON projects (archived_at, created_at, id);
@@ -5268,6 +5341,15 @@ export class SqliteArtifactRepository implements
         ON staged_uploads (project_id, principal_id, idempotency_key)
         WHERE idempotency_key IS NOT NULL
     `);
+  }
+
+  #addArtifactCommentRevisionIfMissing(): void {
+    const columns = this.#tableColumns("artifacts");
+    if (!columns.includes("comment_revision")) {
+      this.#database.exec(`
+        ALTER TABLE artifacts ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0
+      `);
+    }
   }
 
   // One nullable column group on the artifact record carries every linked

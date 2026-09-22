@@ -42,6 +42,7 @@ import {
 import {
   ArtifactCommentService,
   type CommentThreadDetails,
+  type ListCommentThreadsCommand,
   type ReadCommentThreadCommand,
   type UpdateCommentThreadCommand,
 } from "../application/artifact-comments.js";
@@ -71,6 +72,7 @@ import {
   type LiveReadGrant,
 } from "../application/linked-artifacts.js";
 import {
+  ArtifactNotFound,
   AuthenticationRequired,
   AuthorizationDenied,
   type ArtifactServerFailure,
@@ -284,6 +286,8 @@ const commentPageQuerySchema = z.object({
     dispatchedThreadFilters.exclude,
   ),
   limit: z.coerce.number().int().min(1).max(maximumCommentPageSize).default(50),
+  // Client-known comment revision; a matching value short-circuits to an empty page.
+  revision: z.coerce.number().int().nonnegative().optional(),
   since: z.iso.datetime().optional(),
   state: commentStateSchema.optional(),
   versionId: z.string().min(1).max(200).optional(),
@@ -1818,17 +1822,7 @@ export function createHttpApp(
       context,
       dependencies,
       ArtifactCommentService.use((comments) =>
-        comments.listThreads({
-          artifactId: context.req.param("artifactId"),
-          cursor: decodePageCursor(query.cursor),
-          dispatched: query.dispatched,
-          limit: query.limit,
-          principal: context.get("principal"),
-          projectId: requestedProjectId(context),
-          since: query.since ?? null,
-          state: query.state ?? null,
-          versionId: query.versionId ?? null,
-        })
+        comments.listThreads(buildListThreadsCommand(context, query))
       ),
     );
     return context.json(commentThreadPageResponse(
@@ -3179,6 +3173,7 @@ function commentThreadPageResponse(requestUrl: URL, page: CommentThreadPage) {
       commentThreadResponse(requestUrl, thread)
     ),
     nextCursor: encodePageCursor(page.nextCursor),
+    revision: page.revision,
   };
 }
 
@@ -3219,6 +3214,30 @@ function commentThreadResponse(requestUrl: URL, thread: CommentThreadRecord) {
     updatedAt: thread.updatedAt,
     versionId: thread.versionId,
   };
+}
+
+function buildListThreadsCommand(
+  context: Context<HttpEnvironment>,
+  query: z.infer<typeof commentPageQuerySchema>,
+): ListCommentThreadsCommand {
+  const artifactId = context.req.param("artifactId");
+  if (artifactId === undefined) {
+    throw new ArtifactNotFound({message: "The artifact does not exist."});
+  }
+  const base = {
+    artifactId,
+    cursor: decodePageCursor(query.cursor),
+    dispatched: query.dispatched,
+    limit: query.limit,
+    principal: context.get("principal"),
+    projectId: requestedProjectId(context),
+    since: query.since ?? null,
+    state: query.state ?? null,
+    versionId: query.versionId ?? null,
+  };
+  return query.revision === undefined
+    ? base
+    : {...base, revision: query.revision};
 }
 
 interface CommentThreadUpdate {

@@ -353,6 +353,15 @@ export interface CommentRepository {
   ): Promise<CommentThreadRecord | null>;
   listReplies(threadId: string): Promise<readonly CommentReplyRecord[]>;
   listThreads(command: ListCommentThreads): Promise<CommentThreadPage>;
+  /**
+   * Read the artifact's current `comment_revision` counter, or null when the
+   * artifact does not exist. Used by the application service to short-circuit
+   * unchanged comment listings.
+   */
+  commentRevision(
+    projectId: string,
+    artifactId: string,
+  ): Promise<number | null>;
   updateReply(command: UpdateCommentReply): Promise<CommentReplyRecord>;
   updateThread(command: UpdateCommentThread): Promise<CommentThreadRecord>;
   /** Determine whether one saved version's manifest declares one exact path. */

@@ -45,6 +45,7 @@ const threadDetailsSchema = z.object({
 const threadPageSchema = z.object({
   items: z.array(commentThreadSchema),
   nextCursor: z.string().nullable(),
+  revision: z.number().int().nonnegative(),
 });
 const failureSchema = z.object({
   error: z.object({code: z.string(), message: z.string()}),

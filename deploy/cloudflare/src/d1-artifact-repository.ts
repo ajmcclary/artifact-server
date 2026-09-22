@@ -1277,6 +1277,35 @@ export function createD1ArtifactRepository(
     ...sourceBindings,
   );
 
+  const bumpCommentRevisionStatement = (
+    artifactId: string,
+  ): D1PreparedStatement => database.prepare(`
+    UPDATE artifacts SET comment_revision = comment_revision + 1 WHERE id = ?
+  `).bind(artifactId);
+
+  const bumpCommentRevisionForDispatchStatement = (
+    dispatchId: string,
+  ): D1PreparedStatement => database.prepare(`
+    UPDATE artifacts
+    SET comment_revision = comment_revision + 1
+    WHERE id IN (
+      SELECT DISTINCT artifact_id FROM comment_threads WHERE dispatch_id = ?
+    )
+  `).bind(dispatchId);
+
+  const bumpCommentRevisionForThreadsStatement = (
+    threadIds: readonly string[],
+  ): D1PreparedStatement => {
+    const placeholders = threadIds.map(() => "?").join(", ");
+    return database.prepare(`
+      UPDATE artifacts
+      SET comment_revision = comment_revision + 1
+      WHERE id IN (
+        SELECT DISTINCT artifact_id FROM comment_threads WHERE id IN (${placeholders})
+      )
+    `).bind(...threadIds);
+  };
+
   const readAgentRowOrNull = async (
     scopeInstallationId: string,
     agentId: string,
@@ -1347,6 +1376,7 @@ export function createD1ArtifactRepository(
         claimed_at = NULL, lease_expires_at = NULL
       WHERE id = ?
     `).bind(failedAt, reason, failedAt, dispatchId),
+    bumpCommentRevisionForDispatchStatement(dispatchId),
     // A permanent failure returns the annotations to the artifact surfaces,
     // which is a thread edit: a `since` poller must see them come back.
     database.prepare(`
@@ -1406,6 +1436,17 @@ export function createD1ArtifactRepository(
       ...scopeBindings,
       isoBefore(now, agentUnavailableStalenessMilliseconds),
     ),
+    database.prepare(`
+      UPDATE artifacts
+      SET comment_revision = comment_revision + 1
+      WHERE id IN (
+        SELECT DISTINCT t.artifact_id FROM comment_threads t
+        WHERE t.dispatch_id IN (
+          SELECT id FROM agent_dispatches
+          WHERE ${scope} AND state IN ('failed', 'canceled')
+        )
+      )
+    `).bind(...scopeBindings),
     database.prepare(`
       UPDATE comment_threads SET dispatch_id = NULL, updated_at = ?
       WHERE dispatch_id IN (
@@ -3302,6 +3343,7 @@ export function createD1ArtifactRepository(
             command.versionId,
             artifactActionKinds.commentCreate,
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
       } catch (cause) {
         const raced = await readIdempotentThreadRowOrNull(
@@ -3361,11 +3403,24 @@ export function createD1ArtifactRepository(
         command.limit + 1,
       ).all<z.input<typeof commentThreadRowSchema>>();
       const parsed = result.results.map((row) => commentThreadRowSchema.parse(row));
-      return pageResult(
+      const revisionRow = await database.prepare(`
+        SELECT comment_revision FROM artifacts WHERE id = ?
+      `).bind(command.artifactId).first<{comment_revision: number}>();
+      const page = pageResult(
         parsed.slice(0, command.limit).map(commentThreadFromRow),
         parsed,
         command.limit,
       );
+      return {...page, revision: revisionRow?.comment_revision ?? 0};
+    },
+    commentRevision: async (
+      projectId: string,
+      artifactId: string,
+    ): Promise<number | null> => {
+      const row = await database.prepare(`
+        SELECT comment_revision FROM artifacts WHERE project_id = ? AND id = ?
+      `).bind(projectId, artifactId).first<{comment_revision: number}>();
+      return row?.comment_revision ?? null;
     },
     updateThread: async (
       command: UpdateCommentThread,
@@ -3455,6 +3510,7 @@ export function createD1ArtifactRepository(
               command.updatedAt,
             ],
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
       } catch (cause) {
         const existing = await readThreadRowOrNull(
@@ -3521,6 +3577,7 @@ export function createD1ArtifactRepository(
               artifactActionKinds.commentDelete,
             ],
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
         return {
           deletedReplyCount: results[3]?.meta.changes ?? 0,
@@ -3602,6 +3659,7 @@ export function createD1ArtifactRepository(
             `).bind(row.id, command.projectId, command.artifactId),
           ];
         }));
+        await database.batch([bumpCommentRevisionStatement(command.artifactId)]);
       }
       return {deleted: deletable.length, skippedDispatched};
     },
@@ -3666,6 +3724,7 @@ export function createD1ArtifactRepository(
             "SELECT 1 FROM comment_replies WHERE id = ?",
             [command.id],
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
       } catch (cause) {
         const raced = await readIdempotentReplyRowOrNull(
@@ -3745,6 +3804,7 @@ export function createD1ArtifactRepository(
               WHERE id = ? AND thread_id = ? AND updated_at = ?`,
             [command.replyId, command.threadId, command.updatedAt],
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
       } catch (cause) {
         const existing = await readReplyRowOrNull(command.replyId);
@@ -3796,6 +3856,7 @@ export function createD1ArtifactRepository(
               artifactActionKinds.commentDelete,
             ],
           ),
+          bumpCommentRevisionStatement(command.artifactId),
         ]);
       } catch (cause) {
         const existing = await readReplyRowOrNull(command.replyId);
@@ -3993,6 +4054,9 @@ export function createD1ArtifactRepository(
               GROUP BY dispatch_id HAVING COUNT(*) = ?`,
             [command.id, command.threadIds.length],
           )),
+          ...(command.threadIds.length === 0
+            ? []
+            : [bumpCommentRevisionForThreadsStatement(command.threadIds)]),
         ]);
       } catch (cause) {
         const raced = await readIdempotentDispatchRowOrNull(
@@ -4194,6 +4258,7 @@ export function createD1ArtifactRepository(
               claimed_at = NULL, lease_expires_at = NULL
             WHERE id = ?
           `).bind(command.canceledAt, command.canceledAt, row.id),
+          bumpCommentRevisionForDispatchStatement(row.id),
           // Cancellation clears the markers so the threads reappear in the
           // default listings: work is never silently lost.
           database.prepare(`

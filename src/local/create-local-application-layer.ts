@@ -605,6 +605,10 @@ export function createApplicationLayer(
         "listCommentThreads",
         () => adapters.repository.listThreads(command),
       ),
+      commentRevision: (projectId, artifactId) => commentEffect(
+        "readCommentRevision",
+        () => adapters.repository.commentRevision(projectId, artifactId),
+      ),
       updateReply: (command) => commentEffect(
         "updateCommentReply",
         () => adapters.repository.updateReply(command),
