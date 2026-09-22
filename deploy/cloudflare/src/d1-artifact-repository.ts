@@ -330,6 +330,7 @@ const stagedUploadBaseSchema = z.object({
   entryPath: z.string(),
   expiresAt: z.string(),
   id: z.string(),
+  idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
   principalId: z.string(),
   projectId: z.string(),
@@ -772,6 +773,34 @@ export function createD1ArtifactRepository(
     }
     return readPublishedVersion(projectId, record.versionId, true);
   };
+  const findPublicationByIdempotencyKey = async (
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<PublishedVersion | null> => {
+    const row = await database.prepare(`
+      SELECT
+        r.access_setting AS accessSetting,
+        r.artifact_id AS artifactId,
+        r.input_digest AS inputDigest,
+        r.operation,
+        r.tags_json AS tagsJson,
+        r.version_id AS versionId
+      FROM idempotency_records r
+      JOIN versions v ON v.id = r.version_id
+      WHERE r.project_id = ? AND r.idempotency_key = ?
+        AND v.publisher_principal_id = ?
+    `).bind(projectId, idempotencyKey, principalId)
+      .first<z.input<typeof idempotencyRowSchema>>();
+    if (row === null) return null;
+    const record = idempotencyRowSchema.parse(row);
+    if (record.operation !== artifactActionKinds.publish) {
+      throw new IdempotencyConflict({
+        message: "The idempotency key was already used with different input.",
+      });
+    }
+    return readPublishedVersion(projectId, record.versionId, true);
+  };
   const readStagedUploadOrNull = async (
     projectId: string,
     uploadId: string,
@@ -781,12 +810,19 @@ export function createD1ArtifactRepository(
       SELECT id, project_id AS projectId, principal_id AS principalId, status,
         manifest_digest AS manifestDigest, entry_path AS entryPath,
         routing_mode AS routingMode, created_at AS createdAt,
-        expires_at AS expiresAt, committed_version_id AS committedVersionId
+        expires_at AS expiresAt, committed_version_id AS committedVersionId,
+        idempotency_key AS idempotencyKey
       FROM staged_uploads
       WHERE project_id = ? AND id = ? AND principal_id = ?
     `).bind(projectId, uploadId, principalId)
       .first<z.input<typeof stagedUploadSchema>>();
     if (row === null) return null;
+    return readStagedUploadFromRow(row, uploadId);
+  };
+  const readStagedUploadFromRow = async (
+    row: z.input<typeof stagedUploadSchema>,
+    uploadId: string,
+  ): Promise<StagedUpload> => {
     const upload = stagedUploadSchema.parse(row);
     const filesResult = await database.prepare(`
       SELECT storage_token AS storageToken, path, size,
@@ -2285,8 +2321,9 @@ export function createD1ArtifactRepository(
         database.prepare(`
           INSERT INTO staged_uploads (
             id, project_id, principal_id, status, manifest_digest, entry_path,
-            routing_mode, created_at, expires_at, committed_version_id
-          ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL)
+            routing_mode, created_at, expires_at, committed_version_id,
+            idempotency_key
+          ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, ?)
         `).bind(
           command.id,
           command.projectId,
@@ -2296,6 +2333,7 @@ export function createD1ArtifactRepository(
           command.manifest.routingMode,
           command.createdAt,
           command.expiresAt,
+          command.idempotencyKey,
         ),
         // `uploaded_at` stays out of the column list so it defaults to NULL:
         // every bound column costs part of the per-statement budget.
@@ -2322,6 +2360,24 @@ export function createD1ArtifactRepository(
       return upload;
     },
     findStagedUpload: readStagedUploadOrNull,
+    findStagedUploadByIdempotencyKey: async (
+      projectId,
+      principalId,
+      idempotencyKey,
+    ) => {
+      const row = await database.prepare(`
+        SELECT id, project_id AS projectId, principal_id AS principalId, status,
+          manifest_digest AS manifestDigest, entry_path AS entryPath,
+          routing_mode AS routingMode, created_at AS createdAt,
+          expires_at AS expiresAt, committed_version_id AS committedVersionId,
+          idempotency_key AS idempotencyKey
+        FROM staged_uploads
+        WHERE project_id = ? AND principal_id = ? AND idempotency_key = ?
+      `).bind(projectId, principalId, idempotencyKey)
+        .first<z.input<typeof stagedUploadSchema>>();
+      if (row === null) return null;
+      return readStagedUploadFromRow(row, row.id);
+    },
     findStagedUploadFileSlot: async (
       projectId,
       uploadId,
@@ -2527,6 +2583,7 @@ export function createD1ArtifactRepository(
       return readPublishedVersion(command.projectId, command.versionId, false);
     },
     findIdempotentPublication,
+    findPublicationByIdempotencyKey,
     findArtifact: (projectId, artifactId) => readArtifactOrNull(projectId, artifactId),
     findArtifactForAdministration: (projectId, artifactId) =>
       readArtifactOrNull(projectId, artifactId, true),

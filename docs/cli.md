@@ -109,18 +109,19 @@ The expected version prevents an old client from replacing a newer current point
 
 ### Recover an interrupted publication
 
-The CLI keeps a private pending-operation identity so an unchanged retry can
-replay the original committed result. Keep the input, selected entry, target and
-expected version unchanged while reconciling that attempt. A conflict means the
-current pointer moved; inspect the new current version before choosing a new
-publication intent.
+The CLI keeps a private pending-operation identity and binds its staged upload
+to that operation, so an unchanged retry resumes instead of starting over. Files
+the server already verified are not sent again, and an operation the server
+already committed returns its original artifact and links without touching
+staging. Keep the input, selected entry, target and expected version unchanged
+while reconciling that attempt; the same operation identity with changed files
+is rejected as a conflict, and an expired staged upload is recreated fresh.
 
-This is operation idempotency, not file-level resume. The current client creates
-a new upload plan and retransfers files before commit replay, so an interrupted
-large directory can repeat substantial work. Scoped upload URLs accept binary
-bytes at the application origin; they are not provider-native signed uploads.
-The planned recovery improvements are [T05 and T11](../NEXT-STEPS.md). Do not
-delete staged server data manually to recover a client operation.
+A conflict on commit means the current pointer moved; inspect the new current
+version before choosing a new publication intent. Scoped upload URLs accept
+binary bytes at the application origin; they are not provider-native signed
+uploads (that remains [T11](../NEXT-STEPS.md)). Do not delete staged server
+data manually to recover a client operation.
 
 ## Link a working file
 

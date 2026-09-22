@@ -113,6 +113,11 @@ export interface PublishArtifactRepository {
     idempotencyKey: string,
     inputDigest: string,
   ): Effect.Effect<PublishedVersion | null, IdempotencyConflict | ArtifactRepositoryFailure>;
+  findPublicationByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Effect.Effect<PublishedVersion | null, ArtifactRepositoryFailure>;
   findCurrentVersion(
     projectId: string,
     artifactId: string,
@@ -148,6 +153,11 @@ export type PublishArtifactFailure =
   | AuthorizationDenied;
 
 interface PublishArtifactOperations {
+  readonly findPublicationByIdempotencyKey: (
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ) => Effect.Effect<PublishedVersion | null, ArtifactRepositoryFailure | InvalidIdempotencyKey>;
   readonly publishPreparedNew: (
     command: PublishPreparedNewArtifactCommand,
   ) => Effect.Effect<PublishedVersion, PublishArtifactFailure>;
@@ -181,6 +191,26 @@ function makePublishArtifactService(
   dependencies: PublishArtifactDependencies,
   authorization: AuthorizationOperations,
 ): PublishArtifactOperations {
+  const findPublicationByIdempotencyKey = Effect.fn(
+    "PublishArtifactService.findPublicationByIdempotencyKey",
+  )(
+    function*(
+      projectId: string,
+      principalId: string,
+      idempotencyKey: string,
+    ): Effect.fn.Return<
+      PublishedVersion | null,
+      ArtifactRepositoryFailure | InvalidIdempotencyKey
+    > {
+      const key = yield* parseIdempotencyKey(idempotencyKey);
+      return yield* dependencies.repository.findPublicationByIdempotencyKey(
+        projectId,
+        principalId,
+        key,
+      );
+    },
+  );
+
   const storeFiles = Effect.fn("PublishArtifactService.storeFiles")(
     function*(
       manifest: CanonicalManifest,
@@ -331,6 +361,7 @@ function makePublishArtifactService(
   });
 
   return PublishArtifactService.of({
+    findPublicationByIdempotencyKey,
     publishPreparedNew,
     publishPreparedVersion,
   });

@@ -260,6 +260,7 @@ async function stageUpload(
     expiresAt: "2026-12-31T00:00:00.000Z",
     files,
     id: uploadId,
+    idempotencyKey: null,
     manifest,
     principalId,
     projectId: defaultProjectId,

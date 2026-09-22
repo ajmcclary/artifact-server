@@ -44,9 +44,11 @@ const createUploadResponseSchema = z.object({
     path: z.string(),
     size: z.number().int().nonnegative(),
     uploadUrl: z.url(),
+    verified: z.boolean(),
   })),
   manifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   projectId: z.string(),
+  status: z.enum(["created", "resumed"]),
   uploadId: z.string(),
 });
 
@@ -147,6 +149,7 @@ export async function createStagedUpload(
   files: readonly TestSiteFile[],
   projectId?: string,
   routingMode: "spa" | "static" = "static",
+  idempotencyKey?: string,
 ): Promise<{readonly body: CreateUploadResponse; readonly response: Response}> {
   const declaredFiles = files.map((file) => ({
     mediaType: file.mediaType,
@@ -157,12 +160,19 @@ export async function createStagedUpload(
   const requestBody = projectId === undefined
     ? {entryPath, files: declaredFiles, routingMode}
     : {entryPath, files: declaredFiles, projectId, routingMode};
-  const response = await fetch(`${server.baseUrl}/api/v1/uploads`, {
-    body: JSON.stringify(requestBody),
-    headers: {
+  const headers = idempotencyKey === undefined
+    ? {
       Authorization: `Bearer ${installation.apiToken}`,
       "Content-Type": "application/json",
-    },
+    }
+    : {
+      Authorization: `Bearer ${installation.apiToken}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    };
+  const response = await fetch(`${server.baseUrl}/api/v1/uploads`, {
+    body: JSON.stringify(requestBody),
+    headers,
     method: "POST",
   });
   const body = createUploadResponseSchema.parse(await response.json());
@@ -236,6 +246,21 @@ const commitTargetSchema = z.discriminatedUnion("kind", [
     kind: z.literal("new_version"),
   }),
 ]);
+
+export function testSiteFile(
+  content: string,
+  mediaType?: string,
+  filePath?: string,
+): TestSiteFile & {readonly sha256: string; readonly size: number} {
+  const bytes = new TextEncoder().encode(content);
+  return {
+    bytes,
+    mediaType: mediaType ?? "text/html; charset=utf-8",
+    path: filePath ?? "index.html",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size: bytes.byteLength,
+  };
+}
 
 function testFile(
   content: string,

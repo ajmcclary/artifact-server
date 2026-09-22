@@ -3,6 +3,7 @@ import { Context, DateTime, Effect, Layer } from "effect";
 import {
   type ArtifactRepositoryFailure,
   type AuthorizationDenied,
+  IdempotencyConflict,
   StagingStorageFailure,
   type ProjectArchived,
   UploadClosed,
@@ -16,6 +17,7 @@ import type { Principal } from "../core/identity.js";
 import {
   uploadStatuses,
   type AccessSetting,
+  type CanonicalManifest,
   type PublishedVersion,
   type RoutingMode,
   type StagedUpload,
@@ -46,6 +48,7 @@ import {
   type ProjectManagementFailure,
   ProjectManagementService,
 } from "./project-management.js";
+import {parseIdempotencyKey} from "./idempotency-key.js";
 
 const uploadLifetimeMilliseconds = 60 * 60 * 1_000;
 const singleWriteDeadlineMilliseconds = 10 * 60 * 1_000;
@@ -54,10 +57,16 @@ const singleWriteDeadlineMilliseconds = 10 * 60 * 1_000;
 export interface CreateStagedUploadCommand {
   readonly entryPath: string;
   readonly files: readonly DeclaredManifestFile[];
+  readonly idempotencyKey?: string;
   readonly principal: Principal;
   readonly projectId?: string | null;
   readonly routingMode?: RoutingMode;
 }
+
+/** Result of creating or resuming one staged upload bound to an idempotency key. */
+export type CreateStagedUploadResult =
+  | {readonly kind: "committed"; readonly publication: PublishedVersion}
+  | {readonly kind: "upload"; readonly resumed: boolean; readonly upload: StagedUpload};
 
 /** Input for streaming one file into the staged upload slot its URL names. */
 export interface UploadStagedFileCommand {
@@ -106,6 +115,11 @@ export interface StagedUploadRepositoryPort {
     projectId: string,
     uploadId: string,
     principalId: string,
+  ): Effect.Effect<StagedUpload | null, ArtifactRepositoryFailure>;
+  findStagedUploadByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
   ): Effect.Effect<StagedUpload | null, ArtifactRepositoryFailure>;
   markStagedFileUploaded(
     projectId: string,
@@ -176,7 +190,7 @@ interface StagedUploadOperations {
   ) => Effect.Effect<PublishedVersion, StagedUploadFailure>;
   readonly createUpload: (
     command: CreateStagedUploadCommand,
-  ) => Effect.Effect<StagedUpload, StagedUploadFailure>;
+  ) => Effect.Effect<CreateStagedUploadResult, StagedUploadFailure>;
   readonly uploadFile: (
     command: UploadStagedFileCommand,
   ) => Effect.Effect<StagedUploadFile, StagedUploadFailure>;
@@ -234,35 +248,163 @@ function makeStagedUploadService(
     },
   );
 
-  const createUpload = Effect.fn("StagedUploadService.createUpload")(
-    function*(
-    command: CreateStagedUploadCommand,
-  ): Effect.fn.Return<StagedUpload, StagedUploadFailure> {
-      yield* authorization.requirePublicationPreparation(command.principal);
-      const project = yield* projects.resolveActiveProject({
-        principal: command.principal,
-        projectId: command.projectId ?? null,
-      });
-      const manifest = yield* parseManifest({
-        entryPath: command.entryPath,
-        files: command.files,
-        routingMode: command.routingMode ?? "static",
-      });
+  const createFreshUpload = (
+    projectId: string,
+    manifest: CanonicalManifest,
+    principalId: string,
+  ): Effect.Effect<StagedUpload, StagedUploadFailure> =>
+    createKeyBoundUpload(projectId, manifest, principalId, null);
+
+  const createKeyBoundUpload = (
+    projectId: string,
+    manifest: CanonicalManifest,
+    principalId: string,
+    idempotencyKey: string | null,
+  ): Effect.Effect<StagedUpload, StagedUploadFailure> =>
+    Effect.gen(function*() {
+      const {entries} = manifest;
       const created = yield* dependencies.clock.now;
       return yield* dependencies.uploads.createStagedUpload({
         createdAt: DateTime.formatIso(created),
         expiresAt: DateTime.formatIso(
           DateTime.addDuration(created, uploadLifetimeMilliseconds),
         ),
-        files: manifest.entries.map((entry) => ({
+        files: entries.map((entry) => ({
           entry,
           storageToken: dependencies.ids.stagedFileToken(),
         })),
         id: dependencies.ids.uploadId(),
+        idempotencyKey,
         manifest,
-        principalId: command.principal.id,
-        projectId: project.id,
+        principalId,
+        projectId,
       });
+    });
+
+  const removeExpiredStagedUpload = (
+    upload: StagedUpload,
+  ): Effect.Effect<void, StagingStorageFailure | ArtifactRepositoryFailure> =>
+    Effect.gen(function*() {
+      yield* Effect.forEach(
+        upload.files,
+        (file) => dependencies.staging.remove(upload.id, file.storageToken),
+        {concurrency: 1, discard: true},
+      );
+      yield* dependencies.uploads.removeExpiredStagedUpload(
+        upload.id,
+        upload.expiresAt,
+      );
+    });
+
+  const createUpload = Effect.fn("StagedUploadService.createUpload")(
+    function*(
+    command: CreateStagedUploadCommand,
+  ): Effect.fn.Return<CreateStagedUploadResult, StagedUploadFailure> {
+      yield* authorization.requirePublicationPreparation(command.principal);
+      const project = yield* projects.resolveActiveProject({
+        principal: command.principal,
+        projectId: command.projectId ?? null,
+      });
+
+      if (command.idempotencyKey === undefined) {
+        const manifest = yield* parseManifest({
+          entryPath: command.entryPath,
+          files: command.files,
+          routingMode: command.routingMode ?? "static",
+        });
+        const upload = yield* createFreshUpload(
+          project.id,
+          manifest,
+          command.principal.id,
+        );
+        return {kind: "upload" as const, resumed: false, upload};
+      }
+
+      const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
+      const committed = yield* publish.findPublicationByIdempotencyKey(
+        project.id,
+        command.principal.id,
+        idempotencyKey,
+      );
+      if (committed !== null) {
+        return {kind: "committed" as const, publication: committed};
+      }
+
+      const manifest = yield* parseManifest({
+        entryPath: command.entryPath,
+        files: command.files,
+        routingMode: command.routingMode ?? "static",
+      });
+      const existing = yield* dependencies.uploads.findStagedUploadByIdempotencyKey(
+        project.id,
+        command.principal.id,
+        idempotencyKey,
+      );
+      if (existing !== null) {
+        if (existing.status === uploadStatuses.committed) {
+          return yield* new IdempotencyConflict({
+            message: "The idempotency key is already bound to a committed upload.",
+          });
+        }
+        const now = yield* dependencies.clock.now;
+        if (DateTime.isLessThanOrEqualTo(DateTime.makeUnsafe(existing.expiresAt), now)) {
+          yield* removeExpiredStagedUpload(existing);
+          const upload = yield* createKeyBoundUpload(
+            project.id,
+            manifest,
+            command.principal.id,
+            idempotencyKey,
+          );
+          return {kind: "upload" as const, resumed: false, upload};
+        }
+        if (existing.manifest.digest !== manifest.digest) {
+          return yield* new IdempotencyConflict({
+            message: "The idempotency key is already bound to a different upload.",
+          });
+        }
+        return {kind: "upload" as const, resumed: true, upload: existing};
+      }
+
+      const result = yield* createKeyBoundUpload(
+        project.id,
+        manifest,
+        command.principal.id,
+        idempotencyKey,
+      ).pipe(
+        Effect.catchTag("ArtifactRepositoryFailure", (error) =>
+          Effect.gen(function*() {
+            const raced = yield* dependencies.uploads
+              .findStagedUploadByIdempotencyKey(
+                project.id,
+                command.principal.id,
+                idempotencyKey,
+              );
+            if (raced === null) {
+              return yield* Effect.fail(error);
+            }
+            if (raced.status === uploadStatuses.committed) {
+              return yield* new IdempotencyConflict({
+                message: "The idempotency key is already bound to a committed upload.",
+              });
+            }
+            const now = yield* dependencies.clock.now;
+            if (DateTime.isLessThanOrEqualTo(DateTime.makeUnsafe(raced.expiresAt), now)) {
+              return yield* new IdempotencyConflict({
+                message: "The idempotency key is already bound to an expired upload.",
+              });
+            }
+            if (raced.manifest.digest !== manifest.digest) {
+              return yield* new IdempotencyConflict({
+                message: "The idempotency key is already bound to a different upload.",
+              });
+            }
+            return {kind: "upload" as const, resumed: true, upload: raced};
+          })),
+      );
+      if ("kind" in result) {
+        return result;
+      }
+      return {kind: "upload" as const, resumed: false, upload: result};
     },
   );
 

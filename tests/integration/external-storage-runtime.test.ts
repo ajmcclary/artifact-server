@@ -681,6 +681,8 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
             DROP CONSTRAINT staged_uploads_routing_mode_check,
             ADD CONSTRAINT staged_uploads_routing_mode_check
               CHECK (routing_mode = 'static')`,
+          "DROP INDEX staged_uploads_idempotency",
+          "ALTER TABLE staged_uploads DROP COLUMN idempotency_key",
           "ALTER TABLE content_sessions DROP COLUMN project_id CASCADE",
           "ALTER TABLE content_bootstraps DROP COLUMN project_id CASCADE",
           "ALTER TABLE staged_uploads DROP COLUMN project_id CASCADE",

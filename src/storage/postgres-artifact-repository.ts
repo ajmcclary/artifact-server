@@ -328,6 +328,7 @@ const stagedUploadRowSchema = z.object({
   entryPath: z.string(),
   expiresAt: z.string(),
   id: z.string(),
+  idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
   principalId: z.string(),
   projectId: z.string(),
@@ -2045,6 +2046,18 @@ export class PostgresArtifactRepository implements
     ));
   }
 
+  async findPublicationByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<PublishedVersion | null> {
+    return this.#database.run(this.#findPublicationByIdempotencyKeyResult(
+      projectId,
+      principalId,
+      idempotencyKey,
+    ));
+  }
+
   async findVersionContent(
     contentToken: string,
     requestedPath: string,
@@ -2249,13 +2262,15 @@ export class PostgresArtifactRepository implements
         yield* this.#assertProjectActive(command.projectId);
         yield* sql`INSERT INTO staged_uploads (
           installation_id, project_id, id, principal_id, status, manifest_digest,
-          entry_path, routing_mode, created_at, expires_at, committed_version_id
+          entry_path, routing_mode, created_at, expires_at, committed_version_id,
+          idempotency_key
         ) VALUES (
           ${installationId}, ${command.projectId}, ${command.id},
           ${command.principalId}, 'open',
           ${command.manifest.digest}, ${command.manifest.entryPath},
           ${command.manifest.routingMode}, ${command.createdAt},
-          ${command.expiresAt}, NULL
+          ${command.expiresAt}, NULL,
+          ${command.idempotencyKey}
         )`;
         const filesJson = JSON.stringify(command.files.map((file) => ({
           disposition: file.entry.disposition,
@@ -2296,6 +2311,31 @@ export class PostgresArtifactRepository implements
       uploadId,
       principalId,
     ));
+  }
+
+  async findStagedUploadByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<StagedUpload | null> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      const headerRows = yield* sql.unsafe<object>(
+        `SELECT id, project_id AS "projectId", principal_id AS "principalId", status,
+          manifest_digest AS "manifestDigest", entry_path AS "entryPath",
+          routing_mode AS "routingMode", created_at AS "createdAt",
+          expires_at AS "expiresAt", committed_version_id AS "committedVersionId",
+          idempotency_key AS "idempotencyKey"
+         FROM staged_uploads
+         WHERE installation_id = $1 AND project_id = $2
+           AND principal_id = $3 AND idempotency_key = $4`,
+        [installationId, projectId, principalId, idempotencyKey],
+      );
+      const header = stagedUploadRowSchema.nullable().parse(headerRows[0] ?? null);
+      if (header === null) return null;
+      return yield* this.#readStagedUploadByHeader(header);
+    }));
   }
 
   async findStagedUploadFileSlot(
@@ -3850,6 +3890,39 @@ export class PostgresArtifactRepository implements
     });
   }
 
+  #findPublicationByIdempotencyKeyResult(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Effect.Effect<PublishedVersion | null, unknown, SqlClient> {
+    return Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT
+          r.access_setting AS "accessSetting",
+          r.artifact_id AS "artifactId",
+          r.input_digest AS "inputDigest",
+          r.operation,
+          r.tags_json AS "tagsJson",
+          r.version_id AS "versionId"
+         FROM idempotency_records r
+         JOIN versions v
+           ON v.installation_id = r.installation_id AND v.id = r.version_id
+         WHERE r.installation_id = $1 AND r.project_id = $2
+           AND r.idempotency_key = $3 AND v.publisher_principal_id = $4`,
+        [this.#installationId, projectId, idempotencyKey, principalId],
+      );
+      const parsed = idempotencyRowSchema.nullable().parse(rows[0] ?? null);
+      if (parsed === null) return null;
+      if (parsed.operation !== "publish") {
+        return yield* new IdempotencyConflict({
+          message: "The idempotency key was already used with different input.",
+        });
+      }
+      return yield* this.#readPublishedVersion(projectId, parsed.versionId, true);
+    });
+  }
+
   #findIdempotentManagementResult(
     projectId: string,
     operation: "change_access" | "restore",
@@ -4210,7 +4283,8 @@ export class PostgresArtifactRepository implements
         `SELECT id, project_id AS "projectId", principal_id AS "principalId", status,
           manifest_digest AS "manifestDigest", entry_path AS "entryPath",
           routing_mode AS "routingMode", created_at AS "createdAt",
-          expires_at AS "expiresAt", committed_version_id AS "committedVersionId"
+          expires_at AS "expiresAt", committed_version_id AS "committedVersionId",
+          idempotency_key AS "idempotencyKey"
          FROM staged_uploads
          WHERE installation_id = $1 AND project_id = $2
            AND id = $3 AND principal_id = $4`,
@@ -4218,6 +4292,16 @@ export class PostgresArtifactRepository implements
       );
       const header = stagedUploadRowSchema.nullable().parse(headerRows[0] ?? null);
       if (header === null) return null;
+      return yield* this.#readStagedUploadByHeader(header);
+    });
+  }
+
+  #readStagedUploadByHeader(
+    header: z.infer<typeof stagedUploadRowSchema>,
+  ): Effect.Effect<StagedUpload, unknown, SqlClient> {
+    const installationId = this.#installationId;
+    return Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
       const fileRows = yield* sql.unsafe<object>(
         `SELECT storage_token AS "storageToken", path, size,
           media_type AS "mediaType", sha256, disposition,
@@ -4225,7 +4309,7 @@ export class PostgresArtifactRepository implements
          FROM staged_upload_files
          WHERE installation_id = $1 AND upload_id = $2
          ORDER BY path`,
-        [installationId, uploadId],
+        [installationId, header.id],
       );
       const parsedFiles = z.array(stagedUploadFileRowSchema).parse(fileRows);
       const manifest = createManifest({
@@ -4240,7 +4324,7 @@ export class PostgresArtifactRepository implements
       });
       if (manifest.digest !== header.manifestDigest) {
         throw new Error(
-          `Staged upload ${uploadId} has an invalid persisted manifest digest.`,
+          `Staged upload ${header.id} has an invalid persisted manifest digest.`,
         );
       }
       const manifestByPath = new Map(
@@ -4250,7 +4334,7 @@ export class PostgresArtifactRepository implements
         const entry = manifestByPath.get(file.path);
         if (entry === undefined || entry.disposition !== file.disposition) {
           throw new Error(
-            `Staged upload ${uploadId} has invalid persisted file metadata.`,
+            `Staged upload ${header.id} has invalid persisted file metadata.`,
           );
         }
         return {
@@ -4264,6 +4348,7 @@ export class PostgresArtifactRepository implements
         expiresAt: header.expiresAt,
         files,
         id: header.id,
+        idempotencyKey: header.idempotencyKey,
         manifest,
         principalId: header.principalId,
         projectId: header.projectId,
@@ -4276,7 +4361,7 @@ export class PostgresArtifactRepository implements
         };
       }
       if (header.committedVersionId === null) {
-        throw new Error(`Committed staged upload ${uploadId} has no version.`);
+        throw new Error(`Committed staged upload ${header.id} has no version.`);
       }
       return {
         ...common,

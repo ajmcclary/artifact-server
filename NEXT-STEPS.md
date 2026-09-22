@@ -267,6 +267,29 @@ promotion from research or a single local green run.
 - **Current:** [CLI journal](./src/cli/publication-operation-store.ts) preserves
   operation identity, but [file client](./src/client/file-publication-client.ts)
   creates a new upload and sends every file before commit replay.
+- **Progress, September 21:** staged uploads can now bind the durable
+  publication idempotency key (`staged_uploads.idempotency_key`, partial unique
+  index per installation/project/principal) across SQLite, Postgres (migration
+  0013), and D1 (schema 11). `POST /api/v1/uploads` accepts an optional
+  `Idempotency-Key` header: a committed key returns the recorded publication
+  (`200`, `status: "committed"`, `replayed: true`) without staging access; an
+  open upload with the same manifest digest returns `status: "resumed"` with
+  per-file `verified` flags; a changed manifest under one key is a 409
+  `IDEMPOTENCY_CONFLICT`; an expired key-bound upload is removed and recreated;
+  a concurrent-create race re-reads and resumes. The file client sends its
+  journal key on create, skips verified files on a resumed plan, and returns a
+  committed result without any transfer. HTTP tests cover created/resumed/
+  committed/conflict/expiry/invalid-key; client tests prove a dropped mid-file
+  connection resumes without re-sending verified bytes and a committed key
+  performs zero PUTs and no commit POST; SQLite and D1 store tests cover key
+  binding, uniqueness, null-key coexistence, cross-principal invisibility, and
+  in-place schema upgrades. The process-level CLI crash test (CLI-003-B/F)
+  now recovers a lost commit response through the committed lookup without
+  re-sending files. PUB-015 specifies the behavior with PUB-015-B/F
+  acceptance IDs. Retention semantics are unchanged: no perpetual negative
+  results, no successful-staging reclamation. Remaining open: Postgres
+  store-level key tests beyond the runtime suite, deployed-runtime resume
+  evidence, Cloudflare Worker resume, and MCP-surface recovery (T15).
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.

@@ -78,13 +78,17 @@ describe("staged upload lifecycle", () => {
       sha256: createHash("sha256").update(bytes).digest("hex"),
       size: bytes.byteLength,
     };
-    const upload = await runStaged(runtime, (service) =>
+    const uploadResult = await runStaged(runtime, (service) =>
       service.createUpload({
         entryPath: file.path,
         files: [file],
         principal: testPrincipal("principal-a"),
       })
     );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
     const slot = upload.files[0];
     if (slot === undefined) throw new Error("The principal fixture has no file slot.");
 
@@ -185,13 +189,17 @@ describe("staged upload lifecycle", () => {
       sha256: createHash("sha256").update(bytes).digest("hex"),
       size: bytes.byteLength,
     };
-    const expired = await runStaged(runtime, (service) =>
+    const expiredResult = await runStaged(runtime, (service) =>
       service.createUpload({
         entryPath: file.path,
         files: [file],
         principal: testPrincipal("principal-a"),
       })
     );
+    if (expiredResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const expired = expiredResult.upload;
     const expiredSlot = expired.files[0];
     if (expiredSlot === undefined) throw new Error("The expiry fixture has no file slot.");
     clock.set(new Date(expired.expiresAt));
@@ -219,13 +227,17 @@ describe("staged upload lifecycle", () => {
     );
 
     clock.set(new Date("2026-08-13T02:00:00.000Z"));
-    const live = await runStaged(runtime, (service) =>
+    const liveResult = await runStaged(runtime, (service) =>
       service.createUpload({
         entryPath: file.path,
         files: [file],
         principal: testPrincipal("principal-a"),
       })
     );
+    if (liveResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const live = liveResult.upload;
     const liveSlot = live.files[0];
     if (liveSlot === undefined) throw new Error("The commit fixture has no file slot.");
     await runStaged(runtime, (service) => service.uploadFile({
@@ -279,11 +291,15 @@ describe("staged upload lifecycle", () => {
       sha256: createHash("sha256").update(bytes).digest("hex"),
       size: bytes.byteLength,
     };
-    const expired = await runStaged(runtime, (service) => service.createUpload({
+    const expiredResult = await runStaged(runtime, (service) => service.createUpload({
       entryPath: file.path,
       files: [file],
       principal: testPrincipal("cleanup-principal"),
     }));
+    if (expiredResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const expired = expiredResult.upload;
     const expiredFile = expired.files[0];
     if (expiredFile === undefined) throw new Error("The cleanup fixture has no file.");
     await runStaged(runtime, (service) => service.uploadFile({
@@ -294,11 +310,15 @@ describe("staged upload lifecycle", () => {
       uploadId: expired.id,
     }));
 
-    const committedUpload = await runStaged(runtime, (service) => service.createUpload({
+    const committedUploadResult = await runStaged(runtime, (service) => service.createUpload({
       entryPath: file.path,
       files: [file],
       principal: testPrincipal("cleanup-principal"),
     }));
+    if (committedUploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const committedUpload = committedUploadResult.upload;
     const committedFile = committedUpload.files[0];
     if (committedFile === undefined) {
       throw new Error("The committed cleanup fixture has no file.");

@@ -558,16 +558,22 @@ async function startLostCommitResponseProxy(
       let responseBody = body;
       if (request.method === "POST" && target.pathname === "/api/v1/uploads") {
         const decoded = z.object({
-          commitUrl: z.url(),
-          files: z.array(z.object({uploadUrl: z.url()}).passthrough()),
+          commitUrl: z.url().optional(),
+          files: z.array(z.object({uploadUrl: z.url()}).passthrough()).optional(),
         }).passthrough().parse(JSON.parse(body));
-        responseBody = JSON.stringify({
-          ...decoded,
-          commitUrl: replaceOrigin(decoded.commitUrl, origin),
-          files: decoded.files.map((file) => Object.assign({}, file, {
-            uploadUrl: replaceOrigin(file.uploadUrl, origin),
-          })),
-        });
+        // A committed replay has no plan URLs to rewrite; only fresh and
+        // resumed upload plans carry origin-bound transfer URLs.
+        if (decoded.commitUrl !== undefined && decoded.files !== undefined) {
+          const commitUrl = decoded.commitUrl;
+          const files = decoded.files;
+          responseBody = JSON.stringify({
+            ...decoded,
+            commitUrl: replaceOrigin(commitUrl, origin),
+            files: files.map((file) => Object.assign({}, file, {
+              uploadUrl: replaceOrigin(file.uploadUrl, origin),
+            })),
+          });
+        }
       }
       response.writeHead(upstream.status, {"Content-Type": "application/json"});
       response.end(responseBody);

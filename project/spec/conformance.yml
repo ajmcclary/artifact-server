@@ -769,6 +769,25 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-17T02:48:43.500Z"
 
+  - id: PUB-015
+    kind: behavior
+    behavior: A staged upload bound to the durable publication idempotency key resumes an interrupted publication without retransmitting verified files or creating a duplicate version, and a key whose publication already committed returns the recorded result without staging access.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: product}
+    acceptance:
+      behavior: {id: PUB-015-B, description: "Interrupt a publication after partial staging, retry with the same operation key, observe verified files marked without resending, and commit exactly one version."}
+      failure: {id: PUB-015-F, description: "Reusing an operation key with a changed manifest conflicts without creating a second upload, and another principal's key binding stays invisible."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local HTTP tests cover partial-staging resume, committed replay without staging, changed-manifest conflict, expiry re-creation, and invalid-key rejection; the file client proves verified files are not re-PUT and a committed key short-circuits before any transfer, and the process-level CLI restart test recovers a lost commit response through the committed lookup without re-sending files. Store-level key binding, uniqueness, and cross-principal invisibility are covered on SQLite and D1, with Postgres covered by the external-storage runtime suite. Deployed-runtime resume evidence and Cloudflare Worker resume remain open under NEXT-STEPS.md T05.
+    depends_on: [PUB-001, PUB-006, PUB-014]
+    evidence:
+      - deployment: local
+        tests: [PUB-015-B, PUB-015-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T00:32:39.000Z"
+
   - id: CLI-001
     kind: security
     behavior: The Artifact Server CLI keeps profiles by exact server origin and account; remote interactive login uses browser authorization and operating-system credential storage, local mode uses private user-only state without visible secrets, and CI uses scoped service credentials from its secret manager.

@@ -273,6 +273,16 @@ export function createApplicationLayer(
               ? cause
               : repositoryFailure("findIdempotentPublication", cause),
         }),
+      findPublicationByIdempotencyKey: (projectId, principalId, idempotencyKey) =>
+        Effect.tryPromise({
+          try: () =>
+            adapters.repository.findPublicationByIdempotencyKey(
+              projectId,
+              principalId,
+              idempotencyKey,
+            ),
+          catch: (cause) => repositoryFailure("findPublicationByIdempotencyKey", cause),
+        }),
       findCurrentVersion: (projectId, artifactId) =>
         Effect.tryPromise({
           try: () => adapters.repository.findCurrentVersion(projectId, artifactId),
@@ -328,6 +338,16 @@ export function createApplicationLayer(
               principalId,
             ),
           catch: (cause) => repositoryFailure("findStagedUpload", cause),
+        }),
+      findStagedUploadByIdempotencyKey: (projectId, principalId, idempotencyKey) =>
+        Effect.tryPromise({
+          try: () =>
+            adapters.repository.findStagedUploadByIdempotencyKey(
+              projectId,
+              principalId,
+              idempotencyKey,
+            ),
+          catch: (cause) => repositoryFailure("findStagedUploadByIdempotencyKey", cause),
         }),
       findStagedUploadFileSlot: (
         projectId,

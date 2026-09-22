@@ -214,6 +214,7 @@ describe("file publication client", () => {
       files: [],
       manifestDigest: "0".repeat(64),
       projectId: "prj_default",
+      status: "created",
       uploadId: "incomplete-upload-plan",
     }));
     try {
@@ -306,6 +307,64 @@ describe("file publication client", () => {
       "application/octet-stream",
     ]);
   });
+
+  test("skips already-verified files when resuming a crashed upload", async () => {
+    const crashServer = await startResumeCrashServer();
+    try {
+      const inputDirectory = path.join(fixtureDirectory, "resume");
+      await mkdir(inputDirectory, {recursive: true});
+      await Promise.all([
+        writeFile(path.join(inputDirectory, "file1.txt"), "first\n"),
+        writeFile(path.join(inputDirectory, "file2.txt"), "second"),
+      ]);
+
+      const command: FilePublicationCommand = {
+        entryPath: "file1.txt",
+        idempotencyKey: "client-resume-key-0001",
+        inputPath: inputDirectory,
+        target: {
+          accessSetting: "account_required",
+          kind: "new_artifact",
+          tags: ["client-resume"],
+        },
+      };
+
+      const first = await executeClient(crashServer.origin, installation.apiToken, command);
+      expect(first.success).toBe(false);
+
+      const second = await executeClient(crashServer.origin, installation.apiToken, command);
+      expect(second.success).toBe(true);
+      if (!second.success) return;
+      expect(second.result.artifact.name).toBe("Resume artifact");
+
+      expect(crashServer.putCounts.get("file1.txt")).toBe(1);
+      expect(crashServer.putCounts.get("file2.txt")).toBe(1);
+    } finally {
+      await crashServer.close();
+    }
+  });
+
+  test("returns an already-committed result without uploading or committing", async () => {
+    const committedServer = await startCommittedShortCircuitServer();
+    try {
+      const filePath = path.join(fixtureDirectory, "committed.txt");
+      await writeFile(filePath, "committed input\n");
+
+      const result = await executeClient(
+        committedServer.origin,
+        installation.apiToken,
+        newArtifactCommand(filePath),
+      );
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.result.artifact.name).toBe("Committed artifact");
+      expect(result.result.replayed).toBe(true);
+      expect(committedServer.putAttempts).toBe(0);
+      expect(committedServer.commitAttempts).toBe(0);
+    } finally {
+      await committedServer.close();
+    }
+  });
 });
 
 function newArtifactCommand(
@@ -364,11 +423,227 @@ async function startUnsafeUploadPlanServer(): Promise<{
         path: "safe.txt",
         size: 22,
         uploadUrl: "https://elsewhere.example.test/upload",
+        verified: false,
       }],
       manifestDigest: "0".repeat(64),
       projectId: "prj_default",
+      status: "created",
       uploadId: "unsafe-upload-plan",
     }));
+}
+
+interface ResumeCrashServer {
+  readonly close: () => Promise<void>;
+  readonly origin: string;
+  readonly putCounts: ReadonlyMap<string, number>;
+}
+
+async function startResumeCrashServer(): Promise<ResumeCrashServer> {
+  const uploadId = "resume-upload-id";
+  const file1Token = "file1-token";
+  const file2Token = "file2-token";
+  const putCounts = new Map<string, number>();
+  let createAttempts = 0;
+  let commitAttempts = 0;
+  let origin = "";
+
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    const pathName = url.pathname;
+
+    if (request.method === "POST" && pathName === "/api/v1/uploads") {
+      createAttempts += 1;
+      const status = createAttempts === 1 ? "created" : "resumed";
+      response.writeHead(201, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({
+        commitUrl: `${origin}/api/v1/uploads/${uploadId}/commit`,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        files: [
+          {
+            method: "PUT",
+            path: "file1.txt",
+            size: 6,
+            uploadUrl: `${origin}/api/v1/uploads/${uploadId}/files/${file1Token}`,
+            verified: createAttempts > 1,
+          },
+          {
+            method: "PUT",
+            path: "file2.txt",
+            size: 6,
+            uploadUrl: `${origin}/api/v1/uploads/${uploadId}/files/${file2Token}`,
+            verified: false,
+          },
+        ],
+        manifestDigest: "0".repeat(64),
+        projectId: "prj_default",
+        status,
+        uploadId,
+      }));
+      return;
+    }
+
+    if (request.method === "PUT" && pathName.includes("/files/")) {
+      const filePath = pathName.includes(file1Token) ? "file1.txt" : "file2.txt";
+      if (createAttempts === 1 && filePath === "file2.txt") {
+        request.socket.destroy();
+        return;
+      }
+      putCounts.set(filePath, (putCounts.get(filePath) ?? 0) + 1);
+      response.writeHead(200, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({
+        path: filePath,
+        status: "verified",
+        uploadId,
+      }));
+      return;
+    }
+
+    if (request.method === "POST" && pathName.includes("/commit")) {
+      commitAttempts += 1;
+      response.writeHead(201, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({
+        artifact: {
+          accessSetting: "account_required",
+          createdAt: "2099-01-01T00:00:00.000Z",
+          currentVersionId: "version-id",
+          deletedAt: null,
+          id: "artifact-id",
+          name: "Resume artifact",
+          projectId: "prj_default",
+          tags: [],
+        },
+        links: {
+          artifact: `${origin}/artifact-id`,
+          review: `${origin}/artifact-id/review/version-id`,
+          version: `${origin}/version-id`,
+        },
+        replayed: false,
+        version: {
+          artifactId: "artifact-id",
+          contentToken: "content-token",
+          createdAt: "2099-01-01T00:00:00.000Z",
+          entryPath: "file1.txt",
+          id: "version-id",
+          manifestDigest: "0".repeat(64),
+          number: 1,
+          publisherPrincipalId: "local-api-token",
+          projectId: "prj_default",
+          routingMode: "static",
+        },
+      }));
+      return;
+    }
+
+    response.writeHead(404);
+    response.end("Not found");
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = assignedAddressSchema.safeParse(server.address());
+  if (!address.success) {
+    await closeServer(server);
+    throw new Error("The resume crash test server did not receive a TCP port.");
+  }
+  origin = `http://127.0.0.1:${address.data.port}`;
+
+  return {
+    close: () => closeServer(server),
+    origin,
+    putCounts,
+  };
+}
+
+interface CommittedShortCircuitServer {
+  readonly close: () => Promise<void>;
+  readonly commitAttempts: number;
+  readonly origin: string;
+  readonly putAttempts: number;
+}
+
+async function startCommittedShortCircuitServer(): Promise<CommittedShortCircuitServer> {
+  let putAttempts = 0;
+  let commitAttempts = 0;
+  let origin = "";
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    const pathName = url.pathname;
+
+    if (request.method === "POST" && pathName === "/api/v1/uploads") {
+      response.writeHead(200, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({
+        artifact: {
+          accessSetting: "account_required",
+          createdAt: "2099-01-01T00:00:00.000Z",
+          currentVersionId: "version-id",
+          deletedAt: null,
+          id: "artifact-id",
+          name: "Committed artifact",
+          projectId: "prj_default",
+          tags: [],
+        },
+        links: {
+          artifact: `${origin}/artifact-id`,
+          review: `${origin}/artifact-id/review/version-id`,
+          version: `${origin}/version-id`,
+        },
+        replayed: true,
+        status: "committed",
+        version: {
+          artifactId: "artifact-id",
+          contentToken: "content-token",
+          createdAt: "2099-01-01T00:00:00.000Z",
+          entryPath: "file1.txt",
+          id: "version-id",
+          manifestDigest: "0".repeat(64),
+          number: 1,
+          publisherPrincipalId: "local-api-token",
+          projectId: "prj_default",
+          routingMode: "static",
+        },
+      }));
+      return;
+    }
+
+    if (request.method === "PUT" && pathName.includes("/files/")) {
+      putAttempts += 1;
+      response.writeHead(200, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({}));
+      return;
+    }
+
+    if (request.method === "POST" && pathName.includes("/commit")) {
+      commitAttempts += 1;
+      response.writeHead(201, {"Content-Type": "application/json"});
+      response.end(JSON.stringify({}));
+      return;
+    }
+
+    response.writeHead(404);
+    response.end("Not found");
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = assignedAddressSchema.safeParse(server.address());
+  if (!address.success) {
+    await closeServer(server);
+    throw new Error("The committed short-circuit test server did not receive a TCP port.");
+  }
+  origin = `http://127.0.0.1:${address.data.port}`;
+
+  return {
+    close: () => closeServer(server),
+    commitAttempts,
+    get putAttempts() {
+      return putAttempts;
+    },
+    origin,
+  };
 }
 
 async function startResponseServer(

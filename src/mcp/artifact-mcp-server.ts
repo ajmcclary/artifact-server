@@ -1220,7 +1220,7 @@ export function createArtifactMcpServer(
       annotations: additiveWriteAnnotations,
     },
     async ({entryPath, files, projectId, routingMode}) => toolResult(async () => {
-      const upload = await runMcpApplicationEffect(
+      const result = await runMcpApplicationEffect(
         dependencies,
         StagedUploadService.use((uploads) =>
           uploads.createUpload({
@@ -1232,7 +1232,12 @@ export function createArtifactMcpServer(
           })
         ),
       );
-      return uploadPlan(applicationUrl, upload);
+      if (result.kind === "committed") {
+        throw new Error(
+          "A staged upload unexpectedly returned a committed publication.",
+        );
+      }
+      return uploadPlan(applicationUrl, result.upload);
     }),
   );
 

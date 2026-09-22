@@ -469,7 +469,7 @@ function makeLinkedArtifactService(
       readonly principal: Principal;
       readonly projectId: string;
     }) {
-      const upload = yield* staged.createUpload({
+      const result = yield* staged.createUpload({
         entryPath: input.entryPath,
         files: [{
           mediaType: input.mediaType,
@@ -480,6 +480,12 @@ function makeLinkedArtifactService(
         principal: input.principal,
         projectId: input.projectId,
       });
+      if (result.kind === "committed") {
+        return yield* Effect.die(
+          new Error("A linked capture upload unexpectedly returned a committed publication."),
+        );
+      }
+      const upload = result.upload;
       const file = upload.files[0];
       if (file === undefined) {
         return yield* Effect.die(

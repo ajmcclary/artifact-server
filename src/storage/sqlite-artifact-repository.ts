@@ -304,6 +304,7 @@ const stagedUploadBaseRowSchema = z.object({
   entryPath: z.string(),
   expiresAt: z.string(),
   id: z.string(),
+  idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
   principalId: z.string(),
   projectId: z.string(),
@@ -2211,6 +2212,20 @@ export class SqliteArtifactRepository implements
     );
   }
 
+  findPublicationByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<PublishedVersion | null> {
+    return Promise.resolve().then(() =>
+      this.#findPublicationByIdempotencyKeyResult(
+        projectId,
+        principalId,
+        idempotencyKey,
+      ),
+    );
+  }
+
   findVersionContent(
     contentToken: string,
     requestedPath: string,
@@ -2456,8 +2471,9 @@ export class SqliteArtifactRepository implements
           .prepare(
             `INSERT INTO staged_uploads (
               id, project_id, principal_id, status, manifest_digest, entry_path,
-              routing_mode, created_at, expires_at, committed_version_id
-            ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL)`,
+              routing_mode, created_at, expires_at, committed_version_id,
+              idempotency_key
+            ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, ?)`,
           )
           .run(
             command.id,
@@ -2468,6 +2484,7 @@ export class SqliteArtifactRepository implements
             command.manifest.routingMode,
             command.createdAt,
             command.expiresAt,
+            command.idempotencyKey,
           );
 
         const insertFile = this.#database.prepare(
@@ -2504,6 +2521,36 @@ export class SqliteArtifactRepository implements
     return Promise.resolve().then(() =>
       this.#readStagedUploadOrNull(projectId, uploadId, principalId),
     );
+  }
+
+  findStagedUploadByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<StagedUpload | null> {
+    return Promise.resolve().then(() => {
+      const row = this.#database
+        .prepare(
+          `SELECT
+            id AS id,
+            project_id AS projectId,
+            principal_id AS principalId,
+            status AS status,
+            manifest_digest AS manifestDigest,
+            entry_path AS entryPath,
+            routing_mode AS routingMode,
+            created_at AS createdAt,
+            expires_at AS expiresAt,
+            committed_version_id AS committedVersionId,
+            idempotency_key AS idempotencyKey
+          FROM staged_uploads
+          WHERE project_id = ? AND principal_id = ? AND idempotency_key = ?`,
+        )
+        .get(projectId, principalId, idempotencyKey);
+      const header = stagedUploadRowSchema.nullable().parse(row ?? null);
+      if (header === null) return null;
+      return this.#readStagedUploadByHeader(header);
+    });
   }
 
   findStagedUploadFileSlot(
@@ -3026,6 +3073,37 @@ export class SqliteArtifactRepository implements
     const parsed = idempotencyRowSchema.nullable().parse(row ?? null);
     if (parsed === null) return null;
     if (parsed.inputDigest !== inputDigest || parsed.operation !== "publish") {
+      throw new IdempotencyConflict({
+        message: "The idempotency key was already used with different input.",
+      });
+    }
+    return this.#readPublishedVersion(projectId, parsed.versionId, true);
+  }
+
+  #findPublicationByIdempotencyKeyResult(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): PublishedVersion | null {
+    const row = this.#database
+      .prepare(
+        `SELECT
+          r.access_setting AS accessSetting,
+          r.artifact_id AS artifactId,
+          r.input_digest AS inputDigest,
+          r.operation,
+          r.tags_json AS tagsJson,
+          r.version_id AS versionId
+         FROM idempotency_records r
+         JOIN versions v
+           ON v.project_id = r.project_id AND v.id = r.version_id
+         WHERE r.project_id = ? AND r.idempotency_key = ?
+           AND v.publisher_principal_id = ?`,
+      )
+      .get(projectId, idempotencyKey, principalId);
+    const parsed = idempotencyRowSchema.nullable().parse(row ?? null);
+    if (parsed === null) return null;
+    if (parsed.operation !== "publish") {
       throw new IdempotencyConflict({
         message: "The idempotency key was already used with different input.",
       });
@@ -4956,6 +5034,7 @@ export class SqliteArtifactRepository implements
         created_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         committed_version_id TEXT REFERENCES versions(id),
+        idempotency_key TEXT,
         CHECK (
           (status = 'open' AND committed_version_id IS NULL)
           OR (status = 'committed' AND committed_version_id IS NOT NULL)
@@ -5049,6 +5128,7 @@ export class SqliteArtifactRepository implements
     this.#widenRegisteredAgentsIfNeeded();
     this.#addSourceBindingColumnsIfMissing();
     this.#addGitHistoryMirrorTablesIfMissing();
+    this.#addStagedUploadIdempotencyKeyIfMissing();
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS projects_active_created
         ON projects (archived_at, created_at, id);
@@ -5173,6 +5253,20 @@ export class SqliteArtifactRepository implements
         ON git_history_jobs (installation_id, version_id);
       CREATE INDEX IF NOT EXISTS git_history_mappings_artifact
         ON git_history_mappings (installation_id, artifact_id, status);
+    `);
+  }
+
+  #addStagedUploadIdempotencyKeyIfMissing(): void {
+    const columns = this.#tableColumns("staged_uploads");
+    if (!columns.includes("idempotency_key")) {
+      this.#database.exec(
+        "ALTER TABLE staged_uploads ADD COLUMN idempotency_key TEXT",
+      );
+    }
+    this.#database.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS staged_uploads_idempotency
+        ON staged_uploads (project_id, principal_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL
     `);
   }
 
@@ -5650,14 +5744,20 @@ export class SqliteArtifactRepository implements
           routing_mode AS routingMode,
           created_at AS createdAt,
           expires_at AS expiresAt,
-          committed_version_id AS committedVersionId
+          committed_version_id AS committedVersionId,
+          idempotency_key AS idempotencyKey
         FROM staged_uploads
         WHERE project_id = ? AND id = ? AND principal_id = ?`,
       )
       .get(projectId, uploadId, principalId);
     const header = stagedUploadRowSchema.nullable().parse(row ?? null);
     if (header === null) return null;
+    return this.#readStagedUploadByHeader(header);
+  }
 
+  #readStagedUploadByHeader(
+    header: z.infer<typeof stagedUploadRowSchema>,
+  ): StagedUpload {
     const fileRows = this.#database
       .prepare(
         `SELECT
@@ -5672,7 +5772,7 @@ export class SqliteArtifactRepository implements
         WHERE upload_id = ?
         ORDER BY path`,
       )
-      .all(uploadId);
+      .all(header.id);
     const parsedFiles = z.array(stagedUploadFileRowSchema).parse(fileRows);
     const manifest = createManifest({
       entryPath: header.entryPath,
@@ -5685,7 +5785,9 @@ export class SqliteArtifactRepository implements
       routingMode: header.routingMode,
     });
     if (manifest.digest !== header.manifestDigest) {
-      throw new Error(`Staged upload ${uploadId} has an invalid persisted manifest digest.`);
+      throw new Error(
+        `Staged upload ${header.id} has an invalid persisted manifest digest.`,
+      );
     }
     const manifestByPath = new Map(
       manifest.entries.map((entry) => [entry.path, entry] as const),
@@ -5693,7 +5795,9 @@ export class SqliteArtifactRepository implements
     const files: readonly StagedUploadFile[] = parsedFiles.map((file) => {
       const entry = manifestByPath.get(file.path);
       if (entry === undefined || entry.disposition !== file.disposition) {
-        throw new Error(`Staged upload ${uploadId} has invalid persisted file metadata.`);
+        throw new Error(
+          `Staged upload ${header.id} has invalid persisted file metadata.`,
+        );
       }
       return {
         entry,
@@ -5706,6 +5810,7 @@ export class SqliteArtifactRepository implements
       expiresAt: header.expiresAt,
       files,
       id: header.id,
+      idempotencyKey: header.idempotencyKey,
       manifest,
       principalId: header.principalId,
       projectId: header.projectId,

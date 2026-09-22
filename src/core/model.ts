@@ -248,6 +248,7 @@ interface StagedUploadBase {
   readonly expiresAt: string;
   readonly files: readonly StagedUploadFile[];
   readonly id: string;
+  readonly idempotencyKey: string | null;
   readonly manifest: CanonicalManifest;
   readonly principalId: string;
   readonly projectId: string;

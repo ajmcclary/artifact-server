@@ -661,6 +661,15 @@ const indexGitHistoryReconciliation = Effect.gen(function*() {
     ON git_history_jobs (installation_id, version_id)`);
 });
 
+const addStagedUploadIdempotencyKey = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`ALTER TABLE staged_uploads
+    ADD COLUMN idempotency_key TEXT`);
+  yield* sql.unsafe(`CREATE UNIQUE INDEX staged_uploads_idempotency
+    ON staged_uploads (installation_id, project_id, principal_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -674,10 +683,11 @@ const migrationLoader = Migrator.fromRecord({
   "0010_agent_capabilities": widenRegisteredAgentKind,
   "0011_artifact_search_name": addArtifactSearchName,
   "0012_git_history_reconciliation_index": indexGitHistoryReconciliation,
+  "0013_staged_upload_idempotency": addStagedUploadIdempotencyKey,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 12;
+export const requiredPostgresSchemaVersion = 13;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -768,6 +778,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 12,
     name: "git_history_reconciliation_index",
+  }, {
+    migration_id: 13,
+    name: "staged_upload_idempotency",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

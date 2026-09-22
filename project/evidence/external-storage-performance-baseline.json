@@ -2,15 +2,15 @@
   "artifactList": {
     "latency": {
       "count": 16,
-      "maximumMilliseconds": 23.636,
-      "meanMilliseconds": 10.704,
-      "minimumMilliseconds": 5.416,
-      "p50Milliseconds": 6.118,
-      "p95Milliseconds": 23.636,
-      "p99Milliseconds": 23.636
+      "maximumMilliseconds": 24.66,
+      "meanMilliseconds": 10.127,
+      "minimumMilliseconds": 4.39,
+      "p50Milliseconds": 5.626,
+      "p95Milliseconds": 24.66,
+      "p99Milliseconds": 24.66
     },
-    "operationsPerSecond": 370.344,
-    "totalMilliseconds": 43.203
+    "operationsPerSecond": 388.271,
+    "totalMilliseconds": 41.208
   },
   "checks": {
     "compiledProcesses": "passed",
@@ -24,28 +24,28 @@
   "concurrentPublish": {
     "latency": {
       "count": 16,
-      "maximumMilliseconds": 67.787,
-      "meanMilliseconds": 59.898,
-      "minimumMilliseconds": 52.424,
-      "p50Milliseconds": 55.397,
-      "p95Milliseconds": 67.787,
-      "p99Milliseconds": 67.787
+      "maximumMilliseconds": 104.033,
+      "meanMilliseconds": 83.102,
+      "minimumMilliseconds": 63.136,
+      "p50Milliseconds": 82.739,
+      "p95Milliseconds": 104.033,
+      "p99Milliseconds": 104.033
     },
-    "operationsPerSecond": 66.631,
-    "totalMilliseconds": 240.129
+    "operationsPerSecond": 47.097,
+    "totalMilliseconds": 339.727
   },
   "concurrentRead": {
     "latency": {
       "count": 80,
-      "maximumMilliseconds": 30.985,
-      "meanMilliseconds": 11.465,
-      "minimumMilliseconds": 3.809,
-      "p50Milliseconds": 6.35,
-      "p95Milliseconds": 28.983,
-      "p99Milliseconds": 30.985
+      "maximumMilliseconds": 43.803,
+      "meanMilliseconds": 22.147,
+      "minimumMilliseconds": 4.621,
+      "p50Milliseconds": 28.349,
+      "p95Milliseconds": 31.908,
+      "p99Milliseconds": 43.803
     },
-    "operationsPerSecond": 606.123,
-    "totalMilliseconds": 131.986
+    "operationsPerSecond": 352.719,
+    "totalMilliseconds": 226.81
   },
   "configuration": {
     "concurrentFileBytes": 16384,
@@ -62,8 +62,8 @@
   "environment": {
     "arch": "arm64",
     "availableParallelism": 10,
-    "capturedAt": "2026-09-21T22:38:42.480Z",
-    "commit": "7c30ed20b75815780fe6448cb9efddacf92e4afa",
+    "capturedAt": "2026-09-22T00:23:40.537Z",
+    "commit": "773e3675d1c1850c85f5a8b1df2499aaf9318cce",
     "cpu": "Apple M1 Max",
     "details": {
       "minioImage": "docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3",
@@ -84,39 +84,39 @@
     "directory": {
       "latency": {
         "count": 3,
-        "maximumMilliseconds": 388.177,
-        "meanMilliseconds": 333.373,
-        "minimumMilliseconds": 287.041,
-        "p50Milliseconds": 324.9,
-        "p95Milliseconds": 388.177,
-        "p99Milliseconds": 388.177
+        "maximumMilliseconds": 368.767,
+        "meanMilliseconds": 346.585,
+        "minimumMilliseconds": 335.179,
+        "p50Milliseconds": 335.808,
+        "p95Milliseconds": 368.767,
+        "p99Milliseconds": 368.767
       },
-      "operationsPerSecond": 3,
-      "totalMilliseconds": 1000.147
+      "operationsPerSecond": 2.885,
+      "totalMilliseconds": 1039.783
     },
     "singleFile": {
       "latency": {
         "count": 3,
-        "maximumMilliseconds": 118.749,
-        "meanMilliseconds": 107.508,
-        "minimumMilliseconds": 98.523,
-        "p50Milliseconds": 105.252,
-        "p95Milliseconds": 118.749,
-        "p99Milliseconds": 118.749
+        "maximumMilliseconds": 123.723,
+        "meanMilliseconds": 119.765,
+        "minimumMilliseconds": 112.769,
+        "p50Milliseconds": 122.802,
+        "p95Milliseconds": 123.723,
+        "p99Milliseconds": 123.723
       },
-      "operationsPerSecond": 9.301,
-      "totalMilliseconds": 322.544
+      "operationsPerSecond": 8.349,
+      "totalMilliseconds": 359.317
     }
   },
-  "generatedAt": "2026-09-21T22:38:42.481Z",
-  "providerReadyMilliseconds": 1840,
+  "generatedAt": "2026-09-22T00:23:40.537Z",
+  "providerReadyMilliseconds": 4202,
   "serverReadyMilliseconds": {
     "initialProcesses": [
-      714.806,
-      718.813
+      786.294,
+      782.955
     ],
-    "replacementProcess": 668.388
+    "replacementProcess": 724.372
   },
-  "totalHarnessMilliseconds": 4262.278,
+  "totalHarnessMilliseconds": 4663.192,
   "warnings": []
 }

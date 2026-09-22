@@ -246,7 +246,7 @@ const testPrincipal: Principal = {
 
 async function publishPrivateArtifact(runtime: ApplicationRuntime) {
   const bytes = new TextEncoder().encode("<!doctype html><title>Private</title>");
-  const upload = await runtime.runPromise(
+  const result = await runtime.runPromise(
     StagedUploadService.use((stagedUploads) => stagedUploads.createUpload({
       entryPath: "index.html",
       files: [{
@@ -259,6 +259,10 @@ async function publishPrivateArtifact(runtime: ApplicationRuntime) {
       projectId: null,
     })),
   );
+  if (result.kind === "committed") {
+    throw new Error("Fixture upload unexpectedly returned a committed publication.");
+  }
+  const upload = result.upload;
   const file = upload.files[0];
   if (file === undefined) throw new Error("The content fixture upload has no file.");
   await runtime.runPromise(

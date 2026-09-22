@@ -16,7 +16,10 @@ import {
   type ApplicationRuntime,
   runApplicationEffect,
 } from "../application/application-runtime.js";
-import { StagedUploadService } from "../application/staged-upload.js";
+import {
+  type CreateStagedUploadCommand,
+  StagedUploadService,
+} from "../application/staged-upload.js";
 import { AuthenticationService } from "../application/authentication.js";
 import {
   digestIdentitySecret,
@@ -2158,41 +2161,65 @@ export function createHttpApp(
 
   app.post("/api/v1/uploads", boundedUploadPlanBody, async (context) => {
     const body = createUploadSchema.parse(await context.req.json());
-    const upload = await runHttpApplicationEffect(
+    const idempotencyKey = context.req.header("idempotency-key");
+    const command: CreateStagedUploadCommand = idempotencyKey === undefined
+      ? {
+        entryPath: body.entryPath,
+        files: body.files,
+        principal: context.get("principal"),
+        projectId: body.projectId ?? null,
+        routingMode: body.routingMode,
+      }
+      : {
+        entryPath: body.entryPath,
+        files: body.files,
+        idempotencyKey,
+        principal: context.get("principal"),
+        projectId: body.projectId ?? null,
+        routingMode: body.routingMode,
+      };
+    const result = await runHttpApplicationEffect(
       context,
       dependencies,
-      StagedUploadService.use((stagedUploads) =>
-        stagedUploads.createUpload({
-          entryPath: body.entryPath,
-          files: body.files,
-          principal: context.get("principal"),
-          projectId: body.projectId ?? null,
-          routingMode: body.routingMode,
-        })
-      ),
+      StagedUploadService.use((stagedUploads) => stagedUploads.createUpload(command)),
     );
+    if (result.kind === "committed") {
+      return context.json(
+        {
+          ...publishResponse(
+            responseApplicationUrl(context, dependencies),
+            dependencies.contentDomain,
+            result.publication,
+          ),
+          status: "committed" as const,
+        },
+        200,
+      );
+    }
     const requestUrl = responseApplicationUrl(context, dependencies);
-    const projectQuery = `?projectId=${encodeURIComponent(upload.projectId)}`;
+    const projectQuery = `?projectId=${encodeURIComponent(result.upload.projectId)}`;
     const fileQuery =
-      `${projectQuery}&owner=${encodeURIComponent(upload.principalId)}`;
+      `${projectQuery}&owner=${encodeURIComponent(result.upload.principalId)}`;
     return context.json({
       commitUrl: new URL(
-        `/api/v1/uploads/${upload.id}/commit${projectQuery}`,
+        `/api/v1/uploads/${result.upload.id}/commit${projectQuery}`,
         requestUrl,
       ).toString(),
-      expiresAt: upload.expiresAt,
-      files: upload.files.map((file) => ({
+      expiresAt: result.upload.expiresAt,
+      files: result.upload.files.map((file) => ({
         method: "PUT" as const,
         path: file.entry.path,
         size: file.entry.size,
         uploadUrl: new URL(
-          `/api/v1/uploads/${upload.id}/files/${file.storageToken}${fileQuery}`,
+          `/api/v1/uploads/${result.upload.id}/files/${file.storageToken}${fileQuery}`,
           requestUrl,
         ).toString(),
+        verified: file.uploadedAt !== null,
       })),
-      manifestDigest: upload.manifest.digest,
-      projectId: upload.projectId,
-      uploadId: upload.id,
+      manifestDigest: result.upload.manifest.digest,
+      projectId: result.upload.projectId,
+      status: result.resumed ? ("resumed" as const) : ("created" as const),
+      uploadId: result.upload.id,
     }, 201);
   });
 

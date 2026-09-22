@@ -115,7 +115,18 @@ const publishResponseSchema = Schema.Struct({
   replayed: Schema.Boolean,
   version: versionSchema,
 });
-const createUploadResponseSchema = Schema.Struct({
+const committedUploadResponseSchema = Schema.Struct({
+  artifact: artifactSchema,
+  links: Schema.Struct({
+    artifact: Schema.URLFromString,
+    review: Schema.URLFromString,
+    version: Schema.URLFromString,
+  }),
+  replayed: Schema.Boolean,
+  status: Schema.Literal("committed"),
+  version: versionSchema,
+});
+const stagedUploadResponseSchema = Schema.Struct({
   commitUrl: Schema.URLFromString,
   expiresAt: Schema.String,
   files: Schema.Array(Schema.Struct({
@@ -123,11 +134,17 @@ const createUploadResponseSchema = Schema.Struct({
     path: Schema.String,
     size: nonnegativeIntegerSchema,
     uploadUrl: Schema.URLFromString,
+    verified: Schema.Boolean,
   })),
   manifestDigest: Schema.String,
   projectId: Schema.String,
+  status: Schema.Literals(["created", "resumed"]),
   uploadId: Schema.String,
 });
+const createUploadResponseSchema = Schema.Union([
+  committedUploadResponseSchema,
+  stagedUploadResponseSchema,
+]);
 const serverErrorSchema = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -379,19 +396,28 @@ export const publishPreparedPath = Effect.fn(
 > {
     const serverOrigin = yield* parseServerOrigin(config.serverOrigin);
     const publication = prepared.publication;
-    const upload = yield* createUpload(
+    const response = yield* createUpload(
       serverOrigin,
       config.apiToken,
       publication,
       prepared.projectId,
+      idempotencyKey,
     );
-    yield* validateUploadPlan(serverOrigin, publication, upload);
+    if (response.status === "committed") {
+      return {
+        artifact: response.artifact,
+        links: response.links,
+        replayed: response.replayed,
+        version: response.version,
+      };
+    }
+    yield* validateUploadPlan(serverOrigin, publication, response);
     yield* Effect.forEach(
-      upload.files,
+      response.files.filter((plannedFile) => !plannedFile.verified),
       (plannedFile) => uploadPreparedFile(
         plannedFile,
         requiredPreparedFile(publication.files, plannedFile.path),
-        upload.uploadId,
+        response.uploadId,
       ),
       {concurrency: uploadConcurrency, discard: true},
     );
@@ -399,7 +425,7 @@ export const publishPreparedPath = Effect.fn(
       config.apiToken,
       idempotencyKey,
       prepared.target,
-      upload.commitUrl,
+      response.commitUrl,
     );
 });
 
@@ -757,6 +783,7 @@ const createUpload = Effect.fn("FilePublicationClient.createUpload")(
     apiToken: Redacted.Redacted,
     prepared: PreparedPublication,
     projectId: string | undefined,
+    idempotencyKey: string,
   ): Effect.fn.Return<
     typeof createUploadResponseSchema.Type,
     FilePublicationProtocolError,
@@ -779,7 +806,9 @@ const createUpload = Effect.fn("FilePublicationClient.createUpload")(
       routingMode: prepared.routingMode,
     };
     const request = yield* jsonRequest(
-      HttpClientRequest.post(new URL("/api/v1/uploads", serverOrigin)),
+      HttpClientRequest.post(new URL("/api/v1/uploads", serverOrigin)).pipe(
+        HttpClientRequest.setHeader("Idempotency-Key", idempotencyKey),
+      ),
       apiToken,
       body,
       "create_upload",
@@ -796,7 +825,7 @@ const validateUploadPlan = Effect.fn("FilePublicationClient.validateUploadPlan")
   function*(
     serverOrigin: URL,
     prepared: PreparedPublication,
-    upload: typeof createUploadResponseSchema.Type,
+    upload: typeof stagedUploadResponseSchema.Type,
   ): Effect.fn.Return<void, FilePublicationConfigurationError> {
     if (
       upload.commitUrl.origin !== serverOrigin.origin
@@ -833,7 +862,7 @@ const validateUploadPlan = Effect.fn("FilePublicationClient.validateUploadPlan")
 
 const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")(
   function*(
-    plannedFile: typeof createUploadResponseSchema.Type["files"][number],
+    plannedFile: typeof stagedUploadResponseSchema.Type["files"][number],
     preparedFile: PreparedFile,
     uploadId: string,
   ): Effect.fn.Return<

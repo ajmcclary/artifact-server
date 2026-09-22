@@ -590,6 +590,7 @@ export interface CreateStagedUpload {
     readonly storageToken: string;
   }[];
   readonly id: string;
+  readonly idempotencyKey: string | null;
   readonly manifest: CanonicalManifest;
   readonly principalId: string;
   readonly projectId: string;
@@ -661,6 +662,11 @@ export interface ArtifactRepository {
     idempotencyKey: string,
     inputDigest: string,
   ): Promise<PublishedVersion | null>;
+  findPublicationByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
+  ): Promise<PublishedVersion | null>;
   findVersionContent(
     contentToken: string,
     path: string,
@@ -707,6 +713,11 @@ export interface StagedUploadRepository {
     projectId: string,
     uploadId: string,
     principalId: string,
+  ): Promise<StagedUpload | null>;
+  findStagedUploadByIdempotencyKey(
+    projectId: string,
+    principalId: string,
+    idempotencyKey: string,
   ): Promise<StagedUpload | null>;
   markStagedFileUploaded(
     projectId: string,

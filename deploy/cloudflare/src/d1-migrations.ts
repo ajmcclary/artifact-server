@@ -8,7 +8,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 10;
+export const requiredD1SchemaVersion = 11;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -115,7 +115,8 @@ const schemaSql = `
     routing_mode TEXT NOT NULL CHECK (routing_mode IN ('static', 'spa')),
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    committed_version_id TEXT REFERENCES versions(id)
+    committed_version_id TEXT REFERENCES versions(id),
+    idempotency_key TEXT
   );
 
   CREATE TABLE IF NOT EXISTS staged_upload_files (
@@ -414,6 +415,9 @@ const schemaSql = `
     ON manifest_entries(sha256);
   CREATE INDEX IF NOT EXISTS staged_uploads_expiry
     ON staged_uploads(status, expires_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS staged_uploads_idempotency
+    ON staged_uploads(project_id, principal_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
   CREATE INDEX IF NOT EXISTS content_bootstraps_expiry
     ON content_bootstraps(expires_at);
   CREATE INDEX IF NOT EXISTS content_sessions_expiry
@@ -620,6 +624,7 @@ export async function migrateD1(
     await addGitHistoryMirrorColumnsIfMissing(database);
     await widenRegisteredAgentsIfNeeded(database);
     await addArtifactSearchNameIfMissing(database);
+    await addStagedUploadIdempotencyKeyIfMissing(database);
   }
   await database.batch([
     database.prepare(`
@@ -662,6 +667,23 @@ async function addArtifactSearchNameIfMissing(
       artifact.id,
     )
   ));
+}
+
+async function addStagedUploadIdempotencyKeyIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const columns = await database.prepare("PRAGMA table_info(staged_uploads)")
+    .all<{name: string}>();
+  if (!columns.results.some((column) => column.name === "idempotency_key")) {
+    await database.prepare(
+      "ALTER TABLE staged_uploads ADD COLUMN idempotency_key TEXT",
+    ).run();
+  }
+  await database.prepare(`
+    CREATE UNIQUE INDEX IF NOT EXISTS staged_uploads_idempotency
+      ON staged_uploads(project_id, principal_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL
+  `).run();
 }
 
 async function addGitHistoryMirrorColumnsIfMissing(

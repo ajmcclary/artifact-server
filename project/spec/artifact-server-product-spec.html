@@ -1668,6 +1668,14 @@
             comparisons, sharing, and the comment threads made on its own artifact versions.
           </p>
 
+          <p>
+            A publication survives interruption. Retrying a publish names the same durable
+            operation: files the server already verified are not sent again, an operation the
+            server already committed returns its original artifact and links without touching
+            staging, and one operation identity can never produce a second version. Reusing an
+            operation identity with changed files is a conflict, not a silent replacement.
+          </p>
+
           <div class="pathway" aria-label="The four steps in the normal artifact workflow">
             <article class="pathway-step">
               <div class="pathway-copy">
