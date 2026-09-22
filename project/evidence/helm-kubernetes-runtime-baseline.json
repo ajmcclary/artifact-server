@@ -1,7 +1,7 @@
 {
-  "clusterReadyMilliseconds": 26787.065416999998,
+  "clusterReadyMilliseconds": 29445.527457999997,
   "helmVersion": "v4.2.3+g43e8b7f",
-  "imageRevision": "3cb81446dd86a161cd4a0a493d809edd66c9f1bf",
+  "imageRevision": "867fb70ddd384a99b8d3f0c302e569bc6c9652b4",
   "kindNodeImage": "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
   "kindVersion": "kind v0.32.0 go1.26.3 darwin/arm64",
   "kubernetesVersion": {
@@ -33,16 +33,16 @@
       "platform": "linux/arm64"
     }
   },
-  "measuredAt": "2026-09-22T05:13:09.571Z",
-  "providerReadyMilliseconds": 3998.9456659999996,
+  "measuredAt": "2026-09-22T16:37:01.562Z",
+  "providerReadyMilliseconds": 3452.5527500000026,
   "readBaseline": {
     "completedRequests": 40,
-    "elapsedMilliseconds": 109.9534580000036,
-    "p95Milliseconds": 107.11820799999987,
-    "requestsPerSecond": 363.79028661380244
+    "elapsedMilliseconds": 115.57641599999624,
+    "p95Milliseconds": 111.69158300000709,
+    "requestsPerSecond": 346.09136867508766
   },
-  "replacementMilliseconds": 7184.7806659999915,
+  "replacementMilliseconds": 9212.200165999995,
   "replicas": 2,
-  "rolloutMilliseconds": 17548.008457999997,
-  "startupMilliseconds": 11212.5775
+  "rolloutMilliseconds": 20999.1155,
+  "startupMilliseconds": 10974.196707999989
 }

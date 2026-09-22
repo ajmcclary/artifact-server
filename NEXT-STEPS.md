@@ -439,6 +439,23 @@ promotion from research or a single local green run.
   R2 operation classes and staging/multipart growth. Separate Workers+D1+R2 from
   Node+Postgres+R2. Record hard failures versus overage behavior and capability
   reporting. Use current official pricing, not a free-trial assumption.
+- **Progress, September 22:** the read-only slice is done in
+  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md):
+  a completed worksheet separating measured local facts (publication sizes,
+  retained bytes, the 1/10/25/50/100-user capacity matrix, and the local-D1
+  Git-backlog probe) from official Cloudflare pricing and limits dated
+  2026-09-22 (Workers, D1, R2, each with sources). It records the polling
+  math with duration stated (7-second visible-tab-only interval; eight tabs
+  for 24 hours sit one percent under the Free 100,000 requests/day cap while
+  an eight-hour workday fits), the per-file R2 operation profile (~2 Class A
+  + 1 Class B per staged file; deletes and multipart aborts free but still
+  execution work), and the supported-envelope read: light teams fit Workers
+  Free within a workday, sustained 24-hour multi-tab review requires Workers
+  Paid, and the 3,301-file publication shape is rejected as unqualified on a
+  live Worker. Blocked on account access: the actual plan, region/RTT, real
+  retained bytes, backups, review hours and mutation rates, and any live
+  hard-fail or overage observation — no Cloudflare credentials exist on this
+  machine, and the account probe creates real resources.
 - **Done when:** a bounded worksheet and qualification report identify the
   supported envelope and reject unsupported many-file assumptions. R2 deletes
   and aborts are free billed operations but still execution work. Eight visible

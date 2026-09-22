@@ -22,7 +22,7 @@ pnpm verify:external-storage-performance
 
 The baseline writes `project/evidence/local-performance-baseline.json`. Results are machine-specific. Compare the same machine, Node version, workload, and storage class when looking for a regression. Do not treat one laptop's operations-per-second number as a production capacity claim.
 
-Use the [workload/account worksheet](./WORKLOAD-WORKSHEET.md) to record missing operating facts such as provider plan, region, RTT, proxy topology, publication sizes, retained bytes, backup counts, review hours, mutation rates, concurrency, durability settings, pool sizes, fixture identity, and warm/cold state. Attach a completed worksheet to any baseline that is used to justify a change.
+Use the [workload/account worksheet](./WORKLOAD-WORKSHEET.md) to record missing operating facts such as provider plan, region, RTT, proxy topology, publication sizes, retained bytes, backup counts, review hours, mutation rates, concurrency, durability settings, pool sizes, fixture identity, and warm/cold state. Attach a completed worksheet to any baseline that is used to justify a change. The [Cloudflare cost envelope](./CLOUDFLARE-COST-ENVELOPE.md) fills that worksheet for the Workers + D1 + R2 target with dated official pricing and measured local workload facts.
 
 The JSON report records:
 
