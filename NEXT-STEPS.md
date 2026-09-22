@@ -664,6 +664,27 @@ promotion from research or a single local green run.
   as affected, L for edge behavior. **Contracts:** AUTH-004/007/014–016,
   CNT-003–008, CMT-018/021/022. **Dependencies:** T01/T07, T24 for expanded policy.
   **Cost:** existing proxy/edge allowance; no blanket immutable public caching.
+- **Progress, September 22:** six conformance/browser test files now claim the
+  previously-unclaimed cache/range/archive IDs. `cnt-003-origin-isolation` proves
+  the app and content origins use different registrable domains with host-only
+  cookies and that a same-domain external-storage configuration is rejected;
+  `cnt-004-version-origin` proves two versions get distinct immutable origins
+  that each serve their exact bytes and cannot read one another;
+  `cnt-008-content-fixture-matrix` proves the full header/conditional/HEAD/range
+  matrix plus 405-on-unsupported-methods, 416-on-malformed-ranges, and
+  octet-stream+attachment for misleading and unknown files; `auth-007` proves
+  public-to-private denial, the "cannot be recalled" warning, and stale-ETag
+  revalidation rejection; `auth-016` proves private no-store vs public
+  revalidation vs immutable app assets and no private bytes for an unauthenticated
+  viewer; and a Chromium `cnt-006-service-worker` spec proves a service worker's
+  scope is bounded to its version origin. Ledger result: CNT-008 promoted to
+  `behavior_verified`; CNT-003/004/006 and AUTH-007/016 moved from `specified`
+  to `implementing` with F-only recorded evidence where `local` is an applicable
+  deployment and honest proof_gaps naming the remaining gaps (deployment
+  qualification for CNT-003/004/006, no CDN purge API for AUTH-007, external-
+  storage recorded evidence for CNT-003/AUTH-016). Full gate
+  `BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration` exit 0;
+  `pnpm conformance:validate` and `pnpm conformance:tests` clean.
 
 ### T27 Close linked-file capture and local-boundary proof gaps
 

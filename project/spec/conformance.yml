@@ -916,7 +916,8 @@ requirements:
       behavior: {id: CNT-003-B, description: "Confirm that application and content origins have different registrable domains and cookies do not cross the boundary."}
       failure: {id: CNT-003-F, description: "Deployment validation rejects an external-storage domain configuration that would make artifact JavaScript same-site with the application."}
     deployments: *external_storage
-    status: specified
+    status: implementing
+    proof_gap: The local conformance tests claim and pass CNT-003-B/F over the shared origin and cookie code path — per-version content origins under a distinct registrable domain, host-only application and __Host-prefixed content cookies, and a same-domain external-storage configuration rejection. Recorded evidence on external-storage deployments remains the release proof.
     depends_on: []
     evidence: []
 
@@ -929,9 +930,15 @@ requirements:
       behavior: {id: CNT-004-B, description: "Publish two versions and confirm that they receive different origins and continue serving their exact files."}
       failure: {id: CNT-004-F, description: "One version cannot read origin storage, cookies, caches, or service-worker control belonging to another version or the application."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: The local conformance tests prove two versions receive distinct immutable origins that each serve their exact hash-pinned bytes, and that one version's host-only content session cannot read another version or the application surface. Origin and browser-isolation release proof remains a deployment qualification.
     depends_on: [ART-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [CNT-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T18:58:40.000Z"
 
   - id: CNT-005
     kind: behavior
@@ -960,9 +967,15 @@ requirements:
       behavior: {id: CNT-006-B, description: "Install a service worker in one fixture version and confirm that its scope is limited to that version origin."}
       failure: {id: CNT-006-F, description: "Attempts to register a scope for the application or another version do not gain control."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: A Chromium browser test proves a service worker installed by one version controls only its own origin (scope equals the version origin, distinct from a second version's), and that cross-origin registration for the application or another version is refused with a SecurityError. The Firefox/WebKit and per-deployment browser matrix remains unrecorded, and release proof remains a deployment qualification.
     depends_on: [CNT-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [CNT-006-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-09-22T18:58:40.000Z"
 
   - id: CNT-007
     kind: behavior
@@ -1006,10 +1019,14 @@ requirements:
       behavior: {id: CNT-008-B, description: "Verify headers, conditional requests, HEAD, and media range requests for the content fixture suite."}
       failure: {id: CNT-008-F, description: "Unsupported methods, malformed ranges, misleading extensions, and active unknown files do not bypass safe serving rules."}
     deployments: *all
-    status: implementing
-    proof_gap: The acceptance-ID and live-cloud probes prove range, conditional, and HEAD behavior, but they do not cover the complete content fixture's media type, nosniff, disposition, unsupported-method, misleading-extension, and active-unknown-file matrix.
+    status: behavior_verified
     depends_on: [MAN-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [CNT-008-B, CNT-008-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T18:58:40.000Z"
 
   - id: CNT-009
     kind: constraint
@@ -1430,9 +1447,15 @@ requirements:
       behavior: {id: AUTH-007-B, description: "Change a public artifact to account required and verify origin denial, configured purge, and the product warning."}
       failure: {id: AUTH-007-F, description: "A stale public cache key cannot obtain a fresh origin response after the change, and the interface never promises recall of external copies."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: Local conformance tests prove that changing public content to account-required denies the origin, warns that copies cannot be recalled, and rejects the stale public ETag on revalidation. No CDN purge or invalidation API exists — the guarantee is the no-cache-must-revalidate origin policy plus CDN configuration honoring origin headers (AWS defaultTtl 0, GCP USE_ORIGIN_HEADERS, Cloudflare routes); an explicit purge remains a deferred policy decision.
     depends_on: [AUTH-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-007-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-22T18:58:40.000Z"
 
   - id: AUTH-008
     kind: security
@@ -1582,7 +1605,8 @@ requirements:
       behavior: {id: AUTH-016-B, description: "Inspect cache behavior for private and public fixtures and observe private no-store or private handling and immutable public keys."}
       failure: {id: AUTH-016-F, description: "An unauthenticated viewer cannot receive private bytes from a shared cache populated by another viewer."}
     deployments: *external_storage
-    status: specified
+    status: implementing
+    proof_gap: The local conformance tests claim and pass AUTH-016-B/F over the shared cache-header code path — private content is private no-store, public content revalidates under a content-addressed ETag, and app assets are public immutable; an unauthenticated viewer cannot receive private bytes. Recorded evidence on external-storage deployments remains the release proof, and public content is deliberately revalidated rather than marked immutable because visibility can flip.
     depends_on: [AUTH-015]
     evidence: []
 
