@@ -41,6 +41,7 @@ guide does not cover, search through the source code in `node_modules/effect/src
 ## Performance verification
 
 - `pnpm verify:iteration` is the canonical end-of-iteration gate. It runs the complete correctness, conformance, build, coverage report, smoke, and bounded performance path.
+- Run the critical cross-engine browser matrix after changing Review sandboxing, exact-version leases, historical asset delivery, or comment convergence: install the engines once with `pnpm exec playwright install firefox webkit`, then run `BROWSER_CRITICAL_ENGINES=all pnpm test:web`. The CI full gate sets `BROWSER_CRITICAL_ENGINES=all` and installs all three engines; the PR job stays Chromium-only, so a matrix break surfaces at the full gate rather than on every pull request.
 - Coverage is diagnostic. Do not add a test only to move a percentage, lower a threshold, or exercise an implementation detail. A test must prove an observable product behavior, security boundary, recovery path, or measured performance characteristic.
 - Run `pnpm smoke` after changing HTTP delivery, publication, SQLite, blob storage, restart behavior, or cleanup.
 - Run `pnpm perf:baseline` before and after a performance-sensitive change. Compare the same machine, Node version, workload, and storage class.

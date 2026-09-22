@@ -281,6 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 47
     env:
+      BROWSER_CRITICAL_ENGINES: all
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - name: Checkout repository
@@ -318,8 +319,8 @@ jobs:
           ruby-version: "3.3"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install critical browser engines
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Enable the containerd image store
         run: |
           artifactserver_daemon_config=$(mktemp)

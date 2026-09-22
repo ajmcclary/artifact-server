@@ -370,9 +370,27 @@ promotion from research or a single local green run.
   (CMT-014/016/018/023) behind per-project `testMatch` gated on
   `BROWSER_CRITICAL_ENGINES` (`--list`: 35 tests/14 files Chromium-only;
   4 tests/1 file with `BROWSER_CRITICAL_ENGINES=firefox --project=firefox`).
-  Remaining open: critical tests are typechecked
-  and listed (`--list`) but unexecuted — Firefox/WebKit binaries are not
-  installed locally; first real runs need CI or installed browsers.
+  - **Matrix run, September 22:** with Firefox 153.0 and WebKit 26.5 installed
+  (`pnpm exec playwright install firefox webkit`), the matrix has now executed
+  for real. Firefox and WebKit each pass **4/4** critical tests, and one
+  combined pass through the real evidence runner runs **43/43** in 3.6 minutes
+  (Chromium 35 across 14 suites, plus the 4-test critical slice on each of
+  Firefox and WebKit), recording `project/evidence/browser.json` with
+  `success:true`, engine `chromium+firefox+webkit@1.62.1`. The final
+  `BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration` then regenerated the
+  same three-engine evidence (43/43, 0 failed, 0 flaky, 14/14 suites, exit 0)
+  and rotated the prior three-engine artifact into the single retained
+  `browser.previous.json` slot — so the earlier Chromium-only artifact is no
+  longer on disk, though its Chromium tests are part of the current evidence. The
+  opaque-origin sandbox, exact-version pinning, historical asset delivery, and
+  two-reviewer convergence hold on Gecko and WebKit, not only Chromium. CI was
+  then wired to match: the full-gate job installs all three engines and sets
+  `BROWSER_CRITICAL_ENGINES: all`, so its existing `pnpm test:web` step runs the
+  whole matrix, while the PR job stays Chromium-only for speed
+  (`pnpm check:ci` still verifies all 14 ordered full-gate commands
+  unchanged). Remaining open: the CI path itself is wired and locally
+  equivalent but unexecuted — no CI run has yet produced the three-engine
+  evidence artifact.
 - **Injection progress, September 22:** the finalizer
   (`scripts/write-browser-evidence.ts`, driven by `scripts/run-browser-evidence.ts`)
   was failure-injected three ways against repo-relative temp evidence paths
@@ -392,10 +410,12 @@ promotion from research or a single local green run.
   spec now polls `.toHaveLength(1)`; the prefix/`":new:"` assertions are
   unchanged and still prove isolation. drf-002 passes 6/6 isolated and the
   full prebuilt Chromium B gate passes **35/35 across 14 suites**
-  (`project/evidence/browser.json`, `success:true`, engine
-  `chromium@1.62.1`, commit `720e06b`, `tsc` clean). Remaining open: the V
-  gate, Firefox/WebKit execution (binaries not installed locally; first real
-  runs need CI or installed browsers), and CI evidence-path execution.
+  (`success:true`, engine `chromium@1.62.1`, commit `720e06b`, `tsc` clean;
+  that Chromium-only artifact has since been rotated out of
+  `project/evidence/browser.json` by the later three-engine run, which
+  includes the same 35 Chromium tests). The V gate and
+  Firefox/WebKit execution left open here are closed by the V-gate and
+  matrix-run notes below; only CI-path execution remains open.
   - **V-gate progress, September 22:** `pnpm verify:iteration` passed clean
   (exit 0) the same day: full check, `test:web`, AWS/GCP Pulumi, object
   storage, external-storage runtime plus compose suites, coverage,
