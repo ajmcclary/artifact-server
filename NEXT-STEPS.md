@@ -359,6 +359,55 @@ promotion from research or a single local green run.
   selected engines. **Gates:** V/B plus CI evidence-path checks.
   **Contracts:** CMT-014/016/018/022, AUTH-010–016, GATE-001, relevant PRV/DRF IDs;
   allocate evidence-lifecycle acceptance IDs. **Cost:** existing runner/storage allowance.
+- **Matrix progress, September 22:** fixed sleeps in
+  `tests/browser/drf-001-draft-durability.spec.ts`,
+  `tests/browser/drf-002-draft-isolation.spec.ts` and
+  `tests/browser/frontend-mvp.spec.ts` are replaced with observable assertions;
+  `scripts/redact-browser-diagnostics.ts` (wired into both browser CI jobs with
+  `pnpm redact:browser-diagnostics`) redacts cookies, secret keys, signed-URL
+  params and private trace content before upload;
+  `tests/browser/critical-engines.spec.ts` pins the 4 critical-engine tests
+  (CMT-014/016/018/023) behind per-project `testMatch` gated on
+  `BROWSER_CRITICAL_ENGINES` (`--list`: 35 tests/14 files Chromium-only;
+  4 tests/1 file with `BROWSER_CRITICAL_ENGINES=firefox --project=firefox`).
+  Remaining open: critical tests are typechecked
+  and listed (`--list`) but unexecuted — Firefox/WebKit binaries are not
+  installed locally; first real runs need CI or installed browsers.
+- **Injection progress, September 22:** the finalizer
+  (`scripts/write-browser-evidence.ts`, driven by `scripts/run-browser-evidence.ts`)
+  was failure-injected three ways against repo-relative temp evidence paths
+  (temp dir removed after; `project/evidence/browser*.json` untouched): missing
+  report with exit 42 wrote `success:false` with `"Browser report not found at
+  ..."` and engine `unknown`, exiting 1; a truncated report (`'{"config": {'`)
+  with exit 0 wrote `success:false` with `"truncated or invalid JSON"`, rotated
+  the prior passing evidence to `browser.previous.json` intact, and exited 1;
+  a clean report with exit 1 wrote `success:false` with `"Playwright exited
+  with code 1"` and exited 1. No stale pass can masquerade as current evidence.
+  - **B-gate progress, September 22:** the drf-002 failure was a test bug,
+  not an app bug: `expect.poll(...).toEqual([expect.not.stringContaining(":new:")])`
+  resolves on an empty array because Jasmine `equals` treats a missing index
+  as matching an asymmetric expectation, so the poll resolved before the
+  400 ms draft mirror debounce fired (probe showed `ATTEMPTS=[[]]`; sampling
+  showed a single `[] → [key]` transition at ~409 ms with no removal). The
+  spec now polls `.toHaveLength(1)`; the prefix/`":new:"` assertions are
+  unchanged and still prove isolation. drf-002 passes 6/6 isolated and the
+  full prebuilt Chromium B gate passes **35/35 across 14 suites**
+  (`project/evidence/browser.json`, `success:true`, engine
+  `chromium@1.62.1`, commit `720e06b`, `tsc` clean). Remaining open: the V
+  gate, Firefox/WebKit execution (binaries not installed locally; first real
+  runs need CI or installed browsers), and CI evidence-path execution.
+  - **V-gate progress, September 22:** `pnpm verify:iteration` passed clean
+  (exit 0) the same day: full check, `test:web`, AWS/GCP Pulumi, object
+  storage, external-storage runtime plus compose suites, coverage,
+  local-package, perf baseline plus capacity, compact-compose, Helm, and
+  OIDC, with evidence JSON regenerated under `project/evidence/`. One
+  gate-internal fix was needed first: the T05 upload-plan response field
+  `verified` had no counterpart in the perf capacity baseline's strict file
+  schema, failing `perf:capacity` with an unrecognized-keys zod error;
+  adding the key to `project/performance/server-capacity-baseline.ts`
+  restored exit 0 with no product-code change. The polling change was
+  ruled out as the timeout cause — the only timeout-adjacent failure was
+  this schema mismatch.
 
 ## Storage, platform and transport experiments
 

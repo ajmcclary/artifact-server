@@ -4634,6 +4634,20 @@ requirements:
     depends_on: [PLN-014, PLN-015]
     evidence: []
 
+  - id: GATE-016
+    kind: release_gate
+    behavior: Browser evidence finalization is failure-safe; a setup, launch, test, or report-copy failure writes current-run failing evidence, preserves the previous run separately, and exits non-zero, and a missing or truncated report can never masquerade as a passing run.
+    owner: operations
+    source: {file: artifact-server-product-spec.html, anchor: implementation}
+    acceptance:
+      behavior: {id: GATE-016-B, description: "A failing or interrupted browser run writes failing current-run evidence, preserves the previous run separately, and exits non-zero."}
+      failure: {id: GATE-016-F, description: "A missing or truncated browser report writes failing evidence and exits non-zero instead of leaving a stale passing result."}
+    deployments: *all
+    status: implementing
+    proof_gap: The runner/finalizer pair and the GATE-016 tooling tests prove local failure-safe behavior and rotation, and a September 22 three-way injection (missing report, truncated report, clean report with non-zero exit) proved no stale pass masquerades as current evidence. The drf-002 flake was diagnosed as a test bug (empty array matches the asymmetric not-containing matcher, beating the 400 ms debounce write), fixed by polling length first, and the fresh September 22 prebuilt Chromium B gate passed 35/35 across 14 suites (project/evidence/browser.json, success:true, chromium@1.62.1). The V gate then passed clean the same day with pnpm verify:iteration exit 0 (full check, test:web, pulumi, object-storage, external-storage runtime/compose, coverage, local-package, perf baseline+capacity, compact-compose, helm, oidc; evidence JSON regenerated under project/evidence/). One gate-internal fix was needed first — the T05 upload-plan response field verified had no counterpart in the perf capacity baseline's strict file schema, failing perf:capacity with an unrecognized-keys zod error; adding the key to project/performance/server-capacity-baseline.ts restored exit 0 with no product-code change. Remaining open — CI evidence-upload path hardening and real Firefox/WebKit execution (binaries not installed locally; first real runs need CI or installed browsers).
+    depends_on: []
+    evidence: []
+
   - id: LNK-001
     kind: constraint
     behavior: Linked artifacts are off by default, exist only on the local deployment behind capability discovery, reference the file in place, and are created only by an explicit protocol call naming the path.

@@ -153,6 +153,9 @@ jobs:
         run: test -f dist/web/review.html
       - name: Run browser tests
         run: pnpm test:web:prebuilt
+      - name: Redact browser diagnostics
+        if: ${{ !cancelled() }}
+        run: pnpm redact:browser-diagnostics
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -354,6 +357,9 @@ jobs:
       # full-gate-command: pnpm test:web
       - name: Test browser behavior
         run: pnpm test:web
+      - name: Redact browser diagnostics
+        if: ${{ !cancelled() }}
+        run: pnpm redact:browser-diagnostics
       # full-gate-command: pnpm test:aws-pulumi
       - name: Test AWS Pulumi project
         run: pnpm test:aws-pulumi

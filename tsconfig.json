@@ -22,6 +22,7 @@
   },
   "include": [
     "deploy/**/*.ts",
+    "playwright.config.ts",
     "project/performance/**/*.ts",
     "scripts/**/*.ts",
     "src/**/*.ts",

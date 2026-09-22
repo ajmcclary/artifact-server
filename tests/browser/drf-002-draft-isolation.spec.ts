@@ -14,7 +14,6 @@ const pageHtml =
   + "<body><h1>Isolation fixture</h1><p id=\"claim\">Reviewed text.</p></body></html>";
 
 const sessionSchema = z.object({principal: z.object({id: z.string()}).loose()}).loose();
-const mirrorSettle = 600;
 
 test.describe("DRF-002 draft isolation", () => {
   test("DRF-002-B DRF-002-F: drafts are principal-scoped and bounded — a foreign principal's draft never restores, signing out clears the signed-in principal's drafts and spares the other principal's, a reply draft never restores into the new-thread composer, and closing over a non-empty draft prompts", async ({browser}) => {
@@ -48,9 +47,16 @@ test.describe("DRF-002 draft isolation", () => {
       await page.getByRole("tab", {name: "Comments"}).click();
 
       // Only a reply draft exists; the new-thread composer must stay empty.
+      // The mirror write is debounced: poll until the single reply draft key
+      // has settled into localStorage. toHaveLength keeps the matcher exact —
+      // an asymmetric matcher inside toEqual would also match the empty array
+      // (missing index 0 counts as matching an asymmetric expectation), so the
+      // poll would resolve before the debounce fires.
       await page.getByRole("button", {exact: true, name: "Reply"}).click();
       await page.getByLabel("Reply", {exact: true}).fill("Reply-only draft.");
-      await page.waitForTimeout(mirrorSettle);
+      await expect.poll(() => page.evaluate(
+        () => Object.keys(localStorage).filter((key) => key.startsWith("draft:")),
+      ).catch(() => null)).toHaveLength(1);
       const keys = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("draft:")));
       expect(keys).toHaveLength(1);
       expect(keys[0]?.startsWith(`draft:${principalId}:${artifactId}:`)).toBe(true);

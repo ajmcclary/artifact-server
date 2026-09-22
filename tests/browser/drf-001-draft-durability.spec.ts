@@ -12,10 +12,7 @@ const pageHtml = (title: string): string =>
   `<!doctype html><html lang="en"><head><title>${title}</title></head>`
   + `<body><h1>${title}</h1><p id="claim">A claim worth reviewing.</p></body></html>`;
 
-/** The mirror write is debounced; settle it before anything that reloads. */
-const mirrorSettle = 600;
-
-test.describe("DRF-001 draft durability", () => {
+test.describe("comment draft durability", () => {
   test("DRF-001-B DRF-001-F: draft text survives a version switch, artifact navigation, and a page reload, restores into the same composer with the draft marker, and is gone after the comment posts and after explicit discard", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
@@ -72,7 +69,15 @@ test.describe("DRF-001 draft durability", () => {
       await page.getByRole("button", {exact: true, name: "Reply"}).click();
       await expect(page.getByRole("textbox", {exact: true, name: "Reply"}))
         .toHaveValue(replyText);
-      await page.waitForTimeout(mirrorSettle);
+      // The mirror write is debounced: poll until both the new-thread draft
+      // and the reply draft have settled into localStorage.
+      await expect.poll(() => page.evaluate(
+        () => Object.keys(localStorage).filter((key) => key.startsWith("draft:")),
+      ).catch(() => null).then((keys) => keys === null ? null : ({
+        hasNewThread: keys.some((key) => key.includes(":new:")),
+        hasReply: keys.some((key) => !key.includes(":new:")),
+        total: keys.length,
+      }))).toEqual({hasNewThread: true, hasReply: true, total: 2});
 
       // In-app version switch and back: the drafts never left.
       await page.getByRole("tab", {name: /Versions/u}).click();

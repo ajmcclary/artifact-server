@@ -672,7 +672,6 @@ test.describe("Artifact Server frontend MVP", () => {
         .toHaveAttribute("href", "https://artifactserver.com/docs/");
       await expect(homeOverlay.getByRole("link", {name: /Connect agents/u}))
         .toHaveAttribute("href", "https://artifactserver.com/docs/connect-agents/");
-      await fixture.page.waitForTimeout(1_200);
       await expect(homeOverlay).toBeVisible();
       await fixture.page.keyboard.press("Escape");
       await expect(homeOverlay).toHaveCount(0);

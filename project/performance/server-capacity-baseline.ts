@@ -128,6 +128,7 @@ const uploadPlanSchema = z.object({
     path: z.string(),
     size: z.number().int().nonnegative(),
     uploadUrl: z.url(),
+    verified: z.boolean(),
   }).strict()).length(1),
   uploadId: z.string(),
 }).loose();
