@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 18, 2026. This is the implementation backlog resulting from
+Updated September 23, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -16,6 +16,8 @@ and follow-up-only bridges. Preserve existing binary publication, ranges,
 compression, MCP HTTP, R2, assets, and Cron rather than implementing them again.
 Use existing infrastructure or verified ongoing free allowances; no paid
 subscription, live deployment, or destructive cleanup is authorized by this plan.
+The September 23 account work was a separately approved bounded qualification;
+it does not authorize future live runs or paid-plan changes.
 
 ## Work order
 
@@ -66,6 +68,13 @@ IDs before being advertised; new IDs suggested below are not already allocated.
 Close a task only when its normal and hostile outcomes are demonstrated and its
 remaining deployment gaps are explicitly recorded. No automatic `verified`
 promotion from research or a single local green run.
+
+The September 23 checkpoint ran `pnpm verify:iteration` successfully after the
+setup and documentation changes. Its refreshed evidence covers 388 main tests,
+37 Chromium browser tests, 45 Cloudflare-package tests, native object storage,
+external storage, coverage, packages, performance, Compose, Helm and Keycloak
+OIDC. Live-provider gaps below remain gaps despite that local/provider-emulated
+gate.
 
 ## Correctness and measurement
 
@@ -126,8 +135,14 @@ promotion from research or a single local green run.
   identical writes at multipart/resumable scale, a gated-stream create-only
   race loser with no leftover sessions, provider enforcement of the
   precondition against pinned MinIO and fake-gcs-server, and metadata-corrupted
-  existing blobs failing closed. Live AWS/GCS qualification remains open under
-  the L gate.
+  existing blobs failing closed.
+- **Live-provider progress, September 23:** `pnpm verify:aws-s3` passed against
+  AWS with a disposable, self-cleaned probe bucket; the JSON reporter is
+  [s3-aws-probe.json](./project/evidence/s3-aws-probe.json). A GCS bucket-scoped
+  service account also produced the native `ifGenerationMatch: 0` collision
+  response, exact readback and cleanup against the configured probe bucket.
+  That GCS observation still needs a checked-in reporter before it is durable L
+  evidence; AWS is attached, while GCS remains partially open.
 - **Do:** add provider-native create-only behavior behind the blob port, including
   multipart completion and verified reuse of a pre-existing destination. Separate
   immutable-blob semantics from reusable staging slots. Never treat a metadata
@@ -176,6 +191,12 @@ promotion from research or a single local green run.
   this last ownership check and remote ref update, live D1 multi-worker and
   provider concurrency proof, live-provider crash recovery, and controlled
   repeated provider backlog measurements.
+- **Live-provider attempt, September 23:** the bounded Cloudflare Artifacts
+  qualification authenticated to the approved account but stopped at namespace
+  health (`dedicated namespace unavailable`) before creating a repository or
+  performing a provider operation. T03's live-provider concurrency and crash
+  recovery claims therefore remain open; this is an entitlement/availability
+  result, not a passing qualification.
 - **Crash progress, September 18:** separate local worker processes are killed
   after a disposable smart-HTTP remote accepts the branch push, both before
   the tag push and after the tag push but before its response. A restarted
@@ -264,6 +285,12 @@ promotion from research or a single local green run.
   p95 859.81 / 908.60 / 863.38 ms with the commit leg dominating at
   397.12 / 425.12 / 377.44 ms. These bound gross variance but do not support
   tail claims; live managed-Postgres qualification remains open.
+- **Managed-Postgres setup, September 23:** a Neon Free PostgreSQL 17 database
+  is configured through a pooled TLS URL outside the repository. The connection
+  reached migration 14 and passed a real query, transaction, advisory-lock and
+  commit check. No controlled live batch/query-count/lock-duration measurement
+  has been recorded yet, so T04's managed-provider performance claim remains
+  open.
 - **Do:** choose a bounded batch representation compatible with query/parameter
   limits. Preserve the single version/manifest/action/idempotency/current-pointer
   transaction and existing source-ready checks.
@@ -313,6 +340,15 @@ promotion from research or a single local green run.
   suite passed with the file included (26 tests, 2 files). Remaining open:
   deployed-runtime resume evidence, Cloudflare Worker resume, and MCP-surface
   recovery (T15).
+- **Deployment-prerequisite progress, September 23:** the managed Postgres
+  connection is paired with a private, versioned, encrypted AWS bucket and the
+  least-privilege `artifact-server-runtime` profile. Native S3 create-only,
+  collision, exact-readback and cleanup checks passed; see
+  [aws-runtime-storage.json](./project/evidence/aws-runtime-storage.json). The
+  end-to-end deployed-runtime resume test has not run. A fresh Cloudflare
+  runtime-stage probe deployed and cleaned its Worker/D1/R2 resources but its
+  health, readiness, unauthenticated and upload requests returned HTTP 503, so
+  it does not close the Worker resume item.
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.
@@ -364,6 +400,10 @@ promotion from research or a single local green run.
   convergence now holds on Chromium, Firefox, and WebKit at HEAD. Remaining
   open: Postgres revision behavior beyond the external-storage runtime suite
   and Postgres/deployed polling cost.
+- **Managed-provider readiness, September 23:** the Neon PostgreSQL 17
+  connection is available for the missing deployed polling-cost run, but only
+  connection, transaction and advisory-lock behavior has been checked so far.
+  No managed-Postgres polling or contention result is claimed.
 - **Do:** specify an authorized revision plus authoritative replacement/refetch
   contract. Increment revisions in each relevant mutation transaction across
   SQLite/Postgres/D1. Prove multi-page snapshot consistency through a coherent
@@ -499,10 +539,19 @@ promotion from research or a single local green run.
   execution work), and the supported-envelope read: light teams fit Workers
   Free within a workday, sustained 24-hour multi-tab review requires Workers
   Paid, and the 3,301-file publication shape is rejected as unqualified on a
-  live Worker. Blocked on account access: the actual plan, region/RTT, real
-  retained bytes, backups, review hours and mutation rates, and any live
-  hard-fail or overage observation — no Cloudflare credentials exist on this
-  machine, and the account probe creates real resources.
+  live Worker.
+- **Account progress, September 23:** the approved account is Workers Free and
+  R2 is active at a $0/month base. The observed R2 allowance is 10 GB-month,
+  1 million Class A operations/month and 10 million Class B operations/month;
+  standard-storage overage is $0.015/GB-month, Class A $4.50/million and Class B
+  $0.36/million, with zero Internet egress fees. The account probe matched the
+  exact account, created the expected Worker/D1/R2 shape, repeated with no drift,
+  and cleaned every exact probe resource without changing non-probe inventory.
+  [cloudflare-account-probe.json](./project/evidence/cloudflare-account-probe.json)
+  records hashes and checks; the worksheet now records the plan. Remaining:
+  actual retained bytes, backups, review hours, mutation rates, isolated RTT and
+  any observed hard-fail or overage behavior. The current runtime 503 remains a
+  separate open item.
 - **Done when:** a bounded worksheet and qualification report identify the
   supported envelope and reject unsupported many-file assumptions. R2 deletes
   and aborts are free billed operations but still execution work. Eight visible
@@ -639,6 +688,12 @@ promotion from research or a single local green run.
 
 ### T16 Qualify identity lifecycle and verify entitlements
 
+- **Setup progress, September 23:** the WorkOS client and API key are stored
+  outside the repository, and the configured AuthKit issuer's discovery document
+  was checked for authorization-code flow, refresh tokens and S256 PKCE. The
+  current environment reports no configured SSO/OIDC connection, and MCP/Audit
+  plan entitlements have not been inventoried separately from demo/staging
+  behavior. Hosted-provider lifecycle qualification therefore remains open.
 - **Do:** qualify WorkOS and configured OIDC discovery, exact-resource audience,
   PKCE/registration, key rotation, refresh, provider revocation, logout and
   cross-replica deactivation. Record actual production MCP/Audit entitlements
@@ -655,6 +710,13 @@ promotion from research or a single local green run.
 
 ### T17 Complete live bridge qualification without changing citizenship
 
+- **Host progress, September 23:** Pi 0.84.4, OpenCode 1.18.32, omp 18.2.11 and
+  Claude Code 2.1.280 are installed with working provider sessions. Pi's live
+  suite passed 3/3 and is attached in
+  [pi-live.json](./project/evidence/pi-live.json). OpenCode, omp and Claude Code
+  Channels each accepted the real adapter registration, but their full delivery,
+  compaction/resume and fail-open matrix has not run; registration is not being
+  reported as end-to-end qualification.
 - **Do:** reconcile version-specific Pi/OpenCode staging evidence with READMEs;
   qualify omp and remaining Claude Channels/host cases. Cover compaction holds,
   session deletion, host refusal, missing API/configuration, lost acknowledgement,
@@ -721,6 +783,11 @@ promotion from research or a single local green run.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 
+- **Account setup, September 23:** bounded AWS S3 and GCS object-storage
+  qualifications are available, but neither account has the broader deployment
+  permissions, state backend, secrets provider and deploy-time inputs required
+  by the full Pulumi stacks. `pnpm test:aws-pulumi` and
+  `pnpm test:gcp-pulumi` remain intentionally unrun against these accounts.
 - **Do:** add scoped Pulumi previews on relevant changes with sanitized resource
   diffs, exact provider/runtime versions and reliable failure artifact retention.
   Reuse existing disposable Postgres/MinIO fixtures. Evaluate ESC only if its

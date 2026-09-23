@@ -53,6 +53,9 @@ const ProbeDatabaseId = Schema.String.check(
     /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/iu,
   ),
 );
+const ProbeWorkerId = Schema.String.check(
+  Schema.isPattern(/^[a-f0-9]{32}$/iu),
+);
 const QualificationUpload = Schema.Struct({
   commitUrl: Schema.String,
   files: Schema.Array(Schema.Struct({uploadUrl: Schema.String})),
@@ -341,7 +344,7 @@ const createdResourceIds = (result) => ({
 });
 
 const exactResourceIdsAreValid = (ids, names) =>
-  ids.worker === names.worker &&
+  (ids.worker === names.worker || Schema.is(ProbeWorkerId)(ids.worker)) &&
   ids.bucket === names.bucket &&
   Schema.is(ProbeDatabaseId)(ids.database);
 
@@ -662,6 +665,9 @@ const main = async () => {
     CLOUDFLARE_ACCOUNT_ID: configuration.cloudflareAccountId,
     DO_NOT_TRACK: "1",
     FORCE_COLOR: "0",
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--import tsx"]
+      .filter((value) => value !== undefined && value.trim() !== "")
+      .join(" "),
     NO_TRACK: "1",
     WRANGLER_SEND_METRICS: "false",
   };

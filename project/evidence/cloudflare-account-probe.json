@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "provider": "cloudflare",
+  "qualification": "account-plan-and-resource-lifecycle",
+  "observedAt": "2026-09-23",
+  "plan": {
+    "workers": "Free",
+    "r2Activated": true,
+    "r2BasePriceUsdPerMonth": 0,
+    "r2Allowances": {
+      "standardStorageGbMonth": 10,
+      "classAOperationsPerMonth": 1000000,
+      "classBOperationsPerMonth": 10000000,
+      "internetEgressPriceUsd": 0
+    },
+    "r2Overage": {
+      "standardStorageUsdPerGbMonth": 0.015,
+      "classAUsdPerMillion": 4.5,
+      "classBUsdPerMillion": 0.36
+    }
+  },
+  "accountProbe": {
+    "startedAt": "2026-09-23T19:33:31.468Z",
+    "finishedAt": "2026-09-23T19:34:43.662Z",
+    "sourceEvidenceSha256": "0e39bd2b15990d3dc525bdef1abc208d190f942c968ed58781ea97352682cdf6",
+    "configurationSha256": "ab986643ccb1a3d25cca5662191974204e2afc7d7fbb58451520b2e44f76e763",
+    "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+    "runtimeExecuted": false,
+    "checks": {
+      "accountMatched": true,
+      "bucketEmptied": true,
+      "cleanupSucceeded": true,
+      "deploymentOutputValid": true,
+      "dnsChangesExcluded": true,
+      "durableDataRetained": true,
+      "exactResourceIdsCaptured": true,
+      "initialInventoryClear": true,
+      "nativePlanNoWrites": true,
+      "nonProbeDurableInventoryUnchanged": true,
+      "repeatDeploymentNoDrift": true,
+      "workerDestroyed": true
+    }
+  },
+  "runtimeAttempt": {
+    "startedAt": "2026-09-23T19:31:04.083Z",
+    "finishedAt": "2026-09-23T19:32:45.319Z",
+    "sourceEvidenceSha256": "f4c5b1f57a1d9d13ed64b58f7e198165a66e347c323e54d4e76dee8b72c222c5",
+    "passed": false,
+    "httpStatus": {
+      "health": 503,
+      "ready": 503,
+      "unauthorized": 503,
+      "upload": 503
+    },
+    "infrastructureChecksPassed": true,
+    "cleanupSucceeded": true,
+    "nonProbeDurableInventoryUnchanged": true
+  },
+  "cloudflareArtifactsAttempt": {
+    "passed": false,
+    "reason": "dedicated namespace unavailable",
+    "repositoriesCreated": 0,
+    "operations": 0
+  },
+  "remaining": [
+    "diagnose the current Worker runtime HTTP 503 before claiming fresh T05 resume evidence",
+    "enable or obtain access to the Cloudflare Artifacts qualification namespace before claiming T03 live-provider evidence",
+    "measure actual retained bytes, backup frequency, review hours, mutation rate, and any hard-limit behavior"
+  ]
+}

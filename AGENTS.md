@@ -52,6 +52,14 @@ guide does not cover, search through the source code in `node_modules/effect/src
 - Do not tighten machine-timing gates from one laptop run. CI smoke limits catch gross failures; controlled repeated baselines establish regression budgets.
 - Do not reintroduce inline base64 publication to add large-file support. Use the specified staged direct-upload and streaming-delivery paths.
 
+## Live provider qualification
+
+- Treat every live suite as metered even when the account is on a free plan. Before a run, confirm the active account, current allowance and overage behavior; record the dated snapshot in the relevant evidence file and `project/performance/CLOUDFLARE-COST-ENVELOPE.md`.
+- Keep provider credentials outside the repository. Prefer named local profiles or provider identity chains, and record hashes, principal names, resource names and restrictive file modes rather than credential values.
+- The Cloudflare account probe uses a private configuration outside the repository and exact `probe-` resource names. Its operator needs Workers Scripts, D1 and R2 edit plus Account Settings read; current Alchemy state bootstrap also needs Secrets Store edit. Never use wildcard cleanup, and do not treat a passing lifecycle-only probe as runtime qualification.
+- The local AWS external-storage setup uses the `artifact-server-runtime` profile and the exact private bucket recorded in `project/evidence/aws-runtime-storage.json`. A deployed AWS workload should use its task role rather than copying this long-lived local key.
+- Preserve failed live evidence. A created/deployed/cleaned resource lifecycle and an HTTP runtime pass are separate claims, as are host registration and end-to-end bridge delivery.
+
 ## Before handing off work
 
 Run `pnpm verify:iteration`. Report any requirement that is still specified but not proved; do not mark it verified optimistically.

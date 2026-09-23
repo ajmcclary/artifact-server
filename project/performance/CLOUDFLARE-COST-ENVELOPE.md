@@ -1,23 +1,24 @@
 # Cloudflare cost envelope (T08)
 
-Status September 22, 2026 — partially bounded. Official pricing and limits are
-current as of 2026-09-22 and taken from Cloudflare's own pages. Local workload
-facts are measured on this machine (Apple M1 Max, darwin arm64, Node 24.15.0,
-commit `867fb70`). Account-plan and live-usage cells are blocked: no Cloudflare
-credentials exist on this machine, and this plan authorizes no live deployment.
+Status September 23, 2026 — account plan and lifecycle probe bounded; current
+runtime remains open. Official pricing and limits are current as of 2026-09-22
+and taken from Cloudflare's own pages. The R2 allowance and overage values were
+also confirmed in the account dashboard on 2026-09-23. Local workload facts are
+measured on this machine (Apple M1 Max, darwin arm64, Node 24.15.0, commit
+`867fb70`). The approved account is Workers Free with R2 activated.
 
 ## Completed workload worksheet
 
 | Fact | Measured or pinned value | How recorded |
 | --- | --- | --- |
-| Provider account / plan | unknown — no credentials on this machine | blocked on live account access |
-| Region(s) | unknown | blocked on live account access |
-| Measured RTT to provider API (ms) | unknown | blocked on live account access |
+| Provider account / plan | Workers Free; R2 active at $0/month base | dashboard observation, 2026-09-23 |
+| Region(s) | Workers global; D1/R2 placement not separately inspected | live probe did not isolate placement |
+| Measured RTT to provider API (ms) | account lifecycle probe completed in 72.194 s end to end; per-call RTT not isolated | `project/evidence/cloudflare-account-probe.json` |
 | Proxy / CDN / tunnel topology | local loopback only | local baseline harness |
 | Publication size distribution (bytes) | 40 × 16 KiB publications; file-client 48 × 4 KiB directory + one 2 MiB file | `project/evidence/local-performance-baseline.json` |
 | Files per publication distribution | 1-file and 48-file fixtures measured; 3,301-version Git backlog probed on local D1 | local baselines + `project/evidence/git-history-d1-backlog.json` |
 | Retained bytes (total / per project) | 15,540,592 bytes across 291 files in the bounded local baseline | `project/evidence/local-performance-baseline.json` `storage` |
-| Backup count and frequency | unknown | blocked on live account access |
+| Backup count and frequency | unknown | no production workload or backup schedule supplied |
 | Visible review hours per day | unknown | blocked on real usage data |
 | Mutation rate (publications / hour) | unknown | blocked on real usage data |
 | Concurrent client count | measured synthetic 1/10/25/50/100 users | `project/evidence/local-capacity-baseline.json` |
@@ -152,12 +153,18 @@ Abandoned multipart aborts are free-billed operations where they do occur.
   live run has yet hit the Free request cap, the D1 row caps, or Paid overage
   billing.
 
-## Blocked on account access
+## Live account result and remaining measurements
 
-The following cells require the approved Cloudflare account and credentials,
-which are not present on this machine: the actual account plan, region and
-measured RTT, real retained bytes, backup count and frequency, real review
-hours and mutation rates, and any live hard-fail observation. Running the
-account probe (`deploy/cloudflare` `pnpm probe:account`) against the approved
-account is the live step; it creates and deletes real resources and needs
-explicit approval per `deploy/cloudflare/README.md`.
+The approved account lifecycle probe ran on 2026-09-23. It matched the exact
+account, created the expected Worker/D1/R2 resources, repeated the deployment
+without drift, retained then removed the exact D1/R2 resources, destroyed the
+Worker, and left the non-probe inventories unchanged. The durable summary is
+`project/evidence/cloudflare-account-probe.json`.
+
+A separate runtime-stage attempt deployed and cleaned the same bounded shape,
+but `/health`, `/ready`, the unauthenticated list and upload request all returned
+HTTP 503. That attempt does not refresh the older runtime qualification. The
+Cloudflare Artifacts qualification also stopped at namespace health with zero
+repositories and zero operations. Remaining account facts are actual retained
+bytes, backup count/frequency, review hours, mutation rates, isolated API RTT,
+and observed hard-limit or overage behavior.

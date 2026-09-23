@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "provider": "aws",
+  "qualification": "external-storage-runtime-bucket",
+  "observedAt": "2026-09-23",
+  "accountIdSha256": "bd616353cc3a087a8e7b6aa9025b0947dc62828b06545df179c7ce22c4c2c1c5",
+  "principal": "artifact-server-runtime",
+  "profile": "artifact-server-runtime",
+  "bucket": "artifact-server-runtime-ajmcclary-20260923",
+  "region": "us-east-1",
+  "bucketConfiguration": {
+    "type": "general-purpose",
+    "publicAccessBlocked": true,
+    "objectOwnership": "BucketOwnerEnforced",
+    "versioning": "Enabled",
+    "defaultEncryption": "AES256"
+  },
+  "policy": {
+    "name": "ArtifactServerRuntimeS3",
+    "scope": "exact bucket and objects",
+    "credentialsStoredOutsideRepository": true
+  },
+  "checks": {
+    "stsIdentity": "pass",
+    "providerChainProfile": "pass",
+    "createOnlyFirstWrite": "pass",
+    "createOnlyCollisionRejected": "pass",
+    "exactReadback": "pass",
+    "cleanup": "pass"
+  },
+  "remaining": [
+    "run deployed-runtime resume qualification against Neon plus this bucket",
+    "configure separate broader infrastructure permissions before running the Pulumi AWS deployment suite"
+  ]
+}
