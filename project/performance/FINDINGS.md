@@ -313,6 +313,39 @@ plausible CPU hotspot at multi-hundred-MB archives but is correct and not a
 defect; a slice-by-4/8 table is a future optimization. No archive CRC/memory
 probe exists, but the design already satisfies the bounded-memory requirement.
 
+## September 23 controlled repetitions (T01/T04) and comment polling cost (T06)
+
+### Controlled repetitions
+
+Three sequential repetitions each of the external-storage baseline
+(`project/evidence/external-storage-baseline-rep{1,2,3}.json`) and the local
+baseline (`project/evidence/local-baseline-rep{1,2,3}.json`) ran back-to-back on
+an otherwise idle Apple M1 Max, Node 24.15.0, commit `4f21086`, with no
+investigation warnings. External-storage 48-file directory p95 was 421.58 /
+393.97 / 427.58 ms (median 421.58, spread about ±4%), publish p95 70.15 /
+87.35 / 65.72 ms, and cross-process read p95 36.57 / 37.81 / 31.88 ms. The T04
+batched manifest insert (two statements per version instead of 1 + N) therefore
+holds its September 21 paired observation (388.18 ms) within run-to-run noise;
+no speed claim is made, and live managed-Postgres qualification remains open.
+Local 48-file directory p95 was 859.81 / 908.60 / 863.38 ms with the commit leg
+at 397.12 / 425.12 / 377.44 ms — the commit-time staged-to-blob copy still
+dominates, matching the T13 verdict. Three samples bound gross variance but do
+not support tail claims; regression budgets still need a controlled runner.
+
+### Comment polling cost and contention (T06)
+
+A new bounded harness (`pnpm perf:comment-polling`,
+`project/evidence/comment-polling-baseline.json`) measures revision polling on
+one hot artifact (200 threads, local SQLite): matching-revision short-circuit
+polls cost p95 1.07 ms at about 1,296 ops/s, stale-revision authoritative first
+pages cost p95 2.49 ms, and a five-second contention phase (eight parallel
+pollers while one client creates and deletes threads) completed 529 mutations
+with poll p95 22.54 ms and mutation round-trip p95 12.66 ms. The short-circuit
+keeps steady-state polling near-constant in thread count; the contention tail
+reflects SQLite's single-writer serialization and stays far below the 7-second
+visible-tab poll interval. Postgres polling cost and deployed-runtime numbers
+remain unmeasured.
+
 ## Baseline policy
 - `pnpm verify:iteration` is the required end-of-iteration gate. It includes correctness, a coverage report, conformance checks, and the default bounded baseline. Coverage percentage is not a test-design target.
 - `pnpm smoke` catches broken behavior and gross regressions with deliberately loose machine-timing limits.

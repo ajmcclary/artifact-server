@@ -1,0 +1,83 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-23T15:34:00.046Z",
+  "commit": "4f21086a46a3e14f67604b70801e3df882e866b6",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "5fc62bea3b5a6a8f68b414e51e257a66d4c23da9616e00af2564e483eebe1376",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-09-23T15:34:00.046Z",
+  "configuration": {
+    "concurrency": 8,
+    "contentionSeconds": 5,
+    "polls": 500,
+    "stalePolls": 100,
+    "threads": 200
+  },
+  "contention": {
+    "mutations": {
+      "latency": {
+        "count": 529,
+        "maximumMilliseconds": 48.45699999999988,
+        "meanMilliseconds": 9.459653962192808,
+        "minimumMilliseconds": 5.912083000000166,
+        "p50Milliseconds": 9.057458000000224,
+        "p95Milliseconds": 12.660624999999982
+      },
+      "operationsPerSecond": 105.71211209169788,
+      "totalMilliseconds": 5004.1569459999955
+    },
+    "mutationCount": 529,
+    "polls": {
+      "latency": {
+        "count": 2239,
+        "maximumMilliseconds": 75.57620799999995,
+        "meanMilliseconds": 17.88403165922287,
+        "minimumMilliseconds": 2.088709000000108,
+        "p50Milliseconds": 17.28454099999999,
+        "p95Milliseconds": 22.536291999999776
+      },
+      "operationsPerSecond": 55.915803497490224,
+      "totalMilliseconds": 40042.346885000006
+    }
+  },
+  "note": "Comment revision polling on one hot artifact: matching-revision polls short-circuit to an empty page, stale-revision polls return the authoritative first page, and the contention phase runs parallel short-circuit polls while one client creates and deletes threads. Setup time is excluded from the measured phases.",
+  "phases": {
+    "shortCircuit": {
+      "latency": {
+        "count": 500,
+        "maximumMilliseconds": 4.382707999999866,
+        "meanMilliseconds": 0.7717287520000022,
+        "minimumMilliseconds": 0.48783300000013696,
+        "p50Milliseconds": 0.7150840000001608,
+        "p95Milliseconds": 1.068667000000005
+      },
+      "operationsPerSecond": 1295.7920738451342,
+      "totalMilliseconds": 385.86437600000113
+    },
+    "stalePage": {
+      "latency": {
+        "count": 100,
+        "maximumMilliseconds": 4.655875000000151,
+        "meanMilliseconds": 2.05738288,
+        "minimumMilliseconds": 1.439834000000019,
+        "p50Milliseconds": 1.9502500000000964,
+        "p95Milliseconds": 2.4865409999999883
+      },
+      "operationsPerSecond": 486.05439936391423,
+      "totalMilliseconds": 205.738288
+    }
+  },
+  "setup": {
+    "milliseconds": 423.0866249999999,
+    "threadsPerSecond": 472.7164324799916
+  },
+  "startedAt": "2026-09-23T15:34:00.046Z",
+  "success": true,
+  "target": "local"
+}

@@ -1,0 +1,122 @@
+{
+  "artifactList": {
+    "latency": {
+      "count": 16,
+      "maximumMilliseconds": 16.2,
+      "meanMilliseconds": 9.298,
+      "minimumMilliseconds": 4.868,
+      "p50Milliseconds": 6.329,
+      "p95Milliseconds": 16.2,
+      "p99Milliseconds": 16.2
+    },
+    "operationsPerSecond": 424.522,
+    "totalMilliseconds": 37.689
+  },
+  "checks": {
+    "compiledProcesses": "passed",
+    "crossProcessDirectoryRead": "passed",
+    "crossProcessSingleFileRead": "passed",
+    "healthEndpoints": "passed",
+    "migrations": "passed",
+    "processReplacement": "passed",
+    "providerBackedPublication": "passed"
+  },
+  "concurrentPublish": {
+    "latency": {
+      "count": 16,
+      "maximumMilliseconds": 65.719,
+      "meanMilliseconds": 55.222,
+      "minimumMilliseconds": 45.205,
+      "p50Milliseconds": 52.845,
+      "p95Milliseconds": 65.719,
+      "p99Milliseconds": 65.719
+    },
+    "operationsPerSecond": 72.17,
+    "totalMilliseconds": 221.698
+  },
+  "concurrentRead": {
+    "latency": {
+      "count": 80,
+      "maximumMilliseconds": 32.882,
+      "meanMilliseconds": 11.717,
+      "minimumMilliseconds": 3.541,
+      "p50Milliseconds": 6.757,
+      "p95Milliseconds": 31.88,
+      "p99Milliseconds": 32.882
+    },
+    "operationsPerSecond": 675.1,
+    "totalMilliseconds": 118.501
+  },
+  "configuration": {
+    "concurrentFileBytes": 16384,
+    "concurrentPublications": 16,
+    "directoryFileBytes": 4096,
+    "directoryFiles": 48,
+    "fileIterations": 3,
+    "listReads": 16,
+    "operationConcurrency": 4,
+    "reads": 80,
+    "singleFileBytes": 2097152,
+    "warmupPublications": 2
+  },
+  "environment": {
+    "arch": "arm64",
+    "availableParallelism": 10,
+    "capturedAt": "2026-09-23T15:28:12.541Z",
+    "commit": "4f21086a46a3e14f67604b70801e3df882e866b6",
+    "cpu": "Apple M1 Max",
+    "details": {
+      "minioImage": "docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3",
+      "minioImageDigest": "sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3",
+      "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+      "postgresImageDigest": "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
+    },
+    "lockfileDigest": "5fc62bea3b5a6a8f68b414e51e257a66d4c23da9616e00af2564e483eebe1376",
+    "node": "v24.15.0",
+    "operatingSystem": "darwin 27.2.0",
+    "platform": "darwin",
+    "temporaryFilesystem": "apfs",
+    "workingTreeDirty": true,
+    "minioImage": "docker.io/pgsty/silo@sha256:b616a0cf8cb281e7e6bb3c9b1fb53875b4016a2878223925541c18f82d6c5ca3",
+    "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
+  },
+  "fileClient": {
+    "directory": {
+      "latency": {
+        "count": 3,
+        "maximumMilliseconds": 427.577,
+        "meanMilliseconds": 372.132,
+        "minimumMilliseconds": 337.005,
+        "p50Milliseconds": 351.815,
+        "p95Milliseconds": 427.577,
+        "p99Milliseconds": 427.577
+      },
+      "operationsPerSecond": 2.687,
+      "totalMilliseconds": 1116.423
+    },
+    "singleFile": {
+      "latency": {
+        "count": 3,
+        "maximumMilliseconds": 123.703,
+        "meanMilliseconds": 112.517,
+        "minimumMilliseconds": 104.956,
+        "p50Milliseconds": 108.893,
+        "p95Milliseconds": 123.703,
+        "p99Milliseconds": 123.703
+      },
+      "operationsPerSecond": 8.887,
+      "totalMilliseconds": 337.569
+    }
+  },
+  "generatedAt": "2026-09-23T15:28:12.541Z",
+  "providerReadyMilliseconds": 1866,
+  "serverReadyMilliseconds": {
+    "initialProcesses": [
+      879.697,
+      876.03
+    ],
+    "replacementProcess": 770.466
+  },
+  "totalHarnessMilliseconds": 4641.777,
+  "warnings": []
+}

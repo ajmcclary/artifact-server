@@ -51,6 +51,7 @@
     "perf:external-storage-baseline": "bash scripts/run-external-storage-performance-baseline.sh",
     "perf:batch-staging-comparison": "node --import tsx project/performance/run-batch-staging-comparison.ts",
     "perf:git-history-backlog": "node --import tsx project/performance/run-git-history-backlog.ts",
+    "perf:comment-polling": "node --import tsx project/performance/run-comment-polling-baseline.ts",
     "perf:git-history-clone-memory": "node --import tsx --expose-gc project/performance/run-git-history-clone-memory.ts",
     "perf:batch-staging-comparison": "node --import tsx project/performance/run-batch-staging-comparison.ts",
     "perf:git-history-postgres-backlog": "bash scripts/with-external-storage-test-providers.sh node --import tsx project/performance/run-git-history-postgres-backlog.ts",

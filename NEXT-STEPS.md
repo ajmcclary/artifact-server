@@ -253,6 +253,17 @@ promotion from research or a single local green run.
   Controlled repeated measurements of query count, lock duration, and commit
   time on a named workload, and live managed-Postgres qualification, remain
   open.
+- **Repetition progress, September 23:** three sequential external-storage
+  baseline repetitions on one idle machine (Node 24.15.0, commit `4f21086`,
+  `project/evidence/external-storage-baseline-rep{1,2,3}.json`) measured the
+  named 48-file directory workload at p95 421.58 / 393.97 / 427.58 ms (median
+  421.58, spread about ±4%) with no investigation warnings, holding the
+  September 21 paired observation (388.18 ms) within run-to-run noise. Three
+  local baseline repetitions
+  (`project/evidence/local-baseline-rep{1,2,3}.json`) put the same workload at
+  p95 859.81 / 908.60 / 863.38 ms with the commit leg dominating at
+  397.12 / 425.12 / 377.44 ms. These bound gross variance but do not support
+  tail claims; live managed-Postgres qualification remains open.
 - **Do:** choose a bounded batch representation compatible with query/parameter
   limits. Preserve the single version/manifest/action/idempotency/current-pointer
   transaction and existing source-ready checks.
@@ -290,6 +301,18 @@ promotion from research or a single local green run.
   results, no successful-staging reclamation. Remaining open: Postgres
   store-level key tests beyond the runtime suite, deployed-runtime resume
   evidence, Cloudflare Worker resume, and MCP-surface recovery (T15).
+- **Postgres progress, September 23:** the Postgres store-level key tests are
+  now in `tests/integration/postgres-staged-upload-idempotency.test.ts`,
+  running in the external-storage suite against pinned Postgres: key binding,
+  cross-principal invisibility and coexistence, partial-index uniqueness
+  violations (asserted as structured `SqlError` `UniqueViolation` reasons),
+  null-key coexistence, and a genuine pre-0013 upgrade — a scratch database
+  with the pre-0013 `staged_uploads` schema and migration ledger at version 12
+  migrates in place, preserving the legacy row with a null key while new
+  key-bound writes enforce uniqueness. The full external-storage runtime
+  suite passed with the file included (26 tests, 2 files). Remaining open:
+  deployed-runtime resume evidence, Cloudflare Worker resume, and MCP-surface
+  recovery (T15).
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.
@@ -327,6 +350,20 @@ promotion from research or a single local green run.
   external-storage runtime suite, hot-project contention and polling-cost
   measurements are unrecorded, and Firefox/WebKit convergence runs await T07's
   engine matrix.
+- **Measurement progress, September 23:** polling cost and hot-project
+  contention are now recorded by a new bounded harness
+  (`pnpm perf:comment-polling`,
+  `project/evidence/comment-polling-baseline.json`): on a 200-thread artifact
+  (local SQLite, Node 24.15.0, commit `4f21086`), matching-revision
+  short-circuit polls cost p95 1.07 ms at about 1,296 ops/s, stale-revision
+  authoritative pages cost p95 2.49 ms, and a five-second contention phase
+  (eight pollers plus one create/delete mutator) completed 529 mutations with
+  poll p95 22.54 ms — far below the 7-second visible-tab poll interval. The
+  three-engine convergence evidence was refreshed at `4f21086`
+  (`project/evidence/browser.json`, 45/45, 0 flaky), so CMT-023-B/F
+  convergence now holds on Chromium, Firefox, and WebKit at HEAD. Remaining
+  open: Postgres revision behavior beyond the external-storage runtime suite
+  and Postgres/deployed polling cost.
 - **Do:** specify an authorized revision plus authoritative replacement/refetch
   contract. Increment revisions in each relevant mutation transaction across
   SQLite/Postgres/D1. Prove multi-page snapshot consistency through a coherent
@@ -391,6 +428,16 @@ promotion from research or a single local green run.
   unchanged). Remaining open: the CI path itself is wired and locally
   equivalent but unexecuted — no CI run has yet produced the three-engine
   evidence artifact.
+- **CI progress, September 23:** the CI path has now executed for real. The
+  disabled `CI` workflow was enabled in this fork and a `tier=full` dispatch
+  on `main` (`4f21086`, run 35879627083) completed **success** in 32 minutes:
+  the Full / Linux iteration gate, macOS portability, and Windows local
+  publishing jobs all passed with `BROWSER_CRITICAL_ENGINES=all`, so CI itself
+  now runs the three-engine browser matrix and regenerates the evidence
+  artifact. The same day, local three-engine evidence was refreshed at
+  `4f21086` (`project/evidence/browser.json`: 45/45, 0 failed, 0 flaky,
+  15/15 suites, engine `chromium+firefox+webkit@1.62.1`), and the full local
+  gate `BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration` passed exit 0.
 - **Injection progress, September 22:** the finalizer
   (`scripts/write-browser-evidence.ts`, driven by `scripts/run-browser-evidence.ts`)
   was failure-injected three ways against repo-relative temp evidence paths

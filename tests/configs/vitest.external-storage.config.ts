@@ -9,7 +9,10 @@ export default defineConfig({
       reportsDirectory: "coverage/external-storage-runtime",
     },
     fileParallelism: false,
-    include: ["tests/integration/external-storage-runtime.test.ts"],
+    include: [
+      "tests/integration/external-storage-runtime.test.ts",
+      "tests/integration/postgres-staged-upload-idempotency.test.ts",
+    ],
     pool: "forks",
     testTimeout: 60_000,
   },
