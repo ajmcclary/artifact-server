@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import {
+  AbortMultipartUploadCommand,
   CreateBucketCommand,
   ListMultipartUploadsCommand,
   PutObjectCommand,
@@ -295,6 +296,100 @@ describe.sequential("S3-compatible object storage", () => {
       new ListMultipartUploadsCommand({Bucket: bucket}),
     );
     expect(remaining.Uploads ?? []).toEqual([]);
+  }, integrationTestTimeoutMs);
+
+  test("a cleanup race treats an already-aborted multipart session as settled", async () => {
+    const installationId = "installation-create-only-abort-race";
+    const racingClient = createClient(environment);
+    const bytes = patternedBytes(multipartBytes);
+    const fingerprint = digest(bytes);
+    const key = blobKey(installationId, fingerprint);
+    const adapterPartBytes = 8 * 1024 * 1024;
+    const gate = Promise.withResolvers<void>();
+    let firstServed = false;
+    let interceptCleanup = false;
+    racingClient.middlewareStack.add(
+      (next, context) => async (arguments_) => {
+        const result = await next(arguments_);
+        if (
+          interceptCleanup &&
+          context.commandName === "ListMultipartUploadsCommand"
+        ) {
+          interceptCleanup = false;
+          const listed = await client.send(new ListMultipartUploadsCommand({
+            Bucket: bucket,
+            Prefix: key,
+          }));
+          for (const session of listed.Uploads ?? []) {
+            if (session.Key !== key || session.UploadId === undefined) continue;
+            // Abort through a separate real client after the adapter lists the
+            // session but before it performs its own cleanup request.
+            // eslint-disable-next-line no-await-in-loop
+            await client.send(new AbortMultipartUploadCommand({
+              Bucket: bucket,
+              Key: key,
+              UploadId: session.UploadId,
+            }));
+          }
+        }
+        return result;
+      },
+      {name: "abortBeforeAdapterCleanup", step: "deserialize"},
+    );
+    const storage = createStorage(racingClient, installationId);
+    try {
+      const gatedBody = new ReadableStream<Uint8Array>({
+        pull: async (controller) => {
+          if (!firstServed) {
+            firstServed = true;
+            controller.enqueue(bytes.subarray(0, adapterPartBytes + 1));
+            return;
+          }
+          await gate.promise;
+          controller.enqueue(bytes.subarray(adapterPartBytes + 1));
+          controller.close();
+        },
+      });
+      const write = storage.blobs.put({
+        body: gatedBody,
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      });
+      const deadline = Date.now() + 15_000;
+      for (;;) {
+        // Session polling must stay ordered to avoid flooding the provider.
+        // eslint-disable-next-line no-await-in-loop
+        const sessions = await client.send(
+          new ListMultipartUploadsCommand({Bucket: bucket, Prefix: key}),
+        );
+        if ((sessions.Uploads ?? []).some((upload) => upload.Key === key)) break;
+        if (Date.now() > deadline) {
+          gate.resolve();
+          throw new Error("The adapter multipart session never appeared.");
+        }
+        // Each delay belongs to the preceding poll.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      await putRawObject(client, key, bytes, {
+        "artifact-kind": "blob",
+        "artifact-sha256": fingerprint,
+      });
+      interceptCleanup = true;
+      gate.resolve();
+      await expect(write).resolves.toEqual({
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      });
+      await expect(readBlob(storage.blobs, fingerprint)).resolves.toEqual(bytes);
+      const remaining = await client.send(
+        new ListMultipartUploadsCommand({Bucket: bucket}),
+      );
+      expect(remaining.Uploads ?? []).toEqual([]);
+    } finally {
+      gate.resolve();
+      racingClient.destroy();
+    }
   }, integrationTestTimeoutMs);
 
   test("the provider enforces the create-only precondition", async () => {
