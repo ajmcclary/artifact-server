@@ -13,7 +13,7 @@ import {
 } from "../../src/deployment/cloud-deployment-evidence.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
-const imageReference = `ghcr.io/plannotator/artifact-server@${digest}`;
+const imageReference = `ghcr.io/ajmcclary/artifact-server@${digest}`;
 
 describe("shared cloud deployment contract", () => {
   test("normalizes the shared defaults and accepts each native provider shape", async () => {
@@ -408,7 +408,7 @@ function deploymentEvidence(
   overrides: CloudDeploymentDocument = {},
 ): CloudDeploymentDocument {
   return {
-    artifactServerVersion: "0.1.0",
+    artifactServerVersion: "0.1.1",
     checks,
     configurationFingerprint: `sha256:${"b".repeat(64)}`,
     environment: "production",

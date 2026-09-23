@@ -1,6 +1,6 @@
 {
   "name": "@plannotator/artifact-server-omp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Oh My Pi (omp) coding-agent bridge for Artifact Server: receives annotation bundles as follow-up work and closes them through the comment API.",
   "type": "module",
   "keywords": ["omp", "pi-package", "artifact-server"],

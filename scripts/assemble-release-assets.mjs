@@ -66,7 +66,7 @@ const imageReference = await readFile(
   path.join(outputDirectory, "image-reference.txt"),
   "utf8",
 );
-if (!imageReference.includes(`ghcr.io/plannotator/artifact-server@sha256:`)) {
+if (!imageReference.includes(`ghcr.io/ajmcclary/artifact-server@sha256:`)) {
   throw new Error("The image reference does not contain the immutable GHCR digest.");
 }
 

@@ -10,7 +10,7 @@ import {parseGcpPulumiConfiguration} from "../configuration.js";
 import {defineGcpStack} from "../stack.js";
 
 const digest = `sha256:${"b".repeat(64)}`;
-const imageReference = `ghcr.io/plannotator/artifact-server@${digest}`;
+const imageReference = `ghcr.io/ajmcclary/artifact-server@${digest}`;
 const resources: pulumi.runtime.MockResourceArgs[] = [];
 
 beforeAll(async () => {

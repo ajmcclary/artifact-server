@@ -40,7 +40,7 @@ region, released image repository and digest, and Secret reference:
 
 ```yaml
 image:
-  repository: ghcr.io/plannotator/artifact-server
+  repository: ghcr.io/ajmcclary/artifact-server
   digest: sha256:replace_with_release_digest
 
 configuration:

@@ -22,7 +22,7 @@ Artifact Server includes workflow, dependency, package, and container integrity 
 
 ## Pull-request verification
 
-The [CI workflow](https://github.com/plannotator/artifact-server/actions/workflows/ci.yml) uses read-only repository permissions. It pins third-party actions to complete commit SHAs. Checkout does not persist credentials. Dependencies install from the committed lockfile.
+The [CI workflow](https://github.com/ajmcclary/artifact-server/actions/workflows/ci.yml) runs manually or as the reusable release gate. It uses read-only repository permissions, pins third-party actions to complete commit SHAs, does not persist checkout credentials, and installs dependencies from the committed lockfile.
 
 The pull-request workflow runs these required jobs:
 
@@ -36,14 +36,14 @@ The complete Linux gate runs after a change reaches `main`. It also runs each da
 
 The complete gate uses `pnpm verify:iteration`. It includes package, storage, Compose, Helm, OIDC, coverage, and bounded performance verification.
 
-The separate [security workflow](https://github.com/plannotator/artifact-server/actions/workflows/security.yml) runs on the same change events and every Monday:
+The separate [security workflow](https://github.com/ajmcclary/artifact-server/actions/workflows/security.yml) runs manually:
 
 - Gitleaks scans all repository history with findings redacted from logs.
 - zizmor audits workflow and Dependabot files without sending source to a hosted scanner.
 - The workflow downloads both scanners at pinned versions and verifies them with SHA-256 before use.
 - Both scanners must detect a synthetic problem before their real analysis can pass.
 
-See the [Actions history](https://github.com/plannotator/artifact-server/actions) for individual runs and logs.
+See the [Actions history](https://github.com/ajmcclary/artifact-server/actions) for individual runs and logs.
 
 ## Evidence in package outputs
 
@@ -98,7 +98,7 @@ A matching checksum proves that the archive matches its manifest. Until the mani
 
 ## Public release verification
 
-Each [GitHub release](https://github.com/plannotator/artifact-server/releases) includes package manifests, SPDX software bills of materials, and `SHA256SUMS`. Download all release assets before you verify them.
+Each [GitHub release](https://github.com/ajmcclary/artifact-server/releases) includes package manifests, SPDX software bills of materials, and `SHA256SUMS`. Download all release assets before you verify them.
 
 On Linux, run:
 
@@ -115,8 +115,8 @@ shasum --algorithm 256 --check SHA256SUMS
 GitHub also records build provenance and SBOM attestations for the downloadable files and the container image. Use GitHub CLI to verify a downloaded file:
 
 ```sh
-gh attestation verify artifact-server-0.1.0-node.tar.gz \
-  --repo plannotator/artifact-server
+gh attestation verify artifact-server-0.1.1-node.tar.gz \
+  --repo ajmcclary/artifact-server
 ```
 
 The release asset named `image-reference.txt` contains the immutable GHCR image reference. Use that digest instead of a mutable tag in production.

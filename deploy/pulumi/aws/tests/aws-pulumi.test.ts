@@ -12,7 +12,7 @@ import {
 } from "../../../../src/deployment/cloud-deployment-contract.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
-const imageReference = `ghcr.io/plannotator/artifact-server@${digest}`;
+const imageReference = `ghcr.io/ajmcclary/artifact-server@${digest}`;
 const resources: pulumi.runtime.MockResourceArgs[] = [];
 
 beforeAll(async () => {

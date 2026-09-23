@@ -5,7 +5,7 @@ import {fileURLToPath} from "node:url";
 
 import {z} from "zod";
 
-const imageRepository = "ghcr.io/plannotator/artifact-server";
+const imageRepository = "ghcr.io/ajmcclary/artifact-server";
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -38,6 +38,12 @@ function fail(message) {
 function expectEqual(actual, expected, label) {
   if (actual !== expected) {
     fail(`${label} is ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}.`);
+  }
+}
+
+function expectIncludes(source, expected, label) {
+  if (!source.includes(expected)) {
+    fail(`${label} does not contain ${JSON.stringify(expected)}.`);
   }
 }
 
@@ -121,9 +127,35 @@ expectEqual(
 );
 
 const imageBuilder = await readText("scripts/build-oci-image.sh");
-if (!imageBuilder.includes(`${imageRepository}:$artifactserver_version`)) {
-  fail("the OCI builder does not default to the release GHCR repository.");
-}
+expectIncludes(
+  imageBuilder,
+  `${imageRepository}:$artifactserver_version`,
+  "OCI builder",
+);
+
+const imageWorkflow = await readText(".github/workflows/image.yml");
+expectIncludes(imageWorkflow, `tags: ${imageRepository}:`, "image workflow");
+expectIncludes(
+  imageWorkflow,
+  `IMAGE_VERSION=${rootPackage.version}`,
+  "image workflow version",
+);
+
+const releaseWorkflow = await readText(".github/workflows/release.yml");
+expectIncludes(
+  releaseWorkflow,
+  `ARTIFACT_SERVER_IMAGE_TAGS: ${imageRepository}:`,
+  "release workflow",
+);
+
+const installVerifyWorkflow = await readText(
+  ".github/workflows/install-verify.yml",
+);
+expectIncludes(
+  installVerifyWorkflow,
+  `default: v${rootPackage.version}`,
+  "published-install verification default",
+);
 
 const explicitTag = parseTagArgument();
 const environmentTag = process.env["GITHUB_REF_TYPE"] === "tag"
