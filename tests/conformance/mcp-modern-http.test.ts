@@ -1387,6 +1387,142 @@ describe("modern MCP HTTP", () => {
     expect(recovered.publication.version.id).toBe(committed.version.id);
     expect(recovered.publication.replayed).toBe(true);
   });
+
+  test("MCP-024-B MCP-024-F: artifact_version_list pages saved versions newest first and stays compatible without arguments", async () => {
+    expect.hasAssertions();
+    const versionCount = 4;
+    const pageSize = 2;
+
+    async function publishVersion(
+      expectedCurrentVersionId: string | null,
+      index: number,
+    ): Promise<z.infer<typeof publicationCommitResultSchema>> {
+      const bytes = new TextEncoder().encode(`version ${index} bytes\n`);
+      const file = declaredMcpFile("page.txt", "text/plain", bytes);
+      const uploadResult = await callTool(server, installation.apiToken, {
+        arguments: {entryPath: file.path, files: [file]},
+        name: "artifact_create_upload",
+      });
+      const upload = requireUploadPlan(createUploadResultSchema.parse(uploadResult.structuredContent));
+      const plan = upload.files[0];
+      if (plan === undefined) throw new Error("The MCP upload plan has no file.");
+      const uploaded = await fetch(plan.uploadUrl, {
+        body: bytes,
+        method: plan.method,
+      });
+      expect(uploaded.status).toBe(200);
+      const target = expectedCurrentVersionId === null
+        ? {kind: "new_artifact" as const, name: "Version pagination proof"}
+        : {
+          artifactId: committedArtifactId,
+          expectedCurrentVersionId,
+          kind: "new_version" as const,
+        };
+      return publicationCommitResultSchema.parse(
+        (await callTool(server, installation.apiToken, {
+          arguments: {
+            idempotencyKey: `mcp-version-page-proof-${index}`,
+            target,
+            uploadId: upload.uploadId,
+          },
+          name: "artifact_commit_upload",
+        })).structuredContent,
+      );
+    }
+
+    let committedArtifactId = "";
+    const versionIds: string[] = [];
+    let previousVersionId: string | null = null;
+    for (let index = 0; index < versionCount; index++) {
+      // Each new version requires the previous current version ID, so this
+      // loop must be sequential.
+      // eslint-disable-next-line no-await-in-loop
+      const committed = await publishVersion(previousVersionId, index);
+      if (index === 0) committedArtifactId = committed.artifact.id;
+      versionIds.unshift(committed.version.id);
+      previousVersionId = committed.version.id;
+    }
+
+    const versionListResultSchema = z.object({
+      artifactId: z.string(),
+      nextCursor: z.string().nullable(),
+      versions: z.array(z.object({
+        contentUrl: z.url(),
+        createdAt: z.string(),
+        entryPath: z.string(),
+        id: z.string(),
+        manifestDigest: z.string(),
+        number: z.number().int().positive(),
+        publisherPrincipalId: z.string(),
+      }).strict()),
+    }).strict();
+
+    const fullResult = versionListResultSchema.parse((await callTool(
+      server,
+      installation.apiToken,
+      {arguments: {artifactId: committedArtifactId}, name: "artifact_version_list"},
+    )).structuredContent);
+    expect(fullResult.versions.map((version) => version.id)).toEqual(versionIds);
+    expect(fullResult.nextCursor).toBeNull();
+
+    const firstPage = versionListResultSchema.parse((await callTool(
+      server,
+      installation.apiToken,
+      {
+        arguments: {
+          artifactId: committedArtifactId,
+          cursor: null,
+          limit: pageSize,
+        },
+        name: "artifact_version_list",
+      },
+    )).structuredContent);
+    expect(firstPage.versions).toHaveLength(pageSize);
+    expect(firstPage.versions.map((version) => version.id)).toEqual(versionIds.slice(0, pageSize));
+    expect(firstPage.nextCursor).not.toBeNull();
+
+    const secondPage = versionListResultSchema.parse((await callTool(
+      server,
+      installation.apiToken,
+      {
+        arguments: {
+          artifactId: committedArtifactId,
+          cursor: firstPage.nextCursor,
+          limit: pageSize,
+        },
+        name: "artifact_version_list",
+      },
+    )).structuredContent);
+    expect(secondPage.versions).toHaveLength(pageSize);
+    expect(secondPage.versions.map((version) => version.id)).toEqual(versionIds.slice(pageSize));
+    expect(secondPage.nextCursor).toBeNull();
+
+    const combinedIds = [
+      ...firstPage.versions.map((version) => version.id),
+      ...secondPage.versions.map((version) => version.id),
+    ];
+    expect(combinedIds).toEqual(versionIds);
+    expect(new Set(combinedIds).size).toBe(versionCount);
+
+    const invalidCursor = await mcpRequest(
+      server,
+      installation.apiToken,
+      "tools/call",
+      {
+        arguments: {
+          artifactId: committedArtifactId,
+          cursor: "not-a-cursor",
+          limit: pageSize,
+        },
+        name: "artifact_version_list",
+      },
+      {"Mcp-Name": "artifact_version_list"},
+    );
+    expect(invalidCursor.status).toBe(200);
+    const invalidCursorBody = toolCallResultSchema.parse(await invalidCursor.json()).result;
+    expect(invalidCursorBody.isError).toBe(true);
+    expect(invalidCursorBody.content[0]?.text).toMatch(/cursor|pagination/i);
+  });
 });
 
 interface ToolInvocation {

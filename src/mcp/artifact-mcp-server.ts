@@ -63,6 +63,7 @@ import {
   type RegisteredAgentRecord,
   type SourceBindingRecord,
   type StagedUpload,
+  type VersionRecord,
 } from "../core/model.js";
 import {principalKinds, type Principal} from "../core/identity.js";
 import {
@@ -1064,13 +1065,16 @@ export function createArtifactMcpServer(
     {
       title: "List saved versions",
       description:
-        "List every immutable saved version of one artifact, newest first. The returned content URLs identify exact versions; use artifact_open when the user needs an authorized browser URL.",
+        "List immutable saved versions of one artifact, newest first. Pass cursor and limit to page; omit both to return every version. The returned content URLs identify exact versions; use artifact_open when the user needs an authorized browser URL.",
       inputSchema: z.object({
         artifactId: artifactIdSchema,
+        cursor: z.string().max(1_024).nullable().default(null),
+        limit: z.number().int().min(1).max(maximumListedArtifacts).nullable().default(null),
         projectId: optionalProjectIdSchema,
       }).strict(),
       outputSchema: z.object({
         artifactId: z.string(),
+        nextCursor: z.string().nullable(),
         versions: z.array(z.object({
           contentUrl: z.url(),
           createdAt: z.string(),
@@ -1083,8 +1087,8 @@ export function createArtifactMcpServer(
       }).strict(),
       annotations: readOnlyAnnotations,
     },
-    async ({artifactId, projectId}) => toolResult(async () => {
-      const versions = await runMcpApplicationEffect(
+    async ({artifactId, cursor, limit, projectId}) => toolResult(async () => {
+      const allVersions = await runMcpApplicationEffect(
         dependencies,
         ArtifactManagementService.use((management) =>
           management.listVersions({
@@ -1094,9 +1098,15 @@ export function createArtifactMcpServer(
           })
         ),
       );
+      const page = paginateVersionList(
+        allVersions,
+        decodePageCursor(cursor),
+        limit,
+      );
       return {
         artifactId,
-        versions: versions.map((version) => ({
+        nextCursor: encodePageCursor(page.nextCursor),
+        versions: page.versions.map((version) => ({
           contentUrl: versionBrowserUrl(
             applicationUrl,
             dependencies.contentDomain,
@@ -2862,6 +2872,41 @@ function decodePageCursor(token: string | null): {readonly createdAt: string; re
       message: "The artifact page cursor is invalid.",
     });
   }
+}
+
+interface VersionListPage {
+  readonly nextCursor: {readonly createdAt: string; readonly id: string} | null;
+  readonly versions: readonly VersionRecord[];
+}
+
+function paginateVersionList(
+  versions: readonly VersionRecord[],
+  cursor: {readonly createdAt: string; readonly id: string} | null,
+  limit: number | null,
+): VersionListPage {
+  const sorted = versions.toSorted((a, b) =>
+    a.createdAt === b.createdAt
+      ? b.id.localeCompare(a.id)
+      : b.createdAt.localeCompare(a.createdAt)
+  );
+  if (limit === null) {
+    return {versions: sorted, nextCursor: null};
+  }
+  let start = 0;
+  if (cursor !== null) {
+    start = sorted.findIndex((version) =>
+      version.createdAt < cursor.createdAt ||
+      (version.createdAt === cursor.createdAt && version.id < cursor.id)
+    );
+    if (start === -1) start = sorted.length;
+  }
+  const pageVersions = sorted.slice(start, start + limit);
+  const lastVersion = pageVersions.at(-1);
+  const nextCursor =
+    lastVersion !== undefined && start + limit < sorted.length
+      ? {createdAt: lastVersion.createdAt, id: lastVersion.id}
+      : null;
+  return {versions: pageVersions, nextCursor};
 }
 
 function variableString(value: string | string[] | undefined): string {

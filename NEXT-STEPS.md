@@ -821,11 +821,15 @@ gate.
   and `entryCount`. `artifact_create_upload` accepts an optional
   `idempotencyKey`, replays the same upload plan with `resumed: true` before
   commit, returns the committed publication after commit, and reports
-  `IDEMPOTENCY_CONFLICT` when the key is reused with a different manifest. New
-  conformance IDs MCP-021, MCP-022, and MCP-023 are behavior-verified locally in
-  `project/spec/conformance.yml`. Remaining open: server/catalog construction
-  measurement, the live supported-client matrix (L gate), and Cloudflare Worker
-  surface qualification.
+  `IDEMPOTENCY_CONFLICT` when the key is reused with a different manifest.
+  `artifact_version_list` now accepts optional `cursor`/`limit` and returns a
+  `nextCursor`; omitting both arguments still returns the full list. The page is
+  built at the tool layer over the service's full ordered result; a future
+  store-level bounded query should replace the in-memory sort/slice. New
+  conformance IDs MCP-021, MCP-022, MCP-023, and MCP-024 are behavior-verified
+  locally in `project/spec/conformance.yml`. Remaining open: server/catalog
+  construction measurement, the live supported-client matrix (L gate), and
+  Cloudflare Worker surface qualification.
 - **Do:** add compatible compact artifact projections and paged manifest/history
   reads; complete manifests must remain explicitly available. Expose T05 recovery
   through the same services with bounded structured errors. Record SDK and wire

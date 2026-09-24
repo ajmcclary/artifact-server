@@ -75,10 +75,13 @@ key before commit returns the same upload plan with `resumed: true`. After the
 publication commits, the same key returns the committed publication. Reusing the
 key with a different manifest before commit returns `IDEMPOTENCY_CONFLICT`.
 
-`artifact_version_list` returns every saved version; pagination is not yet
-implemented. Modern stateless MCP HTTP and legacy compatibility are both
-supported. Subscriptions remain unavailable until a shared event service has its
-own replay, authorization, and recovery proof.
+`artifact_version_list` accepts optional `cursor` and `limit` arguments. When
+both are omitted it returns every saved version, preserving compatibility with
+callers that expect the full list. Passing `limit` pages newest-first; each page
+includes a `nextCursor` for the following page, or `null` on the final page.
+Modern stateless MCP HTTP and legacy compatibility are both supported.
+Subscriptions remain unavailable until a shared event service has its own
+replay, authorization, and recovery proof.
 
 ## Use the publication result
 

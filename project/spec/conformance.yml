@@ -2229,7 +2229,7 @@ requirements:
         tests: [MCP-021-B, MCP-021-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-24T14:54:50.000Z"
+        recorded_at: "2026-09-24T15:30:10.000Z"
 
   - id: MCP-022
     kind: behavior
@@ -2247,7 +2247,7 @@ requirements:
         tests: [MCP-022-B, MCP-022-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-24T14:54:50.000Z"
+        recorded_at: "2026-09-24T15:30:10.000Z"
 
   - id: MCP-023
     kind: behavior
@@ -2265,7 +2265,25 @@ requirements:
         tests: [MCP-023-B, MCP-023-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-24T14:54:50.000Z"
+        recorded_at: "2026-09-24T15:30:10.000Z"
+
+  - id: MCP-024
+    kind: behavior
+    behavior: artifact_version_list supports bounded paged traversal of an artifact's saved versions while remaining compatible when called without pagination arguments.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-024-B, description: "Page through an artifact's saved versions with cursor and limit, observing newest-first order, stable cursors, and no duplicates or omissions."}
+      failure: {id: MCP-024-F, description: "An invalid cursor is rejected, and omitting cursor and limit returns the full ordered list."}
+    deployments: *all
+    status: behavior_verified
+    depends_on: [MCP-009]
+    evidence:
+      - deployment: local
+        tests: [MCP-024-B, MCP-024-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-24T15:30:10.000Z"
 
   - id: SKL-001
     kind: behavior
