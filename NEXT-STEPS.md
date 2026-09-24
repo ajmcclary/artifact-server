@@ -6,7 +6,8 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-All T01–T27 tasks are open. Task IDs are planning identifiers, not new
+T02, T04, T06 and T07 are closed with their remaining gaps recorded; all
+other T01–T27 tasks are open. Task IDs are planning identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
 of product promises and proof; [AGENTS.md](./AGENTS.md) remains binding.
 
@@ -24,12 +25,12 @@ it does not authorize future live runs or paid-plan changes.
 | Rank | Task | Expected result | Dependencies | Effort |
 | --- | --- | --- | --- | --- |
 | 1 | T03 Git order and bounded reconciliation | Correct an observed GIT-008 failure without affecting primary publication. | Existing probe; add focused regression first. | 5–8 days |
-| 2 | T02 Create-only immutable writes | Close S3/GCS provider parity gap and prove concurrent reuse. | T01 for performance claims, not for correctness work. | 3–5 days |
+| 2 | T02 Create-only immutable writes (closed September 24) | Close S3/GCS provider parity gap and prove concurrent reuse. | T01 for performance claims, not for correctness work. | 3–5 days |
 | 3 | T01 Measurement and evidence baseline | Attribute transfer, SQL, CPU and memory before choosing optimizations. | None. | 2–4 days |
-| 4 | T04 Batch final Postgres manifest insertion | Remove sequential per-file SQL while preserving one atomic commit. | T01. | 2–4 days |
+| 4 | T04 Batch final Postgres manifest insertion (closed September 24) | Remove sequential per-file SQL while preserving one atomic commit. | T01. | 2–4 days |
 | 5 | T05 Publication reconciliation and file resume | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
-| 6 | T06 Review revision and authoritative refetch | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
-| 7 | T07 Browser evidence and critical engine matrix | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
+| 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
+| 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
 | 8 | T08 then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
 | 9 | T15/T16/T17 MCP and identity/host qualification | Bound agent results and qualify current auth/delivery behavior. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth; 2–4 per host |
 | 10 | Select T11, T12 or T13 from measurements | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
@@ -149,6 +150,20 @@ gate.
   rewritable staging slots, false-size-declaration rejection and cleanup. The
   JSON reporter is [gcs-gcp-probe.json](./project/evidence/gcs-gcp-probe.json).
   Both advertised providers now have attached live create-only evidence.
+- **Closed, September 24:** normal and hostile outcomes are demonstrated and
+  the remaining gaps are recorded. Identical and conflicting concurrent writes,
+  small/multipart boundaries, abort, retry, metadata corruption and
+  precondition failures preserve original bytes and IDs across the S3, GCS, R2
+  and Azure adapters; a proven existing blob is reused after its bytes are
+  re-proved through the stream verifier, with no repeated object-generation
+  installation. Live evidence is attached for both advertised remote providers:
+  AWS ([s3-aws-probe.json](./project/evidence/s3-aws-probe.json)) and GCS
+  ([gcs-gcp-probe.json](./project/evidence/gcs-gcp-probe.json)), each a
+  disposable, self-cleaned probe from the separately approved September 23
+  account qualification. Gates V/H/O/E/X/P passed at the recorded commits; the
+  L gate is the two probe reports. Remaining deployment gaps: none for the
+  advertised providers. Sealed-source promotion is separate conditional work
+  (T12).
 - **Do:** add provider-native create-only behavior behind the blob port, including
   multipart completion and verified reuse of a pre-existing destination. Separate
   immutable-blob semantics from reusable staging slots. Never treat a metadata
@@ -321,6 +336,27 @@ gate.
   keeping the container wrapper as the default gate. T04's managed-provider
   performance evidence is now recorded; the ≥10% claim discipline is unchanged
   (no speed claim is made from these runs).
+- **Closed, September 24:** normal and hostile outcomes are demonstrated and
+  the remaining gaps are recorded. The final manifest insertion is one bounded
+  `INSERT ... SELECT` over `jsonb_to_recordset` (three parameters regardless
+  of entry count; 2 statements per version instead of 1 + N) inside the
+  unchanged single version/manifest/action/idempotency/current-pointer
+  transaction with the existing source-ready checks. Exact manifest/bytes,
+  conflict/idempotency behavior and transaction-stage failures are covered by
+  the external-storage runtime suite against pinned Postgres/MinIO. Controlled
+  measurements: three local-container repetitions
+  ([external-storage-baseline-rep1.json](./project/evidence/external-storage-baseline-rep1.json),
+  [rep2](./project/evidence/external-storage-baseline-rep2.json),
+  [rep3](./project/evidence/external-storage-baseline-rep3.json)) and three
+  managed Neon repetitions
+  ([neon-rep1](./project/evidence/external-storage-baseline-neon-rep1.json),
+  [neon-rep2](./project/evidence/external-storage-baseline-neon-rep2.json),
+  [neon-rep3](./project/evidence/external-storage-baseline-neon-rep3.json)),
+  Node 24.15.0, with per-version statement counts structural and commit-leg
+  timings in the reports; no ≥10% speed claim is made. Gates V/H/E/X/P passed
+  at the recorded commits. Remaining gaps: a dedicated lock-duration probe was
+  not added (recorded, not blocking); PUB-005 stays `specified` in the ledger,
+  a pre-existing status this task does not change.
 - **Do:** choose a bounded batch representation compatible with query/parameter
   limits. Preserve the single version/manifest/action/idempotency/current-pointer
   transaction and existing source-ready checks.
@@ -473,6 +509,25 @@ gate.
   627 contention mutations; refreshed
   [comment-polling-baseline.json](./project/evidence/comment-polling-baseline.json)).
   T06's measurement and Postgres-coverage gaps are now closed.
+- **Closed, September 24:** normal and hostile outcomes are demonstrated and
+  the remaining gaps are recorded. The `comment_revision` counter increments
+  inside the same transaction as every listing-visible change across SQLite
+  (schema 15), Postgres (migration 0014) and D1 (schema 12); a matching
+  revision short-circuits without reading threads and a stale revision returns
+  the authoritative filtered page, so deletions and dispatch removals converge.
+  Two browser contexts converge after create/delete on Chromium, Firefox and
+  WebKit (the September 23 three-engine run recorded 45/45, 0 flaky at
+  `4f21086`; [browser.json](./project/evidence/browser.json) is regenerated by
+  each browser run, so the file records the latest run rather than retaining
+  that artifact). Polling cost and hot-project contention are measured locally and
+  against the managed Neon database
+  ([comment-polling-baseline.json](./project/evidence/comment-polling-baseline.json),
+  [comment-polling-baseline-neon.json](./project/evidence/comment-polling-baseline-neon.json)),
+  with ample headroom under the 7-second visible-tab poll interval and
+  concurrent revision increments converging without error; Postgres revision
+  behavior is exercised beyond the external-storage runtime suite through the
+  managed contention run. The 30-second AUTH-022 bound is untouched. Gates
+  V/B/E/X/P passed at the recorded commits. Remaining gaps: none recorded.
 - **Do:** specify an authorized revision plus authoritative replacement/refetch
   contract. Increment revisions in each relevant mutation transaction across
   SQLite/Postgres/D1. Prove multi-page snapshot consistency through a coherent
@@ -584,6 +639,22 @@ gate.
   restored exit 0 with no product-code change. The polling change was
   ruled out as the timeout cause — the only timeout-adjacent failure was
   this schema mismatch.
+  - **Closed, September 24:** normal and hostile outcomes are demonstrated and
+  the remaining gaps are recorded. The evidence finalizer fails closed on a
+  missing report, a truncated report, and a nonzero Playwright exit
+  (three-way failure injection, prior evidence rotated intact, original exit
+  codes preserved); diagnostics are redacted before CI upload; fixed sleeps
+  are replaced with observable assertions. The critical-engine matrix
+  (CMT-014/016/018/023) passes locally on Chromium, Firefox and WebKit
+  (September 23 three-engine run: 45/45, 0 failed, 0 flaky at `4f21086`,
+  engine `chromium+firefox+webkit@1.62.1`;
+  [browser.json](./project/evidence/browser.json) is regenerated by each
+  browser run, so the file records the latest run rather than retaining that
+  artifact) and in CI — the
+  full-gate dispatch on `main` at `4f21086` (run 35879627083) completed
+  successfully with `BROWSER_CRITICAL_ENGINES=all` on the Linux, macOS and
+  Windows jobs, so CI itself regenerates the three-engine evidence artifact.
+  Remaining gaps: none recorded.
 
 ## Storage, platform and transport experiments
 
