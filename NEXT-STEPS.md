@@ -253,6 +253,26 @@ gate.
   seconds per shape. Reports separate setup from claims and preserve all pass
   samples. These local runs do not qualify managed Postgres, deployed Worker
   limits, full history growth or live Git traffic.
+- **Repetition progress, September 24:** five sequential repetitions of the
+  3,301-version, 30-pass shapes ran on one idle machine (Apple M1 Max, Node
+  24.15.0, commit `b531db1`). SQLite claim medians
+  ([rep1](./project/evidence/git-history-backlog-rep1.json) through
+  [rep5](./project/evidence/git-history-backlog-rep5.json)): 7.59–7.88 ms
+  many-artifacts (median 7.63 ms) and 2.84–2.96 ms deep-history (median
+  2.92 ms), about ±4% spread. Pinned Postgres claim medians
+  ([rep1](./project/evidence/git-history-postgres-backlog-rep1.json) through
+  [rep5](./project/evidence/git-history-postgres-backlog-rep5.json)):
+  52.19–62.88 ms many-artifacts (median 54.41 ms) and 15.76–17.04 ms
+  deep-history (median 16.37 ms); the first deep-history pass holds steady at
+  761–802 ms across every repetition. Local Wrangler D1 claim medians
+  ([rep1](./project/evidence/git-history-d1-backlog-rep1.json) through
+  [rep5](./project/evidence/git-history-d1-backlog-rep5.json)): 43.89–50.97 ms
+  many-artifacts (median 48.24 ms) and 41.32–51.45 ms deep-history (median
+  43.35 ms). These five samples bound gross run-to-run variance but do not
+  support tail claims, and all fifteen reports record the full measurement
+  context. Live-provider backlog measurements, live D1 multi-worker and
+  provider concurrency proof, and live-provider crash recovery remain open —
+  the Cloudflare Artifacts namespace entitlement is still unavailable.
 - **Iteration checks, September 18:** `pnpm verify:iteration`, `pnpm smoke`,
   and `pnpm verify:external-storage-performance` passed on Node 24.15.0.
   The external-storage baseline reported no investigation warnings. The
@@ -827,9 +847,23 @@ gate.
   built at the tool layer over the service's full ordered result; a future
   store-level bounded query should replace the in-memory sort/slice. New
   conformance IDs MCP-021, MCP-022, MCP-023, and MCP-024 are behavior-verified
-  locally in `project/spec/conformance.yml`. Remaining open: server/catalog
-  construction measurement, the live supported-client matrix (L gate), and
-  Cloudflare Worker surface qualification.
+  locally in `project/spec/conformance.yml`. Remaining open at that point:
+  server/catalog construction measurement, the live supported-client matrix
+  (L gate), and Cloudflare Worker surface qualification.
+- **Measurement progress, September 24:** a new bounded harness
+  (`pnpm perf:mcp-server-construction`,
+  [mcp-server-construction-baseline.json](./project/evidence/mcp-server-construction-baseline.json))
+  measures the modern MCP HTTP boundary at 0, 100 and 1,000 seeded artifacts
+  (local SQLite, Node 24.15.0, commit `b531db1`, 50 samples per method per
+  size). Every request is a fresh stateless POST, so each sample pays one full
+  `createArtifactMcpServer` construction plus bearer authentication. Costs are
+  flat in catalog size: `server/discover` p95 12.63–17.10 ms, `tools/list`
+  p95 17.01–21.24 ms, `resources/templates/list` p95 10.56–14.44 ms, and a
+  first-page `artifact_list` call p95 13.74–15.85 ms across all three sizes.
+  There is no measured case for caching or deferring tool registration; the
+  per-request floor is authentication and construction constants. One run on
+  one machine; no tail claim. Remaining open: the live supported-client matrix
+  (L gate) and Cloudflare Worker surface qualification.
 - **Do:** add compatible compact artifact projections and paged manifest/history
   reads; complete manifests must remain explicitly available. Expose T05 recovery
   through the same services with bounded structured errors. Record SDK and wire

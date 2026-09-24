@@ -58,6 +58,7 @@
     "perf:batch-staging-comparison": "node --import tsx project/performance/run-batch-staging-comparison.ts",
     "perf:git-history-postgres-backlog": "bash scripts/with-external-storage-test-providers.sh node --import tsx project/performance/run-git-history-postgres-backlog.ts",
     "perf:git-history-d1-backlog": "pnpm --dir deploy/cloudflare exec tsx scripts/run-git-history-backlog.ts",
+    "perf:mcp-server-construction": "node --import tsx project/performance/run-mcp-server-construction.ts",
     "predev": "pnpm --filter @artifact-server/web build",
     "qualify:cloud:create-abandoned-upload": "pnpm build && node --import tsx scripts/create-deployed-abandoned-upload.ts",
     "qualify:cloud:phase11-content": "pnpm build && node --import tsx scripts/qualify-deployed-phase11-content.ts",

@@ -346,6 +346,25 @@ reflects SQLite's single-writer serialization and stays far below the 7-second
 visible-tab poll interval. Postgres polling cost and deployed-runtime numbers
 remain unmeasured.
 
+## September 24 MCP server construction cost (T15)
+
+A new bounded harness (`pnpm perf:mcp-server-construction`,
+`project/evidence/mcp-server-construction-baseline.json`) measures the modern
+MCP HTTP boundary at growing catalog sizes. Every request is a fresh stateless
+POST, so each sample pays one full `createArtifactMcpServer` construction (31
+tools plus one resource, all registered statically) plus bearer authentication
+and the named method. On a local SQLite installation (Apple M1 Max, Node
+24.15.0, commit `b531db1`, 50 samples per method per size), p95 costs are flat
+from 0 to 1,000 artifacts: `server/discover` 14.78 / 12.63 / 17.10 ms,
+`tools/list` 20.54 / 17.01 / 21.24 ms, `resources/templates/list` 14.44 /
+10.56 / 11.48 ms, and a first-page `artifact_list` call 15.23 / 13.74 /
+15.85 ms. Catalog size does not materially affect the per-request construction
+or discovery path, so there is no measured case for caching or deferring tool
+registration; the per-request ~10–20 ms floor is dominated by authentication
+and construction constants, and a principal-bound server must never be cached
+globally regardless. Seeding is recorded separately (1,000 artifacts in about
+26.6 s through the real publish path). One run at one machine; no tail claim.
+
 ## Baseline policy
 - `pnpm verify:iteration` is the required end-of-iteration gate. It includes correctness, a coverage report, conformance checks, and the default bounded baseline. Coverage percentage is not a test-design target.
 - `pnpm smoke` catches broken behavior and gross regressions with deliberately loose machine-timing limits.

@@ -1,0 +1,184 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-24T18:29:22.638Z",
+  "commit": "b531db11e20a3a161d1dd78b72bbcad91b2c44e2",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-09-24T18:29:22.638Z",
+  "configuration": {
+    "catalogSizes": [
+      0,
+      100,
+      1000
+    ],
+    "samples": 50
+  },
+  "note": "Every measured request is a fresh stateless POST, so each sample pays one full createArtifactMcpServer construction plus bearer authentication and the named method. Bounded local diagnostic; this does not establish tail latency or support an optimization decision on its own.",
+  "scenarios": [
+    {
+      "artifactCount": 0,
+      "artifactListFirstPage": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 18.393500000000017,
+          "meanMilliseconds": 9.100069980000008,
+          "minimumMilliseconds": 6.172500000000127,
+          "p50Milliseconds": 7.8270840000000135,
+          "p95Milliseconds": 15.227333999999928
+        },
+        "operationsPerSecond": 109.8892648295875,
+        "totalMilliseconds": 455.0034990000004
+      },
+      "serverDiscover": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 16.213207999999895,
+          "meanMilliseconds": 8.814092480000001,
+          "minimumMilliseconds": 5.803040999999666,
+          "p50Milliseconds": 7.35329200000001,
+          "p95Milliseconds": 14.783083000000033
+        },
+        "operationsPerSecond": 113.45467525659544,
+        "totalMilliseconds": 440.7046240000001
+      },
+      "resourcesTemplatesList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 39.798958000000084,
+          "meanMilliseconds": 8.848934160000004,
+          "minimumMilliseconds": 5.490041000000019,
+          "p50Milliseconds": 6.8469169999998485,
+          "p95Milliseconds": 14.437124999999924
+        },
+        "operationsPerSecond": 113.00796027168086,
+        "totalMilliseconds": 442.44670800000017
+      },
+      "seedMilliseconds": 0.0002910000000611035,
+      "toolsList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 32.517958000000135,
+          "meanMilliseconds": 12.705295820000005,
+          "minimumMilliseconds": 8.531958000000031,
+          "p50Milliseconds": 10.735167000000047,
+          "p95Milliseconds": 20.538374999999974
+        },
+        "operationsPerSecond": 78.70733701657326,
+        "totalMilliseconds": 635.2647910000003
+      }
+    },
+    {
+      "artifactCount": 100,
+      "artifactListFirstPage": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 16.742332999999235,
+          "meanMilliseconds": 9.26886825999989,
+          "minimumMilliseconds": 7.153250000000298,
+          "p50Milliseconds": 8.040541000000303,
+          "p95Milliseconds": 13.737624999999753
+        },
+        "operationsPerSecond": 107.8880368076363,
+        "totalMilliseconds": 463.4434129999945
+      },
+      "serverDiscover": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 27.65191700000014,
+          "meanMilliseconds": 8.150831640000069,
+          "minimumMilliseconds": 5.666458000000603,
+          "p50Milliseconds": 6.750707999999577,
+          "p95Milliseconds": 12.629542000000583
+        },
+        "operationsPerSecond": 122.68686732437422,
+        "totalMilliseconds": 407.5415820000035
+      },
+      "resourcesTemplatesList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 12.570209000000432,
+          "meanMilliseconds": 7.0390366400000675,
+          "minimumMilliseconds": 5.149750000000495,
+          "p50Milliseconds": 6.2072079999998095,
+          "p95Milliseconds": 10.563415999999961
+        },
+        "operationsPerSecond": 142.06489483481226,
+        "totalMilliseconds": 351.9518320000034
+      },
+      "seedMilliseconds": 2874.718792,
+      "toolsList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 22.202916999999616,
+          "meanMilliseconds": 10.89759329999999,
+          "minimumMilliseconds": 8.270708000000013,
+          "p50Milliseconds": 9.644124999999804,
+          "p95Milliseconds": 17.013500000000022
+        },
+        "operationsPerSecond": 91.76338045208578,
+        "totalMilliseconds": 544.8796649999995
+      }
+    },
+    {
+      "artifactCount": 1000,
+      "artifactListFirstPage": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 16.661999999996624,
+          "meanMilliseconds": 8.783776579999977,
+          "minimumMilliseconds": 6.3787910000028205,
+          "p50Milliseconds": 7.5914580000026035,
+          "p95Milliseconds": 15.851416999998037
+        },
+        "operationsPerSecond": 113.84624721408872,
+        "totalMilliseconds": 439.1888289999988
+      },
+      "serverDiscover": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 39.98737500000425,
+          "meanMilliseconds": 8.38172918000011,
+          "minimumMilliseconds": 5.50604100000055,
+          "p50Milliseconds": 6.548041999994894,
+          "p95Milliseconds": 17.099667000002228
+        },
+        "operationsPerSecond": 119.30712368828728,
+        "totalMilliseconds": 419.08645900000556
+      },
+      "resourcesTemplatesList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 14.579540999999153,
+          "meanMilliseconds": 7.2768316400001645,
+          "minimumMilliseconds": 4.944666999996116,
+          "p50Milliseconds": 6.427541999997629,
+          "p95Milliseconds": 11.476332999998704
+        },
+        "operationsPerSecond": 137.42244557412593,
+        "totalMilliseconds": 363.8415820000082
+      },
+      "seedMilliseconds": 26590.248166999998,
+      "toolsList": {
+        "latency": {
+          "count": 50,
+          "maximumMilliseconds": 37.24725000000035,
+          "meanMilliseconds": 11.432439980000636,
+          "minimumMilliseconds": 7.943291000003228,
+          "p50Milliseconds": 9.249500000005355,
+          "p95Milliseconds": 21.241625000002387
+        },
+        "operationsPerSecond": 87.47039142557077,
+        "totalMilliseconds": 571.6219990000318
+      }
+    }
+  ],
+  "startedAt": "2026-09-24T18:28:47.439Z",
+  "success": true
+}
