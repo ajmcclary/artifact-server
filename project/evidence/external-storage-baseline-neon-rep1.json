@@ -1,0 +1,126 @@
+{
+  "artifactList": {
+    "latency": {
+      "count": 16,
+      "maximumMilliseconds": 183.207,
+      "meanMilliseconds": 158.273,
+      "minimumMilliseconds": 145.379,
+      "p50Milliseconds": 149.727,
+      "p95Milliseconds": 183.207,
+      "p99Milliseconds": 183.207
+    },
+    "operationsPerSecond": 25.023,
+    "totalMilliseconds": 639.42
+  },
+  "checks": {
+    "compiledProcesses": "passed",
+    "crossProcessDirectoryRead": "passed",
+    "crossProcessSingleFileRead": "passed",
+    "healthEndpoints": "passed",
+    "migrations": "passed",
+    "processReplacement": "passed",
+    "providerBackedPublication": "passed"
+  },
+  "concurrentPublish": {
+    "latency": {
+      "count": 16,
+      "maximumMilliseconds": 3156.498,
+      "meanMilliseconds": 2451.555,
+      "minimumMilliseconds": 2197.504,
+      "p50Milliseconds": 2372.485,
+      "p95Milliseconds": 3156.498,
+      "p99Milliseconds": 3156.498
+    },
+    "operationsPerSecond": 1.62,
+    "totalMilliseconds": 9873.628
+  },
+  "concurrentRead": {
+    "latency": {
+      "count": 80,
+      "maximumMilliseconds": 297.07,
+      "meanMilliseconds": 134.199,
+      "minimumMilliseconds": 112.714,
+      "p50Milliseconds": 125.132,
+      "p95Milliseconds": 164.782,
+      "p99Milliseconds": 297.07
+    },
+    "operationsPerSecond": 57.794,
+    "totalMilliseconds": 1384.217
+  },
+  "configuration": {
+    "concurrentFileBytes": 16384,
+    "concurrentPublications": 16,
+    "directoryFileBytes": 4096,
+    "directoryFiles": 48,
+    "fileIterations": 3,
+    "listReads": 16,
+    "operationConcurrency": 4,
+    "reads": 80,
+    "singleFileBytes": 2097152,
+    "warmupPublications": 2
+  },
+  "environment": {
+    "arch": "arm64",
+    "availableParallelism": 10,
+    "capturedAt": "2026-09-24T02:11:55.167Z",
+    "commit": "849441eadd3bd2f8c5b58ca70c917173797a1786",
+    "cpu": "Apple M1 Max",
+    "details": {
+      "minioImage": "managed",
+      "minioImageDigest": null,
+      "postgresImage": "managed",
+      "postgresImageDigest": null
+    },
+    "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+    "node": "v24.15.0",
+    "operatingSystem": "darwin 27.2.0",
+    "platform": "darwin",
+    "temporaryFilesystem": "apfs",
+    "workingTreeDirty": true,
+    "minioImage": "managed",
+    "postgresImage": "managed"
+  },
+  "fileClient": {
+    "directory": {
+      "latency": {
+        "count": 3,
+        "maximumMilliseconds": 11034.566,
+        "meanMilliseconds": 10476.736,
+        "minimumMilliseconds": 10182.751,
+        "p50Milliseconds": 10212.892,
+        "p95Milliseconds": 11034.566,
+        "p99Milliseconds": 11034.566
+      },
+      "operationsPerSecond": 0.095,
+      "totalMilliseconds": 31430.298
+    },
+    "singleFile": {
+      "latency": {
+        "count": 3,
+        "maximumMilliseconds": 5196.084,
+        "meanMilliseconds": 4257.819,
+        "minimumMilliseconds": 3396.738,
+        "p50Milliseconds": 4180.634,
+        "p95Milliseconds": 5196.084,
+        "p99Milliseconds": 5196.084
+      },
+      "operationsPerSecond": 0.235,
+      "totalMilliseconds": 12773.496
+    }
+  },
+  "generatedAt": "2026-09-24T02:11:55.172Z",
+  "providerReadyMilliseconds": 0,
+  "serverReadyMilliseconds": {
+    "initialProcesses": [
+      1631.277,
+      1719.621
+    ],
+    "replacementProcess": 2872.189
+  },
+  "totalHarnessMilliseconds": 68879.167,
+  "warnings": [
+    "Concurrent publication p95 exceeded the external-storage investigation threshold of 1,000 ms.",
+    "External-storage directory publication p95 exceeded 10,000 ms.",
+    "External-storage single-file publication p95 exceeded 5,000 ms."
+  ]
+}

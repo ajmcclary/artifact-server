@@ -99,22 +99,39 @@ Verified by the fake plugin context against a real spawned Artifact Server:
   dispatch fail and releases its comments. Selecting another session lets the
   same bridge deliver the next dispatch without restarting OpenCode.
 
-Not fully qualified against the current live OpenCode host:
+Qualified live against the current host, **OpenCode 1.18.32** (2026-09-23):
+the `tests/opencode-live` suite drives a real `opencode serve` plus
+`run --attach` clients with this plugin loaded against a real Artifact
+Server and a scripted offline model — round trip (`OPENCODE-LIVE 1`), FIFO
+drain (`OPENCODE-LIVE 2`), and fail-open against an unreachable origin
+(`OPENCODE-LIVE 3`) all pass. Evidence: `project/evidence/opencode-live.json`
+(`pnpm test:opencode-live` re-runs it). The cross-instance zod interop below
+is exercised by that suite, since the plugin loads through OpenCode's own
+Bun plugin loader.
 
-- Cross-instance zod interop: this package ships zod `4.4.3` argument
-  schemas; OpenCode composes them with its own zod (`4.1.8` at the pinned
-  commit) through the `_zod` protocol. This is the standard path for every
-  npm plugin, but it is not executed by this repository's tests.
+Host behaviors observed on OpenCode 1.18.32 during live qualification:
+
+- A `run --attach` client exits shortly after its first paint; the server
+  keeps the session alive and processes queued follow-up prompts one per
+  work boundary. Host observation therefore goes through the `opencode
+  serve` HTTP API (`GET /session`, `GET /session/:id/message`), not the
+  attach client's terminal output.
+- OpenCode makes a small title-generation model call before the main
+  prompt's call, so turn indexes in a scripted-model harness are offset
+  by one.
+
+Still not covered live:
+
 - The `experimental.*` hook names are marked experimental by OpenCode and
   may change in later versions; the bridge degrades to "no compaction
-  hold" if they stop firing.
-- No automated live OpenCode smoke test is wired here. The automated adapter
-  test uses a scripted plugin context driving the real bridge core against a
-  real spawned Artifact Server (`tests/client/opencode-bridge.test.ts`). The
+  hold" if they stop firing. The compaction hold itself is covered by the
+  scripted plugin-context test (`tests/client/opencode-bridge.test.ts`),
+  not by the live suite.
+- The
   [August 27 staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md)
   separately records a bounded live pass on OpenCode 1.18.23. It does not prove
-  every compaction or session-deletion race, or current-host compatibility.
-  Remaining live qualification is tracked in [T17](../../NEXT-STEPS.md).
+  every compaction or session-deletion race. Any remaining live qualification
+  is tracked in [T17](../../NEXT-STEPS.md).
 
 ## Compatibility
 

@@ -1,0 +1,87 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-24T02:01:22.261Z",
+  "commit": "849441eadd3bd2f8c5b58ca70c917173797a1786",
+  "cpu": "Apple M1 Max",
+  "details": {
+    "objectStorage": "aws-s3",
+    "postgres": "managed",
+    "region": "us-east-1"
+  },
+  "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-09-24T02:01:22.261Z",
+  "configuration": {
+    "concurrency": 8,
+    "contentionSeconds": 5,
+    "polls": 500,
+    "stalePolls": 100,
+    "threads": 200
+  },
+  "contention": {
+    "mutations": {
+      "latency": {
+        "count": 4,
+        "maximumMilliseconds": 1705.9035830000066,
+        "meanMilliseconds": 1409.4290932500007,
+        "minimumMilliseconds": 1270.2174160000286,
+        "p50Milliseconds": 1318.6137909999816,
+        "p95Milliseconds": 1705.9035830000066
+      },
+      "operationsPerSecond": 0.7095071364633898,
+      "totalMilliseconds": 5637.716373000003
+    },
+    "mutationCount": 4,
+    "polls": {
+      "latency": {
+        "count": 122,
+        "maximumMilliseconds": 924.773749999993,
+        "meanMilliseconds": 333.06978895901904,
+        "minimumMilliseconds": 196.77716699999291,
+        "p50Milliseconds": 308.87462499999674,
+        "p95Milliseconds": 624.9104999999981
+      },
+      "operationsPerSecond": 3.0023737761548834,
+      "totalMilliseconds": 40634.51425300032
+    }
+  },
+  "note": "Comment revision polling on one hot artifact against the compiled external-storage server on managed Postgres and real object storage: matching-revision polls short-circuit to an empty page, stale-revision polls return the authoritative first page, and the contention phase runs parallel short-circuit polls while one client creates and deletes threads. Setup time is excluded from the measured phases. The contention phase also exercises concurrent Postgres revision increments; completion without error demonstrates no lost revision bumps.",
+  "phases": {
+    "shortCircuit": {
+      "latency": {
+        "count": 500,
+        "maximumMilliseconds": 441.75345899999957,
+        "meanMilliseconds": 217.61063048200106,
+        "minimumMilliseconds": 184.64245799998753,
+        "p50Milliseconds": 210.90729099998134,
+        "p95Milliseconds": 268.1222499999858
+      },
+      "operationsPerSecond": 4.595363736528081,
+      "totalMilliseconds": 108805.31524100053
+    },
+    "stalePage": {
+      "latency": {
+        "count": 100,
+        "maximumMilliseconds": 581.953125,
+        "meanMilliseconds": 330.4852820999999,
+        "minimumMilliseconds": 283.10779199999524,
+        "p50Milliseconds": 314.9859169999836,
+        "p95Milliseconds": 405.873540999979
+      },
+      "operationsPerSecond": 3.025853356148595,
+      "totalMilliseconds": 33048.52820999999
+    }
+  },
+  "setup": {
+    "milliseconds": 147973.284917,
+    "threadsPerSecond": 1.351595324197759
+  },
+  "startedAt": "2026-09-24T02:01:22.261Z",
+  "success": true,
+  "target": "managed-postgres"
+}

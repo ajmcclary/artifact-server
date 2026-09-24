@@ -75,10 +75,27 @@ the session. It never blocks an omp event handler on the network.
 ## Compatibility
 
 - omp extension API: the adapter types its narrow API slice structurally and
-  keeps no hard dependency on omp's own type package. Typechecking proves this
-  structural contract, but live-host qualification remains pending (events
-  `session_start` / `session_before_compact` / `session_compact` /
-  `session_shutdown`, `registerTool`, `sendUserMessage`).
+  keeps no hard dependency on omp's own type package. Live-host qualification
+  has run against **omp 18.2.11** (2026-09-23): the `tests/omp-live` suite
+  drives a real omp process in a PTY with this extension loaded against a
+  real Artifact Server and a scripted offline model — round trip
+  (`OMP-LIVE 1`), FIFO drain (`OMP-LIVE 2`), and session replacement
+  (`OMP-LIVE 3`) all pass. Evidence: `project/evidence/omp-live.json`
+  (`pnpm test:omp-live` re-runs it). Events exercised live: `session_start`,
+  `session_shutdown`, `registerTool`, `sendUserMessage`; the compaction pair
+  (`session_before_compact` / `session_compact`) is covered by the structural
+  test `tests/client/omp-bridge.test.ts`, not by the live suite.
+- Host behaviors observed on omp 18.2.11 during live qualification:
+  - `/new` emits no session lifecycle events at all (no `session_shutdown`,
+    no new `session_start`): the extension host survives, so the original
+    registration stays connected and the replacement session inherits the
+    pending FIFO through it. The agent row's `agentSessionId` keeps the first
+    session's value.
+  - A bundle accepted while the session is fully idle does not start a turn
+    on its own; it drains at the next work boundary (the user's next
+    prompt). While the session is busy, bundles drain one per boundary.
+  - Terminal input typed while a model turn is in flight is queued as input,
+    not executed as a command, so `/new` cannot be issued mid-work.
 - omp's `session_shutdown` event does not carry the `reason` field that Pi's
   does (`reason: "quit" | "reload" | "new" | ...`). This adapter therefore
   sends the courtesy disconnect on every shutdown rather than only on a

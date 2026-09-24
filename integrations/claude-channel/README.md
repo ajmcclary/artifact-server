@@ -8,11 +8,28 @@ threads, completes the work, replies, and resolves them in Artifact Server.
 ## Current support
 
 Claude Code Channels are a research preview. Custom channels require a
-development flag. Team and Enterprise administrators must also enable the
-`channelsEnabled` organization policy.
+development flag. Availability is decided by a server-side feature flag on
+the signed-in Claude account; Team and Enterprise administrators must also
+enable the `channelsEnabled` organization policy.
 
 The Artifact Server channel is currently available from a source checkout.
 The npm package is not published yet.
+
+## Live verification
+
+Qualified live against the current host, **Claude Code 2.1.281** (2026-09-24):
+the `tests/claude-live` suite drives a real `claude` process in a PTY with
+the channel loaded through `.mcp.json` and
+`--dangerously-load-development-channels`, against a real Artifact Server
+and a scripted offline model — no metered provider usage. The round trip
+(`CLAUDE-LIVE 1`: the channel registers the session, a dispatch is
+`delivered`, the model works the thread through `artifact_comments`, the
+thread resolves, and the dispatch reads `addressed`) passes. Evidence:
+`project/evidence/claude-live.json` (`pnpm test:claude-live` re-runs it).
+
+The suite's isolated HOME seeds the account feature-flag cache
+(`cachedGrowthBookFeatures.tengu_harbor` in `.claude.json`), because a
+signed-out install has no bootstrap to fetch the flag from.
 
 ## Before you start
 

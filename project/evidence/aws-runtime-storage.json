@@ -29,7 +29,13 @@
     "cleanup": "pass"
   },
   "remaining": [
-    "run deployed-runtime resume qualification against Neon plus this bucket",
     "configure separate broader infrastructure permissions before running the Pulumi AWS deployment suite"
-  ]
+  ],
+  "followUp": {
+    "deployedRuntimeResume": {
+      "completedAt": "2026-09-23",
+      "evidence": "project/evidence/deployed-runtime-resume.json",
+      "result": "crash mid-publication resume and lost-commit-response replay passed against Neon plus this bucket"
+    }
+  }
 }

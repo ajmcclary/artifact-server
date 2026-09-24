@@ -78,6 +78,9 @@
     "test:oci-image": "bash scripts/run-oci-image-integration.sh",
     "test:oidc": "bash scripts/run-oidc-integration.sh",
     "test:pi-live": "bash scripts/run-pi-live.sh",
+    "test:omp-live": "bash scripts/run-omp-live.sh",
+    "test:claude-live": "bash scripts/run-claude-live.sh",
+    "test:opencode-live": "bash scripts/run-opencode-live.sh",
     "test:coverage": "vitest run --coverage",
     "test:aws-pulumi": "pnpm --dir deploy/pulumi/aws verify",
     "test:compact-compose": "bash scripts/run-compact-compose-integration.sh",
@@ -102,6 +105,8 @@
     "verify:helm-static": "pnpm test:helm-static",
     "verify:helm": "pnpm test:helm-static && pnpm test:helm",
     "verify:aws-s3": "bash scripts/run-aws-s3-probe.sh",
+    "verify:deployed-runtime-resume": "bash scripts/run-deployed-runtime-resume.sh",
+    "verify:gcs": "bash scripts/run-gcs-probe.sh",
     "verify:oci-image": "pnpm test:oci-image",
     "verify:object-storage": "pnpm test:storage-s3 && pnpm test:storage-native-cloud"
   },

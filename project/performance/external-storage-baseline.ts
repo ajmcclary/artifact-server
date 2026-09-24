@@ -15,6 +15,7 @@ import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import {
   CreateBucketCommand,
   S3Client,
+  type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import {Effect, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -72,12 +73,15 @@ const externalStorageBaselineConfigSchema = z.object({
 
 const environmentSchema = z.object({
   ARTIFACT_SERVER_TEST_DATABASE_URL: z.url(),
-  ARTIFACT_SERVER_TEST_MINIO_IMAGE: z.string().min(1),
-  ARTIFACT_SERVER_TEST_POSTGRES_IMAGE: z.string().min(1),
-  ARTIFACT_SERVER_TEST_PROVIDER_READY_MILLISECONDS: z.coerce.number().int().nonnegative(),
-  ARTIFACT_SERVER_TEST_S3_ACCESS_KEY: z.string().min(1),
-  ARTIFACT_SERVER_TEST_S3_ENDPOINT: z.url(),
-  ARTIFACT_SERVER_TEST_S3_SECRET_KEY: z.string().min(1),
+  ARTIFACT_SERVER_TEST_MINIO_IMAGE: z.string().min(1).optional(),
+  ARTIFACT_SERVER_TEST_POSTGRES_IMAGE: z.string().min(1).optional(),
+  ARTIFACT_SERVER_TEST_PROVIDER_READY_MILLISECONDS: z.coerce.number().int()
+    .nonnegative().default(0),
+  ARTIFACT_SERVER_TEST_S3_ACCESS_KEY: z.string().min(1).optional(),
+  ARTIFACT_SERVER_TEST_S3_BUCKET: z.string().min(1).optional(),
+  ARTIFACT_SERVER_TEST_S3_ENDPOINT: z.url().optional(),
+  ARTIFACT_SERVER_TEST_S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
+  ARTIFACT_SERVER_TEST_S3_SECRET_KEY: z.string().min(1).optional(),
 });
 
 const artifactListSchema = z.object({
@@ -155,13 +159,15 @@ export interface ExternalStorageBaselineReport {
 }
 
 interface ExternalStorageEnvironment {
-  readonly accessKey: string;
+  readonly accessKey: string | undefined;
+  readonly configuredBucket: string | undefined;
   readonly databaseUrl: string;
+  readonly forcePathStyle: boolean;
   readonly minioImage: string;
   readonly postgresImage: string;
   readonly providerReadyMilliseconds: number;
-  readonly s3Endpoint: string;
-  readonly secretKey: string;
+  readonly s3Endpoint: string | undefined;
+  readonly secretKey: string | undefined;
 }
 
 interface ExternalStorageProcess {
@@ -199,14 +205,17 @@ export async function runExternalStorageBaseline(
   const installationId = `performance-${randomUUID()}`;
   const apiToken =
     `as_key_key_${randomUUID()}_${randomBytes(32).toString("base64url")}`;
-  const bucket = `artifact-perf-${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+  const bucket = environment.configuredBucket ??
+    `artifact-perf-${randomUUID().replaceAll("-", "").slice(0, 24)}`;
   const s3Client = createS3Client(environment);
   const runningProcesses = new Set<ExternalStorageProcess>();
   const fixtures = await createFixtures(configuration);
   const totalStartedAt = performance.now();
 
   try {
-    await s3Client.send(new CreateBucketCommand({Bucket: bucket}));
+    if (environment.configuredBucket === undefined) {
+      await s3Client.send(new CreateBucketCommand({Bucket: bucket}));
+    }
     await applyMigrations(environment, installationId);
     const [first, second] = await Promise.all([
       startExternalStorageProcess(environment, {apiToken, bucket, installationId}),
@@ -379,9 +388,11 @@ function readExternalStorageEnvironment(): ExternalStorageEnvironment {
   }
   return {
     accessKey: parsed.data.ARTIFACT_SERVER_TEST_S3_ACCESS_KEY,
+    configuredBucket: parsed.data.ARTIFACT_SERVER_TEST_S3_BUCKET,
     databaseUrl: parsed.data.ARTIFACT_SERVER_TEST_DATABASE_URL,
-    minioImage: parsed.data.ARTIFACT_SERVER_TEST_MINIO_IMAGE,
-    postgresImage: parsed.data.ARTIFACT_SERVER_TEST_POSTGRES_IMAGE,
+    forcePathStyle: parsed.data.ARTIFACT_SERVER_TEST_S3_FORCE_PATH_STYLE === "true",
+    minioImage: parsed.data.ARTIFACT_SERVER_TEST_MINIO_IMAGE ?? "managed",
+    postgresImage: parsed.data.ARTIFACT_SERVER_TEST_POSTGRES_IMAGE ?? "managed",
     providerReadyMilliseconds:
       parsed.data.ARTIFACT_SERVER_TEST_PROVIDER_READY_MILLISECONDS,
     s3Endpoint: parsed.data.ARTIFACT_SERVER_TEST_S3_ENDPOINT,
@@ -390,15 +401,22 @@ function readExternalStorageEnvironment(): ExternalStorageEnvironment {
 }
 
 function createS3Client(environment: ExternalStorageEnvironment): S3Client {
-  return new S3Client({
-    credentials: {
+  const configuration: S3ClientConfig = {
+    forcePathStyle: environment.forcePathStyle,
+    region,
+  };
+  if (
+    environment.accessKey !== undefined && environment.secretKey !== undefined
+  ) {
+    configuration.credentials = {
       accessKeyId: environment.accessKey,
       secretAccessKey: environment.secretKey,
-    },
-    endpoint: environment.s3Endpoint,
-    forcePathStyle: true,
-    region,
-  });
+    };
+  }
+  if (environment.s3Endpoint !== undefined) {
+    configuration.endpoint = environment.s3Endpoint;
+  }
+  return new S3Client(configuration);
 }
 
 async function createFixtures(
@@ -453,29 +471,43 @@ function startExternalStorageProcess(
   },
 ): Promise<ExternalStorageProcess> {
   const startedAt = performance.now();
+  const childEnvironment: NodeJS.ProcessEnv = {
+    ...process.env,
+    ARTIFACT_SERVER_API_TOKEN: identity.apiToken,
+    ARTIFACT_SERVER_ORIGIN: "https://artifacts.example.com",
+    ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL: "performance@example.test",
+    ARTIFACT_SERVER_CONTENT_DOMAIN: "content.example.net",
+    ARTIFACT_SERVER_DATABASE_URL: environment.databaseUrl,
+    ARTIFACT_SERVER_INSTALLATION_ID: identity.installationId,
+    ARTIFACT_SERVER_OIDC_CLIENT_ID: "external-storage-performance",
+    ARTIFACT_SERVER_OIDC_ISSUER: "https://oidc.performance.example",
+    ARTIFACT_SERVER_READINESS_WITHDRAWAL_MS: "0",
+    ARTIFACT_SERVER_S3_BUCKET: identity.bucket,
+    ARTIFACT_SERVER_S3_FORCE_PATH_STYLE: environment.forcePathStyle
+      ? "true"
+      : "false",
+    ARTIFACT_SERVER_S3_REGION: region,
+  };
+  if (environment.accessKey !== undefined && environment.secretKey !== undefined) {
+    childEnvironment["ARTIFACT_SERVER_S3_ACCESS_KEY_ID"] = environment.accessKey;
+    childEnvironment["ARTIFACT_SERVER_S3_SECRET_ACCESS_KEY"] = environment.secretKey;
+  }
+  if (environment.s3Endpoint !== undefined) {
+    childEnvironment["ARTIFACT_SERVER_S3_ENDPOINT"] = environment.s3Endpoint;
+  }
+  // The harness selects the browser-login provider and object-storage
+  // credentials itself; an operator environment must not override them.
+  delete childEnvironment["ARTIFACT_SERVER_WORKOS_API_KEY"];
+  delete childEnvironment["ARTIFACT_SERVER_WORKOS_CLIENT_ID"];
+  delete childEnvironment["ARTIFACT_SERVER_WORKOS_ISSUER"];
+  delete childEnvironment["ARTIFACT_SERVER_S3_ACCESS_KEY_ID_FILE"];
+  delete childEnvironment["ARTIFACT_SERVER_S3_SECRET_ACCESS_KEY_FILE"];
   const child = spawn(
     process.execPath,
     [externalStorageCli, "start-external-storage", "--host", "127.0.0.1", "--port", "0"],
     {
       cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        ARTIFACT_SERVER_API_TOKEN: identity.apiToken,
-        ARTIFACT_SERVER_ORIGIN: "https://artifacts.example.com",
-        ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL: "performance@example.test",
-        ARTIFACT_SERVER_CONTENT_DOMAIN: "content.example.net",
-        ARTIFACT_SERVER_DATABASE_URL: environment.databaseUrl,
-        ARTIFACT_SERVER_INSTALLATION_ID: identity.installationId,
-        ARTIFACT_SERVER_OIDC_CLIENT_ID: "external-storage-performance",
-        ARTIFACT_SERVER_OIDC_ISSUER: "https://oidc.performance.example",
-        ARTIFACT_SERVER_READINESS_WITHDRAWAL_MS: "0",
-        ARTIFACT_SERVER_S3_ACCESS_KEY_ID: environment.accessKey,
-        ARTIFACT_SERVER_S3_BUCKET: identity.bucket,
-        ARTIFACT_SERVER_S3_ENDPOINT: environment.s3Endpoint,
-        ARTIFACT_SERVER_S3_FORCE_PATH_STYLE: "true",
-        ARTIFACT_SERVER_S3_REGION: region,
-        ARTIFACT_SERVER_S3_SECRET_ACCESS_KEY: environment.secretKey,
-      },
+      env: childEnvironment,
       stdio: ["pipe", "pipe", "pipe"],
     },
   );

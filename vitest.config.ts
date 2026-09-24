@@ -16,7 +16,10 @@ export default defineConfig({
     fileParallelism: true,
     exclude: [
       ...configDefaults.exclude,
+      "tests/claude-live/**",
       "tests/integration/**",
+      "tests/omp-live/**",
+      "tests/opencode-live/**",
       "tests/pi-live/**",
       "tests/release/**",
     ],

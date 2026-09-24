@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 23, 2026. This is the implementation backlog resulting from
+Updated September 24, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -141,8 +141,14 @@ gate.
   [s3-aws-probe.json](./project/evidence/s3-aws-probe.json). A GCS bucket-scoped
   service account also produced the native `ifGenerationMatch: 0` collision
   response, exact readback and cleanup against the configured probe bucket.
-  That GCS observation still needs a checked-in reporter before it is durable L
-  evidence; AWS is attached, while GCS remains partially open.
+  The GCS probe is now repeatable and durable: `pnpm verify:gcs`
+  (`scripts/run-gcs-probe.sh`; the bucket-scoped service account creates only
+  run-scoped objects under a hashed installation namespace and the test deletes
+  them) passed against the configured probe bucket, proving first-write
+  create-only generations, collision rejection, resumable-scale exact readback,
+  rewritable staging slots, false-size-declaration rejection and cleanup. The
+  JSON reporter is [gcs-gcp-probe.json](./project/evidence/gcs-gcp-probe.json).
+  Both advertised providers now have attached live create-only evidence.
 - **Do:** add provider-native create-only behavior behind the blob port, including
   multipart completion and verified reuse of a pre-existing destination. Separate
   immutable-blob semantics from reusable staging slots. Never treat a metadata
@@ -291,6 +297,30 @@ gate.
   commit check. No controlled live batch/query-count/lock-duration measurement
   has been recorded yet, so T04's managed-provider performance claim remains
   open.
+- **Managed-Postgres measurement, September 23:** three sequential
+  external-storage baseline repetitions against the managed Neon database and
+  the private AWS bucket (Node 24.15.0,
+  `project/evidence/external-storage-baseline-neon-rep{1,2,3}.json`) measured
+  the named 48-file directory workload at p95 11,034.57 / 12,331.54 /
+  10,888.92 ms (median 11,034.57, spread about ±6%), single-file publication
+  p95 5,196.08 / 5,096.80 / 4,739.31 ms, concurrent-publish p95 3,156.50 /
+  2,691.84 / 2,489.84 ms, and cross-process read p95 under 200 ms. WAN round
+  trips dominate every leg — the same workload measures about 400 ms p95
+  against local containers — so the batched manifest insert (structurally 2
+  statements per version instead of 1 + N) removes N − 2 round trips per
+  version at commit time while the staged-to-blob copy leg continues to
+  dominate end-to-end time, the same shape the local batch experiment found.
+  The investigation warnings in these reports reflect WAN latency against
+  thresholds calibrated for local containers, not product regressions; the
+  container-based gates still run locally and are unaffected. Per-version
+  statement counts are structural (the single `INSERT ... SELECT` over
+  `jsonb_to_recordset`), and commit-leg timings are in the reports; a
+  dedicated lock-duration probe was not added. The baseline harness now
+  accepts managed providers through `ARTIFACT_SERVER_TEST_S3_BUCKET` /
+  provider-chain credentials (path-style off, no bucket creation) while
+  keeping the container wrapper as the default gate. T04's managed-provider
+  performance evidence is now recorded; the ≥10% claim discipline is unchanged
+  (no speed claim is made from these runs).
 - **Do:** choose a bounded batch representation compatible with query/parameter
   limits. Preserve the single version/manifest/action/idempotency/current-pointer
   transaction and existing source-ready checks.
@@ -349,6 +379,26 @@ gate.
   runtime-stage probe deployed and cleaned its Worker/D1/R2 resources but its
   health, readiness, unauthenticated and upload requests returned HTTP 503, so
   it does not close the Worker resume item.
+- **Deployed-runtime resume, September 23:** the new opt-in live suite
+  `pnpm verify:deployed-runtime-resume`
+  (`tests/integration/deployed-runtime-resume.live.test.ts`, support in
+  `tests/support/managed-external-storage.ts`) ran the compiled
+  external-storage server against the managed Neon database and the private
+  AWS bucket through the real HTTP boundary. A SIGKILL mid-publication (16 MiB
+  file in flight) recovered on a replacement process with the same installation
+  ID: the resumed plan reported the small verified file as `verified: true`
+  (not retransmitted), re-sent only the unverified file, committed version 1,
+  and served exact bytes for both files with exactly one version on the
+  artifact. A dropped commit response (a loopback proxy destroys the first
+  commit response after the server processed it) replayed as
+  `status: "committed"`, `replayed: true` with the same single version and no
+  retransfer. Evidence:
+  [deployed-runtime-resume.json](./project/evidence/deployed-runtime-resume.json)
+  (2/2 passing at HEAD; three earlier failed attempts — an operator-environment
+  provider clash and two test-schema bugs, no product defects — are preserved
+  as `deployed-runtime-resume.failed-20260923-*.json`). Remaining open:
+  Cloudflare Worker resume (blocked by the runtime 503) and MCP-surface
+  recovery (T15).
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.
@@ -404,6 +454,25 @@ gate.
   connection is available for the missing deployed polling-cost run, but only
   connection, transaction and advisory-lock behavior has been checked so far.
   No managed-Postgres polling or contention result is claimed.
+- **Managed polling measurement, September 23:** the comment-polling harness
+  now shares its phases between local and managed targets
+  (`project/performance/comment-polling-shared.ts`), and a new runner
+  (`project/performance/run-comment-polling-managed.ts`) drove the same
+  200-thread artifact against the compiled external-storage server on the
+  managed Neon database plus the private AWS bucket
+  ([comment-polling-baseline-neon.json](./project/evidence/comment-polling-baseline-neon.json),
+  Node 24.15.0): matching-revision short-circuit polls cost p95 268.12 ms,
+  stale-revision authoritative pages p95 405.87 ms, and a five-second
+  contention phase (eight pollers plus one create/delete mutator) completed 4
+  mutations with poll p95 624.91 ms and mutation p95 1,705.90 ms. WAN round
+  trips dominate every leg, but the 7-second visible-tab poll interval still
+  fits with ample headroom, and the concurrent revision increments converged
+  without error, exercising Postgres revision behavior beyond the
+  external-storage runtime suite. The refactored local harness reproduced
+  consistent local numbers (short-circuit p95 0.94 ms, stale page p95 2.37 ms,
+  627 contention mutations; refreshed
+  [comment-polling-baseline.json](./project/evidence/comment-polling-baseline.json)).
+  T06's measurement and Postgres-coverage gaps are now closed.
 - **Do:** specify an authorized revision plus authoritative replacement/refetch
   contract. Increment revisions in each relevant mutation transaction across
   SQLite/Postgres/D1. Prove multi-page snapshot consistency through a coherent
@@ -710,13 +779,25 @@ gate.
 
 ### T17 Complete live bridge qualification without changing citizenship
 
-- **Host progress, September 23:** Pi 0.84.4, OpenCode 1.18.32, omp 18.2.11 and
-  Claude Code 2.1.280 are installed with working provider sessions. Pi's live
-  suite passed 3/3 and is attached in
-  [pi-live.json](./project/evidence/pi-live.json). OpenCode, omp and Claude Code
-  Channels each accepted the real adapter registration, but their full delivery,
-  compaction/resume and fail-open matrix has not run; registration is not being
-  reported as end-to-end qualification.
+- **Host progress, September 24:** Pi 0.84.4, OpenCode 1.18.32, omp 18.2.11 and
+  Claude Code 2.1.281 each have an opt-in live suite that drives the real host
+  against a real Artifact Server with a scripted offline model. Pi passed 3/3
+  ([pi-live.json](./project/evidence/pi-live.json)). omp passed 3/3 — round
+  trip, FIFO drain, and session rebind against omp 18.2.11
+  ([omp-live.json](./project/evidence/omp-live.json), `pnpm test:omp-live`).
+  OpenCode passed 3/3 — round trip, FIFO drain, and fail-open against an
+  unreachable origin against OpenCode 1.18.32
+  ([opencode-live.json](./project/evidence/opencode-live.json),
+  `pnpm test:opencode-live`). Claude Code passed its bounded round trip
+  (`CLAUDE-LIVE 1`: the channel registers the session, the dispatch is
+  `delivered`, the model closes the thread through `artifact_comments`, and
+  the dispatch reads `addressed`) against Claude Code 2.1.281 with no metered
+  provider usage
+  ([claude-live.json](./project/evidence/claude-live.json),
+  `pnpm test:claude-live`). Remaining unproven against live hosts: compaction
+  holds, host refusal, lost acknowledgement, duplicate lease delivery and the
+  1–30-second jitter cap stay structural coverage, labeled as such in each
+  adapter README.
 - **Do:** reconcile version-specific Pi/OpenCode staging evidence with READMEs;
   qualify omp and remaining Claude Channels/host cases. Cover compaction holds,
   session deletion, host refusal, missing API/configuration, lost acknowledgement,
