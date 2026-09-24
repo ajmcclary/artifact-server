@@ -25,6 +25,7 @@ const publicationSchema = z.object({
 const artifactListSchema = z.object({
   artifacts: z.array(z.object({artifact: z.object({id: z.string()})})),
 });
+const notReadySchema = z.object({error: z.string()});
 const versionListSchema = z.object({
   versions: z.array(z.object({
     version: z.object({id: z.string(), number: z.number().int().positive()}),
@@ -247,6 +248,53 @@ describe("Cloudflare Worker runtime", () => {
   }, 30_000);
 });
 
+describe("Cloudflare Worker without a browser-login provider", () => {
+  let misconfiguredPath: string;
+  let misconfigured: Unstable_DevWorker;
+
+  beforeAll(async () => {
+    misconfiguredPath = await mkdtemp(
+      join(tmpdir(), "artifact-server-cloudflare-misconfigured-"),
+    );
+    misconfigured = await startWorker(misconfiguredPath, {
+      withoutIdentityProvider: true,
+    });
+  }, 30_000);
+
+  afterAll(async () => {
+    await misconfigured.stop();
+    await rm(misconfiguredPath, {force: true, recursive: true});
+  });
+
+  it("answers 503 artifact_server_not_ready on every probe endpoint", async () => {
+    // Reproduces the September 23 runtime-stage probe: a stack deployed
+    // without OIDC or WorkOS settings composes no browser-login provider,
+    // so runtime initialization throws and every request gets the same 503.
+    const responses = await Promise.all(
+      ["/health", "/ready", "/api/v1/artifacts"].map(async (path) => {
+        const response = await misconfigured.fetch(`${origin}${path}`);
+        return {body: await response.json(), status: response.status};
+      }),
+    );
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(notReadySchema.parse(response.body).error)
+        .toBe("artifact_server_not_ready");
+    }
+    const upload = await misconfigured.fetch(`${origin}/api/v1/uploads`, {
+      body: "{}",
+      headers: authenticatedJsonHeaders(),
+      method: "POST",
+    });
+    expect(upload.status).toBe(503);
+    expect(notReadySchema.parse(await upload.json()).error)
+      .toBe("artifact_server_not_ready");
+
+    const retried = await misconfigured.fetch(`${origin}/health`);
+    expect(retried.status).toBe(503);
+  }, 30_000);
+});
+
 async function stageFile(source: string) {
   const bytes = new TextEncoder().encode(source);
   const response = await worker.fetch(`${origin}/api/v1/uploads`, {
@@ -275,7 +323,14 @@ async function stageFile(source: string) {
   return uploadPlan;
 }
 
-function startWorker(persistenceDirectory: string): Promise<Unstable_DevWorker> {
+function startWorker(
+  persistenceDirectory: string,
+  options?: {readonly withoutIdentityProvider?: boolean},
+): Promise<Unstable_DevWorker> {
+  const identityProviderVars = options?.withoutIdentityProvider === true ? {} : {
+    ARTIFACT_SERVER_OIDC_CLIENT_ID: "cloudflare-worker-test",
+    ARTIFACT_SERVER_OIDC_ISSUER: "https://identity.example.test",
+  };
   return unstable_dev("src/worker.ts", {
     bundle: true,
     config: "wrangler.test.jsonc",
@@ -307,8 +362,7 @@ function startWorker(persistenceDirectory: string): Promise<Unstable_DevWorker> 
         "administrator@example.test",
       ARTIFACT_SERVER_CONTENT_DOMAIN: contentDomain,
       ARTIFACT_SERVER_INSTALLATION_ID: "cloudflare-runtime-test",
-      ARTIFACT_SERVER_OIDC_CLIENT_ID: "cloudflare-worker-test",
-      ARTIFACT_SERVER_OIDC_ISSUER: "https://identity.example.test",
+      ...identityProviderVars,
       ARTIFACT_SERVER_ORIGIN: origin,
       ARTIFACT_SERVER_QUALIFICATION_MODE: "enabled",
       ARTIFACT_SERVER_REQUEST_LOG_SAMPLE_RATE: "0",

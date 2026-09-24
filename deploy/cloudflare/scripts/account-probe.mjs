@@ -240,6 +240,20 @@ const validateProbePolicy = (options, configuration) => {
   ) {
     failures.push("every proposed resource name must start with probe-");
   }
+  if (configuration.stage.startsWith("probe-runtime-")) {
+    const oidcConfigured =
+      configuration.oidcClientId !== undefined &&
+      configuration.oidcIssuer !== undefined;
+    const workOsConfigured =
+      configuration.workosApiKeySecretRef !== undefined &&
+      configuration.workosClientId !== undefined &&
+      configuration.workosIssuer !== undefined;
+    if (!oidcConfigured && !workOsConfigured) {
+      failures.push(
+        "a runtime-stage probe requires one browser-login provider (oidcClientId + oidcIssuer, or the WorkOS triple); without one the deployed Worker answers every request 503",
+      );
+    }
+  }
   return failures;
 };
 
@@ -495,6 +509,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
   const evidence = {
     artifactIdSha256: null,
     commit: null,
+    failureBodies: {},
     health: null,
     list: null,
     ready: null,
@@ -503,15 +518,21 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     upload: null,
     uploadFile: null,
   };
+  const recordResponse = (name, response) => {
+    evidence[name] = response.status;
+    if (response.status >= 400) {
+      evidence.failureBodies[name] = response.body.slice(0, 300);
+    }
+  };
   try {
     const health = await awaitHealthyRuntime(qualificationUrl, 20);
-    evidence.health = health.status;
+    recordResponse("health", health);
     const ready = await requestStatus(new URL("/ready", qualificationUrl));
-    evidence.ready = ready.status;
+    recordResponse("ready", ready);
     const unauthorized = await requestStatus(
       new URL("/api/v1/artifacts", qualificationUrl),
     );
-    evidence.unauthorized = unauthorized.status;
+    recordResponse("unauthorized", unauthorized);
 
     const bytes = new TextEncoder().encode(
       "<main>Live Cloudflare qualification</main>",
@@ -535,7 +556,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
         method: "POST",
       },
     );
-    evidence.upload = upload.status;
+    recordResponse("upload", upload);
     const uploadDocument = parseResponseDocument(upload);
     if (!Schema.is(QualificationUpload)(uploadDocument)) {
       return {evidence, passed: false};
@@ -550,7 +571,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
         method: "PUT",
       },
     );
-    evidence.uploadFile = uploadedFile.status;
+    recordResponse("uploadFile", uploadedFile);
     const commitBody = JSON.stringify({target: {
       accessSetting: "public_link",
       kind: "new_artifact",
@@ -566,7 +587,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
       rewriteQualificationUrl(qualificationUrl, uploadDocument.commitUrl),
       {body: commitBody, headers: commitHeaders, method: "POST"},
     );
-    evidence.commit = commit.status;
+    recordResponse("commit", commit);
     const commitDocument = parseResponseDocument(commit);
     if (!Schema.is(QualificationCommit)(commitDocument)) {
       return {evidence, passed: false};
@@ -577,12 +598,12 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
       rewriteQualificationUrl(qualificationUrl, uploadDocument.commitUrl),
       {body: commitBody, headers: commitHeaders, method: "POST"},
     );
-    evidence.replay = replay.status;
+    recordResponse("replay", replay);
     const list = await requestStatus(
       new URL("/api/v1/artifacts", qualificationUrl),
       {headers: {Authorization: `Bearer ${apiToken}`}},
     );
-    evidence.list = list.status;
+    recordResponse("list", list);
     const listDocument = parseResponseDocument(list);
     const listed = Schema.is(QualificationList)(listDocument) &&
       listDocument.artifacts.some((item) => item.artifact.id === artifactId);

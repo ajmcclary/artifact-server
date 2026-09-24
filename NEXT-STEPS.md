@@ -519,8 +519,10 @@ gate.
   Gates V/H/O/E/X/P passed at the recorded commits. Remaining deployment gap:
   Cloudflare Worker resume is unproven — the September 23 runtime-stage probe
   deployed and cleaned its Worker/D1/R2 resources but every runtime request
-  returned HTTP 503, and the Cloudflare Artifacts namespace entitlement
-  remains unavailable.
+  returned HTTP 503 (diagnosed September 24 under T08 as a missing
+  browser-login provider in the probe configuration, not a product defect;
+  live re-qualification is approval-gated), and the Cloudflare Artifacts
+  namespace entitlement remains unavailable.
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.
@@ -776,8 +778,26 @@ gate.
   [cloudflare-account-probe.json](./project/evidence/cloudflare-account-probe.json)
   records hashes and checks; the worksheet now records the plan. Remaining:
   actual retained bytes, backups, review hours, mutation rates, isolated RTT and
-  any observed hard-fail or overage behavior. The current runtime 503 remains a
-  separate open item.
+  any observed hard-fail or overage behavior. The runtime 503 is diagnosed in
+  the note below; live re-qualification remains approval-gated.
+- **Runtime 503 diagnosis, September 24:** the September 23 runtime-stage 503
+  is diagnosed and locally reproduced without a new live run. The probe
+  configuration carried no OIDC or WorkOS browser-login provider; the
+  deployment contract validates pairing and mutual exclusion but never
+  requires one, so the stack planned and deployed cleanly while the Worker
+  threw `missingIdentityProvider` during runtime composition and answered
+  every request — including `/health` and `/ready` — with 503
+  `artifact_server_not_ready` (the fetch-handler catch in
+  `deploy/cloudflare/src/worker.ts`). A new local Worker case in
+  `deploy/cloudflare/tests/worker-runtime.test.ts` boots without identity
+  variables and asserts exactly that response on the four probe endpoints
+  (the captured initialization error is the expected "requires exactly one
+  OIDC or WorkOS browser-login provider"), and the account probe now rejects
+  a `probe-runtime-*` configuration without a browser-login provider before
+  deploying anything and records a truncated response body for each failed
+  runtime request so future evidence is not status-only. Live
+  re-qualification with an OIDC-configured probe and `wrangler tail` remains
+  approval-gated; no new live run was performed for this diagnosis.
 - **Done when:** a bounded worksheet and qualification report identify the
   supported envelope and reject unsupported many-file assumptions. R2 deletes
   and aborts are free billed operations but still execution work. Eight visible

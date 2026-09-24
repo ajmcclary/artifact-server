@@ -253,7 +253,13 @@ A stage beginning with `probe-runtime-` temporarily enables the probe Worker's
 `workers.dev` address. The probe generates an API token in memory and verifies
 health, readiness, authentication, D1, R2 upload, publication, idempotent
 replay, and listing before cleanup. Normal private deployments keep
-`workers.dev` disabled.
+`workers.dev` disabled. A runtime stage also requires one browser-login
+provider in the configuration (`oidcClientId` + `oidcIssuer`, or the WorkOS
+triple): without one the deployed Worker cannot compose its identity layer and
+answers every request, including `/health` and `/ready`, with 503
+`artifact_server_not_ready`, so the probe rejects the configuration before
+deploying. Runtime evidence records a truncated response body for every
+failed request so a future failure is not status-only.
 
 The probe uses the active `npx wrangler` login. Run:
 
