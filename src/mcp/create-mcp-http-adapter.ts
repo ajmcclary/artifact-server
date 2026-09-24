@@ -1,6 +1,7 @@
 import {
   createMcpHandler,
   type AuthInfo,
+  type McpRequestContext,
   OAuthError,
   OAuthErrorCode,
   getOAuthProtectedResourceMetadataUrl,
@@ -90,6 +91,7 @@ export function createMcpHttpAdapter(
         linkedArtifacts: dependencies.linkedArtifacts === true,
         mode: dependencies.mode,
         requestId: requestIdFrom(context.requestInfo),
+        requestMetadata: requestMetadataFrom(context),
       };
       return createArtifactMcpServer(
         serverDependencies,
@@ -245,4 +247,23 @@ function requestOrigin(request: Request | undefined): string {
 
 function requestIdFrom(request: Request | undefined): string {
   return request?.headers.get("x-artifact-request-id") ?? crypto.randomUUID();
+}
+
+const modernProtocolRevision = "2026-07-28";
+const legacyProtocolRevision = "2025-06-18";
+
+function requestMetadataFrom(
+  context: McpRequestContext,
+): ArtifactMcpServerDependencies["requestMetadata"] {
+  const headerVersion = context.requestInfo?.headers.get("MCP-Protocol-Version");
+  if (context.era === "legacy") {
+    return {
+      era: "legacy",
+      protocolVersion: headerVersion ?? legacyProtocolRevision,
+    };
+  }
+  return {
+    era: "modern",
+    protocolVersion: headerVersion ?? modernProtocolRevision,
+  };
 }

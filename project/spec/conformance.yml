@@ -2213,6 +2213,60 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-25T18:29:58.000Z"
 
+  - id: MCP-021
+    kind: behavior
+    behavior: artifact_capabilities reports the detected MCP protocol era and the wire revision used for the current request.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-021-B, description: "Call artifact_capabilities through a modern client and a legacy client and observe the matching era and negotiated wire revision."}
+      failure: {id: MCP-021-F, description: "An unadvertised or legacy wire revision is not reported as the modern revision."}
+    deployments: *all
+    status: behavior_verified
+    depends_on: [MCP-003]
+    evidence:
+      - deployment: local
+        tests: [MCP-021-B, MCP-021-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-24T14:54:50.000Z"
+
+  - id: MCP-022
+    kind: behavior
+    behavior: artifact_get accepts an optional projection so a compact result omits the manifest entry list while preserving digest, entryPath, routingMode, and entryCount.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-022-B, description: "Request full and compact projections for the same artifact and confirm compact lacks entries while both report the same digest, entryPath, routingMode, and entryCount."}
+      failure: {id: MCP-022-F, description: "An invalid projection is rejected instead of returning a malformed or partial manifest."}
+    deployments: *all
+    status: behavior_verified
+    depends_on: [MCP-009]
+    evidence:
+      - deployment: local
+        tests: [MCP-022-B, MCP-022-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-24T14:54:50.000Z"
+
+  - id: MCP-023
+    kind: behavior
+    behavior: artifact_create_upload accepts an optional idempotency key and recovers an interrupted or already-committed publication without re-uploading or creating a duplicate.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-023-B, description: "Replay the same upload plan before commit and the committed publication after commit using the same idempotency key, observing resumed=true."}
+      failure: {id: MCP-023-F, description: "Reusing the key with a different manifest before commit returns IDEMPOTENCY_CONFLICT and creates no new upload or version."}
+    deployments: *all
+    status: behavior_verified
+    depends_on: [PUB-015, MCP-013]
+    evidence:
+      - deployment: local
+        tests: [MCP-023-B, MCP-023-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-24T14:54:50.000Z"
+
   - id: SKL-001
     kind: behavior
     behavior: Artifact Server ships one portable artifact-server skill that routes routine artifact work and explicit server-operation work to separate internal references.

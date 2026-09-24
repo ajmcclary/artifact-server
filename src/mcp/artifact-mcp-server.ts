@@ -42,7 +42,10 @@ import {
   GitHistoryAccessService,
   maximumGitCloneCredentialTtlSeconds,
 } from "../application/git-history-access.js";
-import {StagedUploadService} from "../application/staged-upload.js";
+import {
+  type CreateStagedUploadCommand,
+  StagedUploadService,
+} from "../application/staged-upload.js";
 import {
   accessSettings,
   agentDispatchStates,
@@ -182,9 +185,10 @@ const manifestEntrySchema = z.object({
   sha256: z.string(),
   size: z.number().int().nonnegative(),
 }).strict();
-const manifestProjectionSchema = z.object({
+const artifactGetManifestProjectionSchema = z.object({
   digest: z.string(),
-  entries: z.array(manifestEntrySchema),
+  entries: z.array(manifestEntrySchema).optional(),
+  entryCount: z.number().int().nonnegative().optional(),
   entryPath: z.string(),
   routingMode: z.enum(["static", "spa"]),
 }).strict();
@@ -383,6 +387,10 @@ export interface ArtifactMcpServerDependencies {
   readonly linkedArtifacts?: boolean;
   readonly mode: "local" | "remote";
   readonly requestId: string;
+  readonly requestMetadata: {
+    era: "legacy" | "modern";
+    protocolVersion: string;
+  };
 }
 
 function runMcpApplicationEffect<A, E>(
@@ -597,6 +605,10 @@ export function createArtifactMcpServer(
           provider: z.enum(gitHistoryProviders).nullable(),
           providerState: z.enum(gitHistoryProviderStates),
         }).strict(),
+        protocol: z.object({
+          era: z.enum(["legacy", "modern"]),
+          version: z.string(),
+        }).strict(),
         publishing: z.object({
           acceptsInlineContent: z.literal(false),
           localPathTool: z.literal(false),
@@ -618,6 +630,7 @@ export function createArtifactMcpServer(
         dependencies.mode,
         dependencies.linkedArtifacts === true,
         dependencies.gitHistory,
+        dependencies.requestMetadata,
       ),
       "Artifact Server publishes actual files through an upload plan. It does not accept inline HTML, CSS, JavaScript, or base64 content."),
   );
@@ -917,6 +930,7 @@ export function createArtifactMcpServer(
       inputSchema: z.object({
         artifactId: artifactIdSchema,
         projectId: optionalProjectIdSchema,
+        projection: z.enum(["full", "compact"]).optional(),
       }).strict(),
       outputSchema: z.object({
         artifact: artifactRecordSchema,
@@ -925,7 +939,7 @@ export function createArtifactMcpServer(
             review: z.url(),
             version: z.url(),
           }).strict(),
-          manifest: manifestProjectionSchema,
+          manifest: artifactGetManifestProjectionSchema,
           version: versionRecordSchema,
         }).strict(),
         links: z.object({artifact: z.url()}).strict(),
@@ -933,7 +947,7 @@ export function createArtifactMcpServer(
       }).strict(),
       annotations: readOnlyAnnotations,
     },
-    async ({artifactId, projectId}) => toolResult(async () => {
+    async ({artifactId, projectId, projection}) => toolResult(async () => {
       const details = await runMcpApplicationEffect(
         dependencies,
         ArtifactManagementService.use((management) =>
@@ -966,6 +980,7 @@ export function createArtifactMcpServer(
           dependencies.contentDomain,
           details.artifact.id,
           details.current,
+          projection ?? "full",
         ),
         links: {
           artifact: artifactBrowserUrl(applicationUrl, details.artifact.id),
@@ -1209,19 +1224,21 @@ export function createArtifactMcpServer(
     {
       title: "Begin a file upload",
       description:
-        "Begin publishing actual files. Supply relative paths, byte sizes, SHA-256 fingerprints, media types, and the entry file. Upload each file to its returned URL, then call artifact_commit_upload. Do not send file bytes through MCP.",
+        "Begin publishing actual files. Supply relative paths, byte sizes, SHA-256 fingerprints, media types, and the entry file. Upload each file to its returned URL, then call artifact_commit_upload. Do not send file bytes through MCP. Pass an idempotency key to recover an interrupted upload or to receive an already-committed result without re-uploading.",
       inputSchema: z.object({
         entryPath: z.string().min(1).max(1_024),
         files: z.array(declaredFileSchema).min(1).max(maximumDeclaredFiles),
+        idempotencyKey: idempotencyKeySchema.nullable().default(null),
         projectId: optionalProjectIdSchema,
         routingMode: z.enum(["static", "spa"]).default("static"),
       }).strict(),
       outputSchema: z.object({
+        kind: z.enum(["committed", "upload"]),
         commit: z.object({
           mcpTool: z.literal("artifact_commit_upload"),
           uploadId: z.string(),
-        }).strict(),
-        expiresAt: z.string(),
+        }).strict().optional(),
+        expiresAt: z.string().optional(),
         files: z.array(z.object({
           authorization: z.object({
             credential: z.literal("included_in_upload_url"),
@@ -1231,33 +1248,59 @@ export function createArtifactMcpServer(
           path: z.string(),
           size: z.number().int().nonnegative(),
           uploadUrl: z.url(),
-        }).strict()),
-        manifestDigest: z.string(),
-        projectId: z.string(),
-        uploadId: z.string(),
+        }).strict()).optional(),
+        manifestDigest: z.string().optional(),
+        projectId: z.string().optional(),
+        publication: publishedVersionSchema.optional(),
+        resumed: z.boolean().optional(),
+        uploadId: z.string().optional(),
       }).strict(),
       annotations: additiveWriteAnnotations,
     },
-    async ({entryPath, files, projectId, routingMode}) => toolResult(async () => {
-      const result = await runMcpApplicationEffect(
-        dependencies,
-        StagedUploadService.use((uploads) =>
-          uploads.createUpload({
+    async ({entryPath, files, idempotencyKey, projectId, routingMode}) =>
+      toolResult(async () => {
+        const createCommand: CreateStagedUploadCommand = idempotencyKey !== null
+          ? {
+            entryPath,
+            files,
+            idempotencyKey,
+            principal: identity.principal,
+            projectId,
+            routingMode,
+          }
+          : {
             entryPath,
             files,
             principal: identity.principal,
             projectId,
             routingMode,
-          })
-        ),
-      );
-      if (result.kind === "committed") {
-        throw new Error(
-          "A staged upload unexpectedly returned a committed publication.",
+          };
+        const result = await runMcpApplicationEffect(
+          dependencies,
+          StagedUploadService.use((uploads) => uploads.createUpload(createCommand)),
         );
-      }
-      return uploadPlan(applicationUrl, result.upload);
-    }),
+        if (result.kind === "committed") {
+          return {
+            kind: "committed" as const,
+            publication: publishedVersionProjection(
+              applicationUrl,
+              dependencies.contentDomain,
+              result.publication,
+            ),
+          };
+        }
+        const plan = uploadPlan(applicationUrl, result.upload);
+        return {
+          kind: "upload" as const,
+          commit: plan.commit,
+          expiresAt: plan.expiresAt,
+          files: plan.files,
+          manifestDigest: plan.manifestDigest,
+          projectId: plan.projectId,
+          resumed: result.resumed,
+          uploadId: plan.uploadId,
+        };
+      }),
   );
 
   registerNudgedTool(
@@ -2368,6 +2411,7 @@ function capabilities(
   mode: "local" | "remote",
   linkedArtifacts: boolean,
   gitHistory: GitHistoryCapability,
+  requestMetadata: ArtifactMcpServerDependencies["requestMetadata"],
 ) {
   return {
     gitHistory,
@@ -2385,6 +2429,10 @@ function capabilities(
     },
     comparison: {maximumTextFileBytes: maximumTextDiffBytes},
     deployment: {mode},
+    protocol: {
+      era: requestMetadata.era,
+      version: requestMetadata.protocolVersion,
+    },
     publishing: {
       acceptsInlineContent: false as const,
       localPathTool: false as const,
@@ -2587,7 +2635,21 @@ function versionProjection(
   contentDomain: string,
   artifactId: string,
   saved: ArtifactVersion,
+  projection: "full" | "compact" = "full",
 ) {
+  const manifest = projection === "compact"
+    ? {
+      digest: saved.manifest.digest,
+      entryCount: saved.manifest.entries.length,
+      entryPath: saved.manifest.entryPath,
+      routingMode: saved.manifest.routingMode,
+    }
+    : {
+      digest: saved.manifest.digest,
+      entries: saved.manifest.entries,
+      entryPath: saved.manifest.entryPath,
+      routingMode: saved.manifest.routingMode,
+    };
   return {
     links: {
       review: artifactReviewUrl(
@@ -2602,12 +2664,7 @@ function versionProjection(
         saved.version.contentToken,
       ),
     },
-    manifest: {
-      digest: saved.manifest.digest,
-      entries: saved.manifest.entries,
-      entryPath: saved.manifest.entryPath,
-      routingMode: saved.manifest.routingMode,
-    },
+    manifest,
     version: saved.version,
   };
 }

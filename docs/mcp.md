@@ -61,12 +61,24 @@ planned work, not current capabilities. Retain the publication idempotency key
 when reconciling an uncertain commit; do not assume a lost response means no
 version was saved.
 
-`artifact_get` currently returns the complete manifest, and
-`artifact_version_list` returns all saved versions. Large histories can produce
-large responses; compact projections and pagination are tracked in
-[T15](../NEXT-STEPS.md). Modern stateless MCP HTTP and legacy compatibility
-already exist. Subscriptions remain unavailable until a shared event service
-has its own replay, authorization, and recovery proof.
+`artifact_capabilities` reports the detected MCP protocol era and wire revision
+in `protocol.era` and `protocol.version`.
+
+`artifact_get` accepts an optional `projection` argument. Use `projection: "full"`
+(default) for the complete manifest, including every `manifest.entries` item, or
+`projection: "compact"` to omit `manifest.entries` while keeping
+`manifest.digest`, `manifest.entryPath`, `manifest.routingMode`, and
+`manifest.entryCount`.
+
+`artifact_create_upload` accepts an optional `idempotencyKey`. Replaying the same
+key before commit returns the same upload plan with `resumed: true`. After the
+publication commits, the same key returns the committed publication. Reusing the
+key with a different manifest before commit returns `IDEMPOTENCY_CONFLICT`.
+
+`artifact_version_list` returns every saved version; pagination is not yet
+implemented. Modern stateless MCP HTTP and legacy compatibility are both
+supported. Subscriptions remain unavailable until a shared event service has its
+own replay, authorization, and recovery proof.
 
 ## Use the publication result
 

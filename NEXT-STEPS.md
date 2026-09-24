@@ -814,6 +814,18 @@ gate.
 
 ### T15 Bound MCP results and qualify the existing transport
 
+- **Progress, September 24:** `artifact_capabilities` now reports the detected
+  MCP protocol era and wire revision. `artifact_get` accepts an optional
+  `projection` argument: `"full"` returns the complete manifest and `"compact"`
+  omits `manifest.entries` while keeping `digest`, `entryPath`, `routingMode`,
+  and `entryCount`. `artifact_create_upload` accepts an optional
+  `idempotencyKey`, replays the same upload plan with `resumed: true` before
+  commit, returns the committed publication after commit, and reports
+  `IDEMPOTENCY_CONFLICT` when the key is reused with a different manifest. New
+  conformance IDs MCP-021, MCP-022, and MCP-023 are behavior-verified locally in
+  `project/spec/conformance.yml`. Remaining open: server/catalog construction
+  measurement, the live supported-client matrix (L gate), and Cloudflare Worker
+  surface qualification.
 - **Do:** add compatible compact artifact projections and paged manifest/history
   reads; complete manifests must remain explicitly available. Expose T05 recovery
   through the same services with bounded structured errors. Record SDK and wire

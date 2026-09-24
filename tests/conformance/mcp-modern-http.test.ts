@@ -56,11 +56,6 @@ const uploadPlanSchema = z.object({
   size: z.number().int().nonnegative(),
   uploadUrl: z.url(),
 });
-const createUploadResultSchema = z.object({
-  files: z.array(uploadPlanSchema).min(1),
-  manifestDigest: z.string(),
-  uploadId: z.string(),
-});
 const sourceBindingResultSchema = z.object({
   lastVerifiedAt: z.string(),
   path: z.string(),
@@ -93,6 +88,51 @@ const publicationResultSchema = z.object({
 const publicationCommitResultSchema = publicationResultSchema.extend({
   links: z.object({artifact: z.url(), review: z.url(), version: z.url()}),
 });
+const createUploadResultSchema = z.object({
+  kind: z.enum(["committed", "upload"]),
+  commit: z.object({
+    mcpTool: z.literal("artifact_commit_upload"),
+    uploadId: z.string(),
+  }).optional(),
+  expiresAt: z.string().optional(),
+  files: z.array(uploadPlanSchema).optional(),
+  manifestDigest: z.string().optional(),
+  projectId: z.string().optional(),
+  publication: publicationCommitResultSchema.optional(),
+  resumed: z.boolean().optional(),
+  uploadId: z.string().optional(),
+});
+
+const uploadPlanResultSchema = createUploadResultSchema.refine(
+  (result): result is z.infer<typeof createUploadResultSchema> & {
+    kind: "upload";
+    files: z.infer<typeof uploadPlanSchema>[];
+    uploadId: string;
+  } =>
+    result.kind === "upload" &&
+    result.files !== undefined &&
+    result.uploadId !== undefined,
+  {message: "Expected an upload plan result."},
+);
+
+const committedPublicationResultSchema = createUploadResultSchema.refine(
+  (result): result is z.infer<typeof createUploadResultSchema> & {
+    kind: "committed";
+    publication: z.infer<typeof publicationCommitResultSchema>;
+  } =>
+    result.kind === "committed" && result.publication !== undefined,
+  {message: "Expected a committed publication result."},
+);
+
+function requireUploadPlan(result: z.infer<typeof createUploadResultSchema>) {
+  return uploadPlanResultSchema.parse(result);
+}
+
+function requireCommittedPublication(
+  result: z.infer<typeof createUploadResultSchema>,
+) {
+  return committedPublicationResultSchema.parse(result);
+}
 
 describe("modern MCP HTTP", () => {
   let installation: TestInstallation;
@@ -398,7 +438,7 @@ describe("modern MCP HTTP", () => {
       arguments: {entryPath: declaredFile.path, files: [declaredFile]},
       name: "artifact_create_upload",
     });
-    const upload = createUploadResultSchema.parse(uploadResult.structuredContent);
+    const upload = requireUploadPlan(createUploadResultSchema.parse(uploadResult.structuredContent));
     const filePlan = upload.files[0];
     if (filePlan === undefined) throw new Error("The MCP upload plan has no file.");
     expect(filePlan.authorization).toEqual({
@@ -502,7 +542,7 @@ describe("modern MCP HTTP", () => {
       name: "artifact_create_upload",
     });
     expect(uploadResult.isError).not.toBe(true);
-    const upload = createUploadResultSchema.parse(uploadResult.structuredContent);
+    const upload = requireUploadPlan(createUploadResultSchema.parse(uploadResult.structuredContent));
     const filePlan = upload.files[0];
     if (filePlan === undefined) throw new Error("The MCP upload plan has no file.");
 
@@ -653,9 +693,9 @@ describe("modern MCP HTTP", () => {
       arguments: {entryPath: "index.html", files: updatedDeclaredFiles},
       name: "artifact_create_upload",
     });
-    const updatedUpload = createUploadResultSchema.parse(
+    const updatedUpload = requireUploadPlan(createUploadResultSchema.parse(
       updatedUploadResult.structuredContent,
-    );
+    ));
     await uploadMcpFiles(
       updatedUpload,
       installation.apiToken,
@@ -1112,6 +1152,241 @@ describe("modern MCP HTTP", () => {
       await rm(linkRoot, {force: true, recursive: true});
     }
   });
+
+  test("MCP-021-B MCP-021-F: artifact_capabilities reports the detected protocol era and wire revision", async () => {
+    expect.hasAssertions();
+    const modernCapabilities = z.object({
+      protocol: z.object({
+        era: z.literal("modern"),
+        version: z.literal(protocolVersion),
+      }),
+    }).parse((await callTool(server, installation.apiToken, {
+      arguments: {},
+      name: "artifact_capabilities",
+    })).structuredContent);
+    expect(modernCapabilities.protocol.era).toBe("modern");
+    expect(modernCapabilities.protocol.version).toBe(protocolVersion);
+
+    const legacyClient = new Client(
+      {name: "artifact-server-codex-era-test", version: "1"},
+      {versionNegotiation: {mode: "legacy"}},
+    );
+    const legacyTransport = new StreamableHTTPClientTransport(
+      new URL(`${server.baseUrl}/mcp`),
+      {authProvider: {token: async () => installation.apiToken}},
+    );
+    try {
+      await legacyClient.connect(legacyTransport);
+      const legacyCapabilities = z.object({
+        protocol: z.object({
+          era: z.literal("legacy"),
+          version: z.string(),
+        }),
+      }).parse((await legacyClient.callTool({
+        arguments: {},
+        name: "artifact_capabilities",
+      })).structuredContent);
+      expect(legacyCapabilities.protocol.era).toBe("legacy");
+      expect(legacyCapabilities.protocol.version < protocolVersion).toBe(true);
+    } finally {
+      await legacyClient.close();
+    }
+
+    const noHeaderResponse = await fetch(`${server.baseUrl}/mcp`, {
+      body: JSON.stringify({
+        id: crypto.randomUUID(),
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          arguments: {},
+          name: "artifact_capabilities",
+          _meta: {
+            [CLIENT_CAPABILITIES_META_KEY]: {},
+            [CLIENT_INFO_META_KEY]: {name: "artifact-server-test", version: "1"},
+            [PROTOCOL_VERSION_META_KEY]: protocolVersion,
+          },
+        },
+      }),
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${installation.apiToken}`,
+        "Content-Type": "application/json",
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "artifact_capabilities",
+      },
+      method: "POST",
+    });
+    expect(noHeaderResponse.status).toBe(200);
+    const noHeaderBody = toolCallResultSchema.parse(await noHeaderResponse.json()).result;
+    expect(noHeaderBody.isError).not.toBe(true);
+    const noHeaderResult = z.object({
+      protocol: z.object({
+        era: z.literal("modern"),
+        version: z.literal(protocolVersion),
+      }),
+    }).parse(noHeaderBody.structuredContent);
+    expect(noHeaderResult.protocol.era).toBe("modern");
+  });
+
+  test("MCP-022-B MCP-022-F: artifact_get supports a compact projection that omits manifest entries", async () => {
+    expect.hasAssertions();
+    const indexBytes = new TextEncoder().encode(
+      "<!doctype html><title>compact</title>",
+    );
+    const assetBytes = new TextEncoder().encode("asset contents\n");
+    const declaredFiles = [
+      declaredMcpFile("index.html", "text/html", indexBytes),
+      declaredMcpFile("asset.txt", "text/plain", assetBytes),
+    ];
+    const uploadResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: "index.html", files: declaredFiles},
+      name: "artifact_create_upload",
+    });
+    const upload = requireUploadPlan(createUploadResultSchema.parse(uploadResult.structuredContent));
+    await uploadMcpFiles(upload, installation.apiToken, new Map([
+      ["index.html", indexBytes],
+      ["asset.txt", assetBytes],
+    ]));
+    const committed = publicationCommitResultSchema.parse(
+      (await callTool(server, installation.apiToken, {
+        arguments: {
+          idempotencyKey: "mcp-compact-projection-proof-001",
+          target: {kind: "new_artifact", name: "Compact projection proof"},
+          uploadId: upload.uploadId,
+        },
+        name: "artifact_commit_upload",
+      })).structuredContent,
+    );
+
+    const compactResult = await callTool(server, installation.apiToken, {
+      arguments: {
+        artifactId: committed.artifact.id,
+        projection: "compact",
+      },
+      name: "artifact_get",
+    });
+    const compact = z.object({
+      current: z.object({
+        manifest: z.object({
+          digest: z.string(),
+          entryCount: z.literal(2),
+          entryPath: z.literal("index.html"),
+          routingMode: z.enum(["static", "spa"]),
+        }),
+      }),
+    }).parse(compactResult.structuredContent);
+    expect(compact.current.manifest).not.toHaveProperty("entries");
+
+    const fullResult = await callTool(server, installation.apiToken, {
+      arguments: {artifactId: committed.artifact.id},
+      name: "artifact_get",
+    });
+    const full = z.object({
+      current: z.object({
+        manifest: z.object({
+          entries: z.array(z.object({path: z.string()}).loose()).length(2),
+        }),
+      }),
+    }).parse(fullResult.structuredContent);
+    expect(full.current.manifest.entries.map((entry) => entry.path)).toEqual([
+      "asset.txt",
+      "index.html",
+    ]);
+
+    const invalidProjection = await mcpRequest(
+      server,
+      installation.apiToken,
+      "tools/call",
+      {
+        arguments: {
+          artifactId: committed.artifact.id,
+          projection: "summary",
+        },
+        name: "artifact_get",
+      },
+      {"Mcp-Name": "artifact_get"},
+    );
+    expect(invalidProjection.status).toBe(200);
+    const invalidProjectionBody = jsonRpcResultSchema.parse(
+      await invalidProjection.json(),
+    ).result;
+    expect(invalidProjectionBody).toMatchObject({
+      isError: true,
+      content: [expect.objectContaining({
+        text: expect.stringContaining("projection"),
+      })],
+    });
+  });
+
+  test("MCP-023-B MCP-023-F: artifact_create_upload recovers a committed publication by idempotency key", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("idempotency recovery proof\n");
+    const declaredFile = declaredMcpFile("recovery.txt", "text/plain", bytes);
+    const idempotencyKey = "mcp-idempotency-recovery-proof-001";
+
+    const firstUploadResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: declaredFile.path, files: [declaredFile], idempotencyKey},
+      name: "artifact_create_upload",
+    });
+    const firstUpload = requireUploadPlan(createUploadResultSchema.parse(firstUploadResult.structuredContent));
+    expect(firstUpload.resumed).toBe(false);
+
+    const resumedResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: declaredFile.path, files: [declaredFile], idempotencyKey},
+      name: "artifact_create_upload",
+    });
+    const resumed = requireUploadPlan(createUploadResultSchema.parse(resumedResult.structuredContent));
+    expect(resumed.resumed).toBe(true);
+    expect(resumed.uploadId).toBe(firstUpload.uploadId);
+
+    const changedFile = declaredMcpFile(
+      "recovery.txt",
+      "text/plain",
+      new TextEncoder().encode("different bytes\n"),
+    );
+    const conflictResult = await mcpRequest(
+      server,
+      installation.apiToken,
+      "tools/call",
+      {
+        arguments: {entryPath: changedFile.path, files: [changedFile], idempotencyKey},
+        name: "artifact_create_upload",
+      },
+      {"Mcp-Name": "artifact_create_upload"},
+    );
+    expect(conflictResult.status).toBe(200);
+    const conflictBody = toolCallResultSchema.parse(await conflictResult.json()).result;
+    expect(conflictBody.isError).toBe(true);
+    expect(conflictBody.content[0]?.text).toContain("IDEMPOTENCY_CONFLICT");
+
+    const filePlan = firstUpload.files[0];
+    if (filePlan === undefined) throw new Error("The MCP upload plan has no file.");
+    const uploaded = await fetch(filePlan.uploadUrl, {
+      body: bytes,
+      method: filePlan.method,
+    });
+    expect(uploaded.status).toBe(200);
+
+    const committed = publicationCommitResultSchema.parse(
+      (await callTool(server, installation.apiToken, {
+        arguments: {
+          idempotencyKey,
+          target: {kind: "new_artifact", name: "Idempotency recovery proof"},
+          uploadId: firstUpload.uploadId,
+        },
+        name: "artifact_commit_upload",
+      })).structuredContent,
+    );
+
+    const recoveredResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: declaredFile.path, files: [declaredFile], idempotencyKey},
+      name: "artifact_create_upload",
+    });
+    const recovered = requireCommittedPublication(createUploadResultSchema.parse(recoveredResult.structuredContent));
+    expect(recovered.publication.artifact.id).toBe(committed.artifact.id);
+    expect(recovered.publication.version.id).toBe(committed.version.id);
+    expect(recovered.publication.replayed).toBe(true);
+  });
 });
 
 interface ToolInvocation {
@@ -1164,7 +1439,7 @@ function declaredMcpFile(
 }
 
 async function uploadMcpFiles(
-  upload: z.infer<typeof createUploadResultSchema>,
+  upload: z.infer<typeof createUploadResultSchema> & {files: z.infer<typeof uploadPlanSchema>[]},
   token: string,
   files: ReadonlyMap<string, Uint8Array>,
 ): Promise<void> {
