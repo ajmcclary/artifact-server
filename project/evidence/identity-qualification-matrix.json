@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-24",
+  "commit": "443ac13",
+  "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions.",
+  "providers": [
+    {
+      "name": "Keycloak (pinned container)",
+      "version": "quay.io/keycloak/keycloak@sha256:09a381c715ab0b111835b70f2905955274843a219c6f27efb348e4d9f4086858",
+      "scope": "local OIDC integration via pnpm test:oidc",
+      "results": {
+        "authorizationCodeSignIn": "pass (2026-09-24, oidc-keycloak.json, 4/4)",
+        "unadmittedIdentityRefusedBrowser": "pass (2026-09-24)",
+        "resourceBoundAccessTokenAtMcp": "pass (2026-09-24)",
+        "unadmittedIdentityRefusedMcp": "pass (2026-09-24)",
+        "keyRotation": "untested",
+        "providerRevocation": "untested",
+        "logout": "untested",
+        "crossReplicaDeactivation": "untested"
+      }
+    },
+    {
+      "name": "WorkOS AuthKit (staging environment)",
+      "version": "environment_01KZX4K46TQD6VDGQSW0D8E5G9, issuer https://eloquent-cello-83-staging.authkit.app",
+      "scope": "hosted provider; last live qualification August 16 (workos-mcp-live-qualification.json); September 23 setup confirmed the client/API key are stored outside the repository and checked the issuer discovery document for authorization-code flow, refresh tokens and S256 PKCE",
+      "results": {
+        "discoveryDocument": "pass (2026-09-23, read-only check)",
+        "tokenContract": "pass (2026-08-16, dated): RS256, exact resource-bound audience, 300-second access tokens, refresh rotation pass",
+        "pkceS256": "pass (2026-09-23 discovery check)",
+        "clientRegistration": "pass (2026-08-16, dated): CIMD enabled, DCR enabled for compatibility",
+        "keyRotation": "untested",
+        "providerRevocation": "pass (2026-08-16, dated): deleting the exact Authorized Application invalidated refresh tokens",
+        "logout": "untested",
+        "crossReplicaDeactivation": "untested",
+        "ssoOidcConnection": "untested: the current environment reports no configured SSO/OIDC connection",
+        "mcpPlanEntitlement": "untested: not inventoried; the operator-held WorkOS API key from the September 23 setup is not discoverable in the 2026-09-24 session (checked process environment, shell rc files, ~/.config, and macOS Keychain)",
+        "auditPlanEntitlement": "untested: not inventoried; same credential gap"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "name": "Codex CLI",
+      "version": "0.147.0",
+      "status": "pass (2026-08-16, dated): DCR registration, browser approval, artifact_capabilities tool call, refresh, server-side revoke, reconnect"
+    },
+    {
+      "name": "Claude Code",
+      "version": "2.1.233",
+      "status": "pass (2026-08-16, dated): CIMD registration, browser approval, tool call, refresh, revocation after access-token expiry; current installed version is 2.1.281 (bridge-qualified 2026-09-24, not identity-qualified)"
+    },
+    {
+      "name": "Cursor Agent",
+      "version": "3.15.6",
+      "status": "partial (2026-08-16, dated): DCR registration, browser approval, tool discovery; model tool call not run (product login separate from MCP OAuth)"
+    },
+    {
+      "name": "Visual Studio Code",
+      "version": "1.132.1",
+      "status": "untested (2026-08-16): no agent surface installed for an MCP tool call"
+    },
+    {
+      "name": "claude.ai",
+      "status": "untested"
+    }
+  ],
+  "applicationInvariants": {
+    "appMembershipAuthority": "preserved; no provider role or organization bypass is recorded anywhere in this matrix",
+    "lastAdminProtection": "covered by the conformance suite (AUTH ledger entries), not re-run here",
+    "thirtySecondCacheCeiling": "covered by the conformance suite, not re-run here"
+  },
+  "open": [
+    "WorkOS MCP/Audit plan entitlement inventory (blocked on the operator-held API key)",
+    "key rotation, logout, and cross-replica deactivation against both providers",
+    "re-qualification of the dated August 16 client rows at current client versions",
+    "SSO/OIDC connection behavior once a connection is configured",
+    "webhook provisioning, if selected later (signed events, dedup/order/reconciliation, new acceptance IDs)"
+  ]
+}

@@ -884,6 +884,18 @@ gate.
   current environment reports no configured SSO/OIDC connection, and MCP/Audit
   plan entitlements have not been inventoried separately from demo/staging
   behavior. Hosted-provider lifecycle qualification therefore remains open.
+- **Matrix progress, September 24:** `pnpm test:oidc` passed 4/4 against the
+  pinned Keycloak image (admitted sign-in, unadmitted refusal at browser and
+  MCP, resource-bound token at MCP; [oidc-keycloak.json](./project/evidence/oidc-keycloak.json)),
+  and the first named-client/deployment matrix is recorded at
+  [identity-qualification-matrix.json](./project/evidence/identity-qualification-matrix.json):
+  pass/fail/untested per provider and client with exact versions, including the
+  dated August 16 WorkOS rows. The MCP/Audit entitlement inventory is still
+  open — the operator-held WorkOS API key from the September 23 setup was not
+  discoverable in this session (environment, shell profiles, `~/.config` and
+  macOS Keychain checked), and that gap is recorded in the matrix rather than
+  worked around. Key rotation, logout, cross-replica deactivation, and
+  re-qualification of the dated client rows at current versions remain open.
 - **Do:** qualify WorkOS and configured OIDC discovery, exact-resource audience,
   PKCE/registration, key rotation, refresh, provider revocation, logout and
   cross-replica deactivation. Record actual production MCP/Audit entitlements
