@@ -25,6 +25,28 @@ and Pi replies to and resolves each comment thread through the
   the server unreachable it backs off between 1 s and 30 s and Pi continues
   normally. No bridge failure is ever thrown into Pi.
 
+## Structural coverage
+
+`tests/client/pi-bridge-core.test.ts` drives the real bridge loop against a
+real Artifact Server with a scripted Pi surface:
+
+- Compaction hold: a bundle sent while the session is compacting stays
+  `claimed` and is delivered only after `session_compact`.
+- Host refusal: a synchronous throw from `pi.sendUserMessage` is the
+  protocol's lost-handle signal, so the loop ends dormant without reporting
+  `delivered` or `failed` and no exception reaches Pi; the claimed dispatch is
+  left for lease expiry.
+- Follow-up delivery, registration identity, and the comment tool closing a
+  thread.
+
+Host-agnostic behaviors are covered once for every adapter by the extracted
+bridge core: lost acknowledgement and duplicate lease delivery
+(`tests/conformance/dsp-006-claim-lease.test.ts`), and the 1 s → 30 s jittered
+backoff cap with fail-open dormancy
+(`tests/conformance/dsp-012-bridge-fail-open.test.ts`). Live-host
+qualification against Pi 0.84.4 (round trip, FIFO drain, session rebind) is
+recorded in `project/evidence/pi-live.json` (`pnpm test:pi-live`).
+
 ## Install
 
 ```bash

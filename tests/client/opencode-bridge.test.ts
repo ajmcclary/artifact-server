@@ -428,4 +428,61 @@ describe("opencode bridge adapter", () => {
     ).items.find((item) => item.id === agent.id);
     expect(listed?.connected).toBe(true);
   });
+
+  test("holds delivery while the target session is compacting and releases when compaction ends", async () => {
+    expect.hasAssertions();
+    const thread = await client.openThread(
+      published,
+      "Update the heading while compacting.",
+      "opencode-compaction-thread",
+    );
+    const context = fakePluginContext("/work/opencode-compaction-test");
+    const hooks = await ArtifactServerBridge(context.input);
+    hooksToDispose.push(hooks);
+
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "opencode-under-test") ?? null;
+    });
+    await hooks["chat.message"]({sessionID: "ses_compaction_target"});
+    await hooks["experimental.session.compacting"]({
+      sessionID: "ses_compaction_target",
+    });
+
+    const sent = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "opencode-compaction-dispatch",
+      projectId,
+      threadIds: [thread.id],
+    });
+    const dispatchId = dispatchCreationSchema.parse(await sent.json())
+      .dispatch.id;
+    await eventually(async () => {
+      const response = await client.getDispatch(dispatchId, projectId);
+      return dispatchEnvelopeSchema.parse(await response.json()).dispatch
+        .state === "claimed" ? true : null;
+    });
+    await settle(700);
+    expect(context.prompts).toHaveLength(0);
+    const held = await client.getDispatch(dispatchId, projectId);
+    expect(
+      dispatchEnvelopeSchema.parse(await held.json()).dispatch.state,
+    ).toBe("claimed");
+
+    await hooks.event({
+      event: {
+        properties: {sessionID: "ses_compaction_target"},
+        type: "session.compacted",
+      },
+    });
+    await eventually(async () => {
+      const response = await client.getDispatch(dispatchId, projectId);
+      return dispatchEnvelopeSchema.parse(await response.json()).dispatch
+        .state === "delivered" ? true : null;
+    });
+    expect(context.prompts).toHaveLength(1);
+    expect(context.prompts[0]?.path.id).toBe("ses_compaction_target");
+    expect(context.prompts[0]?.body.parts[0]?.text).toContain(thread.id);
+  });
 });

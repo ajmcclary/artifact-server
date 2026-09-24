@@ -866,6 +866,28 @@ gate.
 
 ### T17 Complete live bridge qualification without changing citizenship
 
+- **Structural progress, September 24:** the host-agnostic citizenship cases
+  that were previously unproven without live hosts now have structural tests
+  driving the packaged bridge core against a real Artifact Server with a
+  scripted host surface. Lost acknowledgement and duplicate lease delivery are
+  covered in `tests/conformance/dsp-006-claim-lease.test.ts`: a bundle the host
+  accepted whose `delivered` report is lost on the network is requeued at lease
+  expiry, redelivered identically, and settles `delivered` — never `failed` —
+  with the duplicate admission tolerated. The Pi adapter gained loop-level
+  coverage (`tests/client/pi-bridge-core.test.ts`): a compaction hold that
+  releases delivery only after `session_compact`, and a synchronous host throw
+  that ends the claim loop dormant without reporting `delivered` or `failed`
+  and without throwing into the host. omp gained the same refusal case, and
+  OpenCode now exercises a compaction hold that starts while a delivery is
+  pending (`tests/client/opencode-bridge.test.ts`); claude-channel gained a
+  missing-configuration case over real stdio (no registration, no push, and an
+  honest dormant tool error). All four adapter READMEs now label each behavior
+  structural versus live. Backoff/jitter stays covered once for every host by
+  `tests/conformance/dsp-012-bridge-fail-open.test.ts`; claude-channel's
+  compaction hold is recorded as not applicable (no signal crosses the stdio
+  boundary) and its asynchronous notification refusal as not structurally
+  separable in that harness, rather than tested with a fake. Remaining open:
+  live-host proof of these five behaviors, and the live client matrix.
 - **Host progress, September 24:** Pi 0.84.4, OpenCode 1.18.32, omp 18.2.11 and
   Claude Code 2.1.281 each have an opt-in live suite that drives the real host
   against a real Artifact Server with a scripted offline model. Pi passed 3/3

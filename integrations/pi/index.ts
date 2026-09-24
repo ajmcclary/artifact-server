@@ -47,13 +47,13 @@ interface PiSessionManagerLike {
   getSessionId(): string;
 }
 
-interface PiExtensionContextLike {
+export interface PiExtensionContextLike {
   cwd: string;
   sessionManager: PiSessionManagerLike;
   ui: PiNotifier;
 }
 
-interface PiSessionStartEventLike {
+export interface PiSessionStartEventLike {
   reason: string;
 }
 
@@ -79,7 +79,7 @@ interface ArtifactCommentsParams {
   threadIds?: string[];
 }
 
-interface PiToolDefinitionLike {
+export interface PiToolDefinitionLike {
   description: string;
   execute(
     toolCallId: string,
@@ -91,19 +91,22 @@ interface PiToolDefinitionLike {
   parameters: ReturnType<typeof artifactCommentsParameters>;
 }
 
-interface PiExtensionApi {
-  on(
-    event: "session_start",
-    handler: (
-      event: PiSessionStartEventLike,
-      ctx: PiExtensionContextLike,
-    ) => Promise<void>,
-  ): void;
-  on(event: "session_before_compact", handler: () => void): void;
-  on(event: "session_compact", handler: () => void): void;
-  on(
-    event: "session_shutdown",
-    handler: (event?: PiSessionShutdownEventLike) => Promise<void>,
+export interface PiEventHandlers {
+  readonly session_start: (
+    event: PiSessionStartEventLike,
+    ctx: PiExtensionContextLike,
+  ) => Promise<void>;
+  readonly session_before_compact: () => void;
+  readonly session_compact: () => void;
+  readonly session_shutdown: (
+    event?: PiSessionShutdownEventLike,
+  ) => Promise<void>;
+}
+
+export interface PiExtensionApi {
+  on<Event extends keyof PiEventHandlers>(
+    event: Event,
+    handler: PiEventHandlers[Event],
   ): void;
   registerTool(tool: PiToolDefinitionLike): void;
   sendUserMessage(text: string, delivery: FollowUpDelivery): void;
@@ -152,7 +155,7 @@ function textResult(
 }
 
 /** The shutdown reasons Pi emits; only a real quit is a departure. */
-interface PiSessionShutdownEventLike {
+export interface PiSessionShutdownEventLike {
   readonly reason?: string;
 }
 

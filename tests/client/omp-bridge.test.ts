@@ -28,6 +28,7 @@ class ScriptedOmp implements OmExtensionApi {
   readonly messages: Array<{delivery: {deliverAs: "followUp"}; text: string}> = [];
   readonly notices: string[] = [];
   tool: Parameters<OmExtensionApi["registerTool"]>[0] | null = null;
+  refuseNextMessage = false;
   #handlers: Partial<OmEventHandlers> = {};
 
   on<Event extends keyof OmEventHandlers>(
@@ -42,6 +43,10 @@ class ScriptedOmp implements OmExtensionApi {
   }
 
   sendUserMessage(text: string, delivery: {deliverAs: "followUp"}): void {
+    if (this.refuseNextMessage) {
+      this.refuseNextMessage = false;
+      throw new Error("The host refused the message.");
+    }
     this.messages.push({delivery, text});
   }
 
@@ -174,5 +179,79 @@ describe("omp bridge adapter", () => {
       return agentListSchema.parse(await response.json()).items
         .some((item) => item.id === agent.id) ? null : true;
     });
+  });
+
+  test("a synchronous host throw ends the claim loop without reporting delivery", async () => {
+    expect.hasAssertions();
+    const client = new ApiClient(server, installation.apiToken);
+    const published = (await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>omp refusal</title>",
+      idempotencyKey: "omp-refusal-publish",
+      name: "omp refusal report",
+    })).body;
+    const refusedThread = await client.openThread(
+      published,
+      "Refuse this follow-up.",
+      "omp-refusal-thread",
+    );
+    const laterThread = await client.openThread(
+      published,
+      "This one is never delivered.",
+      "omp-later-thread",
+    );
+
+    artifactServerBridge(host);
+    await host.start();
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "omp-under-test") ?? null;
+    });
+
+    // A synchronous throw is the protocol's lost-handle signal: the loop ends
+    // dormant instead of reporting `failed`, and the claimed dispatch is left
+    // for lease expiry. The host receives no follow-up and no exception.
+    host.refuseNextMessage = true;
+    const refused = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "omp-refused-dispatch",
+      projectId: published.artifact.projectId,
+      threadIds: [refusedThread.id],
+    });
+    expect(refused.status).toBe(201);
+    const refusedId = dispatchCreationSchema.parse(await refused.json())
+      .dispatch.id;
+    const refusedState = async () => {
+      const response = await client.getDispatch(
+        refusedId,
+        published.artifact.projectId,
+      );
+      return dispatchEnvelopeSchema.parse(await response.json()).dispatch;
+    };
+    await eventually(async () =>
+      (await refusedState()).state === "claimed" ? true : null
+    );
+    expect(host.messages).toHaveLength(0);
+
+    const later = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "omp-later-dispatch",
+      projectId: published.artifact.projectId,
+      threadIds: [laterThread.id],
+    });
+    expect(later.status).toBe(201);
+    const laterId = dispatchCreationSchema.parse(await later.json())
+      .dispatch.id;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const settledRefused = await refusedState();
+    expect(settledRefused).toMatchObject({deliveredAt: null, failedAt: null});
+    const laterResponse = await client.getDispatch(
+      laterId,
+      published.artifact.projectId,
+    );
+    expect(dispatchEnvelopeSchema.parse(await laterResponse.json()).dispatch)
+      .toMatchObject({state: "queued"});
+    expect(host.messages).toHaveLength(0);
   });
 });

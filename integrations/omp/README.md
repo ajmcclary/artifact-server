@@ -84,7 +84,14 @@ the session. It never blocks an omp event handler on the network.
   (`pnpm test:omp-live` re-runs it). Events exercised live: `session_start`,
   `session_shutdown`, `registerTool`, `sendUserMessage`; the compaction pair
   (`session_before_compact` / `session_compact`) is covered by the structural
-  test `tests/client/omp-bridge.test.ts`, not by the live suite.
+  test `tests/client/omp-bridge.test.ts`, not by the live suite. The same test
+  covers a synchronous refusal: a throw from `sendUserMessage` is the
+  protocol's lost-handle signal, so the loop ends dormant without reporting
+  `delivered` or `failed` and the claimed dispatch is left for lease expiry.
+  Lost acknowledgement, duplicate lease delivery
+  (`tests/conformance/dsp-006-claim-lease.test.ts`) and the 1 s → 30 s
+  jittered backoff cap (`tests/conformance/dsp-012-bridge-fail-open.test.ts`)
+  are covered once for every adapter by the shared bridge core.
 - Host behaviors observed on omp 18.2.11 during live qualification:
   - `/new` emits no session lifecycle events at all (no `session_shutdown`,
     no new `session_start`): the extension host survives, so the original

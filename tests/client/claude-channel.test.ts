@@ -186,4 +186,43 @@ describe("claude channel bridge", () => {
       return current.dispatch.state === "addressed" ? current : null;
     });
   }, 60_000);
+
+  test("missing credentials leave the channel dormant without a registration or a crash", async () => {
+    expect.hasAssertions();
+    const notifications: z.infer<typeof channelNotificationSchema>[] = [];
+    mcpClient = new Client({name: "channel-test", version: "0.0.0"});
+    mcpClient.fallbackNotificationHandler = (notification) => {
+      const parsed = channelNotificationSchema.safeParse(notification);
+      if (parsed.success) notifications.push(parsed.data);
+      return Promise.resolve();
+    };
+    await mcpClient.connect(new StdioClientTransport({
+      args: [resolve(repositoryRoot, "integrations/claude-channel/index.ts")],
+      command: resolve(repositoryRoot, "node_modules/.bin/tsx"),
+      cwd: repositoryRoot,
+      env: {
+        ...process.env,
+        ARTIFACT_SERVER_AGENT_NAME: "",
+        ARTIFACT_SERVER_AGENT_TOKEN: "",
+        ARTIFACT_SERVER_ORIGIN: "",
+      },
+      stderr: "pipe",
+    }));
+
+    // The tool refuses with the real reason instead of pretending to work.
+    await expect(mcpClient.callTool({
+      arguments: {operation: "resolve", threadId: "channel-dormant-thread"},
+      name: "artifact_comments",
+    })).rejects.toThrow(/dormant/);
+
+    // No registration, no push, and the process is still answering.
+    await new Promise((settle) => setTimeout(settle, 1_000));
+    const response = await client.listAgents();
+    expect(response.status).toBe(200);
+    expect(agentListSchema.parse(await response.json()).items
+      .filter((item) => item.displayName === "channel-under-test")).toEqual([]);
+    expect(notifications).toHaveLength(0);
+    const listed = await mcpClient.listTools();
+    expect(listed.tools.map((tool) => tool.name)).toEqual(["artifact_comments"]);
+  }, 60_000);
 });

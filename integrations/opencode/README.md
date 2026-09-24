@@ -98,6 +98,11 @@ Verified by the fake plugin context against a real spawned Artifact Server:
 - Deleting the target session while `promptAsync` is pending makes that
   dispatch fail and releases its comments. Selecting another session lets the
   same bridge deliver the next dispatch without restarting OpenCode.
+- A bundle claimed while the target session is compacting stays `claimed` and
+  no prompt is injected; `session.compacted` releases it and the follow-up
+  lands as one prompt on that session.
+- A missing plugin surface fails open: no registration, no crash, and an
+  honest tool error.
 
 Qualified live against the current host, **OpenCode 1.18.32** (2026-09-23):
 the `tests/opencode-live` suite drives a real `opencode serve` plus
@@ -124,9 +129,13 @@ Still not covered live:
 
 - The `experimental.*` hook names are marked experimental by OpenCode and
   may change in later versions; the bridge degrades to "no compaction
-  hold" if they stop firing. The compaction hold itself is covered by the
-  scripted plugin-context test (`tests/client/opencode-bridge.test.ts`),
-  not by the live suite.
+  hold" if they stop firing. The compaction hold itself — including a hold
+  that starts while a delivery is pending — is covered by the scripted
+  plugin-context test (`tests/client/opencode-bridge.test.ts`), not by the
+  live suite. Lost acknowledgement, duplicate lease delivery
+  (`tests/conformance/dsp-006-claim-lease.test.ts`) and the 1 s → 30 s
+  jittered backoff cap (`tests/conformance/dsp-012-bridge-fail-open.test.ts`)
+  are covered once for every adapter by the shared bridge core.
 - The
   [August 27 staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md)
   separately records a bounded live pass on OpenCode 1.18.23. It does not prove

@@ -31,6 +31,36 @@ The suite's isolated HOME seeds the account feature-flag cache
 (`cachedGrowthBookFeatures.tengu_harbor` in `.claude.json`), because a
 signed-out install has no bootstrap to fetch the flag from.
 
+## Structural coverage
+
+`tests/client/claude-channel.test.ts` drives the real channel process over
+stdio against a real spawn, so every claim below is observed through the
+process boundary, not a mock:
+
+- Missing configuration: with no credentials the channel registers nothing,
+  pushes no notification, and answers `artifact_comments` with the real reason
+  ("Artifact Server is not configured; the bridge is dormant") instead of
+  pretending to work.
+- Follow-up delivery as one `notifications/claude/channel` event, its
+  sanitization, and the tool closing both threads.
+
+Host-agnostic behaviors are covered once for every adapter by the extracted
+bridge core: lost acknowledgement and duplicate lease delivery
+(`tests/conformance/dsp-006-claim-lease.test.ts`), and the 1 s → 30 s jittered
+backoff cap with fail-open dormancy
+(`tests/conformance/dsp-012-bridge-fail-open.test.ts`).
+
+Two behaviors are recorded gaps rather than tests:
+
+- **Compaction hold is not applicable.** No compaction signal crosses the
+  stdio boundary (`isCompacting()` is always false); Claude Code queues channel
+  events itself while the session is busy.
+- **Asynchronous notification refusal is not structurally separable.** This
+  tier's delivery evidence is transport admission, and the only way to make
+  the notification reject in this harness is to close the transport, which the
+  adapter maps to bridge shutdown. The live round trip above is the current
+  evidence; T17 tracks the gap.
+
 ## Before you start
 
 Before you start, make sure that:
