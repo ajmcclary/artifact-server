@@ -6,8 +6,9 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-T01, T02, T04, T05, T06 and T07 are closed with their remaining gaps
-recorded; all other tasks (T03, T08–T27) are open. Task IDs are planning
+T01, T02, T04, T05, T06, T07 and T18 are closed with their remaining gaps
+recorded; all other tasks (T03, T08–T17, T19–T27) are open. Task IDs are
+planning
 identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
 of product promises and proof; [AGENTS.md](./AGENTS.md) remains binding.
@@ -1093,6 +1094,41 @@ gate.
   noted as a future slice-by-4/8 optimization). Full write-up in
   `project/performance/FINDINGS.md`. Remaining: no probe yet proves pool-close-once
   at shutdown or span linkage, and no archive CRC-throughput probe.
+- **Closed, September 24:** the three remaining probes are now measured or
+  proven at real boundaries, and the remaining gaps are recorded. Pool
+  close-once at shutdown is proven twice: the local SQLite runtime
+  (`tests/lifecycle/storage-shutdown.test.ts`,
+  [storage-shutdown.json](./project/evidence/storage-shutdown.json)) shows
+  `node:sqlite` `DatabaseSync` refusing a second close and any post-close use
+  with `ERR_INVALID_STATE` (a double-run release finalizer would fail loudly),
+  repeated `ManagedRuntime` disposal resolving quietly, post-shutdown requests
+  rejecting with `ManagedRuntime disposed`, and a restarted server on the same
+  data directory reading the published artifact back; the pinned-Postgres pool
+  (`tests/integration/postgres-pool-shutdown.test.ts`,
+  [postgres-pool-shutdown.json](./project/evidence/postgres-pool-shutdown.json))
+  drains `pg_stat_activity` to zero after `close()`, resolves a second close
+  without reconnecting, and rejects post-close use. Span linkage is measured
+  by a new opt-in harness (`pnpm perf:observability-span-linkage`,
+  [observability-span-linkage.json](./project/evidence/observability-span-linkage.json))
+  driving real authenticated requests against a real OTLP collector: the main
+  runtime's request span chain is continuous with no orphan spans, while
+  Postgres persistence work exports **no spans at all** — a stronger statement
+  than the earlier "not parented" wording, since the Postgres
+  `ManagedRuntime` is built without the OTLP exporter layer — and an inbound
+  W3C `traceparent` is not honored. Archive CRC throughput is measured by a
+  new bounded harness (`pnpm perf:archive-crc-throughput`,
+  [archive-crc-throughput.json](./project/evidence/archive-crc-throughput.json)):
+  the stored-compression ZIP route streams a 64 MiB blob at 156.2 MiB/s mean
+  versus 804.5 MiB/s for the raw version file route (ratio about 0.19), so the
+  byte-at-a-time CRC-32 plus ZIP framing is the dominant archive cost and the
+  strongest measured justification for a future slice-by-4/8 table — one
+  bounded local observation, not a tail claim. Full write-up in
+  `project/performance/FINDINGS.md`. Gates V/E/P passed at the recorded
+  commits. Remaining gaps, recorded rather than fixed: a client disconnect
+  does not interrupt an in-flight SQL effect (SQLite runs synchronously on
+  the main thread; Postgres runs on its separate `ManagedRuntime`), Postgres
+  SQL spans are not exported, and inbound `traceparent`/`tracestate`
+  extraction remains open.
 
 ### T19 Improve design navigation and exact-file annotation
 
