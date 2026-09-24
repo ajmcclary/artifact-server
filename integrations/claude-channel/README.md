@@ -17,15 +17,23 @@ The npm package is not published yet.
 
 ## Live verification
 
-Qualified live against the current host, **Claude Code 2.1.281** (2026-09-24):
+Qualified live against the current host, **Claude Code 2.1.282** (2026-09-24):
 the `tests/claude-live` suite drives a real `claude` process in a PTY with
 the channel loaded through `.mcp.json` and
 `--dangerously-load-development-channels`, against a real Artifact Server
 and a scripted offline model — no metered provider usage. The round trip
 (`CLAUDE-LIVE 1`: the channel registers the session, a dispatch is
 `delivered`, the model works the thread through `artifact_comments`, the
-thread resolves, and the dispatch reads `addressed`) passes. Evidence:
-`project/evidence/claude-live.json` (`pnpm test:claude-live` re-runs it).
+thread resolves, and the dispatch reads `addressed`), a lost `delivered`
+acknowledgement (`CLAUDE-LIVE 2`: the report is dropped before it reaches
+the server, the bundle is requeued at lease expiry and redelivered
+byte-identically, the host tolerates the duplicate channel event, and the
+dispatch settles `delivered` — never `failed`), and a duplicate lease
+delivery (`CLAUDE-LIVE 3`: a replayed claim delivers a second,
+byte-identical channel event, the second `delivered` report is refused with
+409 `DISPATCH_STATE_CONFLICT`, and settlement stays singular) all pass.
+Evidence: `project/evidence/claude-live.json` (`pnpm test:claude-live`
+re-runs it).
 
 The suite's isolated HOME seeds the account feature-flag cache
 (`cachedGrowthBookFeatures.tengu_harbor` in `.claude.json`), because a
@@ -45,10 +53,13 @@ process boundary, not a mock:
   sanitization, and the tool closing both threads.
 
 Host-agnostic behaviors are covered once for every adapter by the extracted
-bridge core: lost acknowledgement and duplicate lease delivery
-(`tests/conformance/dsp-006-claim-lease.test.ts`), and the 1 s → 30 s jittered
-backoff cap with fail-open dormancy
-(`tests/conformance/dsp-012-bridge-fail-open.test.ts`).
+bridge core: the structural floor is
+`tests/conformance/dsp-006-claim-lease.test.ts` (lost acknowledgement and
+duplicate lease delivery — both also proven live here as `CLAUDE-LIVE 2` and
+`CLAUDE-LIVE 3`) and `tests/conformance/dsp-012-bridge-fail-open.test.ts`
+(the 1 s → 30 s jittered backoff cap with fail-open dormancy — measured live
+once for every adapter by the opencode suite's `OPENCODE-LIVE 4`, since the
+backoff lives in the shared core).
 
 Two behaviors are recorded gaps rather than tests:
 

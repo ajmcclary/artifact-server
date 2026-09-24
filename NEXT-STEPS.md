@@ -953,6 +953,35 @@ gate.
   holds, host refusal, lost acknowledgement, duplicate lease delivery and the
   1–30-second jitter cap stay structural coverage, labeled as such in each
   adapter README.
+- **Live behavior progress, September 24:** a shared loopback fault proxy
+  (`tests/support/bridge-fault-proxy.ts`) now destroys `delivered` report
+  sockets before they reach the server and replays recorded claim bodies, so
+  the remaining citizenship behaviors are proven against real hosts.
+  OpenCode 1.18.32 passed 7/7
+  ([opencode-live.json](./project/evidence/opencode-live.json)): the new
+  OPENCODE-LIVE 4 times registration retries against a blackhole origin inside
+  the 1–30-second jitter cap, OPENCODE-LIVE 5 proves a lost `delivered`
+  acknowledgement requeues at lease expiry and settles `delivered` with
+  exactly one report ever reaching the server, OPENCODE-LIVE 6 replays a claim
+  and observes at-least-once admission (two byte-identical injections, the
+  second report refused 409, never `failed`), and OPENCODE-LIVE 7 drives real
+  auto-compaction (manual compact is unavailable in 1.18.32) and proves a
+  claimed bundle is held until compaction completes. omp 18.2.11 passed 6/6
+  ([omp-live.json](./project/evidence/omp-live.json)) with the same lost
+  acknowledgement and duplicate claim proofs plus OMP-LIVE 6, a real
+  `/compact` hold (the session must exceed `compaction.keepRecentTokens`).
+  Claude Code 2.1.282 passed 3/3
+  ([claude-live.json](./project/evidence/claude-live.json)) with lost
+  acknowledgement and duplicate claim proofs; compaction holds are not
+  applicable to claude-channel (no signal crosses the stdio boundary).
+  Duplicate lease delivery is now recorded as at-least-once admission — the
+  "exactly one copy" expectation does not hold and the tests assert the
+  observed truth. Host refusal stays structural-only on every host (no host
+  surface can be made to refuse an injection deterministically), with the
+  rationale in each adapter README; the jitter cap is measured live once via
+  OpenCode and shared by the common bridge core. Remaining open: live proof of
+  these behaviors against Pi (its CLI is unavailable in this session), and the
+  T15/T16 live client matrix.
 - **Do:** reconcile version-specific Pi/OpenCode staging evidence with READMEs;
   qualify omp and remaining Claude Channels/host cases. Cover compaction holds,
   session deletion, host refusal, missing API/configuration, lost acknowledgement,

@@ -104,12 +104,18 @@ Verified by the fake plugin context against a real spawned Artifact Server:
 - A missing plugin surface fails open: no registration, no crash, and an
   honest tool error.
 
-Qualified live against the current host, **OpenCode 1.18.32** (2026-09-23):
+Qualified live against the current host, **OpenCode 1.18.32** (2026-09-24):
 the `tests/opencode-live` suite drives a real `opencode serve` plus
 `run --attach` clients with this plugin loaded against a real Artifact
 Server and a scripted offline model — round trip (`OPENCODE-LIVE 1`), FIFO
-drain (`OPENCODE-LIVE 2`), and fail-open against an unreachable origin
-(`OPENCODE-LIVE 3`) all pass. Evidence: `project/evidence/opencode-live.json`
+drain (`OPENCODE-LIVE 2`), fail-open against an unreachable origin
+(`OPENCODE-LIVE 3`), the 1 s → 30 s jittered retry-backoff cap measured on
+destroyed registration attempts (`OPENCODE-LIVE 4`), a lost `delivered`
+acknowledgement requeued at lease expiry and redelivered byte-identically
+(`OPENCODE-LIVE 5`), a duplicate lease delivery tolerated by the host with
+singular settlement (`OPENCODE-LIVE 6`), and a bundle held through a real
+auto-compaction and released at the compaction boundary (`OPENCODE-LIVE 7`)
+all pass. Evidence: `project/evidence/opencode-live.json`
 (`pnpm test:opencode-live` re-runs it). The cross-instance zod interop below
 is exercised by that suite, since the plugin loads through OpenCode's own
 Bun plugin loader.
@@ -124,18 +130,30 @@ Host behaviors observed on OpenCode 1.18.32 during live qualification:
 - OpenCode makes a small title-generation model call before the main
   prompt's call, so turn indexes in a scripted-model harness are offset
   by one.
+- A duplicate lease delivery is admitted, not deduplicated: the replayed
+  bundle enters the session as a second, byte-identical follow-up. The
+  server refuses the second `delivered` report with 409
+  `DISPATCH_STATE_CONFLICT`, so settlement stays singular.
+- Manual compaction is not available in 1.18.32 (`/api/session/:id/compact`
+  answers 503 "Session compact is not available yet" and the legacy route
+  serves the SPA), but auto-compaction is: a turn whose reported usage
+  overflows the model's context window compacts the session, fires the
+  `experimental.session.compacting` hook and `session.compacted` event, and
+  runs a summarization call whose system prompt names it a "context
+  summarization agent". The live compaction hold drives that path.
 
 Still not covered live:
 
 - The `experimental.*` hook names are marked experimental by OpenCode and
   may change in later versions; the bridge degrades to "no compaction
-  hold" if they stop firing. The compaction hold itself — including a hold
-  that starts while a delivery is pending — is covered by the scripted
-  plugin-context test (`tests/client/opencode-bridge.test.ts`), not by the
-  live suite. Lost acknowledgement, duplicate lease delivery
-  (`tests/conformance/dsp-006-claim-lease.test.ts`) and the 1 s → 30 s
-  jittered backoff cap (`tests/conformance/dsp-012-bridge-fail-open.test.ts`)
-  are covered once for every adapter by the shared bridge core.
+  hold" if they stop firing. The scripted plugin-context test
+  (`tests/client/opencode-bridge.test.ts`) covers that degradation and the
+  hold-starting-while-a-delivery-is-pending race, which the live suite
+  cannot schedule deterministically.
+- Host refusal of an admitted bundle is not deterministically exercisable
+  on this host: deleting the target session removes the delivery target
+  (the two-minute target-loss hold), it does not make `promptAsync` refuse.
+  Refusal remains covered by the scripted plugin-context test.
 - The
   [August 27 staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md)
   separately records a bounded live pass on OpenCode 1.18.23. It does not prove

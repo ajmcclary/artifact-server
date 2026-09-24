@@ -33,9 +33,23 @@ export interface ScriptedToolCall {
   readonly name: string;
 }
 
-/** What the scripted model answers for one turn. */
+/** Token accounting a scripted reply can report to the host. */
+export interface ScriptedUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+/**
+ * What the scripted model answers for one turn. A text reply may carry
+ * `usage`; reporting an overflowing prompt size is how a test drives
+ * OpenCode's automatic compaction deterministically.
+ */
 export type ScriptedReply =
-  | {readonly kind: "text"; readonly text: string}
+  | {
+    readonly kind: "text";
+    readonly text: string;
+    readonly usage?: ScriptedUsage;
+  }
   | {readonly kind: "toolCalls"; readonly toolCalls: readonly ScriptedToolCall[]};
 
 /**
@@ -97,6 +111,12 @@ interface CompletionChunk {
   readonly id: string;
   readonly model: string;
   readonly object: "chat.completion.chunk";
+  /** Present on the closing chunk when the planner reported usage. */
+  readonly usage?: {
+    readonly prompt_tokens: number;
+    readonly completion_tokens: number;
+    readonly total_tokens: number;
+  };
 }
 
 const defaultWaitMilliseconds = 60_000;
@@ -163,13 +183,27 @@ export async function startScriptedModel(
       const chunk = (
         delta: CompletionDelta,
         finishReason: string | null,
-      ): CompletionChunk => ({
-        choices: [{delta, finish_reason: finishReason, index: 0}],
-        created: Math.floor(Date.now() / 1_000),
-        id: identifier,
-        model,
-        object: "chat.completion.chunk",
-      });
+        usage?: ScriptedUsage,
+      ): CompletionChunk => {
+        const base: CompletionChunk = {
+          choices: [{delta, finish_reason: finishReason, index: 0}],
+          created: Math.floor(Date.now() / 1_000),
+          id: identifier,
+          model,
+          object: "chat.completion.chunk",
+        };
+        if (usage === undefined) {
+          return base;
+        }
+        return {
+          ...base,
+          usage: {
+            prompt_tokens: usage.promptTokens,
+            completion_tokens: usage.completionTokens,
+            total_tokens: usage.promptTokens + usage.completionTokens,
+          },
+        };
+      };
 
       response.writeHead(200, {
         "Cache-Control": "no-cache",
@@ -182,7 +216,7 @@ export async function startScriptedModel(
       const reply = await planner(turn);
       if (reply.kind === "text") {
         write(chunk({content: reply.text}, null));
-        write(chunk({}, "stop"));
+        write(chunk({}, "stop", reply.usage));
       } else {
         reply.toolCalls.forEach((call, position) => {
           write(chunk({

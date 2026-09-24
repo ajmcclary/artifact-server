@@ -76,22 +76,27 @@ the session. It never blocks an omp event handler on the network.
 
 - omp extension API: the adapter types its narrow API slice structurally and
   keeps no hard dependency on omp's own type package. Live-host qualification
-  has run against **omp 18.2.11** (2026-09-23): the `tests/omp-live` suite
+  has run against **omp 18.2.11** (2026-09-24): the `tests/omp-live` suite
   drives a real omp process in a PTY with this extension loaded against a
   real Artifact Server and a scripted offline model — round trip
-  (`OMP-LIVE 1`), FIFO drain (`OMP-LIVE 2`), and session replacement
-  (`OMP-LIVE 3`) all pass. Evidence: `project/evidence/omp-live.json`
-  (`pnpm test:omp-live` re-runs it). Events exercised live: `session_start`,
-  `session_shutdown`, `registerTool`, `sendUserMessage`; the compaction pair
-  (`session_before_compact` / `session_compact`) is covered by the structural
-  test `tests/client/omp-bridge.test.ts`, not by the live suite. The same test
-  covers a synchronous refusal: a throw from `sendUserMessage` is the
+  (`OMP-LIVE 1`), FIFO drain (`OMP-LIVE 2`), session replacement
+  (`OMP-LIVE 3`), a lost `delivered` acknowledgement requeued at lease
+  expiry and redelivered byte-identically (`OMP-LIVE 4`), a duplicate lease
+  delivery tolerated by the host with singular settlement (`OMP-LIVE 5`),
+  and a bundle held through a real `/compact` compaction and released at the
+  compaction boundary (`OMP-LIVE 6`) all pass. Evidence:
+  `project/evidence/omp-live.json` (`pnpm test:omp-live` re-runs it). Events
+  exercised live: `session_start`, `session_shutdown`, `registerTool`,
+  `sendUserMessage`, and the compaction pair (`session_before_compact` /
+  `session_compact`). A synchronous refusal is covered by the structural test
+  `tests/client/omp-bridge.test.ts`: a throw from `sendUserMessage` is the
   protocol's lost-handle signal, so the loop ends dormant without reporting
   `delivered` or `failed` and the claimed dispatch is left for lease expiry.
-  Lost acknowledgement, duplicate lease delivery
-  (`tests/conformance/dsp-006-claim-lease.test.ts`) and the 1 s → 30 s
-  jittered backoff cap (`tests/conformance/dsp-012-bridge-fail-open.test.ts`)
-  are covered once for every adapter by the shared bridge core.
+  It is not exercisable live — `sendUserMessage` is a synchronous void call
+  that does not refuse an admitted message. The 1 s → 30 s jittered backoff
+  cap lives in the shared bridge core and is measured live once for every
+  adapter by the opencode suite (`OPENCODE-LIVE 4`); the structural floor is
+  `tests/conformance/dsp-012-bridge-fail-open.test.ts`.
 - Host behaviors observed on omp 18.2.11 during live qualification:
   - `/new` emits no session lifecycle events at all (no `session_shutdown`,
     no new `session_start`): the extension host survives, so the original
@@ -101,6 +106,18 @@ the session. It never blocks an omp event handler on the network.
   - A bundle accepted while the session is fully idle does not start a turn
     on its own; it drains at the next work boundary (the user's next
     prompt). While the session is busy, bundles drain one per boundary.
+  - A duplicate lease delivery is admitted, not deduplicated: the replayed
+    bundle is queued as a second, byte-identical follow-up. The server
+    refuses the second `delivered` report with 409
+    `DISPATCH_STATE_CONFLICT`, so settlement stays singular.
+  - `/compact` refuses with "Nothing to compact (session too small)" unless
+    the branch holds more than `compaction.keepRecentTokens` (default
+    20000) tokens, and its soft-compaction summarization calls carry a
+    "Summarize user–AI coding-assistant conversations" system prompt —
+    the live compaction-hold test pads the first exchange past the floor
+    and detects the summarization turn by that prompt. The padding must
+    not repeat an exact character cycle: omp's loop guard aborts such
+    streams.
   - Terminal input typed while a model turn is in flight is queued as input,
     not executed as a command, so `/new` cannot be issued mid-work.
 - omp's `session_shutdown` event does not carry the `reason` field that Pi's

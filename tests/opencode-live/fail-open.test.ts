@@ -5,7 +5,15 @@
  * must keep working: the model still answers, the host does not crash, and no
  * agent row appears on the real server. The failure is contained inside the
  * bridge with bounded backoff rather than thrown into the host.
+ *
+ * OPENCODE-LIVE 4 — the same unreachable origin doubles as the observation
+ * point for the backoff contract: the "blackhole" below accepts the bridge's
+ * connections, timestamps every registration attempt, and destroys the
+ * socket, so the suite can prove the retry spacing starts at one second and
+ * never exceeds the thirty-second jittered ceiling.
  */
+
+import {createServer, type Server} from "node:http";
 
 import {afterAll, beforeAll, describe, expect, test} from "vitest";
 import {z} from "zod";
@@ -48,9 +56,62 @@ function isTitleGenerationTurn(turn: ModelTurn): boolean {
 /** One session row from the `opencode serve` HTTP API. */
 const sessionListSchema = z.array(z.object({id: z.string()}).loose());
 
+/** One bridge request the blackhole observed and destroyed. */
+interface BlackholeAttempt {
+  readonly at: number;
+  readonly method: string;
+  readonly path: string;
+}
+
+interface BlackholeOrigin {
+  attempts(): readonly BlackholeAttempt[];
+  readonly origin: string;
+  stop(): Promise<void>;
+}
+
+/**
+ * An "unreachable" origin that is nonetheless observable: it accepts every
+ * connection, records the request line with a timestamp, and destroys the
+ * socket without answering — the same failure the bridge sees from a dead
+ * server, with the retry timing laid bare.
+ */
+async function startBlackholeOrigin(): Promise<BlackholeOrigin> {
+  const attempts: BlackholeAttempt[] = [];
+  const server: Server = createServer((request) => {
+    attempts.push({
+      at: Date.now(),
+      method: request.method ?? "GET",
+      path: request.url ?? "/",
+    });
+    request.socket.destroy();
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = z.object({port: z.number()}).parse(server.address());
+  return {
+    attempts: () => attempts,
+    origin: `http://127.0.0.1:${address.port}`,
+    stop: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => {
+          resolve();
+        });
+      }),
+  };
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 describe("live OpenCode bridge fail-open", () => {
   let installation: TestInstallation;
   let server: RunningTestServer;
+  let blackhole: BlackholeOrigin;
   let client: ApiClient;
   let environment: OpencodeEnvironment;
   let model: ScriptedModel;
@@ -72,16 +133,17 @@ describe("live OpenCode bridge fail-open", () => {
     });
     environment = await createOpencodeEnvironment(model.baseUrl, bridgeExtension);
 
-    // Point the bridge at an origin that is guaranteed unreachable, but keep
-    // the model endpoint reachable so we can observe the host still thinking.
+    // Point the bridge at the blackhole: unreachable like a dead server, but
+    // every retry is timestamped for the backoff assertions. The model
+    // endpoint stays reachable so the host keeps thinking.
+    blackhole = await startBlackholeOrigin();
     opencode = await startLiveOpencode(
       {
         agentName: "opencode-live-fail-open",
         cacheDirectory: environment.cacheDirectory,
         configDirectory: environment.configDirectory,
         dataDirectory: environment.dataDirectory,
-        // Nothing is listening on this port in the test.
-        origin: "http://127.0.0.1:1",
+        origin: blackhole.origin,
         projectDirectory: environment.projectDirectory,
         stateDirectory: environment.stateDirectory,
         token: installation.apiToken,
@@ -94,6 +156,7 @@ describe("live OpenCode bridge fail-open", () => {
     await opencode.stop();
     await model.stop();
     await environment.remove();
+    await blackhole.stop();
     await server.stop();
     await removeTestInstallation(installation);
   });
@@ -146,5 +209,51 @@ describe("live OpenCode bridge fail-open", () => {
       expect(response.status).toBe(200);
       expect(agentListSchema.parse(await response.json()).items).toHaveLength(0);
     },
+  );
+
+  test(
+    "OPENCODE-LIVE 4: the unreachable-origin retry spacing starts at 1s and never exceeds the 30s jittered ceiling",
+    async () => {
+      expect.hasAssertions();
+
+      // Registration attempts accumulate from bridge start. Backoff doubles
+      // 1s → 2s → 4s → 8s → 16s and then sits on the 30s ceiling, so the
+      // eighth attempt lands roughly 90–100s in and proves both the floor and
+      // the cap.
+      const registrationAttempts = () =>
+        blackhole.attempts().filter((attempt) =>
+          attempt.method === "POST" && attempt.path.startsWith("/api/v1/agents")
+        );
+      const deadline = Date.now() + 150_000;
+      while (registrationAttempts().length < 8) {
+        if (Date.now() > deadline) break;
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(500);
+      }
+      const attempts = registrationAttempts();
+      expect(attempts.length).toBeGreaterThanOrEqual(8);
+
+      const gaps = attempts.slice(1).map((attempt, index) =>
+        attempt.at - (attempts[index]?.at ?? attempt.at)
+      );
+      // No spin: every retry waits at least the one-second floor (minus timer
+      // slop), and none sleeps past the jittered ceiling plus slack.
+      for (const gap of gaps) {
+        expect(gap).toBeGreaterThanOrEqual(900);
+        expect(gap).toBeLessThanOrEqual(31_500);
+      }
+      // The first retry is the one-second step with up to 25% jitter.
+      expect(gaps[0]).toBeDefined();
+      expect(gaps[0] ?? 0).toBeLessThanOrEqual(2_100);
+      // The ceiling is reached and held: the last two observed gaps are the
+      // capped 30s sleeps, not something still growing.
+      const penultimate = gaps.at(-2) ?? 0;
+      const last = gaps.at(-1) ?? 0;
+      expect(penultimate).toBeGreaterThanOrEqual(29_000);
+      expect(last).toBeGreaterThanOrEqual(29_000);
+      expect(penultimate).toBeLessThanOrEqual(31_500);
+      expect(last).toBeLessThanOrEqual(31_500);
+    },
+    200_000,
   );
 });
