@@ -1,0 +1,58 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-24T22:13:24.053Z",
+  "commit": "816988b0b5b745793fa80d4c4bba2aec727cd142",
+  "cpu": "Apple M1 Max",
+  "details": {
+    "probe": "archive-crc-throughput",
+    "scope": "local-sqlite-runtime"
+  },
+  "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "archive": {
+    "latency": {
+      "meanMilliseconds": 429.77184159999996,
+      "p50Milliseconds": 428.597167,
+      "p95Milliseconds": 442.790292
+    },
+    "megabytesPerSecond": {
+      "mean": 156.19520445004986,
+      "p50": 156.57865512676148,
+      "p95": 159.2624963808033
+    },
+    "samples": 5,
+    "totalBytes": 335545840
+  },
+  "completedAt": "2026-09-24T22:13:24.053Z",
+  "configuration": {
+    "largeBlobBytes": 67108864,
+    "megabytes": 64,
+    "samples": 5
+  },
+  "file": {
+    "latency": {
+      "meanMilliseconds": 83.4657498,
+      "p50Milliseconds": 83.556708,
+      "p95Milliseconds": 86.501916
+    },
+    "megabytesPerSecond": {
+      "mean": 804.5309170102846,
+      "p50": 803.15351820706,
+      "p95": 835.9684328192885
+    },
+    "samples": 5,
+    "totalBytes": 335544320
+  },
+  "note": "Archive (stored-compression ZIP with incremental CRC-32 per chunk) versus the raw version file route for the same immutable blob. The archive path adds ZIP headers, central directory and byte-at-a-time CRC-32 over the file route, which streams the blob directly. Setup (publish) time is excluded. Sequential samples; single machine; no tail claim.",
+  "ratio": {
+    "archiveToFileMegabytesPerSecondMean": 0.19414444012976714
+  },
+  "startedAt": "2026-09-24T22:13:24.053Z",
+  "success": true,
+  "target": "local"
+}

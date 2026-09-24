@@ -11,6 +11,7 @@ export default defineConfig({
     fileParallelism: false,
     include: [
       "tests/integration/external-storage-runtime.test.ts",
+      "tests/integration/postgres-pool-shutdown.test.ts",
       "tests/integration/postgres-staged-upload-idempotency.test.ts",
     ],
     pool: "forks",

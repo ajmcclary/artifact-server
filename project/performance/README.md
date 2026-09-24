@@ -125,3 +125,9 @@ account limits.
 Provider provisioning is measured separately and excluded from application-operation latency. The default run caps publication concurrency at 4, read concurrency at 8, aggregate measured publication data at 64 MiB, and aggregate measured read data at 128 MiB. Command-line settings cannot raise publication concurrency above 16 or the bounded operation counts above their configured caps.
 
 The external-storage report is written to `project/evidence/external-storage-performance-baseline.json`. It is a regression baseline for the same machine, container runtime, Node version, workload, and storage class. MinIO on a laptop proves the S3-compatible application path; it does not claim production AWS S3 or Cloudflare R2 latency or capacity.
+
+## Archive and observability diagnostics
+
+`pnpm perf:archive-crc-throughput` publishes a real immutable blob (default 64 MiB, capped at 256 MiB) and measures the archive route (stored-compression ZIP with incremental CRC-32) against the version file route that streams the same blob with no CRC or ZIP framing. Sequential samples report MiB/s p50/p95 and the archive/file ratio. The report is written to `project/evidence/archive-crc-throughput.json`.
+
+`pnpm perf:observability-span-linkage` drives real authenticated requests that perform storage work against an in-process server wired to a real OTLP collector and records exported span names, trace IDs and parent IDs exactly as observed. The SQLite arm always runs; the Postgres arm runs under `scripts/with-external-storage-test-providers.sh`. It documents the span-linkage gap rather than changing it. The report is written to `project/evidence/observability-span-linkage.json`.

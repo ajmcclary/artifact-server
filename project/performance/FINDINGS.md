@@ -365,6 +365,80 @@ and construction constants, and a principal-bound server must never be cached
 globally regardless. Seeding is recorded separately (1,000 artifacts in about
 26.6 s through the real publish path). One run at one machine; no tail claim.
 
+## September 24 T18 remaining probes: pool-close-once, span linkage, archive CRC
+
+The three open T18 items from the September 22 write-up are now measured or
+proven on a real Apple M1 Max / Node 24.15.0, with full measurement context in
+each report.
+
+### Pool-close-once at shutdown
+
+Two real-boundary proofs now establish that storage resources close exactly
+once at shutdown:
+
+- **Local SQLite runtime** (`tests/lifecycle/storage-shutdown.test.ts`,
+  `project/evidence/storage-shutdown.json`): `node:sqlite` `DatabaseSync`
+  refuses a second `close()` and any post-close use with `ERR_INVALID_STATE`,
+  so a double-run release finalizer would fail loudly rather than silently
+  double-close. Disposing a real `LocalRuntime` twice resolves quietly
+  (proving the release finalizer ran exactly once) while a post-shutdown
+  request rejects with `ManagedRuntime disposed`. A real server stopped twice
+  then restarted on the same data directory reads the published artifact back,
+  so the closed database was left consistent.
+- **Postgres pool** (`tests/integration/postgres-pool-shutdown.test.ts`,
+  `project/evidence/postgres-pool-shutdown.json`, pinned container): one
+  `PostgresDatabase` pool shows at least one server-side connection while open,
+  `pg_stat_activity` drains to zero after `close()`, a second `close()`
+  resolves without reconnecting, and post-close use rejects with
+  `ManagedRuntime disposed` instead of leaking a usable pool.
+
+The "no test proves a pool closes exactly once at shutdown" gap is closed. The
+remaining `sql-cancellation` gap is unchanged and separate: a client disconnect
+does not interrupt an in-flight SQL effect, and SQLite runs synchronously on the
+main thread.
+
+### Span linkage across the Postgres runtime boundary
+
+A new opt-in harness (`pnpm perf:observability-span-linkage`,
+`project/evidence/observability-span-linkage.json`) drives real authenticated
+requests that perform storage work against an in-process server wired to a real
+OTLP collector, then records exported span names, trace IDs and parent IDs
+exactly as observed. The SQLite arm always runs; the Postgres arm runs under
+`scripts/with-external-storage-test-providers.sh`.
+
+Findings, recorded rather than fixed:
+
+- On the main runtime the request span chain is continuous: every request emits
+  an `http.request` span, the route span (`POST /api/*`, `GET /api/*`) is
+  parented to it, and service spans (`AuthorizationService.*`,
+  `ProjectManagementService.*`, `PublishArtifactService.*`, etc.) are parented
+  inside the same trace, with no orphan spans.
+- Postgres persistence work produces **no exported spans at all**: the captured
+  span inventory contains no `sql.*` or query span for either arm. The Postgres
+  `ManagedRuntime` is built from `PgClient.layer(...)` alone
+  (`src/storage/postgres-database.ts`) without the OTLP exporter layer, so its
+  SQL work is invisible to tracing — a stronger statement than the prior
+  "not parented to the request span." The earlier "not parented" wording in
+  this file over-stated what could be observed; the gap is "not exported."
+- An inbound W3C `traceparent` header is not honored: the server starts a fresh
+  trace (`inboundTraceparentHonored: false`) rather than continuing the caller's
+  trace context. Inbound `traceparent`/`tracestate` extraction remains open.
+
+### Archive CRC-32 throughput
+
+A new bounded harness (`pnpm perf:archive-crc-throughput`,
+`project/evidence/archive-crc-throughput.json`) publishes a real 64 MiB
+immutable blob and measures the archive route (stored-compression ZIP with
+incremental CRC-32 per chunk) against the version file route that streams the
+same blob with no CRC or ZIP framing. On this machine the archive streams at
+156.2 MiB/s mean (p95 159.3) while the raw file route streams at 804.5 MiB/s
+mean (p95 836.0) — an archive/file ratio of about 0.19. The byte-at-a-time
+CRC-32 plus ZIP framing is therefore the dominant archive cost, roughly a 5×
+penalty over raw streaming, and it is the strongest measured signal so far that
+a slice-by-4/8 CRC table (or an equally correct vectorized CRC) is a justified
+optimization target when archives reach this size. This is one bounded local
+observation, not a tail or production claim.
+
 ## Baseline policy
 - `pnpm verify:iteration` is the required end-of-iteration gate. It includes correctness, a coverage report, conformance checks, and the default bounded baseline. Coverage percentage is not a test-design target.
 - `pnpm smoke` catches broken behavior and gross regressions with deliberately loose machine-timing limits.

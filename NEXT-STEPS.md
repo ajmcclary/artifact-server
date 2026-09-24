@@ -6,8 +6,9 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-T02, T04, T06 and T07 are closed with their remaining gaps recorded; all
-other T01–T27 tasks are open. Task IDs are planning identifiers, not new
+T01, T02, T04, T05, T06 and T07 are closed with their remaining gaps
+recorded; all other tasks (T03, T08–T27) are open. Task IDs are planning
+identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
 of product promises and proof; [AGENTS.md](./AGENTS.md) remains binding.
 
@@ -26,9 +27,9 @@ it does not authorize future live runs or paid-plan changes.
 | --- | --- | --- | --- | --- |
 | 1 | T03 Git order and bounded reconciliation | Correct an observed GIT-008 failure without affecting primary publication. | Existing probe; add focused regression first. | 5–8 days |
 | 2 | T02 Create-only immutable writes (closed September 24) | Close S3/GCS provider parity gap and prove concurrent reuse. | T01 for performance claims, not for correctness work. | 3–5 days |
-| 3 | T01 Measurement and evidence baseline | Attribute transfer, SQL, CPU and memory before choosing optimizations. | None. | 2–4 days |
+| 3 | T01 Measurement and evidence baseline (closed September 24) | Attribute transfer, SQL, CPU and memory before choosing optimizations. | None. | 2–4 days |
 | 4 | T04 Batch final Postgres manifest insertion (closed September 24) | Remove sequential per-file SQL while preserving one atomic commit. | T01. | 2–4 days |
-| 5 | T05 Publication reconciliation and file resume | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
+| 5 | T05 Publication reconciliation and file resume (closed September 24) | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
 | 8 | T08 then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
@@ -104,6 +105,38 @@ gate.
   sizes, fixture identity, and warm/cold state. The D1 Git-history harness
   retains its existing environment fields because its tsconfig does not include
   the shared Node-only measurement module.
+- **Closed, September 24:** the measurement foundation is in place and the
+  ≥10% stage question has a measured answer. Every baseline records the shared
+  measurement context (commit, working-tree dirty flag, lockfile digest, Node
+  version, platform, architecture, CPU model, parallelism, OS, temporary
+  filesystem type, and caller details such as pinned container image digests),
+  and the local baseline attributes every file-client request to the `plan`,
+  `staging`, `commit` or `other` leg with per-leg counts, bytes and latency
+  percentiles — without logging bodies, tokens or signed URLs. The
+  [workload/account worksheet](./project/performance/WORKLOAD-WORKSHEET.md)
+  captures missing operating facts and is filled for the Workers + D1 + R2
+  target in
+  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  Controlled repetitions with reported uncertainty are recorded: three local
+  and three external-storage baseline repetitions (about ±4% spread), five
+  Git-history backlog repetitions across SQLite, pinned Postgres and local D1,
+  and three managed-Neon external-storage repetitions — all single-machine
+  samples that bound gross variance and explicitly do not support tail claims.
+  Large shapes run in dedicated opt-in bounded harnesses without relaxing
+  canonical caps: the 3,301-version Git backlog, the 1,000-file batch
+  comparison, the 200-thread comment-polling harness, the 1,000-artifact MCP
+  construction harness, and the Git clone-memory probe. The attribution
+  answer that unblocks the rank-10 selection: the commit-time staged-to-blob
+  copy dominates the local directory workload (commit leg 397–425 ms of an
+  860–908 ms p95 across the three local repetitions), so it is the only stage
+  with a plausible ≥10% end-to-end opportunity, and the one measured transport
+  experiment against it (T13's batch, staging leg about 75% cheaper) stayed
+  below the 10% end-to-end bar and was rejected on this evidence. Gates V/P/X
+  passed at the recorded commits. Remaining gaps: all results are
+  single-machine local or disposable-provider observations without a
+  controlled CI runner; live WAN measurements exist only inside the separately
+  approved September 23 account qualification, and live-provider Git backlog
+  measurement remains open under T03.
 - **Do:** capture commit, resolved dependencies, runtime, CPU/OS/filesystem,
   provider/container digests, region/RTT, proxy topology, durability, pool size,
   fixture hash, warm/cold state, and client/server scope. Attribute walk/hash,
@@ -455,6 +488,38 @@ gate.
   as `deployed-runtime-resume.failed-20260923-*.json`). Remaining open:
   Cloudflare Worker resume (blocked by the runtime 503) and MCP-surface
   recovery (T15).
+- **Closed, September 24:** normal and hostile outcomes are demonstrated and
+  the remaining deployment gap is recorded. Staged uploads bind the durable
+  publication idempotency key across SQLite, Postgres (migration 0013) and D1
+  (schema 11): a committed key replays the recorded publication without
+  staging access, an open upload with the same manifest digest resumes with
+  per-file `verified` flags, a changed manifest under one key is a 409
+  `IDEMPOTENCY_CONFLICT`, an expired key-bound upload is removed and
+  recreated, and a concurrent-create race re-reads and resumes. The file
+  client skips verified files on a resumed plan and performs zero PUTs and no
+  commit POST on a committed replay; the process-level CLI crash test
+  (CLI-003-B/F) recovers a lost commit response through the committed lookup
+  without re-sending files. Store-level key behavior — binding, uniqueness,
+  null-key coexistence, cross-principal invisibility and a genuine pre-0013
+  in-place upgrade — is covered on SQLite, D1 and Postgres
+  (`tests/integration/postgres-staged-upload-idempotency.test.ts`). PUB-015 is
+  `behavior_verified` in the ledger. Deployed-runtime resume is proven through
+  the real HTTP boundary against the managed Neon database and the private AWS
+  bucket: a SIGKILL mid-publication resumed without retransmitting the
+  verified file and committed exactly one version, and a dropped commit
+  response replayed as `status: "committed"`, `replayed: true` with no
+  retransfer
+  ([deployed-runtime-resume.json](./project/evidence/deployed-runtime-resume.json)).
+  MCP-surface recovery is now satisfied: `artifact_create_upload` accepts an
+  optional `idempotencyKey` with pre-commit resumed replay, post-commit
+  committed replay and `IDEMPOTENCY_CONFLICT` on manifest change (MCP-023,
+  behavior-verified September 24 under T15). Retention semantics are
+  unchanged: no perpetual negative results, no successful-staging reclamation.
+  Gates V/H/O/E/X/P passed at the recorded commits. Remaining deployment gap:
+  Cloudflare Worker resume is unproven — the September 23 runtime-stage probe
+  deployed and cleaned its Worker/D1/R2 resources but every runtime request
+  returned HTTP 503, and the Cloudflare Artifacts namespace entitlement
+  remains unavailable.
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.

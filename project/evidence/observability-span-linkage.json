@@ -1,0 +1,235 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-24T22:13:44.208Z",
+  "commit": "816988b0b5b745793fa80d4c4bba2aec727cd142",
+  "cpu": "Apple M1 Max",
+  "details": {
+    "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+    "probe": "observability-span-linkage"
+  },
+  "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "arms": {
+    "postgres": {
+      "requests": [
+        {
+          "allTraceIds": [
+            "30b1e6e1ca2b22ef35b92d9efec68c02"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "postgres-publish-write",
+          "orphanSpanNames": [],
+          "requestId": "24cce77d-92d2-4ab7-9128-fcc53adc04ca",
+          "routeSpanName": "POST /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "InstallationAccessService.authenticateManagedApiKey",
+            "AuthorizationService.requirePublicationPreparation",
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "StagedUploadService.requiredUpload",
+            "AuthorizationService.requireArtifactCreation",
+            "StagedUploadService.openPublicationSource",
+            "PublishArtifactService.storeFiles",
+            "PublishArtifactService.publishPreparedNew",
+            "StagedUploadService.commitUpload",
+            "POST /api/v1/uploads/:uploadId/commit",
+            "POST /api/v1/uploads/:uploadId/commit"
+          ],
+          "spanCount": 15,
+          "sqlSpanNames": [],
+          "status": 201,
+          "traceId": "30b1e6e1ca2b22ef35b92d9efec68c02"
+        },
+        {
+          "allTraceIds": [
+            "9eb70246388294d66a479998f205db41"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "postgres-project-read",
+          "orphanSpanNames": [],
+          "requestId": "d6c3ee59-4ce4-48b5-98fc-98271216dbcf",
+          "routeSpanName": "GET /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "InstallationAccessService.authenticateManagedApiKey",
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "GET /api/v1/projects/:projectId",
+            "GET /api/v1/projects/:projectId"
+          ],
+          "spanCount": 8,
+          "sqlSpanNames": [],
+          "status": 200,
+          "traceId": "9eb70246388294d66a479998f205db41"
+        },
+        {
+          "allTraceIds": [
+            "8d9f5213dcd4974e73831245653db794"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "postgres-traceparent-read",
+          "orphanSpanNames": [],
+          "requestId": "feb92a10-fd11-4da4-9a74-a9c57399d22a",
+          "routeSpanName": "GET /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "InstallationAccessService.authenticateManagedApiKey",
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "GET /api/v1/projects/:projectId",
+            "GET /api/v1/projects/:projectId"
+          ],
+          "spanCount": 8,
+          "sqlSpanNames": [],
+          "status": 200,
+          "traceId": "8d9f5213dcd4974e73831245653db794",
+          "inboundTraceparentHonored": false
+        }
+      ],
+      "spanInventory": {
+        "ExpiredStagingCleanupService.runPass": 2,
+        "POST /api/*": 4,
+        "AuthorizationService.requirePublicationPreparation": 4,
+        "AuthorizationService.requireProjectAccess": 8,
+        "ProjectManagementService.listProjects": 2,
+        "ProjectManagementService.resolveActiveProject": 2,
+        "StagedUploadService.createUpload": 2,
+        "POST /api/v1/uploads": 4,
+        "http.request": 10,
+        "StagedUploadService.uploadFile": 2,
+        "PUT /api/v1/uploads/:uploadId/files/:storageToken": 4,
+        "ProjectManagementService.requireProject": 6,
+        "ProjectManagementService.getProject": 6,
+        "StagedUploadService.requiredUpload": 2,
+        "AuthorizationService.requireArtifactCreation": 2,
+        "StagedUploadService.openPublicationSource": 2,
+        "PublishArtifactService.storeFiles": 2,
+        "PublishArtifactService.publishPreparedNew": 2,
+        "StagedUploadService.commitUpload": 2,
+        "POST /api/v1/uploads/:uploadId/commit": 4,
+        "GET /api/*": 4,
+        "GET /api/v1/projects/:projectId": 8,
+        "InstallationAccessService.authenticateManagedApiKey": 4
+      },
+      "status": "measured"
+    },
+    "sqlite": {
+      "requests": [
+        {
+          "allTraceIds": [
+            "15bf2fb6021d1354dbb8f798596c9301"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "sqlite-publish-write",
+          "orphanSpanNames": [],
+          "requestId": "46d13a64-0357-469a-9bce-9b924e48382b",
+          "routeSpanName": "POST /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "AuthorizationService.requirePublicationPreparation",
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "StagedUploadService.requiredUpload",
+            "AuthorizationService.requireArtifactCreation",
+            "StagedUploadService.openPublicationSource",
+            "PublishArtifactService.storeFiles",
+            "PublishArtifactService.publishPreparedNew",
+            "StagedUploadService.commitUpload",
+            "POST /api/v1/uploads/:uploadId/commit",
+            "POST /api/v1/uploads/:uploadId/commit"
+          ],
+          "spanCount": 14,
+          "sqlSpanNames": [],
+          "status": 201,
+          "traceId": "15bf2fb6021d1354dbb8f798596c9301"
+        },
+        {
+          "allTraceIds": [
+            "340966a30b7fca67847b2b76a53eac54"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "sqlite-project-read",
+          "orphanSpanNames": [],
+          "requestId": "ae5b1ca9-63ff-4021-a39f-5b0e5d19ff2f",
+          "routeSpanName": "GET /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "GET /api/v1/projects/:projectId",
+            "GET /api/v1/projects/:projectId"
+          ],
+          "spanCount": 7,
+          "sqlSpanNames": [],
+          "status": 200,
+          "traceId": "340966a30b7fca67847b2b76a53eac54"
+        },
+        {
+          "allTraceIds": [
+            "bac73eedbff7f1c8c5b2e9814558167e"
+          ],
+          "httpRequestSpanFound": true,
+          "label": "sqlite-traceparent-read",
+          "orphanSpanNames": [],
+          "requestId": "3a1bd40a-454e-470c-ac2f-8b4fc46302e6",
+          "routeSpanName": "GET /api/*",
+          "routeSpanParentedToHttpRequest": true,
+          "serviceSpanNames": [
+            "AuthorizationService.requireProjectAccess",
+            "ProjectManagementService.requireProject",
+            "ProjectManagementService.getProject",
+            "GET /api/v1/projects/:projectId",
+            "GET /api/v1/projects/:projectId"
+          ],
+          "spanCount": 7,
+          "sqlSpanNames": [],
+          "status": 200,
+          "traceId": "bac73eedbff7f1c8c5b2e9814558167e",
+          "inboundTraceparentHonored": false
+        }
+      ],
+      "spanInventory": {
+        "ExpiredStagingCleanupService.runPass": 1,
+        "POST /api/*": 2,
+        "AuthorizationService.requirePublicationPreparation": 2,
+        "AuthorizationService.requireProjectAccess": 4,
+        "ProjectManagementService.listProjects": 1,
+        "ProjectManagementService.resolveActiveProject": 1,
+        "StagedUploadService.createUpload": 1,
+        "POST /api/v1/uploads": 2,
+        "http.request": 5,
+        "StagedUploadService.uploadFile": 1,
+        "PUT /api/v1/uploads/:uploadId/files/:storageToken": 2,
+        "ProjectManagementService.requireProject": 3,
+        "ProjectManagementService.getProject": 3,
+        "StagedUploadService.requiredUpload": 1,
+        "AuthorizationService.requireArtifactCreation": 1,
+        "StagedUploadService.openPublicationSource": 1,
+        "PublishArtifactService.storeFiles": 1,
+        "PublishArtifactService.publishPreparedNew": 1,
+        "StagedUploadService.commitUpload": 1,
+        "POST /api/v1/uploads/:uploadId/commit": 2,
+        "GET /api/*": 2,
+        "GET /api/v1/projects/:projectId": 4
+      },
+      "status": "measured"
+    }
+  },
+  "completedAt": "2026-09-24T22:13:44.208Z",
+  "inboundTraceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "note": "Span-linkage diagnostic (T18): drives real authenticated requests that perform storage work against an in-process server wired to a real OTLP collector, then records exported span names, trace IDs, and parent IDs exactly as observed. The Postgres arm runs only under scripts/with-external-storage-test-providers.sh. This probe documents the gap; it does not change linkage behavior.",
+  "startedAt": "2026-09-24T22:13:44.208Z",
+  "success": true,
+  "target": "local"
+}

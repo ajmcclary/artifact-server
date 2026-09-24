@@ -1,0 +1,28 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-24T22:26:54.398Z",
+  "commit": "816988b0b5b745793fa80d4c4bba2aec727cd142",
+  "cpu": "Apple M1 Max",
+  "details": {
+    "probe": "storage-shutdown",
+    "scope": "local-sqlite-runtime"
+  },
+  "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "note": "T18 SQL-cancellation follow-up: proof that local storage resources close exactly once at shutdown. node:sqlite DatabaseSync refuses a second close and any post-close use with ERR_INVALID_STATE, so a double-run release finalizer would fail loudly; repeated ManagedRuntime disposal resolves quietly, which proves the release finalizer ran exactly once. A restarted runtime on the same data directory reads the published artifact back, proving the closed database was left consistent.",
+  "boundaryDoubleCloseError": "ERR_INVALID_STATE",
+  "boundaryPostCloseUseError": "ERR_INVALID_STATE",
+  "sqliteBoundary": true,
+  "repeatedRuntimeCloseResolved": true,
+  "postShutdownRequestOutcome": "rejected: ManagedRuntime disposed",
+  "backgroundScheduleSecondCloseOutcome": "rejected: ManagedRuntime disposed",
+  "repeatedServerCloseResolved": true,
+  "restartDataIntact": true,
+  "probe": "T18-storage-shutdown",
+  "target": "local"
+}
