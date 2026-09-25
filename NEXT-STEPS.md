@@ -892,10 +892,16 @@ gate.
   commit leg p95 from 377.44–436.91 ms to 159.87–175.03 ms and the staging
   leg unchanged — every after sample below every before sample, a
   single-machine observation with no tail claim (full write-up in
-  `project/performance/FINDINGS.md`). Remaining open: per-adapter native
-  copy qualification (the S3 CopyObject destination create-only question is
-  still unproven), the R2/Worker surface, and PUB-018 promotion to
-  `behavior_verified` once the final gate attaches this run's evidence.
+  `project/performance/FINDINGS.md`). The full iteration gate caught one
+  regression from the hard-link install: compact backups archived the link
+  entries and the strict restore validator rejected them, fixed by
+  dereferencing hard links at backup time so archives stay self-contained
+  regular files. With that fix the full gate
+  (`BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration`) and the
+  external-storage performance gate pass, and PUB-018 is promoted to
+  `behavior_verified` with this run's local evidence. Remaining open:
+  per-adapter native copy qualification (the S3 CopyObject destination
+  create-only question is still unproven) and the R2/Worker surface.
 - **Do:** add a product-named promotion capability only after source sealing,
   destination create-only installation, digest verification and retry semantics
   are specified. Qualify AWS source/version and destination conditions, GCS

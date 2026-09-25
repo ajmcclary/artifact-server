@@ -825,10 +825,15 @@ requirements:
       behavior: {id: PUB-018-B, description: "Promote a sealed staged file to an immutable blob without re-streaming, commit and serve the exact bytes, retain the staged slot, and converge a same-digest concurrent promotion on one blob."}
       failure: {id: PUB-018-F, description: "A size- or digest-mismatched staged source fails closed without creating or replacing blob bytes or a version, and an adapter without promotion commits the exact same bytes through the verified stream path."}
     deployments: *all
-    status: implementing
-    proof_gap: Local promotion (hard link with one-handle re-hash seal, post-link inode identity check, create-only EEXIST reuse) is implemented and claimed by local conformance tests; cloud adapters (S3/GCS/Azure/R2) keep the verified stream fallback until each native copy primitive is qualified per NEXT-STEPS.md T12, and no speed claim is made without paired controlled measurements.
+    status: behavior_verified
+    proof_gap: Only the local deployment has passing promotion evidence; cloud adapters (S3/GCS/Azure/R2) keep the verified stream fallback until each native copy primitive is qualified per NEXT-STEPS.md T12, so full verification needs a qualified promote per cloud adapter or a recorded decision that the stream fallback is the permanent cloud path.
     depends_on: [PUB-003, PUB-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-018-B, PUB-018-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-25T00:34:07.203Z"
 
   - id: CLI-001
     kind: security
