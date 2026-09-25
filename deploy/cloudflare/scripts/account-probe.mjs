@@ -257,14 +257,18 @@ const validateProbePolicy = (options, configuration) => {
   return failures;
 };
 
-const planSummary = (output) =>
-  output.split("\n")
-    .find((line) => line.includes("Plan:")) ?? "";
+const planSummary = (output) => {
+  const line = output.split("\n")
+    .find((entry) => entry.includes("Plan:"));
+  return line === undefined ? "" : line.slice(line.indexOf("Plan:")).trim();
+};
 
 const hasNoDrift = (result) => {
   const summary = planSummary(result.stdout);
   return result.exitCode === 0 &&
-    summary.trim() === "Plan: 3 to noop";
+    (summary === "Plan: no changes" ||
+      (summary.startsWith("Plan: 3 to noop") &&
+        !/(?:to create|to update|to delete|to replace)/iu.test(summary)));
 };
 
 const hasDeploymentOutput = (result, configuration, names) => {
@@ -334,14 +338,19 @@ const workerIsAbsent = (result) =>
     `${result.stdout}\n${result.stderr}`,
   );
 
-const stageIsAbsent = (result, stage) =>
-  result.exitCode === 0 &&
-  !result.stdout.split(/\r?\n/gu).some((line) => line.trim() === stage);
+const stageIsAbsent = (result, stagePath) =>
+  result.exitCode !== 0 &&
+  new RegExp(`${stagePath}: path does not exist`, "u").test(
+    `${result.stdout}\n${result.stderr}`,
+  );
 
-const initialPlanIsSafe = (result) =>
-  result.exitCode === 0 &&
-  planSummary(result.stdout).trim() === "Plan: 3 to create" &&
-  !/plannotator/iu.test(`${result.stdout}\n${result.stderr}`);
+const initialPlanIsSafe = (result) => {
+  const summary = planSummary(result.stdout);
+  return result.exitCode === 0 &&
+    summary.startsWith("Plan: 3 to create") &&
+    !/(?:to update|to delete|to replace)/iu.test(summary) &&
+    !/plannotator/iu.test(`${result.stdout}\n${result.stderr}`);
+};
 
 const extractOutputValue = (result, key) => {
   const match = new RegExp(
@@ -705,6 +714,21 @@ const main = async () => {
       ],
       environment,
     );
+  // `alchemy state ls` takes the state path as its only positional argument;
+  // the entrypoint defaults to ./alchemy.run.ts from the package directory.
+  const alchemyState = (...args) =>
+    runCommand(
+      "pnpm",
+      [
+        "exec",
+        "alchemy",
+        "state",
+        ...args,
+        "--profile",
+        options["alchemy-profile"],
+      ],
+      environment,
+    );
   const wrangler = (args, input) =>
     runCommand(
       "npx",
@@ -734,6 +758,11 @@ const main = async () => {
     workerDestroyed: false,
   };
   let runtimeEvidence = null;
+  const planSummaries = {
+    firstDeploy: null,
+    initialPlan: null,
+    repeatDeploy: null,
+  };
   let exactIds = {
     worker: null,
     database: null,
@@ -751,6 +780,7 @@ const main = async () => {
       resources: names,
       createdResourceIds: exactIds,
       checks,
+      planSummaries,
       runtime: runtimeEvidence,
       stoppedReason,
       steps,
@@ -777,14 +807,10 @@ const main = async () => {
     return;
   }
 
-  const existingStages = await alchemy(
-    "state",
-    "stages",
-    "--stack",
-    STACK_NAME,
-  );
+  const stagePath = `${STACK_NAME}/${configuration.stage}`;
+  const existingStages = await alchemyState("ls", stagePath);
   steps.push(commandEvidence(existingStages));
-  if (!stageIsAbsent(existingStages, configuration.stage)) {
+  if (!stageIsAbsent(existingStages, stagePath)) {
     await stop(
       "stage-exists",
       "The probe stage already exists or cannot be verified.",
@@ -828,6 +854,7 @@ const main = async () => {
     configuration.stage,
   );
   steps.push(commandEvidence(initialPlan));
+  planSummaries.initialPlan = planSummary(initialPlan.stdout) || null;
   checks.nativePlanNoWrites = initialPlanIsSafe(initialPlan);
   if (!checks.nativePlanNoWrites) {
     await stop(
@@ -844,6 +871,7 @@ const main = async () => {
     configuration.stage,
   );
   steps.push(commandEvidence(firstDeploy));
+  planSummaries.firstDeploy = planSummary(firstDeploy.stdout) || null;
   if (firstDeploy.exitCode !== 0) {
     await stop(
       "first-deploy-failed",
@@ -945,6 +973,7 @@ const main = async () => {
     configuration.stage,
   );
   steps.push(commandEvidence(repeatDeploy));
+  planSummaries.repeatDeploy = planSummary(repeatDeploy.stdout) || null;
   const repeatIds = createdResourceIds(repeatDeploy);
   checks.deploymentOutputValid =
     hasDeploymentOutput(repeatDeploy, configuration, names) &&

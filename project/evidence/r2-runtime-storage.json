@@ -31,16 +31,27 @@
       "exactRunPrefixCleanup": "pass"
     }
   },
+  "promotionProbe": {
+    "observedAt": "2026-09-25",
+    "evidence": "project/evidence/r2-s3-promotion-probe.json",
+    "verdict": "R2 does not enforce the sealed-promotion preconditions",
+    "checks": {
+      "preconditionVerdictRecorded": "pass",
+      "capabilityProbeCleanupExact": "pass",
+      "providerFactoryWithholdsPromote": "pass",
+      "verifiedStreamFallbackRetained": "pass"
+    },
+    "consequence": "the S3-compatible adapter against R2 never exposes promote; every commit uses the proven verified-stream path"
+  },
   "postRun": {
     "objectCount": 0,
     "bucketSizeBytes": 0,
     "bucketRetained": true
   },
   "boundary": {
-    "proves": "Artifact Server's S3-compatible verified-stream adapter against live Cloudflare R2",
+    "proves": "Artifact Server's S3-compatible verified-stream adapter against live Cloudflare R2, and that R2's S3-compatible CopyObject does not enforce the sealed-promotion preconditions so the adapter honestly withholds promote",
     "doesNotProve": [
-      "native server-side promotion",
-      "R2 beta CopyObject destination conditions under hostile races",
+      "native server-side promotion (probed and not enforced by R2)",
       "the Cloudflare Worker R2 binding surface",
       "production latency or capacity"
     ]

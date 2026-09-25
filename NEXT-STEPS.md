@@ -530,6 +530,16 @@ gate.
   browser-login provider in the probe configuration, not a product defect;
   live re-qualification is approval-gated), and the Cloudflare Artifacts
   namespace entitlement remains unavailable.
+- **Worker replay re-qualification, September 25:** the corrected
+  runtime-stage account probe (see the T08 re-qualification note) drove the
+  live Worker through create upload, file PUT, commit, and an idempotent
+  commit replay that returned 200 with the same publication — the Worker
+  committed-replay clause of the remaining deployment gap is now proven
+  through the real workers.dev HTTP boundary on D1/R2
+  ([cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  Still unproven on Workers: mid-publication resume with per-file `verified`
+  flags (the SIGKILL deployed-runtime-resume suite is Node-only), and the
+  Cloudflare Artifacts namespace entitlement remains unavailable.
 - **Do:** design an authorized operation lookup before transfer allocation,
   persisted upload/file completion state, renewal/expiry, and recovery after
   a changed local source. Return a committed result without staging access.
@@ -805,6 +815,34 @@ gate.
   runtime request so future evidence is not status-only. Live
   re-qualification with an OIDC-configured probe and `wrangler tail` remains
   approval-gated; no new live run was performed for this diagnosis.
+- **Runtime re-qualification, September 25:** the corrected runtime-stage
+  probe passed every check against the approved account. The private probe
+  configuration (`stage probe-runtime-ajmcclary-20260925`, WorkOS triple with
+  the client ID and issuer from the ignored root `.env`, API key supplied only
+  through the process environment — never written to the configuration, the
+  chat, or the repository) deployed the probe Worker/D1/R2 shape, and the live
+  runtime qualification returned health 200, ready 200, unauthenticated 401,
+  upload 201, file PUT 200, commit 201, idempotent replay 200, and list 200:
+  the September 23 503 is confirmed as the missing browser-login provider,
+  not a product defect. The repeat deploy reported `Plan: no changes`, the
+  Worker was destroyed, the exact D1/R2 probe resources were retained then
+  deleted, and the non-probe inventories were unchanged (evidence
+  `deploy/cloudflare/evidence/account-probe-2026-09-25T22-22-35-066Z.json`;
+  durable summary [cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  Three harness repairs were needed first, all probe-side and none product:
+  alchemy `2.0.0-beta.79` (bumped September 23 in `ec47d2a`, after the last
+  successful probe) replaced `alchemy state stages --stack` with
+  `alchemy state ls <stack>/<stage>`, prefixes plan summaries with log
+  fields and a `, N binding changes` suffix, and prints `Plan: no changes`
+  for a no-drift repeat; the probe now parses all three and records the plan
+  summary text in evidence. The three format-fix attempts are preserved as
+  `account-probe-2026-09-25T22-08-35-659Z.json`,
+  `...T22-13-55-748Z.json`, `...T22-17-07-605Z.json` (the third already
+  passed the runtime qualification; only the no-drift string check failed),
+  and `...T22-20-18-425Z.json`. No `wrangler tail` capture was needed — every
+  runtime request succeeded. Remaining: actual retained bytes, backup
+  count/frequency, review hours, mutation rates, isolated API RTT, and
+  observed hard-limit or overage behavior.
 - **Done when:** a bounded worksheet and qualification report identify the
   supported envelope and reject unsupported many-file assumptions. R2 deletes
   and aborts are free billed operations but still execution work. Eight visible
@@ -945,6 +983,26 @@ gate.
   it does not enable native promotion or qualify the Worker binding surface.
   The focused live probe and `pnpm verify:iteration` both passed after the
   qualification helper was added.
+- **R2 sealed-promotion probe, September 25:** the R2 S3-compatible surface
+  does **not** enforce the sealed-promotion preconditions. The new bounded live
+  probe (`pnpm verify:r2-s3-promotion`,
+  `tests/integration/r2-s3-promotion.probe.test.ts`,
+  [r2-s3-promotion-probe.json](./project/evidence/r2-s3-promotion-probe.json))
+  ran `probeS3SealedPromotion` against the dedicated qualification bucket:
+  R2's `CopyObject` does not reject an `If-None-Match: *` destination
+  overwrite or a bogus `CopySourceIfMatch` with 412, so the capability probe
+  returned false, the two promotion round-trip tests recorded a legible skip,
+  and a fourth test proved the provider factory against live R2 completes
+  readiness while honestly withholding `promote` and leaving zero scratch
+  objects. Consequence: the S3-compatible adapter against R2 never exposes
+  `promote`; every commit uses the proven verified-stream path qualified in
+  [r2-s3-probe.json](./project/evidence/r2-s3-probe.json). The verdict is
+  recorded in [r2-runtime-storage.json](./project/evidence/r2-runtime-storage.json).
+  This closes the R2 S3 copy surface question with a documented negative.
+  The Worker binding surface is qualified by the September 25 runtime-stage
+  account probe (see the T08 re-qualification note): the live Worker served
+  upload, file PUT, commit, idempotent replay and list through the R2 binding
+  adapter. Remaining open for T12: Azure.
 - **Progress, September 24:** the capability is specified before
   implementation as PUB-018 in the ledger (`implementing`): an adapter may
   install an already-staged file as an immutable blob by sealed server-side

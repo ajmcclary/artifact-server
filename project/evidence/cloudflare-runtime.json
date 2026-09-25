@@ -3,12 +3,13 @@
   "provider": "cloudflare",
   "deployment": "cloudflare",
   "qualification": "private-application-core",
-  "startedAt": "2026-08-15T23:44:42.474Z",
-  "finishedAt": "2026-08-15T23:45:22.007Z",
-  "sourceEvidenceSha256": "9c831007926b1c1e90e294922daa4843585b7aaeaa15def070125036f1b44bcd",
-  "accountIdSha256": "731f3dd0cf9d9055209a1f4d8f3c1535704097fca322a9c7cc89969736702f06",
+  "startedAt": "2026-09-25T22:20:52.317Z",
+  "finishedAt": "2026-09-25T22:22:35.066Z",
+  "sourceEvidenceSha256": "b7c4ba312fee6d3a9a67ce65f7e746226610bc5a54fda9f47f1eba2dddf5bd6d",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
   "passed": true,
   "dnsChanged": false,
+  "browserLoginProvider": "workos-authkit",
   "checks": {
     "accountMatched": true,
     "bucketEmptied": true,
@@ -37,14 +38,6 @@
     "public domain and TLS qualification",
     "WorkOS browser and MCP authorization",
     "backup and restore qualification",
-    "hosted load, quota, and abuse controls"
-  ],
-  "resolvedSinceCheckpoint": [
-    "public domain and TLS qualification",
-    "WorkOS browser and MCP authorization for Codex and Claude Code",
-    "backup and restore qualification"
-  ],
-  "remainingReleaseGates": [
     "hosted load, quota, and abuse controls"
   ]
 }

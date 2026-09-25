@@ -168,3 +168,18 @@ Cloudflare Artifacts qualification also stopped at namespace health with zero
 repositories and zero operations. Remaining account facts are actual retained
 bytes, backup count/frequency, review hours, mutation rates, isolated API RTT,
 and observed hard-limit or overage behavior.
+
+On 2026-09-25 two bounded live runs stayed inside this envelope. The R2
+sealed-promotion probe (`project/evidence/r2-s3-promotion-probe.json`) ran tens
+of Class A/B operations and a few MiB of transient bytes against the dedicated
+`artifact-server-qual-r2-20260925` bucket and returned it to zero objects; its
+verdict is that R2's S3-compatible `CopyObject` does not enforce the
+sealed-promotion preconditions, so the adapter keeps the verified-stream path
+and the per-file operation profile above is unchanged. The corrected
+runtime-stage account probe
+(`deploy/cloudflare/evidence/account-probe-2026-09-25T22-22-35-066Z.json`,
+summarized in `project/evidence/cloudflare-runtime.json`) deployed, qualified
+(health/ready/auth/upload/commit/replay/list all expected statuses), destroyed,
+and cleaned its exact `probe-` resources, refreshing the runtime qualification
+with a WorkOS browser-login provider configured; request counts were the
+bounded probe set only, far under the Free daily request cap.
