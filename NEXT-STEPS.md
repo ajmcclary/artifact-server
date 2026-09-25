@@ -894,6 +894,40 @@ gate.
   every run prefix cleaned to zero objects (recorded in
   [aws-runtime-storage.json](./project/evidence/aws-runtime-storage.json)).
   Remaining open: GCS generations, Azure, and the R2 copy/Worker surfaces.
+- **GCS qualification, September 25:** sealed rewrite promotion is
+  implemented and qualified on real GCS. The GCS blobs adapter gained
+  `promote` with the same bounded-attempt shape as S3 (max 3): each attempt
+  inspects the destination first so completed-but-unacknowledged copies and
+  same-digest races converge, seals the staged source by object metadata
+  (size plus the server-written `artifact-sha256` fingerprint, pinned to the
+  exact generation), and rewrites with the pinned `sourceGeneration` plus
+  destination `ifGenerationMatch: 0`; a 412 resolves to the concurrent
+  winner, a 404 from a vanished sealed generation re-seals, and any rejection
+  degrades to the proven verified-stream path. Generation pinning copies
+  exactly the sealed bytes, so a staged slot replaced after the seal is never
+  silently copied. A startup capability probe
+  (`src/storage/gcs-sealed-promotion-probe.ts`, memoized once per process
+  during readiness, retrying after transient failure) exposes `promote` only
+  when the provider proves both the destination zero-generation precondition
+  and source-generation pinning on rewrite; fake-gcs-server honors source
+  pinning but ignores the destination precondition on rewriteTo, so it keeps
+  the verified-stream fallback and asserts that honesty.
+  `tests/integration/gcs-promotion.test.ts` (13 tests, fake-gcs-server)
+  covers the small and resumable-scale round trips, size/digest/missing-source
+  rejection, replacement before and after the seal failing closed, same-digest
+  concurrent convergence, lost and repeatedly faulted rewrite responses
+  through loopback proxies, and the post-rejection stream fallback. The
+  bounded live probe (`pnpm verify:gcs-promotion`,
+  [gcs-promotion-probe.json](./project/evidence/gcs-promotion-probe.json))
+  passed 3/3 against the configured probe bucket with the bucket-scoped
+  service account: real GCS enforces both preconditions, an 11 MiB
+  resumable-scale sealed promote serves exact bytes and converges same-digest
+  races create-only (a raw zero-generation overwrite attempt is 412 with the
+  original bytes intact), and a replaced staged source fails closed with the
+  stream fallback intact; every run prefix cleaned to zero objects. Live cost
+  stayed within the September 23 account envelope: run-scoped objects only,
+  tens of Class A/B operations, about 35 MiB of transient bytes, all deleted.
+  Remaining open: Azure and the R2 copy/Worker surfaces.
 - **Operator decision, September 25:** proceed with the planned per-adapter
   promotion work. Qualify AWS source sealing and destination-create-only copy
   first, preserve the verified stream fallback, and treat R2's S3-compatible

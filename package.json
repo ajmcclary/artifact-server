@@ -112,6 +112,7 @@
     "verify:r2-s3": "bash scripts/run-r2-s3-probe.sh",
     "verify:deployed-runtime-resume": "bash scripts/run-deployed-runtime-resume.sh",
     "verify:gcs": "bash scripts/run-gcs-probe.sh",
+    "verify:gcs-promotion": "bash scripts/run-gcs-promotion-probe.sh",
     "verify:oci-image": "pnpm test:oci-image",
     "verify:object-storage": "pnpm test:storage-s3 && pnpm test:storage-native-cloud"
   },

@@ -10,6 +10,7 @@ import type {
   BlobWrite,
   OpenedBlob,
   OpenedBlobRange,
+  SealedStagedSource,
   StagingStore,
   StoredBlob,
 } from "../core/ports.js";
@@ -19,9 +20,12 @@ import {
   inspectCloudObjectMetadata,
   kindMetadataName,
   nodeByteStream,
+  type InstallationObjectKeyspace,
   type StoredObjectKind,
   verifyCloudObjectWriteSize,
 } from "./cloud-object-storage.js";
+import {parseGcsFailure} from "./gcs-failure.js";
+import {probeGcsSealedPromotion} from "./gcs-sealed-promotion-probe.js";
 import type {
   ObjectStorageProvider,
   ObjectStorageProviderFactory,
@@ -29,11 +33,7 @@ import type {
 import {drainVerifiedBlobWrite, verifiedBlobStream} from "./verified-file.js";
 
 const resumableUploadThresholdBytes = 10 * 1024 * 1024;
-
-const gcsFailureSchema = Schema.Struct({
-  code: Schema.optional(Schema.Number),
-});
-const parseGcsFailure = Schema.decodeUnknownOption(gcsFailureSchema);
+const maximumSealAttempts = 3;
 
 /** GCS settings using Google Application Default Credentials. */
 export interface GcsObjectStorageProviderConfig {
@@ -51,6 +51,12 @@ export interface GcsObjectStorageConfig {
   readonly bucket: Bucket;
   /** Trusted installation identity used to derive an isolated key prefix. */
   readonly installationId: string;
+  /**
+   * Sealed rewrite promotion mode. "probe" defers the decision to runtime
+   * readiness; "enabled" exposes promote unconditionally (test seam);
+   * "disabled" never exposes it.
+   */
+  readonly promotion?: "probe" | "enabled" | "disabled";
 }
 
 /** Immutable and staging adapters backed by one installation-scoped GCS bucket. */
@@ -80,23 +86,40 @@ export function createGcsObjectStorageAdapters(
 ): GcsObjectStorageAdapters {
   const keyspace = createInstallationObjectKeyspace(config.installationId);
   const objects = new GcsObjects(config.bucket);
+  return buildGcsObjectStorageAdapters(
+    objects,
+    keyspace,
+    config.promotion ?? "probe",
+  );
+}
+
+function buildGcsObjectStorageAdapters(
+  objects: GcsObjects,
+  keyspace: InstallationObjectKeyspace,
+  promotion: "probe" | "enabled" | "disabled" = "probe",
+): GcsObjectStorageAdapters {
+  const blobs: BlobStore = {
+    inspect: (digest) => objects.inspect(keyspace.blob(digest), digest, "blob"),
+    open: (digest) => objects.open(keyspace.blob(digest), digest, "blob"),
+    openRange: (digest, range) => objects.openRange(
+      keyspace.blob(digest),
+      digest,
+      "blob",
+      range,
+    ),
+    put: (write) => objects.put(
+      keyspace.blob(write.sha256),
+      write,
+      write.sha256,
+      "blob",
+    ),
+  };
+  if (promotion === "enabled") {
+    blobs.promote = (source) => objects.promote(source, keyspace);
+  }
+
   return {
-    blobs: {
-      inspect: (digest) => objects.inspect(keyspace.blob(digest), digest, "blob"),
-      open: (digest) => objects.open(keyspace.blob(digest), digest, "blob"),
-      openRange: (digest, range) => objects.openRange(
-        keyspace.blob(digest),
-        digest,
-        "blob",
-        range,
-      ),
-      put: (write) => objects.put(
-        keyspace.blob(write.sha256),
-        write,
-        write.sha256,
-        "blob",
-      ),
-    },
+    blobs,
     staging: {
       remove: (uploadId, storageToken) => objects.remove(
         keyspace.staging(uploadId, storageToken),
@@ -127,12 +150,33 @@ function createGcsObjectStorageProvider(
     ? {projectId: config.projectId}
     : {apiEndpoint: config.apiEndpoint, projectId: config.projectId});
   const bucket = storage.bucket(config.bucket);
-  const adapters = createGcsObjectStorageAdapters({bucket, installationId});
+  const keyspace = createInstallationObjectKeyspace(installationId);
+  const objects = new GcsObjects(bucket);
+  const adapters = buildGcsObjectStorageAdapters(objects, keyspace, "probe");
+  // The capability probe writes, copies and deletes scratch objects, so a
+  // settled result is memoized per process rather than re-run on every
+  // readiness poll. A rejected probe is retried on the next poll and only
+  // withholds promote — the verified-stream fallback keeps serving.
+  let promotionProbe: Promise<boolean> | undefined;
+  const probePromotion = async () => {
+    promotionProbe ??= probeGcsSealedPromotion(bucket, installationId);
+    try {
+      return await promotionProbe;
+    } catch {
+      promotionProbe = undefined;
+      return false;
+    }
+  };
   return {
     ...adapters,
     kind: "gcs",
     close: () => Promise.resolve(),
-    readiness: (signal) => abortable(bucket.getMetadata(), signal).then(() => undefined),
+    readiness: async (signal) => {
+      await abortable(bucket.getMetadata(), signal);
+      if (await probePromotion()) {
+        adapters.blobs.promote = (source) => objects.promote(source, keyspace);
+      }
+    },
   };
 }
 
@@ -256,6 +300,107 @@ class GcsObjects {
       if (Option.isNone(failure) || failure.value.code !== 404) throw error;
       return null;
     }
+  }
+
+  async promote(
+    source: SealedStagedSource,
+    keyspace: InstallationObjectKeyspace,
+  ): Promise<StoredBlob> {
+    const destKey = keyspace.blob(source.sha256);
+    for (let attempt = 0; attempt < maximumSealAttempts; attempt += 1) {
+      // Each iteration re-inspects the destination first so a completed but
+      // unacknowledged copy converges instead of duplicating.
+      // eslint-disable-next-line no-await-in-loop
+      const existing = await this.#inspectIfPresent(destKey, source.sha256);
+      if (existing !== null) {
+        return verifyCloudObjectWriteSize(
+          existing,
+          source.size,
+          "GCS",
+          "blob",
+        );
+      }
+
+      const sourceKey = keyspace.staging(
+        source.uploadId,
+        source.storageToken,
+      );
+      let generation: number | string;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const [metadata] = await this.#bucket.file(sourceKey).getMetadata();
+        if (Number(metadata.size) !== source.size) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} has an unexpected size.`,
+          );
+        }
+        if (stringMetadata(metadata.metadata)?.[digestMetadataName] !== source.sha256) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} failed fingerprint verification.`,
+          );
+        }
+        if (metadata.generation === undefined) {
+          throw new Error("GCS returned no generation for the staged source.");
+        }
+        generation = metadata.generation;
+      } catch (error) {
+        const failure = parseGcsFailure(error);
+        if (Option.isSome(failure) && failure.value.code === 404) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} is missing.`,
+            {cause: error},
+          );
+        }
+        throw error;
+      }
+
+      try {
+        // The pinned source generation copies exactly the sealed bytes: a
+        // staged slot replaced after the seal either rewrites the old
+        // generation or fails 404 so the next attempt re-seals. The
+        // zero-generation destination precondition keeps the copy create-only.
+        // eslint-disable-next-line no-await-in-loop
+        await this.#bucket.file(sourceKey, {generation}).copy(
+          this.#bucket.file(destKey),
+          {
+            contentType: "application/octet-stream",
+            metadata: {
+              [digestMetadataName]: source.sha256,
+              [kindMetadataName]: "blob",
+            },
+            preconditionOpts: {ifGenerationMatch: 0},
+          },
+        );
+      } catch (error) {
+        const failure = parseGcsFailure(error);
+        const status = Option.isSome(failure) ? failure.value.code : undefined;
+        if (status === 412) {
+          // eslint-disable-next-line no-await-in-loop
+          const winner = await this.#inspectIfPresent(destKey, source.sha256);
+          if (winner !== null) {
+            return verifyCloudObjectWriteSize(
+              winner,
+              source.size,
+              "GCS",
+              "blob",
+            );
+          }
+        }
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const verified = await this.inspect(destKey, source.sha256, "blob");
+      return verifyCloudObjectWriteSize(
+        verified,
+        source.size,
+        "GCS",
+        "blob",
+      );
+    }
+    throw new Error(
+      `The staged source for blob ${source.sha256} could not be promoted after ${maximumSealAttempts} attempts.`,
+    );
   }
 }
 
