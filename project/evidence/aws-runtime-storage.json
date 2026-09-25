@@ -26,7 +26,11 @@
     "createOnlyFirstWrite": "pass",
     "createOnlyCollisionRejected": "pass",
     "exactReadback": "pass",
-    "cleanup": "pass"
+    "cleanup": "pass",
+    "sealedPromotionPreconditions": "pass",
+    "sealedPromotionRoundTrip": "pass",
+    "sealedPromotionCreateOnly": "pass",
+    "sealedPromotionSourceReplacement": "pass"
   },
   "remaining": [
     "configure separate broader infrastructure permissions before running the Pulumi AWS deployment suite"
@@ -36,6 +40,11 @@
       "completedAt": "2026-09-23",
       "evidence": "project/evidence/deployed-runtime-resume.json",
       "result": "crash mid-publication resume and lost-commit-response replay passed against Neon plus this bucket"
+    },
+    "sealedPromotion": {
+      "completedAt": "2026-09-25",
+      "evidence": "project/evidence/aws-s3-promotion-probe.json",
+      "result": "CopyObject CopySourceIfMatch and destination If-None-Match:* are enforced; multipart sealed promote serves exact bytes, converges same-digest races create-only, and a replaced staged source fails closed with the verified-stream fallback intact; run prefixes cleaned to zero objects"
     }
   }
 }

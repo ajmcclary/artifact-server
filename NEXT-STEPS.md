@@ -865,6 +865,35 @@ gate.
 
 ### T12 Qualify sealed-source promotion per adapter
 
+- **AWS S3 qualification, September 25:** sealed CopyObject promotion is
+  implemented and qualified on real AWS S3. The S3 blobs adapter gained
+  `promote`: each bounded attempt (max 3) inspects the destination first so
+  completed-but-unacknowledged copies and same-digest races converge, seals
+  the staged source by HeadObject (size plus the server-written
+  `artifact-sha256` fingerprint metadata, pinned to the exact ETag), and
+  copies with `CopySourceIfMatch` plus destination `If-None-Match: *`; a 412
+  resolves to the concurrent winner or re-seals a replaced source, and any
+  rejection degrades to the proven verified-stream path. Because the
+  destination condition is not enforceable on every S3-compatible provider
+  (the pinned MinIO/Silo image ignores it on CopyObject), a startup
+  capability probe (`src/storage/s3-sealed-promotion-probe.ts`, memoized once
+  per process during readiness, retrying after transient failure) exposes
+  `promote` only when the provider proves both preconditions; MinIO therefore
+  keeps the verified-stream fallback and asserts that honesty.
+  `tests/integration/s3-promotion.test.ts` (12 tests, MinIO) covers the
+  single-part and multipart round trips, size/digest/missing-source
+  rejection, source replacement failing closed, same-digest concurrent
+  convergence, a lost CopyObject response through a socket-destroying
+  loopback proxy, and the post-rejection stream fallback. The bounded live
+  probe (`pnpm verify:aws-s3-promotion`,
+  [aws-s3-promotion-probe.json](./project/evidence/aws-s3-promotion-probe.json))
+  passed 3/3 against the existing runtime bucket: AWS S3 enforces both
+  preconditions, a 9 MiB multipart sealed promote serves exact bytes and
+  converges same-digest races create-only (a raw overwrite attempt is 412
+  with the original bytes intact), and a replaced staged source fails closed;
+  every run prefix cleaned to zero objects (recorded in
+  [aws-runtime-storage.json](./project/evidence/aws-runtime-storage.json)).
+  Remaining open: GCS generations, Azure, and the R2 copy/Worker surfaces.
 - **Operator decision, September 25:** proceed with the planned per-adapter
   promotion work. Qualify AWS source sealing and destination-create-only copy
   first, preserve the verified stream fallback, and treat R2's S3-compatible
@@ -923,9 +952,10 @@ gate.
   regular files. With that fix the full gate
   (`BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration`) and the
   external-storage performance gate pass, and PUB-018 is promoted to
-  `behavior_verified` with this run's local evidence. Remaining open:
-  per-adapter native copy qualification (the S3 CopyObject destination
-  create-only question is still unproven) and the R2/Worker surface.
+  `behavior_verified` with this run's local evidence. The S3 CopyObject
+  destination create-only question is now proven on AWS (see the September 25
+  qualification above); remaining open: GCS/Azure native copy qualification
+  and the R2/Worker surface.
 - **Do:** add a product-named promotion capability only after source sealing,
   destination create-only installation, digest verification and retry semantics
   are specified. Qualify AWS source/version and destination conditions, GCS

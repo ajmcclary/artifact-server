@@ -108,6 +108,7 @@
     "verify:helm-static": "pnpm test:helm-static",
     "verify:helm": "pnpm test:helm-static && pnpm test:helm",
     "verify:aws-s3": "bash scripts/run-aws-s3-probe.sh",
+    "verify:aws-s3-promotion": "bash scripts/run-aws-s3-promotion-probe.sh",
     "verify:r2-s3": "bash scripts/run-r2-s3-probe.sh",
     "verify:deployed-runtime-resume": "bash scripts/run-deployed-runtime-resume.sh",
     "verify:gcs": "bash scripts/run-gcs-probe.sh",

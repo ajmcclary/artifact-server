@@ -1,7 +1,8 @@
-import { Readable } from "node:stream";
+import {Readable} from "node:stream";
 
 import {
   AbortMultipartUploadCommand,
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -11,8 +12,8 @@ import {
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
-import { Upload } from "@aws-sdk/lib-storage";
-import { Option, Redacted, Schema } from "effect";
+import {Upload} from "@aws-sdk/lib-storage";
+import {Option, Redacted} from "effect";
 
 import type {
   BlobByteRange,
@@ -20,6 +21,7 @@ import type {
   BlobWrite,
   OpenedBlob,
   OpenedBlobRange,
+  SealedStagedSource,
   StagingStore,
   StoredBlob,
 } from "../core/ports.js";
@@ -33,18 +35,15 @@ import {
   inspectCloudObjectMetadata,
   kindMetadataName,
   requireCloudObjectBody,
+  type InstallationObjectKeyspace,
   type StoredObjectKind,
   verifyCloudObjectWriteSize,
 } from "./cloud-object-storage.js";
-import { drainVerifiedBlobWrite, verifiedBlobStream } from "./verified-file.js";
+import {parseS3Failure} from "./s3-failure.js";
+import {probeS3SealedPromotion} from "./s3-sealed-promotion-probe.js";
+import {drainVerifiedBlobWrite, verifiedBlobStream} from "./verified-file.js";
 const multipartPartBytes = 8 * 1024 * 1024;
-
-const s3FailureSchema = Schema.Struct({
-  $metadata: Schema.optional(Schema.Struct({
-    httpStatusCode: Schema.optional(Schema.Number),
-  })),
-});
-const parseS3Failure = Schema.decodeUnknownOption(s3FailureSchema);
+const maximumSealAttempts = 3;
 
 interface S3ObjectStorageProviderConfigBase {
   readonly bucket: string;
@@ -73,6 +72,12 @@ export interface S3ObjectStorageConfig {
   readonly client: S3Client;
   /** Trusted installation identity used to derive an isolated key prefix. */
   readonly installationId: string;
+  /**
+   * Sealed CopyObject promotion mode. "probe" defers the decision to runtime
+   * readiness; "enabled" exposes promote unconditionally (test seam); "disabled"
+   * never exposes it.
+   */
+  readonly promotion?: "probe" | "enabled" | "disabled";
 }
 
 /** Immutable and staging adapters backed by one installation-scoped bucket. */
@@ -119,11 +124,27 @@ function createS3ObjectStorageProvider(
   installationId: string,
 ): ObjectStorageProvider {
   const client = new S3Client(createS3ClientConfig(config));
-  const adapters = createS3ObjectStorageAdapters({
-    bucket: config.bucket,
-    client,
-    installationId,
-  });
+  const keyspace = createInstallationObjectKeyspace(installationId);
+  const objects = new S3Objects(client, config.bucket);
+  const adapters = buildS3ObjectStorageAdapters(objects, keyspace, "probe");
+  // The capability probe writes, copies and deletes scratch objects, so a
+  // settled result is memoized per process rather than re-run on every
+  // readiness poll. A rejected probe is retried on the next poll and only
+  // withholds promote — the verified-stream fallback keeps serving.
+  let promotionProbe: Promise<boolean> | undefined;
+  const probePromotion = async () => {
+    promotionProbe ??= probeS3SealedPromotion(
+      client,
+      config.bucket,
+      installationId,
+    );
+    try {
+      return await promotionProbe;
+    } catch {
+      promotionProbe = undefined;
+      return false;
+    }
+  };
   return {
     ...adapters,
     kind: "s3",
@@ -136,6 +157,9 @@ function createS3ObjectStorageProvider(
         new HeadBucketCommand({Bucket: config.bucket}),
         {abortSignal: signal},
       );
+      if (await probePromotion()) {
+        adapters.blobs.promote = (source) => objects.promote(source, keyspace);
+      }
     },
   };
 }
@@ -149,32 +173,48 @@ export function createS3ObjectStorageAdapters(
 ): S3ObjectStorageAdapters {
   const keyspace = createInstallationObjectKeyspace(config.installationId);
   const objects = new S3Objects(config.client, config.bucket);
+  return buildS3ObjectStorageAdapters(
+    objects,
+    keyspace,
+    config.promotion ?? "probe",
+  );
+}
+
+function buildS3ObjectStorageAdapters(
+  objects: S3Objects,
+  keyspace: InstallationObjectKeyspace,
+  promotion: "probe" | "enabled" | "disabled" = "probe",
+): S3ObjectStorageAdapters {
+  const blobs: BlobStore = {
+    inspect: (digest) => objects.inspect(
+      keyspace.blob(digest),
+      digest,
+      "blob",
+    ),
+    open: (digest) => objects.open(
+      keyspace.blob(digest),
+      digest,
+      "blob",
+    ),
+    openRange: (digest, range) => objects.openRange(
+      keyspace.blob(digest),
+      digest,
+      "blob",
+      range,
+    ),
+    put: (write) => objects.put(
+      keyspace.blob(write.sha256),
+      write,
+      write.sha256,
+      "blob",
+    ),
+  };
+  if (promotion === "enabled") {
+    blobs.promote = (source) => objects.promote(source, keyspace);
+  }
 
   return {
-    blobs: {
-      inspect: (digest) => objects.inspect(
-        keyspace.blob(digest),
-        digest,
-        "blob",
-      ),
-      open: (digest) => objects.open(
-        keyspace.blob(digest),
-        digest,
-        "blob",
-      ),
-      openRange: (digest, range) => objects.openRange(
-        keyspace.blob(digest),
-        digest,
-        "blob",
-        range,
-      ),
-      put: (write) => objects.put(
-        keyspace.blob(write.sha256),
-        write,
-        write.sha256,
-        "blob",
-      ),
-    },
+    blobs,
     staging: {
       remove: (uploadId, storageToken) => objects.remove(
         keyspace.staging(uploadId, storageToken),
@@ -418,6 +458,113 @@ class S3Objects {
     } finally {
       write.signal?.removeEventListener("abort", abort);
     }
+  }
+
+  async promote(
+    source: SealedStagedSource,
+    keyspace: InstallationObjectKeyspace,
+  ): Promise<StoredBlob> {
+    const destKey = keyspace.blob(source.sha256);
+    for (let attempt = 0; attempt < maximumSealAttempts; attempt += 1) {
+      // Each iteration re-inspects the destination first so a completed but
+      // unacknowledged copy converges instead of duplicating.
+      // eslint-disable-next-line no-await-in-loop
+      const existing = await this.#inspectIfPresent(destKey, source.sha256);
+      if (existing !== null) {
+        return verifyCloudObjectWriteSize(
+          existing,
+          source.size,
+          "S3",
+          "blob",
+        );
+      }
+
+      const sourceKey = keyspace.staging(
+        source.uploadId,
+        source.storageToken,
+      );
+      let etag: string;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const head = await this.#client.send(new HeadObjectCommand({
+          Bucket: this.#bucket,
+          Key: sourceKey,
+        }));
+        if (head.ContentLength !== source.size) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} has an unexpected size.`,
+          );
+        }
+        if (head.Metadata?.[digestMetadataName] !== source.sha256) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} failed fingerprint verification.`,
+          );
+        }
+        if (head.ETag === undefined) {
+          throw new Error("S3 returned no ETag for the staged source.");
+        }
+        etag = head.ETag;
+      } catch (error) {
+        const failure = parseS3Failure(error);
+        const missing = Option.isSome(failure) &&
+          failure.value.$metadata?.httpStatusCode === 404;
+        if (missing) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} is missing.`,
+            {cause: error},
+          );
+        }
+        throw error;
+      }
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await this.#client.send(new CopyObjectCommand({
+          Bucket: this.#bucket,
+          Key: destKey,
+          CopySource: `/${this.#bucket}/${encodeURIComponent(sourceKey)}`,
+          CopySourceIfMatch: etag,
+          IfNoneMatch: "*",
+          MetadataDirective: "REPLACE",
+          Metadata: {
+            [digestMetadataName]: source.sha256,
+            [kindMetadataName]: "blob",
+          },
+          ContentType: "application/octet-stream",
+        }));
+      } catch (error) {
+        const failure = parseS3Failure(error);
+        const status = Option.isSome(failure)
+          ? failure.value.$metadata?.httpStatusCode
+          : undefined;
+        if (status === 412) {
+          // eslint-disable-next-line no-await-in-loop
+          const winner = await this.#inspectIfPresent(destKey, source.sha256);
+          if (winner !== null) {
+            return verifyCloudObjectWriteSize(
+              winner,
+              source.size,
+              "S3",
+              "blob",
+            );
+          }
+          continue;
+        }
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const verified = await this.inspect(destKey, source.sha256, "blob");
+      return verifyCloudObjectWriteSize(
+        verified,
+        source.size,
+        "S3",
+        "blob",
+      );
+    }
+    throw new Error(
+      `The staged source for blob ${source.sha256} could not be promoted after ${maximumSealAttempts} attempts.`,
+    );
   }
 }
 

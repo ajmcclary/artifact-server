@@ -826,7 +826,7 @@ requirements:
       failure: {id: PUB-018-F, description: "A size- or digest-mismatched staged source fails closed without creating or replacing blob bytes or a version, and an adapter without promotion commits the exact same bytes through the verified stream path."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Only the local deployment has passing promotion evidence; cloud adapters (S3/GCS/Azure/R2) keep the verified stream fallback until each native copy primitive is qualified per NEXT-STEPS.md T12, so full verification needs a qualified promote per cloud adapter or a recorded decision that the stream fallback is the permanent cloud path.
+    proof_gap: The local deployment has passing promotion evidence, and AWS S3 sealed CopyObject promotion is qualified by the MinIO suite (tests/integration/s3-promotion.test.ts, recorded in project/evidence/s3-minio.json) plus the bounded live probe recorded at project/evidence/aws-s3-promotion-probe.json (real AWS S3 enforces CopySourceIfMatch and destination If-None-Match:*; a multipart sealed promote serves exact bytes, converges same-digest races create-only, and a replaced staged source fails closed with the verified-stream fallback intact; see also project/evidence/aws-runtime-storage.json). GCS/Azure/R2 keep the verified stream fallback until each native copy primitive is qualified per NEXT-STEPS.md T12, so full verification needs a qualified promote per remaining cloud adapter or a recorded decision that the stream fallback is the permanent path there.
     depends_on: [PUB-003, PUB-004]
     evidence:
       - deployment: local
