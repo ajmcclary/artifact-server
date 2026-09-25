@@ -45,7 +45,7 @@ artifactserver_compose run --rm --no-deps --quiet-pull artifact-server \
 
 artifactserver_compose run --rm --no-deps --quiet-pull \
   --entrypoint /bin/tar artifact-server \
-  -C /var/lib/artifact-server -cf - data > "$artifactserver_archive"
+  --hard-dereference -C /var/lib/artifact-server -cf - data > "$artifactserver_archive"
 
 artifactserver_archive_digest=$(artifactserver_sha256 "$artifactserver_archive")
 printf '%s  data.tar\n' "$artifactserver_archive_digest" > "$artifactserver_checksum"
