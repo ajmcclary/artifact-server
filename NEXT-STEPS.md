@@ -211,6 +211,13 @@ gate.
 
 ### T03 Repair Git order, reconciliation bounds and worker ownership
 
+- **Operator decision, September 25:** request Cloudflare Artifacts closed-beta
+  access for the intended account. The ordinary Cloudflare Worker/D1/R2 live
+  qualification is approved independently of that beta, and R2 is to remain
+  available on the account now. Do not run or claim the Artifacts qualification
+  until Cloudflare grants the entitlement and the dedicated namespace can be
+  verified. Treat this as approval for the bounded qualification shape, not for
+  an unbounded load or quota-pressure run.
 - **Starting evidence:** the [retained probe](./project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json)
   claimed version 8 first. SQLite/Postgres enablement inserts all missing jobs
   inside one foreground transaction; D1 has an unbounded insert-select. Claims
@@ -858,6 +865,23 @@ gate.
 
 ### T12 Qualify sealed-source promotion per adapter
 
+- **Operator decision, September 25:** proceed with the planned per-adapter
+  promotion work. Qualify AWS source sealing and destination-create-only copy
+  first, preserve the verified stream fallback, and treat R2's S3-compatible
+  copy extension and the Worker binding as separate provider surfaces.
+- **R2 S3-compatible progress, September 25:** the intended Cloudflare account
+  now has a dedicated `artifact-server-qual-r2-20260925` Standard bucket and a
+  30-day user token restricted to Object Read & Write on that bucket. The live
+  adapter probe passed multipart verified upload/readback, concurrent
+  same-digest create-only convergence, staged-object readback, false-size
+  rejection and exact run-prefix cleanup; the retained bucket returned to zero
+  objects and zero bytes. The redacted provider record is
+  [r2-runtime-storage.json](./project/evidence/r2-runtime-storage.json), and the
+  test result is [r2-s3-probe.json](./project/evidence/r2-s3-probe.json). This
+  qualifies the existing verified-stream path through R2's S3-compatible API;
+  it does not enable native promotion or qualify the Worker binding surface.
+  The focused live probe and `pnpm verify:iteration` both passed after the
+  qualification helper was added.
 - **Progress, September 24:** the capability is specified before
   implementation as PUB-018 in the ledger (`implementing`): an adapter may
   install an already-staged file as an immutable blob by sealed server-side
@@ -1008,7 +1032,40 @@ gate.
 
 ### T16 Qualify identity lifecycle and verify entitlements
 
-- **Setup progress, September 23:** the WorkOS client and API key are stored
+- **Operator decision, September 25:** complete the WorkOS entitlement and
+  lifecycle setup collaboratively in the Codex browser. Keep API keys out of
+  chat and the repository; pause for the operator at sign-in, secret-entry, or
+  externally consequential confirmation points.
+- **Operator scope correction, September 25:** use the existing
+  `Backend.app's Project` Production environment, its default application and
+  the already deployed `artifacts.backend.app` server. Do not create another
+  WorkOS project, application, client or server. The ignored root `.env`
+  contains the matching API key, client ID and issuer.
+- **Production inventory, September 25:** the `.env` client ID matches the sole
+  existing application, whose configured redirect is
+  `https://artifacts.backend.app/auth/callback`. The issuer discovery document
+  returns authorization-code and refresh-token support but does not advertise
+  a PKCE method. The existing Artifact Server nevertheless starts WorkOS's
+  explicit S256 PKCE flow; a real passkey sign-in completed its code-verifier
+  exchange, issued an administrator application session and rendered the live
+  Review catalog. A read-only WorkOS API call passed, the existing server
+  returned health/readiness 200, and its MCP protected-resource metadata names
+  the exact resource and configured issuer. Audit Logs is available with no
+  custom event definitions. Agent Auth is a separate gated product showing
+  `Request access`; it is not required for the existing integration and was
+  left untouched. The redacted record is
+  [workos-production-configuration.json](./project/evidence/workos-production-configuration.json).
+- **Production Codex MCP progress, September 25:** WorkOS Connect now has CIMD
+  enabled while DCR remains disabled, and the exact
+  `https://artifacts.backend.app/mcp` resource indicator is configured as the
+  default. Codex CLI 0.155.1 completed S256 PKCE through its stable CIMD
+  identity and called `artifact_capabilities` once against the existing server;
+  the tool returned `deployment.mode: remote` and the current structured
+  capability contract. A local `codex mcp logout` removed the cached grant and
+  an immediate CIMD login restored it successfully, proving client logout and
+  reconnect without changing WorkOS resources. No WorkOS project, application
+  or server was created.
+- **Historical staging setup progress, September 23:** the WorkOS client and API key are stored
   outside the repository, and the configured AuthKit issuer's discovery document
   was checked for authorization-code flow, refresh tokens and S256 PKCE. The
   current environment reports no configured SSO/OIDC connection, and MCP/Audit
@@ -1020,12 +1077,12 @@ gate.
   and the first named-client/deployment matrix is recorded at
   [identity-qualification-matrix.json](./project/evidence/identity-qualification-matrix.json):
   pass/fail/untested per provider and client with exact versions, including the
-  dated August 16 WorkOS rows. The MCP/Audit entitlement inventory is still
-  open — the operator-held WorkOS API key from the September 23 setup was not
-  discoverable in this session (environment, shell profiles, `~/.config` and
-  macOS Keychain checked), and that gap is recorded in the matrix rather than
-  worked around. Key rotation, logout, cross-replica deactivation, and
-  re-qualification of the dated client rows at current versions remain open.
+  dated August 16 WorkOS rows. The September 25 inventory adds the selected
+  existing Production environment and resolves the credential/Audit-access
+  discovery gap without creating resources. Key rotation, logout,
+  provider-side revocation, server API-key rotation, cross-replica deactivation
+  and re-qualification of the other dated client rows at current versions
+  remain open.
 - **Do:** qualify WorkOS and configured OIDC discovery, exact-resource audience,
   PKCE/registration, key rotation, refresh, provider revocation, logout and
   cross-replica deactivation. Record actual production MCP/Audit entitlements
@@ -1042,6 +1099,10 @@ gate.
 
 ### T17 Complete live bridge qualification without changing citizenship
 
+- **Operator decision, September 25:** the proposed Pi completion path is
+  accepted. Pi 0.84.4 is now installed in the current environment, so the prior
+  CLI-availability blocker is cleared; extend and run the offline live-host
+  fault cases without adding a provider credential or paid dependency.
 - **Structural progress, September 24:** the host-agnostic citizenship cases
   that were previously unproven without live hosts now have structural tests
   driving the packaged bridge core against a real Artifact Server with a

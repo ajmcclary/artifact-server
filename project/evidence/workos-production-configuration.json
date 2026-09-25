@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "provider": "workos-authkit",
+  "qualification": "existing-production-environment-read-only-inventory",
+  "observedAt": "2026-09-25",
+  "project": "Backend.app's Project",
+  "environment": {
+    "name": "Production",
+    "id": "environment_01KVGF61HFXGQAHJK6HMHQV7ZZ"
+  },
+  "application": {
+    "name": "gmail.com's Application",
+    "id": "app_01KVGF620NNEED7FE6855TGNWC",
+    "clientIdSha256": "30d8bd45dbbb699c78d0e7b343a465221e424cacef7f9b6cb562b080916e59d8",
+    "redirectUri": "https://artifacts.backend.app/auth/callback"
+  },
+  "credential": {
+    "apiKeySha256": "589e43755e028c4c9ceff6db192e9026b92480f1d020c35d7167e353bb9f059e",
+    "issuerSha256": "157e933cee62886469f403a80d68ce2f46283ddcc532cb8de2aa981c44cfb642",
+    "storedInIgnoredEnvFile": true,
+    "valueRecorded": false
+  },
+  "checks": {
+    "dashboardClientMatchesEnv": "pass",
+    "issuerDiscoveryHttpStatus": 200,
+    "issuerMatchesDiscovery": "pass",
+    "authorizationCodeAdvertised": true,
+    "refreshTokenAdvertised": true,
+    "oidcPkceS256Advertised": false,
+    "oauthPkceS256Advertised": true,
+    "oauthCimdAdvertised": true,
+    "oauthDcrAdvertised": false,
+    "pkceS256Behavior": "pass through the existing Artifact Server WorkOS SDK helper",
+    "browserPasskeySignIn": "pass",
+    "applicationSessionIssued": true,
+    "sessionAuthenticationMethod": "session",
+    "sessionMembershipRole": "administrator",
+    "reviewCatalogRendered": true,
+    "readOnlyApiKeyRequestHttpStatus": 200,
+    "runtimeHealthHttpStatus": 200,
+    "runtimeReadyHttpStatus": 200,
+    "mcpProtectedResourceMetadataHttpStatus": 200,
+    "mcpResourceExact": "pass",
+    "mcpAuthorizationServerMatchesIssuer": "pass",
+    "auditLogsConfigurationAvailable": true,
+    "customAuditEventsDefined": 0,
+    "workosMcpOnboardingSurfaceAvailable": true,
+    "agentAuthAccess": "not entitled; not requested",
+    "mcpAuthCimdEnabled": true,
+    "mcpAuthDcrEnabled": false,
+    "mcpResourceIndicator": "https://artifacts.backend.app/mcp",
+    "mcpResourceIndicatorDefault": true,
+    "codexCliVersion": "0.155.1",
+    "codexOauthLogin": "pass",
+    "codexOauthCallbackBrowser": "Safari",
+    "codexOauthRegistration": "CIMD",
+    "codexArtifactCapabilitiesToolCall": "pass",
+    "codexObservedDeploymentMode": "remote",
+    "codexLocalLogout": "pass",
+    "codexCimdReconnect": "pass",
+    "codexExplicitResourceOverrideRemoved": true
+  },
+  "existingRuntime": {
+    "origin": "https://artifacts.backend.app",
+    "mcpResource": "https://artifacts.backend.app/mcp"
+  },
+  "mutations": {
+    "projectsCreated": 0,
+    "applicationsCreated": 0,
+    "serversCreated": 0,
+    "credentialsRotated": 0,
+    "auditEventsCreated": 0,
+    "agentAuthAccessRequested": false,
+    "cimdEnabled": true,
+    "dcrEnabled": false,
+    "resourceIndicatorsConfigured": 1
+  },
+  "remaining": [
+    "server API-key rotation, provider revocation and cross-replica deactivation under an explicitly approved non-disruptive plan"
+  ]
+}

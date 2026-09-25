@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "provider": "cloudflare-r2",
+  "qualification": "s3-compatible-verified-stream-adapter",
+  "observedAt": "2026-09-25",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+  "endpointSha256": "46c205a5cc7ae5f235570b1846ac24a47968f51d9e852d8fd90cdb4a74e46dde",
+  "bucket": "artifact-server-qual-r2-20260925",
+  "location": "ENAM",
+  "storageClass": "Standard",
+  "credential": {
+    "kind": "user-api-token",
+    "name": "artifact-server-r2-qualification",
+    "accessKeyIdSha256": "0ee9750a22160deb4d0675f5ce7efd846f54c26d33547cab601c20ed1e2f8b4a",
+    "permission": "Object Read & Write",
+    "scope": "exact qualification bucket",
+    "activeFrom": "2026-09-25",
+    "expiresOn": "2026-10-25",
+    "storedOutsideRepository": true,
+    "valueRecorded": false
+  },
+  "run": {
+    "startedAt": "2026-09-25T14:34:00.008Z",
+    "finishedAt": "2026-09-25T14:34:34.179Z",
+    "evidence": "project/evidence/r2-s3-probe.json",
+    "checks": {
+      "multipartVerifiedUploadAndReadback": "pass",
+      "concurrentCreateOnlyConvergence": "pass",
+      "stagedObjectReadback": "pass",
+      "falseSizeRejected": "pass",
+      "exactRunPrefixCleanup": "pass"
+    }
+  },
+  "postRun": {
+    "objectCount": 0,
+    "bucketSizeBytes": 0,
+    "bucketRetained": true
+  },
+  "boundary": {
+    "proves": "Artifact Server's S3-compatible verified-stream adapter against live Cloudflare R2",
+    "doesNotProve": [
+      "native server-side promotion",
+      "R2 beta CopyObject destination conditions under hostile races",
+      "the Cloudflare Worker R2 binding surface",
+      "production latency or capacity"
+    ]
+  }
+}

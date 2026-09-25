@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-24",
+  "recordedAt": "2026-09-25",
   "commit": "443ac13",
   "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions.",
   "providers": [
@@ -15,7 +15,7 @@
         "unadmittedIdentityRefusedMcp": "pass (2026-09-24)",
         "keyRotation": "untested",
         "providerRevocation": "untested",
-        "logout": "untested",
+        "logout": "pass (2026-09-25): codex mcp logout removed the local grant and CIMD login restored OAuth successfully",
         "crossReplicaDeactivation": "untested"
       }
     },
@@ -36,13 +36,36 @@
         "mcpPlanEntitlement": "untested: not inventoried; the operator-held WorkOS API key from the September 23 setup is not discoverable in the 2026-09-24 session (checked process environment, shell rc files, ~/.config, and macOS Keychain)",
         "auditPlanEntitlement": "untested: not inventoried; same credential gap"
       }
+    },
+    {
+      "name": "WorkOS AuthKit (Backend.app Production environment)",
+      "version": "environment_01KVGF61HFXGQAHJK6HMHQV7ZZ, application app_01KVGF620NNEED7FE6855TGNWC",
+      "scope": "current operator-selected environment; read-only inventory against the existing application and deployed artifacts.backend.app server; no WorkOS or server resource was created",
+      "evidence": "project/evidence/workos-production-configuration.json",
+      "results": {
+        "clientConfiguration": "pass (2026-09-25): ignored .env client ID matches the sole existing default application",
+        "discoveryDocument": "pass (2026-09-25): exact issuer, authorization-code flow and refresh-token grant",
+        "pkceS256": "pass (2026-09-25 behavior): discovery omits code_challenge_methods_supported, but the existing Artifact Server WorkOS S256 helper completed a real passkey authorization-code and code-verifier exchange",
+        "serverApiKey": "pass (2026-09-25): read-only user-list request returned HTTP 200; no response data retained",
+        "redirectUri": "pass: https://artifacts.backend.app/auth/callback is already configured",
+        "runtimeReadiness": "pass: existing /health and /ready returned HTTP 200",
+        "resourceMetadata": "pass: /mcp protected-resource metadata names the exact resource and configured issuer",
+        "browserPasskeySignIn": "pass: existing application issued an Artifact Server administrator session and rendered the live Review catalog",
+        "auditPlanEntitlement": "pass: Audit Logs configuration is available; no custom events are defined",
+        "mcpPlanEntitlement": "pass (2026-09-25): CIMD enabled, DCR disabled, exact resource indicator configured, and Codex CLI 0.155.1 completed OAuth plus artifact_capabilities",
+        "agentAuth": "not selected: the separate gated Agent Auth product shows Request access and was left untouched",
+        "keyRotation": "untested: no Production credential mutation authorized",
+        "providerRevocation": "untested: no Production session or application mutation authorized",
+        "logout": "untested",
+        "crossReplicaDeactivation": "untested"
+      }
     }
   ],
   "clients": [
     {
       "name": "Codex CLI",
-      "version": "0.147.0",
-      "status": "pass (2026-08-16, dated): DCR registration, browser approval, artifact_capabilities tool call, refresh, server-side revoke, reconnect"
+      "version": "0.155.1 current; 0.147.0 historical",
+      "status": "pass (2026-09-25): existing Backend.app Production environment, CIMD, S256 PKCE, exact resource audience, browser consent, and artifact_capabilities tool call; pass (2026-08-16, dated): DCR, refresh, server-side revoke and reconnect"
     },
     {
       "name": "Claude Code",
@@ -70,8 +93,7 @@
     "thirtySecondCacheCeiling": "covered by the conformance suite, not re-run here"
   },
   "open": [
-    "WorkOS MCP/Audit plan entitlement inventory (blocked on the operator-held API key)",
-    "key rotation, logout, and cross-replica deactivation against both providers",
+    "Production server API-key rotation, provider revocation, and cross-replica deactivation without creating another server",
     "re-qualification of the dated August 16 client rows at current client versions",
     "SSO/OIDC connection behavior once a connection is configured",
     "webhook provisioning, if selected later (signed events, dedup/order/reconciliation, new acceptance IDs)"

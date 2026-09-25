@@ -299,6 +299,32 @@ file. Do not use a wildcard or an account-wide cleanup command.
 If destroy fails, the probe does not delete D1 or R2. First, remove the Worker.
 Then, delete the two probe-only durable resources.
 
+## Qualify the R2 S3-compatible adapter
+
+This is separate from the Worker binding qualification. Create one dedicated
+bucket whose name starts with `artifact-server-qual-r2-`, then create a
+short-lived R2 token with **Object Read & Write** limited to that exact bucket.
+Store its values only in the ignored root `.env` file:
+
+```text
+CLOUDFLARE_R2_ACCESS_ID=...
+CLOUDFLARE_R2_ACCESS_KEY=...
+CLOUDFLARE_R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+```
+
+Run the live probe from the repository root with the exact bucket name:
+
+```sh
+pnpm verify:r2-s3 artifact-server-qual-r2-<run>
+```
+
+The probe refuses non-qualification bucket names. It uses one random
+installation prefix, exercises the normal S3-compatible verified-stream
+adapter, aborts any multipart sessions for that prefix, deletes only that
+prefix, and verifies that no run object remains. It neither tests nor enables
+R2's beta destination-conditional copy extension. The bucket and scoped token
+remain operator-owned prerequisites after the run.
+
 ## Recover D1 and R2 together
 
 Use the checked-in coordinated recovery command only after writes to the source
