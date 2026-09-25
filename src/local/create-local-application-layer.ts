@@ -54,6 +54,7 @@ import {
 import {
   type PublishArtifactDependencies,
   PublishArtifactService,
+  type PublishBlobStorage,
 } from "../application/publish-artifact.js";
 import {
   type StagedUploadDependencies,
@@ -120,6 +121,7 @@ import type {
   ContentSessionRepository,
   IdGenerator,
   ProjectRepository,
+  SealedStagedSource,
   SourceBindingRepository,
   StagedUploadRepository,
   StagingStore,
@@ -225,18 +227,28 @@ export function createApplicationLayer(
   const clock = {
     now: Effect.sync(() => DateTime.makeUnsafe(adapters.clock.now())),
   };
-  const publishDependencies: PublishArtifactDependencies = {
-    blobs: {
-      put: (write) =>
-        Effect.tryPromise({
-          try: (fiberSignal) => adapters.blobs.put({
-            ...write,
-            signal: combineAbortSignals(fiberSignal, write.signal),
-          }),
-          catch: (cause) =>
-            new BlobStorageFailure({cause, operation: "put"}),
+  const publishBlobs: PublishBlobStorage = {
+    put: (write) =>
+      Effect.tryPromise({
+        try: (fiberSignal) => adapters.blobs.put({
+          ...write,
+          signal: combineAbortSignals(fiberSignal, write.signal),
         }),
-    },
+        catch: (cause) =>
+          new BlobStorageFailure({cause, operation: "put"}),
+      }),
+  };
+  if (adapters.blobs.promote !== undefined) {
+    const promote = adapters.blobs.promote.bind(adapters.blobs);
+    publishBlobs.promote = (source: SealedStagedSource) =>
+      Effect.tryPromise({
+        try: () => promote(source),
+        catch: (cause) =>
+          new BlobStorageFailure({cause, operation: "promote"}),
+      });
+  }
+  const publishDependencies: PublishArtifactDependencies = {
+    blobs: publishBlobs,
     clock,
     ids: adapters.ids,
     repository: {

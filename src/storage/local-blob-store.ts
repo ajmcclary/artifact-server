@@ -124,6 +124,11 @@ export class LocalBlobStore implements BlobStore {
   #pathFor(digest: string): string {
     return path.join(this.#root, digest.slice(0, 2), digest);
   }
+
+  /** The validated on-disk path of one stored blob, for sealed promotion. */
+  blobPath(digest: string): string {
+    return this.#pathFor(sha256Schema.parse(digest));
+  }
 }
 
 function assertRangeWithinBlob(range: BlobByteRange, size: number): void {
@@ -138,7 +143,7 @@ function assertRangeWithinBlob(range: BlobByteRange, size: number): void {
   }
 }
 
-async function verifyExistingBlob(
+export async function verifyExistingBlob(
   blobPath: string,
   expectedDigest: string,
   expectedSize: number,

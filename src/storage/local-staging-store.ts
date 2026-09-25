@@ -87,6 +87,11 @@ export class LocalStagingStore implements StagingStore {
     }
   }
 
+  /** The validated on-disk path of one staged slot, for sealed promotion. */
+  stagedFilePath(uploadId: string, storageToken: string): string {
+    return this.#location(uploadId, storageToken).file;
+  }
+
   #location(
     uploadId: string,
     storageToken: string,

@@ -460,7 +460,7 @@ export class BlobStorageFailure extends Schema.TaggedError<BlobStorageFailure>()
   "BlobStorageFailure",
   {
     cause: Schema.Defect(),
-    operation: Schema.Literals(["inspect", "open", "put"]),
+    operation: Schema.Literals(["inspect", "open", "promote", "put"]),
   },
 ) {}
 

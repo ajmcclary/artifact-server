@@ -605,6 +605,10 @@ function makeStagedUploadService(
       path: file.entry.path,
       sha256: file.entry.sha256,
       size: file.entry.size,
+      staged: {
+        storageToken: file.storageToken,
+        uploadId: upload.id,
+      },
     };
     return signal === undefined ? source : {...source, signal};
   };

@@ -72,6 +72,22 @@ export interface BlobStore {
   open(sha256: string): Promise<OpenedBlob>;
   openRange(sha256: string, range: BlobByteRange): Promise<OpenedBlobRange>;
   put(write: BlobWrite): Promise<StoredBlob>;
+  /**
+   * Install an already-staged file as an immutable blob without streaming its
+   * bytes through the application. An adapter implements this only when it can
+   * seal the source (re-prove its size and SHA-256 at copy time) and keep the
+   * destination create-only; otherwise the method stays absent and callers
+   * fall back to the verified stream path through `put`.
+   */
+  promote?(source: SealedStagedSource): Promise<StoredBlob>;
+}
+
+/** A verified staged file addressed for sealed server-side promotion. */
+export interface SealedStagedSource {
+  readonly sha256: string;
+  readonly size: number;
+  readonly storageToken: string;
+  readonly uploadId: string;
 }
 
 export interface StagedFileWrite extends BlobWrite {

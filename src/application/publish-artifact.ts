@@ -31,6 +31,7 @@ import type {
   CommitNewArtifact,
   IdGenerator,
   PublicationSource,
+  SealedStagedSource,
   StoredBlob,
 } from "../core/ports.js";
 import type {ManifestFailure} from "./parse-manifest.js";
@@ -48,6 +49,10 @@ export interface PublicationFileSource {
   readonly sha256: string;
   readonly size: number;
   readonly signal?: AbortSignal;
+  readonly staged?: {
+    readonly storageToken: string;
+    readonly uploadId: string;
+  };
   open(): Effect.Effect<ReadableStream<Uint8Array>, StagingStorageFailure>;
 }
 
@@ -127,6 +132,9 @@ export interface PublishArtifactRepository {
 /** Immutable blob capability required by publication. */
 export interface PublishBlobStorage {
   put(write: BlobWrite): Effect.Effect<StoredBlob, BlobStorageFailure>;
+  promote?(
+    source: SealedStagedSource,
+  ): Effect.Effect<StoredBlob, BlobStorageFailure>;
 }
 
 /** Dependencies used to construct the publication application service. */
@@ -226,7 +234,7 @@ function makePublishArtifactService(
               new Error(`The publication source for ${entry.path} is missing.`),
             );
           }
-          return source.open().pipe(
+          const storeByStream = source.open().pipe(
             Effect.flatMap((body) => {
               const write = {
                 body,
@@ -237,6 +245,23 @@ function makePublishArtifactService(
                 ? write
                 : {...write, signal: source.signal});
             }),
+          );
+          if (
+            source.staged === undefined ||
+            dependencies.blobs.promote === undefined
+          ) {
+            return storeByStream;
+          }
+          const {staged} = source;
+          return dependencies.blobs.promote({
+            sha256: entry.sha256,
+            size: entry.size,
+            storageToken: staged.storageToken,
+            uploadId: staged.uploadId,
+          }).pipe(
+            // A promotion that cannot seal or install create-only degrades to
+            // the proven verified-stream path rather than failing the commit.
+            Effect.catch(() => storeByStream),
           );
         },
         {concurrency: 4, discard: true},

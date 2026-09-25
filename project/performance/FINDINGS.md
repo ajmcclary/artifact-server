@@ -439,6 +439,36 @@ a slice-by-4/8 CRC table (or an equally correct vectorized CRC) is a justified
 optimization target when archives reach this size. This is one bounded local
 observation, not a tail or production claim.
 
+## September 24 sealed-source promotion: commit-leg and end-to-end measurement (T12)
+
+The T01 attribution named the commit-time staged-to-blob copy as the only
+stage with a plausible ≥10% end-to-end opportunity on the 48-file directory
+workload. The local sealed promotion (hard-link install with a one-handle
+re-hash seal, post-link inode identity check, and create-only `EEXIST`
+verified reuse) was measured against it on one Apple M1 Max, Node 24.15.0,
+alternating the working tree between the pre-promotion commit and the
+promotion working set. Evidence:
+`project/evidence/local-baseline-promotion-before.json` and
+`local-baseline-promotion-after-rep{1,2,3}.json`.
+
+| Measurement | Before | After (3 reps) | Delta |
+| --- | --- | --- | --- |
+| 48-file directory p95 | 860.69 ms (September 23 repetitions: 859.81 / 908.60 / 863.38) | 632.30 / 650.56 / 653.61 ms | about −25% end-to-end |
+| Commit leg p95 | 436.91 ms (September: 397.12 / 425.12 / 377.44) | 163.72 / 175.03 / 159.87 ms | about −60% |
+| Commit leg total | 1,008.6 ms | 253.5 / 265.7 / 235.1 ms | about −75% |
+| Staging leg p95 | 46.77 ms | 48.89 / 46.88 / 51.53 ms | unchanged |
+
+Every after sample sits below every before sample on both the directory and
+commit-leg metrics, with a separation roughly ten times the within-group
+spread — comfortably over the ≥10% bar on this named workload. The remaining
+commit-leg time is the seal re-hash and the per-version transaction; the
+staged-to-blob byte copy and its second full-file write are gone. The staging
+leg is untouched, as designed. These are single-machine paired observations
+with no tail claim, and the local adapter is the only promotion path so far:
+cloud adapters still take the verified stream fallback, where the same
+promotion shape (native server-side copy with create-only destination
+conditions) must be qualified per adapter before any claim there.
+
 ## Baseline policy
 - `pnpm verify:iteration` is the required end-of-iteration gate. It includes correctness, a coverage report, conformance checks, and the default bounded baseline. Coverage percentage is not a test-design target.
 - `pnpm smoke` catches broken behavior and gross regressions with deliberately loose machine-timing limits.

@@ -858,6 +858,44 @@ gate.
 
 ### T12 Qualify sealed-source promotion per adapter
 
+- **Progress, September 24:** the capability is specified before
+  implementation as PUB-018 in the ledger (`implementing`): an adapter may
+  install an already-staged file as an immutable blob by sealed server-side
+  promotion — re-proving the staged source's size and SHA-256 at copy time
+  and keeping the destination create-only — and a commit falls back to the
+  verified stream path whenever the adapter has no proven promotion for that
+  source. The core `BlobStore` port gained an optional `promote` method; the
+  commit path (`storeFiles` in
+  [publish-artifact](./src/application/publish-artifact.ts)) tries promotion
+  for staged sources and degrades any promotion failure to the proven
+  verified-stream path rather than failing the commit. The local adapter
+  ([LocalPromotingBlobStore](./src/storage/local-promoting-blob-store.ts))
+  promotes by hard link: it re-hashes the staged inode through one open
+  handle, links create-only (`EEXIST` falls back to the existing verified
+  reuse), and compares post-link inode identity so a staged slot renamed
+  over mid-promotion is detected, unlinked and re-sealed (bounded retries).
+  Conformance tests claim PUB-018-B/F: two concurrent same-digest commits
+  converge on one linked blob and serve exact bytes through the real HTTP
+  boundary, and a staged source replaced after verification fails closed
+  with no version and no blob; store-level tests cover slot retention,
+  promotion races, and size/digest/missing-source rejection. Cloud adapters
+  (S3/GCS/Azure/R2) have no `promote` yet — every commit there takes the
+  verified stream fallback, so their existing suites cover the fallback
+  clause. Paired same-machine measurement (Node 24.15.0,
+  [before](./project/evidence/local-baseline-promotion-before.json),
+  [after rep1](./project/evidence/local-baseline-promotion-after-rep1.json),
+  [rep2](./project/evidence/local-baseline-promotion-after-rep2.json),
+  [rep3](./project/evidence/local-baseline-promotion-after-rep3.json); the
+  September 23 before-repetitions bound the baseline further): the named
+  48-file directory workload moved from p95 859.81–908.60 ms to
+  632.30–653.61 ms (about −25% end-to-end, over the ≥10% bar) with the
+  commit leg p95 from 377.44–436.91 ms to 159.87–175.03 ms and the staging
+  leg unchanged — every after sample below every before sample, a
+  single-machine observation with no tail claim (full write-up in
+  `project/performance/FINDINGS.md`). Remaining open: per-adapter native
+  copy qualification (the S3 CopyObject destination create-only question is
+  still unproven), the R2/Worker surface, and PUB-018 promotion to
+  `behavior_verified` once the final gate attaches this run's evidence.
 - **Do:** add a product-named promotion capability only after source sealing,
   destination create-only installation, digest verification and retry semantics
   are specified. Qualify AWS source/version and destination conditions, GCS

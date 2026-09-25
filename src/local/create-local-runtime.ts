@@ -24,6 +24,7 @@ import {
   structuredLoggingLayer,
 } from "../observability/application-observability.js";
 import { LocalBlobStore } from "../storage/local-blob-store.js";
+import { LocalPromotingBlobStore } from "../storage/local-promoting-blob-store.js";
 import { LocalStagingStore } from "../storage/local-staging-store.js";
 import { SqliteArtifactRepository } from "../storage/sqlite-artifact-repository.js";
 import { SqliteIdentityRepository } from "../storage/sqlite-identity-repository.js";
@@ -128,8 +129,11 @@ export async function createLocalRuntime(
   config: LocalRuntimeConfig,
 ): Promise<LocalRuntime> {
   await mkdir(config.dataDirectory, {recursive: true, mode: 0o700});
-  const blobs = new LocalBlobStore(path.join(config.dataDirectory, "blobs"));
   const staging = new LocalStagingStore(path.join(config.dataDirectory, "staging"));
+  const blobs = new LocalPromotingBlobStore(
+    new LocalBlobStore(path.join(config.dataDirectory, "blobs")),
+    staging,
+  );
   const databasePath = path.join(config.dataDirectory, "artifact-server.db");
   const installationId = config.installationId ?? "local";
   const runtimeClock = config.clock ?? new SystemClock();
