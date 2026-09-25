@@ -30,22 +30,32 @@ and Pi replies to and resolves each comment thread through the
 `tests/client/pi-bridge-core.test.ts` drives the real bridge loop against a
 real Artifact Server with a scripted Pi surface:
 
-- Compaction hold: a bundle sent while the session is compacting stays
-  `claimed` and is delivered only after `session_compact`.
 - Host refusal: a synchronous throw from `pi.sendUserMessage` is the
   protocol's lost-handle signal, so the loop ends dormant without reporting
   `delivered` or `failed` and no exception reaches Pi; the claimed dispatch is
-  left for lease expiry.
+  left for lease expiry. This stays structural-only: no live host surface can
+  be made to refuse an injection deterministically.
 - Follow-up delivery, registration identity, and the comment tool closing a
   thread.
 
-Host-agnostic behaviors are covered once for every adapter by the extracted
-bridge core: lost acknowledgement and duplicate lease delivery
-(`tests/conformance/dsp-006-claim-lease.test.ts`), and the 1 s → 30 s jittered
-backoff cap with fail-open dormancy
-(`tests/conformance/dsp-012-bridge-fail-open.test.ts`). Live-host
-qualification against Pi 0.84.4 (round trip, FIFO drain, session rebind) is
-recorded in `project/evidence/pi-live.json` (`pnpm test:pi-live`).
+Live-host qualification against Pi 0.84.4 is recorded in
+`project/evidence/pi-live.json` (`pnpm test:pi-live`), 6/6:
+
+- Round trip, FIFO drain, and session rebind (PI-LIVE 1–3).
+- Lost acknowledgement (`tests/pi-live/lost-acknowledgement.test.ts`,
+  PI-LIVE 4): a destroyed `delivered` report requeues at lease expiry,
+  redelivers byte-identically, and settles `delivered` with exactly one report
+  ever reaching the server.
+- Duplicate lease delivery (`tests/pi-live/duplicate-claim.test.ts`,
+  PI-LIVE 5): a replayed claim is admitted twice byte-identically, the second
+  `delivered` report is refused 409, and the dispatch never goes `failed`.
+- Compaction hold (`tests/pi-live/compaction-hold.test.ts`, PI-LIVE 6): a
+  bundle dispatched during a real `/compact` stays `claimed` until
+  `session_compact`, then arrives exactly once.
+
+The 1 s → 30 s jittered backoff cap with fail-open dormancy is covered by
+`tests/conformance/dsp-012-bridge-fail-open.test.ts` and measured live once
+via the OpenCode suite, shared by the common bridge core.
 
 ## Install
 

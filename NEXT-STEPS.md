@@ -1099,6 +1099,18 @@ gate.
 
 ### T17 Complete live bridge qualification without changing citizenship
 
+- **Pi live completion, September 25:** Pi 0.84.4 passed 6/6
+  ([pi-live.json](./project/evidence/pi-live.json), `pnpm test:pi-live`). The
+  new PI-LIVE 4 proves a destroyed `delivered` report requeues at lease
+  expiry, redelivers byte-identically and settles `delivered` with exactly one
+  report reaching the server; PI-LIVE 5 replays a claim and observes
+  at-least-once admission (two byte-identical injections, the second report
+  refused 409, never `failed`); PI-LIVE 6 drives a real `/compact` and proves
+  a claimed bundle is held until `session_compact`, then arrives exactly once.
+  Pi emits a turn-prefix summarization prompt before the main conversation
+  summary, and the hold is taken on that first summarization request. Host
+  refusal stays structural-only on Pi, matching every other host, and the
+  jitter cap stays measured live once via OpenCode.
 - **Operator decision, September 25:** the proposed Pi completion path is
   accepted. Pi 0.84.4 is now installed in the current environment, so the prior
   CLI-availability blocker is cleared; extend and run the offline live-host
@@ -1170,9 +1182,8 @@ gate.
   observed truth. Host refusal stays structural-only on every host (no host
   surface can be made to refuse an injection deterministically), with the
   rationale in each adapter README; the jitter cap is measured live once via
-  OpenCode and shared by the common bridge core. Remaining open: live proof of
-  these behaviors against Pi (its CLI is unavailable in this session), and the
-  T15/T16 live client matrix.
+  OpenCode and shared by the common bridge core. Pi's live proofs landed
+  September 25 (see above). Remaining open: the T15/T16 live client matrix.
 - **Do:** reconcile version-specific Pi/OpenCode staging evidence with READMEs;
   qualify omp and remaining Claude Channels/host cases. Cover compaction holds,
   session deletion, host refusal, missing API/configuration, lost acknowledgement,
