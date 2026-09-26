@@ -20,8 +20,8 @@
   "environment": {
     "arch": "arm64",
     "availableParallelism": 10,
-    "capturedAt": "2026-09-25T22:42:05.507Z",
-    "commit": "9bc68ec4c4a8677a447106aa32b65ce71ff50ab0",
+    "capturedAt": "2026-09-26T17:46:39.741Z",
+    "commit": "205706dfc3a4aedfeb4deca75010247fc0dac45b",
     "cpu": "Apple M1 Max",
     "details": null,
     "lockfileDigest": "d0e139101a1b0f2e8cf122f042848ebad3348fdc0d9f1c5e74cb13601e4a3aab",
@@ -32,60 +32,60 @@
     "workingTreeDirty": true,
     "productVersion": "0.1.1"
   },
-  "generatedAt": "2026-09-25T22:42:05.508Z",
+  "generatedAt": "2026-09-26T17:46:39.742Z",
   "levels": [
     {
       "browse": {
         "completedJourneys": 3,
         "concurrentUsers": 1,
         "eventLoop": {
-          "maximumDelayMilliseconds": 27.8,
-          "meanDelayMilliseconds": 14.96,
-          "p95DelayMilliseconds": 27.8,
-          "utilization": 0.6897
+          "maximumDelayMilliseconds": 24.97,
+          "meanDelayMilliseconds": 12.84,
+          "p95DelayMilliseconds": 24.97,
+          "utilization": 0.7158
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 3,
-          "maximumMilliseconds": 50.99,
-          "meanMilliseconds": 34.21,
-          "minimumMilliseconds": 22.12,
-          "p50Milliseconds": 29.51,
-          "p95Milliseconds": 50.99,
-          "p99Milliseconds": 50.99
+          "maximumMilliseconds": 46.67,
+          "meanMilliseconds": 29.34,
+          "minimumMilliseconds": 19.79,
+          "p50Milliseconds": 21.55,
+          "p95Milliseconds": 46.67,
+          "p99Milliseconds": 46.67
         },
-        "journeysPerSecond": 29.21,
+        "journeysPerSecond": 34.06,
         "memory": {
           "peak": {
             "arrayBuffers": 10688489,
             "external": 20716755,
-            "heapTotal": 236535808,
-            "heapUsed": 138717448,
-            "rss": 303071232
+            "heapTotal": 239157248,
+            "heapUsed": 138725328,
+            "rss": 307019776
           },
-          "peakRssDeltaBytes": 11862016,
-          "retainedHeapDeltaBytes": 6889928,
+          "peakRssDeltaBytes": 12189696,
+          "retainedHeapDeltaBytes": 6896024,
           "settled": {
             "arrayBuffers": 317232,
             "external": 10345582,
-            "heapTotal": 236126208,
-            "heapUsed": 95758408,
-            "rss": 299941888
+            "heapTotal": 237699072,
+            "heapUsed": 95763304,
+            "rss": 304087040
           },
           "started": {
             "arrayBuffers": 308608,
             "external": 10336917,
-            "heapTotal": 231407616,
-            "heapUsed": 88868480,
-            "rss": 291209216
+            "heapTotal": 234553344,
+            "heapUsed": 88867280,
+            "rss": 294830080
           }
         },
         "profile": "browse",
         "serverCpu": {
-          "systemMilliseconds": 6.62,
-          "userMilliseconds": 101.87
+          "systemMilliseconds": 5.39,
+          "userMilliseconds": 92.65
         },
-        "totalMilliseconds": 102.69,
+        "totalMilliseconds": 88.08,
         "totalRequests": 12,
         "waves": 3
       },
@@ -94,53 +94,53 @@
         "completedJourneys": 3,
         "concurrentUsers": 1,
         "eventLoop": {
-          "maximumDelayMilliseconds": 10.73,
-          "meanDelayMilliseconds": 10.32,
-          "p95DelayMilliseconds": 10.73,
-          "utilization": 0.366
+          "maximumDelayMilliseconds": 11.27,
+          "meanDelayMilliseconds": 10.57,
+          "p95DelayMilliseconds": 11.27,
+          "utilization": 0.3261
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 3,
-          "maximumMilliseconds": 27.93,
-          "meanMilliseconds": 22.54,
-          "minimumMilliseconds": 19.79,
-          "p50Milliseconds": 19.89,
-          "p95Milliseconds": 27.93,
-          "p99Milliseconds": 27.93
+          "maximumMilliseconds": 23.81,
+          "meanMilliseconds": 19.31,
+          "minimumMilliseconds": 16.51,
+          "p50Milliseconds": 17.61,
+          "p95Milliseconds": 23.81,
+          "p99Milliseconds": 23.81
         },
-        "journeysPerSecond": 44.36,
+        "journeysPerSecond": 51.77,
         "memory": {
           "peak": {
             "arrayBuffers": 760320,
             "external": 10788586,
-            "heapTotal": 236388352,
-            "heapUsed": 100409936,
-            "rss": 300154880
+            "heapTotal": 237699072,
+            "heapUsed": 100408520,
+            "rss": 304431104
           },
-          "peakRssDeltaBytes": 147456,
-          "retainedHeapDeltaBytes": 231696,
+          "peakRssDeltaBytes": 229376,
+          "retainedHeapDeltaBytes": 233096,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10345686,
-            "heapTotal": 236650496,
-            "heapUsed": 95932456,
-            "rss": 300220416
+            "heapTotal": 237961216,
+            "heapUsed": 95936480,
+            "rss": 304480256
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10345685,
-            "heapTotal": 236388352,
-            "heapUsed": 95700760,
-            "rss": 300007424
+            "heapTotal": 237436928,
+            "heapUsed": 95703384,
+            "rss": 304201728
           }
         },
         "profile": "publish",
         "serverCpu": {
-          "systemMilliseconds": 7.17,
-          "userMilliseconds": 35.53
+          "systemMilliseconds": 5.53,
+          "userMilliseconds": 29.15
         },
-        "totalMilliseconds": 67.63,
+        "totalMilliseconds": 57.95,
         "totalRequests": 9,
         "waves": 3
       }
@@ -150,53 +150,53 @@
         "completedJourneys": 30,
         "concurrentUsers": 10,
         "eventLoop": {
-          "maximumDelayMilliseconds": 56.03,
-          "meanDelayMilliseconds": 19,
-          "p95DelayMilliseconds": 49.22,
-          "utilization": 0.9665
+          "maximumDelayMilliseconds": 41.42,
+          "meanDelayMilliseconds": 15.53,
+          "p95DelayMilliseconds": 27.51,
+          "utilization": 0.9871
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 30,
-          "maximumMilliseconds": 209.73,
-          "meanMilliseconds": 150.7,
-          "minimumMilliseconds": 56.38,
-          "p50Milliseconds": 150.81,
-          "p95Milliseconds": 203.22,
-          "p99Milliseconds": 209.73
+          "maximumMilliseconds": 150.12,
+          "meanMilliseconds": 112.8,
+          "minimumMilliseconds": 94.28,
+          "p50Milliseconds": 108.41,
+          "p95Milliseconds": 147.58,
+          "p99Milliseconds": 150.12
         },
-        "journeysPerSecond": 60.76,
+        "journeysPerSecond": 80.59,
         "memory": {
           "peak": {
-            "arrayBuffers": 42648665,
-            "external": 52676931,
-            "heapTotal": 295337984,
-            "heapUsed": 198624800,
-            "rss": 449396736
+            "arrayBuffers": 35347327,
+            "external": 45375593,
+            "heapTotal": 314540032,
+            "heapUsed": 213744632,
+            "rss": 467124224
           },
-          "peakRssDeltaBytes": 149176320,
-          "retainedHeapDeltaBytes": 1829512,
+          "peakRssDeltaBytes": 162643968,
+          "retainedHeapDeltaBytes": 1811768,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10345686,
-            "heapTotal": 239009792,
-            "heapUsed": 97754344,
-            "rss": 432406528
+            "heapTotal": 240320512,
+            "heapUsed": 97739576,
+            "rss": 444334080
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10345685,
-            "heapTotal": 236388352,
-            "heapUsed": 95924832,
-            "rss": 300220416
+            "heapTotal": 237961216,
+            "heapUsed": 95927808,
+            "rss": 304480256
           }
         },
         "profile": "browse",
         "serverCpu": {
-          "systemMilliseconds": 62.08,
-          "userMilliseconds": 714.97
+          "systemMilliseconds": 43.62,
+          "userMilliseconds": 606.08
         },
-        "totalMilliseconds": 493.71,
+        "totalMilliseconds": 372.25,
         "totalRequests": 120,
         "waves": 3
       },
@@ -205,53 +205,53 @@
         "completedJourneys": 30,
         "concurrentUsers": 10,
         "eventLoop": {
-          "maximumDelayMilliseconds": 20.14,
-          "meanDelayMilliseconds": 11.75,
-          "p95DelayMilliseconds": 17.02,
-          "utilization": 0.6293
+          "maximumDelayMilliseconds": 16.52,
+          "meanDelayMilliseconds": 11.17,
+          "p95DelayMilliseconds": 15.82,
+          "utilization": 0.5694
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 30,
-          "maximumMilliseconds": 148.47,
-          "meanMilliseconds": 127.4,
-          "minimumMilliseconds": 95.06,
-          "p50Milliseconds": 127.75,
-          "p95Milliseconds": 144.12,
-          "p99Milliseconds": 148.47
+          "maximumMilliseconds": 137.36,
+          "meanMilliseconds": 116.49,
+          "minimumMilliseconds": 87.38,
+          "p50Milliseconds": 114.6,
+          "p95Milliseconds": 132.11,
+          "p99Milliseconds": 137.36
         },
-        "journeysPerSecond": 77.04,
+        "journeysPerSecond": 84.08,
         "memory": {
           "peak": {
             "arrayBuffers": 5350978,
             "external": 15379244,
-            "heapTotal": 239271936,
-            "heapUsed": 139326168,
-            "rss": 437288960
+            "heapTotal": 240058368,
+            "heapUsed": 139282728,
+            "rss": 449150976
           },
-          "peakRssDeltaBytes": 4882432,
-          "retainedHeapDeltaBytes": 649648,
+          "peakRssDeltaBytes": 4784128,
+          "retainedHeapDeltaBytes": 629816,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10345686,
-            "heapTotal": 239271936,
-            "heapUsed": 98261376,
-            "rss": 437305344
+            "heapTotal": 240320512,
+            "heapUsed": 98245856,
+            "rss": 449200128
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10345685,
-            "heapTotal": 238747648,
-            "heapUsed": 97611728,
-            "rss": 432406528
+            "heapTotal": 239534080,
+            "heapUsed": 97616040,
+            "rss": 444366848
           }
         },
         "profile": "publish",
         "serverCpu": {
-          "systemMilliseconds": 71.95,
-          "userMilliseconds": 166.59
+          "systemMilliseconds": 58.89,
+          "userMilliseconds": 130.65
         },
-        "totalMilliseconds": 389.39,
+        "totalMilliseconds": 356.82,
         "totalRequests": 90,
         "waves": 3
       }
@@ -261,53 +261,53 @@
         "completedJourneys": 75,
         "concurrentUsers": 25,
         "eventLoop": {
-          "maximumDelayMilliseconds": 94.31,
-          "meanDelayMilliseconds": 20.69,
-          "p95DelayMilliseconds": 45.42,
-          "utilization": 0.9939
+          "maximumDelayMilliseconds": 60.52,
+          "meanDelayMilliseconds": 21.17,
+          "p95DelayMilliseconds": 40.47,
+          "utilization": 0.994
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 75,
-          "maximumMilliseconds": 417.99,
-          "meanMilliseconds": 312.08,
-          "minimumMilliseconds": 182.48,
-          "p50Milliseconds": 321.63,
-          "p95Milliseconds": 405.16,
-          "p99Milliseconds": 417.99
+          "maximumMilliseconds": 333.95,
+          "meanMilliseconds": 267.6,
+          "minimumMilliseconds": 158.63,
+          "p50Milliseconds": 282.87,
+          "p95Milliseconds": 329.72,
+          "p99Milliseconds": 333.95
         },
-        "journeysPerSecond": 73,
+        "journeysPerSecond": 84.59,
         "memory": {
           "peak": {
-            "arrayBuffers": 84359870,
-            "external": 100694118,
-            "heapTotal": 404144128,
-            "heapUsed": 307766544,
-            "rss": 612089856
+            "arrayBuffers": 95638871,
+            "external": 105667137,
+            "heapTotal": 405848064,
+            "heapUsed": 309900888,
+            "rss": 623083520
           },
-          "peakRssDeltaBytes": 174784512,
-          "retainedHeapDeltaBytes": -3630768,
+          "peakRssDeltaBytes": 173883392,
+          "retainedHeapDeltaBytes": -3656488,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10341538,
-            "heapTotal": 237240320,
-            "heapUsed": 94507024,
-            "rss": 570785792
+            "heapTotal": 238026752,
+            "heapUsed": 94484944,
+            "rss": 571523072
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10345685,
-            "heapTotal": 239271936,
-            "heapUsed": 98137792,
-            "rss": 437305344
+            "heapTotal": 240320512,
+            "heapUsed": 98141432,
+            "rss": 449200128
           }
         },
         "profile": "browse",
         "serverCpu": {
-          "systemMilliseconds": 107.32,
-          "userMilliseconds": 1624.93
+          "systemMilliseconds": 85.01,
+          "userMilliseconds": 1488.7
         },
-        "totalMilliseconds": 1027.39,
+        "totalMilliseconds": 886.68,
         "totalRequests": 300,
         "waves": 3
       },
@@ -316,53 +316,53 @@
         "completedJourneys": 75,
         "concurrentUsers": 25,
         "eventLoop": {
-          "maximumDelayMilliseconds": 47.68,
-          "meanDelayMilliseconds": 14.4,
-          "p95DelayMilliseconds": 25.1,
-          "utilization": 0.6762
+          "maximumDelayMilliseconds": 49.64,
+          "meanDelayMilliseconds": 13.05,
+          "p95DelayMilliseconds": 23.45,
+          "utilization": 0.6069
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 75,
-          "maximumMilliseconds": 366.01,
-          "meanMilliseconds": 312.66,
-          "minimumMilliseconds": 261.02,
-          "p50Milliseconds": 313.97,
-          "p95Milliseconds": 354.5,
-          "p99Milliseconds": 366.01
+          "maximumMilliseconds": 337.33,
+          "meanMilliseconds": 283.68,
+          "minimumMilliseconds": 224.22,
+          "p50Milliseconds": 285.39,
+          "p95Milliseconds": 330.58,
+          "p99Milliseconds": 337.33
         },
-        "journeysPerSecond": 77.54,
+        "journeysPerSecond": 86.73,
         "memory": {
           "peak": {
-            "arrayBuffers": 7907482,
-            "external": 17931600,
-            "heapTotal": 238288896,
-            "heapUsed": 150712952,
-            "rss": 573603840
+            "arrayBuffers": 7905082,
+            "external": 17929200,
+            "heapTotal": 238551040,
+            "heapUsed": 150612344,
+            "rss": 574242816
           },
-          "peakRssDeltaBytes": 2801664,
-          "retainedHeapDeltaBytes": 579608,
+          "peakRssDeltaBytes": 2719744,
+          "retainedHeapDeltaBytes": 572360,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10341538,
-            "heapTotal": 237764608,
-            "heapUsed": 94835384,
-            "rss": 573702144
+            "heapTotal": 238551040,
+            "heapUsed": 94810800,
+            "rss": 574308352
           },
           "started": {
-            "arrayBuffers": 317419,
+            "arrayBuffers": 317336,
             "external": 10341537,
-            "heapTotal": 236978176,
-            "heapUsed": 94255776,
-            "rss": 570802176
+            "heapTotal": 237764608,
+            "heapUsed": 94238440,
+            "rss": 571523072
           }
         },
         "profile": "publish",
         "serverCpu": {
-          "systemMilliseconds": 159.64,
-          "userMilliseconds": 385.82
+          "systemMilliseconds": 154.76,
+          "userMilliseconds": 324.53
         },
-        "totalMilliseconds": 967.27,
+        "totalMilliseconds": 864.74,
         "totalRequests": 225,
         "waves": 3
       }
@@ -372,53 +372,53 @@
         "completedJourneys": 150,
         "concurrentUsers": 50,
         "eventLoop": {
-          "maximumDelayMilliseconds": 140.9,
-          "meanDelayMilliseconds": 32.12,
-          "p95DelayMilliseconds": 104.86,
-          "utilization": 0.9946
+          "maximumDelayMilliseconds": 112,
+          "meanDelayMilliseconds": 25.55,
+          "p95DelayMilliseconds": 55.9,
+          "utilization": 0.9973
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 150,
-          "maximumMilliseconds": 1063.18,
-          "meanMilliseconds": 622.25,
-          "minimumMilliseconds": 203.55,
-          "p50Milliseconds": 624.93,
-          "p95Milliseconds": 853.45,
-          "p99Milliseconds": 1045.17
+          "maximumMilliseconds": 955.73,
+          "meanMilliseconds": 544.12,
+          "minimumMilliseconds": 209,
+          "p50Milliseconds": 555.23,
+          "p95Milliseconds": 829.24,
+          "p99Milliseconds": 897.94
         },
-        "journeysPerSecond": 72.45,
+        "journeysPerSecond": 82.04,
         "memory": {
           "peak": {
-            "arrayBuffers": 99834983,
-            "external": 109856464,
-            "heapTotal": 451870720,
-            "heapUsed": 358276704,
-            "rss": 714031104
+            "arrayBuffers": 115591085,
+            "external": 125612566,
+            "heapTotal": 449036288,
+            "heapUsed": 354129040,
+            "rss": 727367680
           },
-          "peakRssDeltaBytes": 140328960,
-          "retainedHeapDeltaBytes": -1701280,
+          "peakRssDeltaBytes": 153059328,
+          "retainedHeapDeltaBytes": -1730552,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10338901,
-            "heapTotal": 237256704,
-            "heapUsed": 92833736,
-            "rss": 666959872
+            "heapTotal": 237518848,
+            "heapUsed": 92779864,
+            "rss": 680624128
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10341537,
-            "heapTotal": 236978176,
-            "heapUsed": 94535016,
-            "rss": 573702144
+            "heapTotal": 238026752,
+            "heapUsed": 94510416,
+            "rss": 574308352
           }
         },
         "profile": "browse",
         "serverCpu": {
-          "systemMilliseconds": 167.77,
-          "userMilliseconds": 3317.5
+          "systemMilliseconds": 145.27,
+          "userMilliseconds": 3097.46
         },
-        "totalMilliseconds": 2070.52,
+        "totalMilliseconds": 1828.29,
         "totalRequests": 600,
         "waves": 3
       },
@@ -427,53 +427,53 @@
         "completedJourneys": 150,
         "concurrentUsers": 50,
         "eventLoop": {
-          "maximumDelayMilliseconds": 46.79,
-          "meanDelayMilliseconds": 14.98,
-          "p95DelayMilliseconds": 39.65,
-          "utilization": 0.5803
+          "maximumDelayMilliseconds": 81.79,
+          "meanDelayMilliseconds": 14.45,
+          "p95DelayMilliseconds": 38.14,
+          "utilization": 0.5331
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 150,
-          "maximumMilliseconds": 665.64,
-          "meanMilliseconds": 525.45,
-          "minimumMilliseconds": 405.38,
-          "p50Milliseconds": 528.23,
-          "p95Milliseconds": 574.97,
-          "p99Milliseconds": 593.12
+          "maximumMilliseconds": 615.61,
+          "meanMilliseconds": 535.91,
+          "minimumMilliseconds": 441.97,
+          "p50Milliseconds": 538.3,
+          "p95Milliseconds": 589.11,
+          "p99Milliseconds": 596.32
         },
-        "journeysPerSecond": 93.07,
+        "journeysPerSecond": 92.04,
         "memory": {
           "peak": {
-            "arrayBuffers": 8274218,
-            "external": 18357287,
-            "heapTotal": 266878976,
-            "heapUsed": 166585840,
-            "rss": 668286976
+            "arrayBuffers": 8426380,
+            "external": 18447861,
+            "heapTotal": 267141120,
+            "heapUsed": 168030640,
+            "rss": 682164224
           },
-          "peakRssDeltaBytes": 1523712,
-          "retainedHeapDeltaBytes": 765168,
+          "peakRssDeltaBytes": 1540096,
+          "retainedHeapDeltaBytes": 868304,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10338901,
-            "heapTotal": 237256704,
-            "heapUsed": 93304464,
-            "rss": 668286976
+            "heapTotal": 237780992,
+            "heapUsed": 93381576,
+            "rss": 682164224
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10338900,
-            "heapTotal": 236732416,
-            "heapUsed": 92539296,
-            "rss": 666763264
+            "heapTotal": 236994560,
+            "heapUsed": 92513272,
+            "rss": 680624128
           }
         },
         "profile": "publish",
         "serverCpu": {
-          "systemMilliseconds": 295.63,
-          "userMilliseconds": 628.32
+          "systemMilliseconds": 313.72,
+          "userMilliseconds": 631.97
         },
-        "totalMilliseconds": 1611.77,
+        "totalMilliseconds": 1629.7,
         "totalRequests": 450,
         "waves": 3
       }
@@ -483,53 +483,53 @@
         "completedJourneys": 300,
         "concurrentUsers": 100,
         "eventLoop": {
-          "maximumDelayMilliseconds": 180.09,
-          "meanDelayMilliseconds": 43.47,
-          "p95DelayMilliseconds": 105.45,
-          "utilization": 0.9985
+          "maximumDelayMilliseconds": 151.65,
+          "meanDelayMilliseconds": 38.59,
+          "p95DelayMilliseconds": 107.61,
+          "utilization": 0.9984
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 300,
-          "maximumMilliseconds": 3535.95,
-          "meanMilliseconds": 1186.39,
-          "minimumMilliseconds": 408.21,
-          "p50Milliseconds": 1053.22,
-          "p95Milliseconds": 2415.07,
-          "p99Milliseconds": 3348.9
+          "maximumMilliseconds": 3564.3,
+          "meanMilliseconds": 1060.63,
+          "minimumMilliseconds": 348.09,
+          "p50Milliseconds": 938.82,
+          "p95Milliseconds": 2131.54,
+          "p99Milliseconds": 3024.08
         },
-        "journeysPerSecond": 74.74,
+        "journeysPerSecond": 84.12,
         "memory": {
           "peak": {
-            "arrayBuffers": 116634189,
-            "external": 126655670,
-            "heapTotal": 501465088,
-            "heapUsed": 408715120,
-            "rss": 811368448
+            "arrayBuffers": 123394701,
+            "external": 133416182,
+            "heapTotal": 508116992,
+            "heapUsed": 433366896,
+            "rss": 839581696
           },
-          "peakRssDeltaBytes": 143065088,
-          "retainedHeapDeltaBytes": 1295904,
+          "peakRssDeltaBytes": 157417472,
+          "retainedHeapDeltaBytes": 1072072,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10338901,
             "heapTotal": 239353856,
-            "heapUsed": 94124008,
-            "rss": 761626624
+            "heapUsed": 93880808,
+            "rss": 789037056
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10338900,
-            "heapTotal": 236994560,
-            "heapUsed": 92828104,
-            "rss": 668303360
+            "heapTotal": 237256704,
+            "heapUsed": 92808736,
+            "rss": 682164224
           }
         },
         "profile": "browse",
         "serverCpu": {
-          "systemMilliseconds": 303.02,
-          "userMilliseconds": 6150.53
+          "systemMilliseconds": 258.65,
+          "userMilliseconds": 5765.28
         },
-        "totalMilliseconds": 4014.02,
+        "totalMilliseconds": 3566.43,
         "totalRequests": 1200,
         "waves": 3
       },
@@ -538,53 +538,53 @@
         "completedJourneys": 300,
         "concurrentUsers": 100,
         "eventLoop": {
-          "maximumDelayMilliseconds": 97.78,
-          "meanDelayMilliseconds": 14.54,
-          "p95DelayMilliseconds": 40.14,
-          "utilization": 0.4761
+          "maximumDelayMilliseconds": 107.48,
+          "meanDelayMilliseconds": 14.64,
+          "p95DelayMilliseconds": 43.88,
+          "utilization": 0.4503
         },
         "garbageCollection": "forced",
         "journeyLatency": {
           "count": 300,
-          "maximumMilliseconds": 1279.73,
-          "meanMilliseconds": 968.77,
-          "minimumMilliseconds": 789.62,
-          "p50Milliseconds": 953.14,
-          "p95Milliseconds": 1094.11,
-          "p99Milliseconds": 1178.6
+          "maximumMilliseconds": 1442.38,
+          "meanMilliseconds": 1107.51,
+          "minimumMilliseconds": 863.65,
+          "p50Milliseconds": 1088.56,
+          "p95Milliseconds": 1209.32,
+          "p99Milliseconds": 1255.3
         },
-        "journeysPerSecond": 101.43,
+        "journeysPerSecond": 89.15,
         "memory": {
           "peak": {
-            "arrayBuffers": 14059320,
-            "external": 24080801,
-            "heapTotal": 305676288,
-            "heapUsed": 220350624,
-            "rss": 768901120
+            "arrayBuffers": 13738302,
+            "external": 23759783,
+            "heapTotal": 305938432,
+            "heapUsed": 216674792,
+            "rss": 797392896
           },
-          "peakRssDeltaBytes": 7274496,
-          "retainedHeapDeltaBytes": 1781768,
+          "peakRssDeltaBytes": 8355840,
+          "retainedHeapDeltaBytes": 1553840,
           "settled": {
             "arrayBuffers": 317336,
             "external": 10338901,
-            "heapTotal": 239878144,
-            "heapUsed": 95294000,
-            "rss": 769081344
+            "heapTotal": 239353856,
+            "heapUsed": 95057144,
+            "rss": 797507584
           },
           "started": {
             "arrayBuffers": 317336,
             "external": 10338900,
-            "heapTotal": 238829568,
-            "heapUsed": 93512232,
-            "rss": 761626624
+            "heapTotal": 238567424,
+            "heapUsed": 93503304,
+            "rss": 789037056
           }
         },
         "profile": "publish",
         "serverCpu": {
-          "systemMilliseconds": 567.52,
-          "userMilliseconds": 1088.86
+          "systemMilliseconds": 621.67,
+          "userMilliseconds": 1048.36
         },
-        "totalMilliseconds": 2957.63,
+        "totalMilliseconds": 3365.3,
         "totalRequests": 900,
         "waves": 3
       }
@@ -592,13 +592,13 @@
   ],
   "server": {
     "measurementBoundary": "compiled child server process",
-    "pid": 4102,
-    "startupMilliseconds": 785.52
+    "pid": 91306,
+    "startupMilliseconds": 872.29
   },
   "summary": {
-    "finalRetainedHeapDeltaBytes": 6425520,
-    "maximumPeakHeapUsedBytes": 408715120,
-    "maximumPeakRssBytes": 811368448
+    "finalRetainedHeapDeltaBytes": 6189864,
+    "maximumPeakHeapUsedBytes": 433366896,
+    "maximumPeakRssBytes": 839581696
   },
   "warnings": [
     "Server peak RSS exceeded 512 MiB; do not size a production process below the measured workload without a provider-specific capacity run."

@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 24, 2026. This is the implementation backlog resulting from
+Updated September 26, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -314,6 +314,26 @@ gate.
   context. Live-provider backlog measurements, live D1 multi-worker and
   provider concurrency proof, and live-provider crash recovery remain open —
   the Cloudflare Artifacts namespace entitlement is still unavailable.
+- **D1 multi-worker progress, September 26:** the local D1 multi-worker proof
+  landed as
+  [git-history-multi-worker.test.ts](./deploy/cloudflare/tests/git-history-multi-worker.test.ts),
+  run by `pnpm check:cloudflare`. Two repository handles and two real
+  `makeGitHistoryMirrorWorker` instances race over one Wrangler local D1
+  binding. Concurrent claim storms never hand the same job to both workers,
+  only an artifact's earliest unmapped version is claimable while a sibling
+  claim is outstanding, and per-artifact claims complete in version order with
+  exactly one mapping per version; two racing mirror workers converge to one
+  ordered commit chain (versions 1–4 with correct parent links); a worker
+  paused inside the provider call loses its expired lease to a successor, its
+  pass resolves `retry`, and the stale owner cannot record or complete; a
+  deletion-job race has exactly one winner and stale completions fail. A
+  300-round claim-race probe per job kind (same and staggered worker clocks)
+  produced zero double-claims on the local binding, so the tests assert strict
+  single-winner exclusion rather than tolerating a shared claim.
+  `pnpm check:cloudflare` passed 50/50. Live D1 multi-worker and provider
+  concurrency proof, live-provider crash recovery, and live-provider backlog
+  measurements remain open — the Cloudflare Artifacts namespace entitlement is
+  still unavailable.
 - **Iteration checks, September 18:** `pnpm verify:iteration`, `pnpm smoke`,
   and `pnpm verify:external-storage-performance` passed on Node 24.15.0.
   The external-storage baseline reported no investigation warnings. The
