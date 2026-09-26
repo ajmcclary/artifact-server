@@ -4,7 +4,9 @@ export default defineConfig({
   test: {
     coverage: {
       include: [
+        "src/storage/azure-blob-common.ts",
         "src/storage/azure-blob-object-storage.ts",
+        "src/storage/azure-blob-sealed-promotion-probe.ts",
         "src/storage/cloud-object-storage.ts",
         "src/storage/gcs-failure.ts",
         "src/storage/gcs-object-storage.ts",
@@ -17,6 +19,7 @@ export default defineConfig({
     fileParallelism: false,
     include: [
       "tests/integration/azure-blob-object-storage.test.ts",
+      "tests/integration/azure-promotion.test.ts",
       "tests/integration/gcs-object-storage.test.ts",
       "tests/integration/gcs-promotion.test.ts",
     ],

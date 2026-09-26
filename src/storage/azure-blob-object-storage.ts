@@ -3,14 +3,20 @@ import {randomUUID} from "node:crypto";
 import {Readable, Writable} from "node:stream";
 import {pipeline} from "node:stream/promises";
 
-import {DefaultAzureCredential} from "@azure/identity";
+import {DefaultAzureCredential, type TokenCredential} from "@azure/identity";
 import {
+  BlobSASPermissions,
   BlobServiceClient,
+  type BlobClient,
   type BlobLeaseClient,
   type BlobGetPropertiesResponse,
   type ContainerClient,
+  generateBlobSASQueryParameters,
+  SASProtocol,
+  type StorageSharedKeyCredential,
+  type UserDelegationKey,
 } from "@azure/storage-blob";
-import {Option, Schema} from "effect";
+import {Option} from "effect";
 
 import type {
   BlobByteRange,
@@ -18,6 +24,7 @@ import type {
   BlobWrite,
   OpenedBlob,
   OpenedBlobRange,
+  SealedStagedSource,
   StagingStore,
   StoredBlob,
 } from "../core/ports.js";
@@ -29,6 +36,7 @@ import {
   kindMetadataName,
   nodeByteStream,
   requireCloudObjectBody,
+  type InstallationObjectKeyspace,
   type StoredObjectKind,
   verifyCloudObjectWriteSize,
 } from "./cloud-object-storage.js";
@@ -36,20 +44,22 @@ import type {
   ObjectStorageProvider,
   ObjectStorageProviderFactory,
 } from "./object-storage-provider.js";
+import {
+  azureDigestMetadataName,
+  azureKindMetadataName,
+  parseAzureFailure,
+} from "./azure-blob-common.js";
+import {probeAzureSealedPromotion} from "./azure-blob-sealed-promotion-probe.js";
 import {verifiedBlobStream} from "./verified-file.js";
 
-const azureDigestMetadataName = "artifactsha256";
-const azureKindMetadataName = "artifactkind";
 const uploadBlockBytes = 8 * 1024 * 1024;
 const uploadConcurrency = 2;
 const leaseDurationSeconds = 60;
 const leaseRetryMilliseconds = 50;
 const leaseWaitMilliseconds = 65_000;
-const azureFailureSchema = Schema.Struct({
-  code: Schema.optional(Schema.String),
-  statusCode: Schema.optional(Schema.Number),
-});
-const parseAzureFailure = Schema.decodeUnknownOption(azureFailureSchema);
+const maximumSealAttempts = 3;
+const copySourceSasClockSkewMinutes = 5;
+const copySourceSasExpirationMinutes = 60;
 
 /** Azure Blob settings using the default Azure credential chain. */
 export interface AzureBlobObjectStorageProviderConfig {
@@ -57,6 +67,17 @@ export interface AzureBlobObjectStorageProviderConfig {
   readonly accountUrl: string;
   /** Existing private container authorized for the runtime identity. */
   readonly container: string;
+  /**
+   * Optional credential used instead of the default Azure credential chain.
+   * Intended for integration environments that require a shared key.
+   */
+  readonly credential?: StorageSharedKeyCredential | TokenCredential;
+  /**
+   * Optional resolver for the URL passed as the copy source during sealed
+   * promotion. Defaults to the source blob's plain URL; the provider factory
+   * supplies a user-delegation SAS resolver for real Azure.
+   */
+  readonly copySourceUrl?: (source: BlobClient) => string | Promise<string>;
 }
 
 /** Construction values for one installation's Azure Blob adapters. */
@@ -65,6 +86,17 @@ export interface AzureBlobObjectStorageConfig {
   readonly container: ContainerClient;
   /** Trusted installation identity used to derive an isolated key prefix. */
   readonly installationId: string;
+  /**
+   * Sealed Copy Blob promotion mode. "probe" defers the decision to runtime
+   * readiness; "enabled" exposes promote unconditionally (test seam); "disabled"
+   * never exposes it.
+   */
+  readonly promotion?: "probe" | "enabled" | "disabled";
+  /**
+   * Optional resolver for the URL passed as the copy source during sealed
+   * promotion. Defaults to the source blob's plain URL.
+   */
+  readonly copySourceUrl?: (source: BlobClient) => string | Promise<string>;
 }
 
 /** Immutable and staging adapters backed by one installation-scoped container. */
@@ -93,24 +125,44 @@ export function createAzureBlobObjectStorageAdapters(
   config: AzureBlobObjectStorageConfig,
 ): AzureBlobObjectStorageAdapters {
   const keyspace = createInstallationObjectKeyspace(config.installationId);
-  const objects = new AzureBlobObjects(config.container);
+  const objects = new AzureBlobObjects(
+    config.container,
+    config.copySourceUrl,
+  );
+  return buildAzureBlobObjectStorageAdapters(
+    objects,
+    keyspace,
+    config.promotion ?? "probe",
+  );
+}
+
+function buildAzureBlobObjectStorageAdapters(
+  objects: AzureBlobObjects,
+  keyspace: InstallationObjectKeyspace,
+  promotion: "probe" | "enabled" | "disabled" = "probe",
+): AzureBlobObjectStorageAdapters {
+  const blobs: BlobStore = {
+    inspect: (digest) => objects.inspect(keyspace.blob(digest), digest, "blob"),
+    open: (digest) => objects.open(keyspace.blob(digest), digest, "blob"),
+    openRange: (digest, range) => objects.openRange(
+      keyspace.blob(digest),
+      digest,
+      "blob",
+      range,
+    ),
+    put: (write) => objects.put(
+      keyspace.blob(write.sha256),
+      write,
+      write.sha256,
+      "blob",
+    ),
+  };
+  if (promotion === "enabled") {
+    blobs.promote = (source) => objects.promote(source, keyspace);
+  }
+
   return {
-    blobs: {
-      inspect: (digest) => objects.inspect(keyspace.blob(digest), digest, "blob"),
-      open: (digest) => objects.open(keyspace.blob(digest), digest, "blob"),
-      openRange: (digest, range) => objects.openRange(
-        keyspace.blob(digest),
-        digest,
-        "blob",
-        range,
-      ),
-      put: (write) => objects.put(
-        keyspace.blob(write.sha256),
-        write,
-        write.sha256,
-        "blob",
-      ),
-    },
+    blobs,
     staging: {
       remove: (uploadId, storageToken) => objects.remove(
         keyspace.staging(uploadId, storageToken),
@@ -137,30 +189,57 @@ function createAzureBlobObjectStorageProvider(
   config: AzureBlobObjectStorageProviderConfig,
   installationId: string,
 ): ObjectStorageProvider {
-  const service = new BlobServiceClient(
-    config.accountUrl,
-    new DefaultAzureCredential(),
-  );
+  const credential = config.credential ?? new DefaultAzureCredential();
+  const service = new BlobServiceClient(config.accountUrl, credential);
   const container = service.getContainerClient(config.container);
-  const adapters = createAzureBlobObjectStorageAdapters({
-    container,
-    installationId,
-  });
+  const copySourceUrl = config.copySourceUrl ??
+    createUserDelegationCopySourceUrlResolver(service, config.accountUrl);
+  const keyspace = createInstallationObjectKeyspace(installationId);
+  const objects = new AzureBlobObjects(container, copySourceUrl);
+  const adapters = buildAzureBlobObjectStorageAdapters(objects, keyspace, "probe");
+  // The capability probe writes, copies and deletes scratch objects, so a
+  // settled result is memoized per process rather than re-run on every
+  // readiness poll. A rejected probe is retried on the next poll and only
+  // withholds promote — the verified-stream fallback keeps serving.
+  let promotionProbe: Promise<boolean> | undefined;
+  const probePromotion = async () => {
+    promotionProbe ??= probeAzureSealedPromotion(
+      container,
+      installationId,
+      copySourceUrl,
+    );
+    try {
+      return await promotionProbe;
+    } catch {
+      promotionProbe = undefined;
+      return false;
+    }
+  };
   return {
     ...adapters,
     kind: "azure-blob",
     close: () => Promise.resolve(),
     readiness: async (signal) => {
       await container.getProperties({abortSignal: signal});
+      if (await probePromotion()) {
+        adapters.blobs.promote = (source) => objects.promote(source, keyspace);
+      }
     },
   };
 }
 
 class AzureBlobObjects {
   readonly #container: ContainerClient;
+  readonly #copySourceUrl: (source: BlobClient) => string | Promise<string>;
 
-  constructor(container: ContainerClient) {
+  constructor(
+    container: ContainerClient,
+    copySourceUrl: ((source: BlobClient) => string | Promise<string>) = (
+      source,
+    ) => source.url,
+  ) {
     this.#container = container;
+    this.#copySourceUrl = copySourceUrl;
   }
 
   async inspect(
@@ -170,6 +249,21 @@ class AzureBlobObjects {
   ): Promise<StoredBlob> {
     const properties = await this.#container.getBlobClient(key).getProperties();
     return inspectAzureMetadata(properties, expectedDigest, kind);
+  }
+
+  async #inspectIfPresent(
+    key: string,
+    expectedDigest: string,
+  ): Promise<StoredBlob | null> {
+    try {
+      return await this.inspect(key, expectedDigest, "blob");
+    } catch (error) {
+      const failure = parseAzureFailure(error);
+      if (Option.isSome(failure) && failure.value.statusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async remove(key: string): Promise<void> {
@@ -233,6 +327,114 @@ class AzureBlobObjects {
       sha256: stored.sha256,
       size: stored.size,
     };
+  }
+
+  async promote(
+    source: SealedStagedSource,
+    keyspace: InstallationObjectKeyspace,
+  ): Promise<StoredBlob> {
+    const destKey = keyspace.blob(source.sha256);
+    for (let attempt = 0; attempt < maximumSealAttempts; attempt += 1) {
+      // Each iteration re-inspects the destination first so a completed but
+      // unacknowledged copy converges instead of duplicating.
+      // eslint-disable-next-line no-await-in-loop
+      const existing = await this.#inspectIfPresent(destKey, source.sha256);
+      if (existing !== null) {
+        return verifyCloudObjectWriteSize(
+          existing,
+          source.size,
+          "Azure Blob",
+          "blob",
+        );
+      }
+
+      const sourceKey = keyspace.staging(
+        source.uploadId,
+        source.storageToken,
+      );
+      const sourceClient = this.#container.getBlobClient(sourceKey);
+      let etag: string;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const properties = await sourceClient.getProperties();
+        if (properties.contentLength !== source.size) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} has an unexpected size.`,
+          );
+        }
+        if (properties.metadata?.[azureDigestMetadataName] !== source.sha256) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} failed fingerprint verification.`,
+          );
+        }
+        if (properties.etag === undefined) {
+          throw new Error("Azure Blob returned no ETag for the staged source.");
+        }
+        etag = properties.etag;
+      } catch (error) {
+        const failure = parseAzureFailure(error);
+        const missing = Option.isSome(failure) &&
+          failure.value.statusCode === 404;
+        if (missing) {
+          throw new Error(
+            `The staged source for blob ${source.sha256} is missing.`,
+            {cause: error},
+          );
+        }
+        throw error;
+      }
+
+      const destClient = this.#container.getBlockBlobClient(destKey);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const copySource = await this.#copySourceUrl(sourceClient);
+        // eslint-disable-next-line no-await-in-loop
+        const poller = await destClient.beginCopyFromURL(copySource, {
+          conditions: {ifNoneMatch: "*"},
+          intervalInMs: 100,
+          metadata: {
+            [azureDigestMetadataName]: source.sha256,
+            [azureKindMetadataName]: "blob",
+          },
+          sourceConditions: {ifMatch: etag},
+        });
+        // eslint-disable-next-line no-await-in-loop
+        const result = await poller.pollUntilDone();
+        if (result.copyStatus !== "success") {
+          continue;
+        }
+      } catch (error) {
+        const failure = parseAzureFailure(error);
+        const status = Option.isSome(failure)
+          ? failure.value.statusCode
+          : undefined;
+        if (status === 409 || status === 412) {
+          // eslint-disable-next-line no-await-in-loop
+          const winner = await this.#inspectIfPresent(destKey, source.sha256);
+          if (winner !== null) {
+            return verifyCloudObjectWriteSize(
+              winner,
+              source.size,
+              "Azure Blob",
+              "blob",
+            );
+          }
+        }
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const verified = await this.inspect(destKey, source.sha256, "blob");
+      return verifyCloudObjectWriteSize(
+        verified,
+        source.size,
+        "Azure Blob",
+        "blob",
+      );
+    }
+    throw new Error(
+      `The staged source for blob ${source.sha256} could not be promoted after ${maximumSealAttempts} attempts.`,
+    );
   }
 
   async put(
@@ -466,6 +668,54 @@ async function* fixedSizeBlocks(
     }
   }
   if (blockOffset > 0) yield block.subarray(0, blockOffset);
+}
+
+function createUserDelegationCopySourceUrlResolver(
+  service: BlobServiceClient,
+  accountUrl: string,
+): (source: BlobClient) => Promise<string> {
+  const accountName = parseAccountName(accountUrl);
+  let cached: {key: UserDelegationKey; expiresOn: Date} | undefined;
+  return async (source) => {
+    const now = Date.now();
+    const refreshDeadline = new Date(
+      now + copySourceSasClockSkewMinutes * 60 * 1000,
+    );
+    if (cached === undefined || cached.expiresOn <= refreshDeadline) {
+      const startsOn = new Date(now - copySourceSasClockSkewMinutes * 60 * 1000);
+      const expiresOn = new Date(now + copySourceSasExpirationMinutes * 60 * 1000);
+      cached = {
+        key: await service.getUserDelegationKey(startsOn, expiresOn),
+        expiresOn,
+      };
+    }
+    const startsOn = new Date();
+    const expiresOn = new Date(
+      Date.now() + copySourceSasExpirationMinutes * 60 * 1000,
+    );
+    const sas = generateBlobSASQueryParameters(
+      {
+        blobName: source.name,
+        containerName: source.containerName,
+        expiresOn,
+        permissions: BlobSASPermissions.parse("r"),
+        protocol: SASProtocol.Https,
+        startsOn,
+      },
+      cached.key,
+      accountName,
+    );
+    return `${source.url}?${sas.toString()}`;
+  };
+}
+
+function parseAccountName(accountUrl: string): string {
+  const host = new URL(accountUrl).hostname;
+  const [name] = host.split(".");
+  if (name === undefined || name.length === 0) {
+    throw new Error("Azure Blob account URL has no account name.");
+  }
+  return name;
 }
 
 function inspectAzureMetadata(

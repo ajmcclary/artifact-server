@@ -1,0 +1,100 @@
+{
+  "accountId": "ee625e5e88a18eea4402075704d78f9f",
+  "accountName": "Ajmcclary@gmail.com's Account",
+  "allowanceSnapshot": {
+    "asOf": "2026-09-26",
+    "d1": "Free: 5M rows read/day, 100k rows written/day; this run reads about 55 rows and writes about 5 rows, all deleted",
+    "plan": "Workers Free (dashboard observation 2026-09-23)",
+    "r2": "Active at $0/month base; 10 GB-month, 1M Class A, 10M Class B allowance (dashboard observation 2026-09-23); this run lists objects only (Class B)",
+    "sources": "project/performance/CLOUDFLARE-COST-ENVELOPE.md",
+    "workers": "100,000 requests/day Free cap; this run performs about 120 Cloudflare API requests, no Worker invocations"
+  },
+  "cleanup": {
+    "probeDatabaseDeleted": true,
+    "probeDatabaseAbsent": true
+  },
+  "finishedAt": "2026-09-26T18:38:03.542Z",
+  "hardLimitObservations": {
+    "boundParameters101": {
+      "errors": [
+        {
+          "code": 7500,
+          "message": "variable number must be between ?1 and ?100 at offset 499: SQLITE_ERROR"
+        }
+      ],
+      "observed": true,
+      "resultErrors": [],
+      "status": 400
+    },
+    "statementBytes100500": {
+      "errors": [
+        {
+          "code": 7500,
+          "message": "statement too long: SQLITE_TOOBIG"
+        }
+      ],
+      "observed": true,
+      "resultErrors": [],
+      "status": 400
+    },
+    "rowBytes2100000": {
+      "errors": [],
+      "observed": false,
+      "resultErrors": [],
+      "status": 200
+    }
+  },
+  "inventory": {
+    "d1Databases": [],
+    "qualificationBucket": {
+      "bucket": "artifact-server-qual-r2-20260925",
+      "bytes": 0,
+      "objectCount": 0
+    },
+    "r2Buckets": [
+      {
+        "creationDate": "2026-09-25T14:25:48.835Z",
+        "name": "artifact-server-qual-r2-20260925"
+      }
+    ]
+  },
+  "measurementContext": {
+    "architecture": "arm64",
+    "commit": "working tree",
+    "cpuModel": "Apple M1 Max",
+    "date": "2026-09-26",
+    "node": "v24.15.0",
+    "platform": "darwin"
+  },
+  "probeDatabase": "probe-d1-rtt-20260926",
+  "qualificationBucket": "artifact-server-qual-r2-20260925",
+  "rttLegs": {
+    "cloudflareRestApi": {
+      "count": 50,
+      "max": 313.27279199999975,
+      "mean": 211.24982256000007,
+      "min": 188.08304099999987,
+      "p50": 203.67675000000054,
+      "p95": 265.1887919999999
+    },
+    "d1QueryApi": {
+      "count": 50,
+      "max": 110.69887500000004,
+      "mean": 85.58739667999984,
+      "min": 74.49275000000125,
+      "p50": 84.49012500000026,
+      "p95": 102.55391699999745
+    },
+    "r2S3ListObjects": {
+      "count": 50,
+      "max": 138.32108400000288,
+      "mean": 93.38735836000022,
+      "min": 75.78741700000319,
+      "p50": 90.31329199999891,
+      "p95": 117.42433300000266
+    }
+  },
+  "samplesPerLeg": 50,
+  "startedAt": "2026-09-26T18:37:30.423Z",
+  "success": true
+}

@@ -1,7 +1,9 @@
 # Cloudflare cost envelope (T08)
 
-Status September 23, 2026 — account plan and lifecycle probe bounded; current
-runtime remains open. Official pricing and limits are current as of 2026-09-22
+Status September 26, 2026 — account plan, lifecycle and runtime probes bounded;
+isolated API RTT and the cheap deterministic D1 limits measured live; the
+remaining production-usage facts are disclosed-unknown because the account has
+no production workload. Official pricing and limits are current as of 2026-09-22
 and taken from Cloudflare's own pages. The R2 allowance and overage values were
 also confirmed in the account dashboard on 2026-09-23. Local workload facts are
 measured on this machine (Apple M1 Max, darwin arm64, Node 24.15.0, commit
@@ -13,14 +15,14 @@ measured on this machine (Apple M1 Max, darwin arm64, Node 24.15.0, commit
 | --- | --- | --- |
 | Provider account / plan | Workers Free; R2 active at $0/month base | dashboard observation, 2026-09-23 |
 | Region(s) | Workers global; D1/R2 placement not separately inspected | live probe did not isolate placement |
-| Measured RTT to provider API (ms) | account lifecycle probe completed in 72.194 s end to end; per-call RTT not isolated | `project/evidence/cloudflare-account-probe.json` |
+| Measured RTT to provider API (ms) | isolated 2026-09-26, 50 samples per leg, this machine, Node 24.15.0: Cloudflare REST API p50 203.7 / p95 265.2; D1 query API p50 84.5 / p95 102.6; R2 S3 ListObjectsV2 p50 90.3 / p95 117.4 | `project/evidence/cloudflare-api-rtt.json` |
 | Proxy / CDN / tunnel topology | local loopback only | local baseline harness |
 | Publication size distribution (bytes) | 40 × 16 KiB publications; file-client 48 × 4 KiB directory + one 2 MiB file | `project/evidence/local-performance-baseline.json` |
 | Files per publication distribution | 1-file and 48-file fixtures measured; 3,301-version Git backlog probed on local D1 | local baselines + `project/evidence/git-history-d1-backlog.json` |
-| Retained bytes (total / per project) | 15,540,592 bytes across 291 files in the bounded local baseline | `project/evidence/local-performance-baseline.json` `storage` |
-| Backup count and frequency | unknown | no production workload or backup schedule supplied |
-| Visible review hours per day | unknown | blocked on real usage data |
-| Mutation rate (publications / hour) | unknown | blocked on real usage data |
+| Retained bytes (total / per project) | 15,540,592 bytes across 291 files in the bounded local baseline; on the live account 0 bytes (0 D1 databases, one R2 bucket with 0 objects) as of 2026-09-26 | `project/evidence/local-performance-baseline.json` `storage`; `project/evidence/cloudflare-api-rtt.json` `inventory` |
+| Backup count and frequency | disclosed-unknown — the account is probe-only with no production workload or backup schedule; recorded per the T24 default ("use synthetic/local fixtures and disclose unknown production capacity/cost", NEXT-STEPS.md) | operator/account state, 2026-09-26 |
+| Visible review hours per day | disclosed-unknown — no production workload exists on the account; recorded per the T24 default | operator/account state, 2026-09-26 |
+| Mutation rate (publications / hour) | disclosed-unknown — no production workload exists on the account; recorded per the T24 default | operator/account state, 2026-09-26 |
 | Concurrent client count | measured synthetic 1/10/25/50/100 users | `project/evidence/local-capacity-baseline.json` |
 | Durability setting (replicas, sync) | provider-managed; no size control in the current stack | `deploy/cloudflare/FINDINGS.md` |
 | Database pool size | n/a — D1 is not connection-pooled; 6 simultaneous D1 connections per Worker invocation | D1 limits, see below |
@@ -149,9 +151,17 @@ Abandoned multipart aborts are free-billed operations where they do occur.
   rows per version, and D1's 500 MB (Free) / 10 GB (Paid)
   per-database cap binds total manifest history. Nothing in this report
   qualifies that shape on a live Worker.
-- Hard-failure versus overage behavior is documented above, not observed: no
-  live run has yet hit the Free request cap, the D1 row caps, or Paid overage
-  billing.
+- Hard-failure versus overage behavior is now partially observed
+  (2026-09-26, `project/evidence/cloudflare-api-rtt.json`): D1 rejects a 101st
+  bound parameter (HTTP 400, code 7500, "variable number must be between ?1
+  and ?100") and a 100,500-byte statement (HTTP 400, code 7500,
+  "statement too long: SQLITE_TOOBIG"), matching the documented 100-parameter
+  and 100,000-byte limits. The documented 2 MB row limit did **not** reject a
+  2,100,000-byte single-row insert through the D1 REST query API — one
+  observation on one date, not a new documented limit. Deliberately
+  unobserved: the Workers Free 100,000 requests/day cap (Error 1027) and the
+  D1 daily row caps, because hitting them would burn the shared account's
+  daily free allowance; R2 has no hard monthly cap, only per-unit billing.
 
 ## Live account result and remaining measurements
 
@@ -165,9 +175,27 @@ A separate runtime-stage attempt deployed and cleaned the same bounded shape,
 but `/health`, `/ready`, the unauthenticated list and upload request all returned
 HTTP 503. That attempt does not refresh the older runtime qualification. The
 Cloudflare Artifacts qualification also stopped at namespace health with zero
-repositories and zero operations. Remaining account facts are actual retained
-bytes, backup count/frequency, review hours, mutation rates, isolated API RTT,
-and observed hard-limit or overage behavior.
+repositories and zero operations.
+
+On 2026-09-26 a bounded, read-mostly measurement run
+(`deploy/cloudflare/scripts/measure-api-rtt.mjs`, evidence
+`project/evidence/cloudflare-api-rtt.json` and
+`deploy/cloudflare/evidence/api-rtt-2026-09-26T18-38-03-542Z.json`) resolved the
+remaining measurable account facts: isolated per-call RTT (50 samples per leg
+after 3 warm-ups, this machine, Node 24.15.0 — Cloudflare REST API
+p50 203.7 / p95 265.2 ms, D1 query API
+p50 84.5 / p95 102.6 ms, R2 S3 ListObjectsV2 p50 90.3 / p95 117.4 ms), a
+read-only retained-bytes inventory (0 D1 databases, one R2 bucket
+`artifact-server-qual-r2-20260925` with 0 objects and 0 bytes), and the cheap
+deterministic D1 limits (101st bound parameter and 100,500-byte statement both
+rejected as documented; the documented 2 MB row limit did not reject a
+2,100,000-byte row — a single honest deviation, recorded). The run created and
+deleted one `probe-d1-rtt-20260926` database (deletion verified by re-listing),
+performed about 170 API calls and no Worker invocations, and stayed far inside
+every free allowance. Backup count/frequency, visible review hours, and
+mutation rates have no production source — the account is probe-only — and are
+recorded in the worksheet as disclosed-unknown per the T24 default in
+NEXT-STEPS.md rather than left as open questions.
 
 On 2026-09-25 two bounded live runs stayed inside this envelope. The R2
 sealed-promotion probe (`project/evidence/r2-s3-promotion-probe.json`) ran tens

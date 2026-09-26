@@ -6,8 +6,9 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-T01, T02, T04, T05, T06, T07 and T18 are closed with their remaining gaps
-recorded; all other tasks (T03, T08–T17, T19–T27) are open. Task IDs are
+T01, T02, T04, T05, T06, T07, T08, T12, T13 and T18 are closed with their
+remaining gaps
+recorded; all other tasks (T03, T09–T11, T14–T17, T19–T27) are open. Task IDs are
 planning
 identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
@@ -33,9 +34,9 @@ it does not authorize future live runs or paid-plan changes.
 | 5 | T05 Publication reconciliation and file resume (closed September 24) | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
-| 8 | T08 then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
+| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
 | 9 | T15/T16/T17 MCP and identity/host qualification | Bound agent results and qualify current auth/delivery behavior. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth; 2–4 per host |
-| 10 | Select T11, T12 or T13 from measurements | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
+| 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
 
 Effort is an initial engineering estimate including focused tests, not a delivery
 promise or all-provider qualification budget. Plan ranks 1–7 first. Work on T19
@@ -785,6 +786,48 @@ gate.
 
 ### T08 Establish actual Cloudflare and provider cost envelopes
 
+- **Envelope completion, September 26:** the remaining envelope facts are
+  resolved. A bounded, read-mostly live run
+  (`deploy/cloudflare/scripts/measure-api-rtt.mjs`; evidence
+  [cloudflare-api-rtt.json](./project/evidence/cloudflare-api-rtt.json) and
+  `deploy/cloudflare/evidence/api-rtt-2026-09-26T18-38-03-542Z.json`) measured
+  isolated per-call RTT (50 samples per leg after 3 warm-ups, this machine,
+  Node 24.15.0: Cloudflare REST API p50 203.7 / p95 265.2 ms, D1 query API
+  p50 84.5 / p95 102.6 ms, R2 S3 ListObjectsV2 p50 90.3 / p95 117.4 ms),
+  recorded a read-only retained-bytes inventory (0 D1 databases; the one R2
+  bucket, `artifact-server-qual-r2-20260925`, holds 0 objects and 0 bytes),
+  and observed the cheap deterministic D1 limits live: a 101st bound
+  parameter and a 100,500-byte statement are both rejected as documented
+  (HTTP 400, code 7500), while the documented 2 MB row limit did not reject a
+  2,100,000-byte single-row insert through the REST query API — one honest
+  deviation, recorded in the envelope doc. The run created and deleted one
+  `probe-d1-rtt-20260926` database (deletion verified by re-listing),
+  performed about 170 API calls and no Worker invocations, and stayed far
+  inside every free allowance. Backup count/frequency, visible review hours
+  and mutation rates have no production source — the account is probe-only —
+  and are recorded in the worksheet as disclosed-unknown per the T24 default
+  ("use synthetic/local fixtures and disclose unknown production
+  capacity/cost").
+- **Closed, September 26:** the bounded worksheet and qualification report in
+  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md)
+  identify the supported envelope (a light team's eight-hour workday review
+  fits Workers Free; sustained 24-hour multi-tab review requires Workers
+  Paid) and reject the unsupported many-file assumption (a 3,301-file
+  publication shape is unqualified on a live Worker). R2 deletes and aborts
+  are recorded as free billed operations that still cost Worker execution
+  work, and the polling math states its duration (7-second visible-tab-only
+  interval; eight tabs for 24 hours versus an eight-hour workday). Account
+  plan, lifecycle probe, runtime-stage re-qualification and the R2 S3
+  surface are qualified live (September 23–25 evidence above); isolated API
+  RTT, actual retained bytes (zero on the probe-only account) and the cheap
+  deterministic D1 hard limits are measured live today. Gates V and L passed
+  at the recorded commits. Remaining gaps, recorded rather than blocking: the
+  Workers Free daily request cap (Error 1027) and D1 daily row caps are
+  documented but deliberately unobserved — hitting them would burn the
+  shared account's daily free allowance; R2 overage is per-unit billing with
+  no hard cap; backup frequency, review hours and mutation rates are
+  disclosed-unknown (no production workload); and the Cloudflare Artifacts
+  namespace entitlement remains unavailable (T03).
 - **Do:** inventory the selected account plan and actual publication sizes/counts,
   retained bytes, backups, visible review hours, mutation rates and client usage.
   Measure Worker CPU/subrequests/body limits, D1 query/row/index/storage costs,
@@ -1023,6 +1066,59 @@ gate.
   account probe (see the T08 re-qualification note): the live Worker served
   upload, file PUT, commit, idempotent replay and list through the R2 binding
   adapter. Remaining open for T12: Azure.
+- **Azure qualification, September 26:** sealed Copy Blob promotion is
+  implemented and qualified against pinned Azurite. The Azure blobs adapter
+  gained `promote` with the same bounded-attempt shape as S3/GCS (max 3):
+  each attempt inspects the destination first so completed-but-unacknowledged
+  copies and same-digest races converge, seals the staged source by
+  `getProperties` (size plus the server-written `artifactsha256` fingerprint
+  metadata, pinned to the exact ETag), and copies with `beginCopyFromURL`
+  using `sourceConditions: {ifMatch: etag}` plus destination
+  `ifNoneMatch: "*"`; a 409/412 resolves to the concurrent winner or
+  re-seals a replaced source, a non-success copy status retries, and any
+  rejection degrades to the proven verified-stream path. Two implementation
+  facts were established empirically against the pinned Azurite image before
+  coding: `syncUploadFromURL` (Put Blob From URL) is not implemented on
+  Azurite (501), and SAS-signed copy sources crash Azurite's copy handler
+  (500), so the async Copy Blob API with a plain same-host source URL is the
+  testable path — and unlike MinIO and fake-gcs-server, **Azurite enforces
+  both preconditions** (destination overwrite rejected 409
+  `BlobAlreadyExists`, bogus or stale source ETag rejected 412
+  `ConditionNotMet`), so the capability probe passes on Azurite and the
+  promotion path runs for real in the suite. A startup capability probe
+  (`src/storage/azure-blob-sealed-promotion-probe.ts`, memoized once per process
+  during readiness, retrying after transient failure) exposes `promote` only
+  when the provider proves both preconditions. For live Azure the provider
+  factory mints a short-lived read user-delegation SAS for the copy source
+  from the runtime credential (cached and refreshed before expiry); if SAS
+  minting or either precondition fails, the probe withholds `promote` and the
+  verified-stream fallback keeps serving.
+  `tests/integration/azure-promotion.test.ts` (12 tests, Azurite) covers the
+  small and block-boundary round trips, size/digest/missing-source rejection,
+  source replacement before and after the seal failing closed, same-digest
+  concurrent convergence, a lost copy response through a socket-destroying
+  loopback proxy, a seal-race proxy, and the post-rejection stream fallback.
+  `pnpm test:storage-native-cloud` passed 40/40 including the new suite, and
+  root lint and typecheck are clean.
+- **Closed, September 26:** sealed-source promotion is resolved per adapter.
+  The local hard-link path shows the measured ≥10% gain (about −25%
+  end-to-end on the named 48-file workload, September 24); AWS S3 and GCS
+  are qualified live (September 25 evidence above); R2's S3-compatible
+  surface is closed with a documented negative (its `CopyObject` enforces
+  neither precondition, so the verified-stream path is permanent there); and
+  Azure is implemented and Azurite-qualified with source replacement,
+  same-digest races, mismatched metadata, lost copy responses and the
+  post-rejection fallback all preserving bytes and one publication result.
+  PUB-018 stays `behavior_verified` with its proof_gap updated. Gates
+  V/H/O/E/X/P passed at the recorded commits; the L gate is the AWS and GCS
+  live probes. Remaining deployment gap, recorded rather than blocking: live
+  Azure is unqualified — no Azure account access exists in this environment
+  as of 2026-09-26 (no `az` CLI, credentials or qualification evidence), so
+  real-Azure precondition enforcement and the user-delegation SAS copy
+  source are unproven; the startup capability probe keeps `promote`
+  withheld there until a bounded live run proves both preconditions (the
+  probe shape mirrors `pnpm verify:aws-s3-promotion` /
+  `pnpm verify:gcs-promotion` and can be added when an account exists).
 - **Progress, September 24:** the capability is specified before
   implementation as PUB-018 in the ledger (`implementing`): an adapter may
   install an already-staged file as an immutable blob by sealed server-side
@@ -1111,6 +1207,28 @@ gate.
   this evidence (its staging win is most relevant to per-call-billed
   Workers/R2/D1 workloads under T08, not this local Node path). Full write-up in
   `project/performance/FINDINGS.md`.
+- **Closed, September 26:** the experiment is complete and the measured answer
+  is the negative one the design allowed — the batch transport is **not
+  adopted**. An opt-in `{transport: "batch"}` frame to
+  `POST /api/v1/uploads/:uploadId/batch` reuses the per-file staging writes
+  and per-part verified flags; local conformance tests claim and pass
+  PUB-016-B/F and PUB-017-B (exact-bytes commit; malformed, duplicate,
+  unknown, size-mismatched and truncated frames verify nothing;
+  truncated-batch resume sends only missing parts and commits one version),
+  and every existing PUB recovery test still passes. PUB-016 and PUB-017 stay
+  `implementing` in the ledger by decision: the transport is unadopted, and
+  their proof_gap notes record both the passing claims and the below-bar
+  verdict. The paired harness
+  ([batch-staging-comparison.json](./project/evidence/batch-staging-comparison.json))
+  shows the staging leg about 75% cheaper but the end-to-end delta below the
+  ≥10% bar (about +7% at 48 × 4 KiB, about 0% at 1,000 files) because the
+  commit-time staged-to-blob copy dominates at scale — the same attribution
+  T01 recorded. Gates V/H/O/E/X/P passed at the recorded commits. Remaining
+  gaps, recorded rather than blocking: the batch stays opt-in and unadopted
+  with no browser-transport qualification (B gate not applicable to an
+  unadopted transport); its staging win may still be relevant to
+  per-call-billed Workers/R2/D1 workloads under T09, which is where any
+  future reconsideration belongs.
 
 ### T14 Evaluate authorized content reuse and bounded metadata reads
 
