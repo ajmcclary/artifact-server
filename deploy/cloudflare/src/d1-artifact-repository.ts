@@ -2888,6 +2888,34 @@ export function createD1ArtifactRepository(
       `).bind(projectId, artifactId).all<z.input<typeof versionRowSchema>>();
       return result.results.map((row) => versionRowSchema.parse(row));
     },
+    listArtifactVersionsPage: async (
+      projectId,
+      artifactId,
+      cursor,
+      limit,
+    ): Promise<PageResult<VersionRecord>> => {
+      if (await readArtifactOrNull(projectId, artifactId) === null) {
+        return {items: [], nextCursor: null};
+      }
+      const cursorCreatedAt = cursor?.createdAt ?? null;
+      const cursorId = cursor?.id ?? null;
+      const result = await database.prepare(`${versionSelect}
+        WHERE project_id = ? AND artifact_id = ?
+          AND (? IS NULL OR createdAt < ? OR (createdAt = ? AND id < ?))
+        ORDER BY createdAt DESC, id DESC
+        LIMIT ?
+      `).bind(
+        projectId,
+        artifactId,
+        cursorCreatedAt,
+        cursorCreatedAt,
+        cursorCreatedAt,
+        cursorId,
+        limit + 1,
+      ).all<z.input<typeof versionRowSchema>>();
+      const parsed = result.results.map((row) => versionRowSchema.parse(row));
+      return pageResult(parsed.slice(0, limit), parsed, limit);
+    },
     listExpiredStagedUploads: async (
       expiredBefore: string,
       now: string,

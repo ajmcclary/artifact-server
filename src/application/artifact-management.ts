@@ -37,6 +37,7 @@ import type {
   ArtifactState,
   ArtifactVersion,
   PageCursor,
+  VersionPage,
   VersionRecord,
 } from "../core/model.js";
 import type {
@@ -67,6 +68,12 @@ export interface ReadArtifactCommand {
   readonly artifactId: string;
   readonly principal: Principal;
   readonly projectId: string | null;
+}
+
+/** Input for listing one artifact's saved versions with optional pagination. */
+export interface ListArtifactVersionsCommand extends ReadArtifactCommand {
+  readonly cursor: PageCursor | null;
+  readonly limit: number | null;
 }
 
 /** Input for reading one exact saved version. */
@@ -164,6 +171,12 @@ export interface ArtifactManagementRepository {
     projectId: string,
     artifactId: string,
   ) => Effect.Effect<readonly VersionRecord[], ArtifactRepositoryFailure>;
+  readonly listArtifactVersionsPage: (
+    projectId: string,
+    artifactId: string,
+    cursor: PageCursor | null,
+    limit: number,
+  ) => Effect.Effect<VersionPage, ArtifactRepositoryFailure>;
   readonly listArtifactActions: (
     command: ListArtifactActions,
   ) => Effect.Effect<ArtifactActionPage, ArtifactRepositoryFailure>;
@@ -221,8 +234,8 @@ interface ArtifactManagementOperations {
     command: ReadArtifactVersionCommand,
   ) => Effect.Effect<ArtifactVersionDetails, ArtifactManagementFailure>;
   readonly listVersions: (
-    command: ReadArtifactCommand,
-  ) => Effect.Effect<readonly VersionRecord[], ArtifactManagementFailure>;
+    command: ListArtifactVersionsCommand,
+  ) => Effect.Effect<readonly VersionRecord[] | VersionPage, ArtifactManagementFailure>;
   readonly listArtifactActions: (
     command: ListArtifactActionsCommand,
   ) => Effect.Effect<ArtifactActionPage, ArtifactManagementFailure>;
@@ -390,26 +403,46 @@ function makeArtifactManagementService(
   );
 
   const listVersions = Effect.fn("ArtifactManagementService.listVersions")(
-    function*(command: ReadArtifactCommand) {
+    function*(command: ListArtifactVersionsCommand) {
       const project = yield* resolveProjectForRead(
         command.principal,
         command.projectId,
       );
+      if (command.limit === null) {
+        // The artifact read and the version listing are independent, so they
+        // run concurrently; existence and authorization checks keep their
+        // original order below.
+        const [artifact, versions] = yield* Effect.all([
+          dependencies.repository.findArtifact(project.id, command.artifactId),
+          dependencies.repository.listArtifactVersions(
+            project.id,
+            command.artifactId,
+          ),
+        ], {concurrency: 2});
+        if (artifact === null) {
+          return yield* new ArtifactNotFound({message: "The artifact does not exist."});
+        }
+        yield* authorization.requireArtifactRead(command.principal);
+        return versions;
+      }
+      const limit = yield* requirePageSize(command.limit);
       // The artifact read and the version listing are independent, so they
       // run concurrently; existence and authorization checks keep their
       // original order below.
-      const [artifact, versions] = yield* Effect.all([
+      const [artifact, page] = yield* Effect.all([
         dependencies.repository.findArtifact(project.id, command.artifactId),
-        dependencies.repository.listArtifactVersions(
+        dependencies.repository.listArtifactVersionsPage(
           project.id,
           command.artifactId,
+          command.cursor,
+          limit,
         ),
       ], {concurrency: 2});
       if (artifact === null) {
         return yield* new ArtifactNotFound({message: "The artifact does not exist."});
       }
       yield* authorization.requireArtifactRead(command.principal);
-      return versions;
+      return page;
     },
   );
 

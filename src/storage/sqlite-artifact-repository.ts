@@ -1944,6 +1944,50 @@ export class SqliteArtifactRepository implements
     });
   }
 
+  listArtifactVersionsPage(
+    projectId: string,
+    artifactId: string,
+    cursor: PageCursor | null,
+    limit: number,
+  ): Promise<PageResult<VersionRecord>> {
+    return Promise.resolve().then(() => {
+      if (this.#readArtifactOrNull(projectId, artifactId) === null) {
+        return {items: [], nextCursor: null};
+      }
+      const cursorCreatedAt = cursor?.createdAt ?? null;
+      const cursorId = cursor?.id ?? null;
+      const rows = this.#database
+        .prepare(
+          `SELECT
+            id,
+            project_id AS projectId,
+            artifact_id AS artifactId,
+            number,
+            manifest_digest AS manifestDigest,
+            entry_path AS entryPath,
+            routing_mode AS routingMode,
+            content_token AS contentToken,
+            publisher_principal_id AS publisherPrincipalId,
+            created_at AS createdAt
+           FROM versions
+           WHERE project_id = ? AND artifact_id = ?
+             AND (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))
+           ORDER BY created_at DESC, id DESC
+           LIMIT ?`,
+        )
+        .all(
+          projectId,
+          artifactId,
+          cursorCreatedAt,
+          cursorCreatedAt,
+          cursorCreatedAt,
+          cursorId,
+          limit + 1,
+        );
+      return pageFromRows(z.array(versionRowSchema).parse(rows), limit);
+    });
+  }
+
   listArtifacts(command: ListArtifacts): Promise<ArtifactPage> {
     return Promise.resolve().then(() => {
       const cursorCreatedAt = command.cursor?.createdAt ?? null;

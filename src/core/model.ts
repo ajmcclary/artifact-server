@@ -157,6 +157,12 @@ export interface ArtifactActionPage {
   readonly nextCursor: PageCursor | null;
 }
 
+/** One bounded page of saved artifact versions, newest first. */
+export interface VersionPage {
+  readonly items: readonly VersionRecord[];
+  readonly nextCursor: PageCursor | null;
+}
+
 /** The durable tombstone returned by an artifact deletion. */
 export interface ArtifactDeletion {
   readonly artifact: ArtifactTombstone;

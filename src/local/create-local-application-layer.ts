@@ -624,6 +624,17 @@ export function createApplicationLayer(
           try: () => adapters.repository.listArtifactVersions(projectId, artifactId),
           catch: (cause) => repositoryFailure("listArtifactVersions", cause),
         }),
+      listArtifactVersionsPage: (projectId, artifactId, cursor, limit) =>
+        Effect.tryPromise({
+          try: () =>
+            adapters.repository.listArtifactVersionsPage(
+              projectId,
+              artifactId,
+              cursor,
+              limit,
+            ),
+          catch: (cause) => repositoryFailure("listArtifactVersionsPage", cause),
+        }),
       listArtifactActions: (command) =>
         Effect.tryPromise({
           try: () => adapters.repository.listArtifactActions(command),

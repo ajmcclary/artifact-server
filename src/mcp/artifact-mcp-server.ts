@@ -63,6 +63,7 @@ import {
   type RegisteredAgentRecord,
   type SourceBindingRecord,
   type StagedUpload,
+  type VersionPage,
   type VersionRecord,
 } from "../core/model.js";
 import {principalKinds, type Principal} from "../core/identity.js";
@@ -1096,21 +1097,22 @@ export function createArtifactMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({artifactId, cursor, limit, projectId}) => toolResult(async () => {
-      const allVersions = await runMcpApplicationEffect(
+      const decodedCursor = decodePageCursor(cursor);
+      const result = await runMcpApplicationEffect(
         dependencies,
         ArtifactManagementService.use((management) =>
           management.listVersions({
             artifactId,
+            cursor: decodedCursor,
+            limit,
             principal: identity.principal,
             projectId,
           })
         ),
       );
-      const page = paginateVersionList(
-        allVersions,
-        decodePageCursor(cursor),
-        limit,
-      );
+      const page = isVersionPage(result)
+        ? {nextCursor: result.nextCursor, versions: result.items}
+        : paginateVersionList(result, decodedCursor, null);
       return {
         artifactId,
         nextCursor: encodePageCursor(page.nextCursor),
@@ -2133,11 +2135,16 @@ export function createArtifactMcpServer(
           ArtifactManagementService.use((management) =>
             management.listVersions({
               artifactId: thread.artifactId,
+              cursor: null,
+              limit: null,
               principal: identity.principal,
               projectId: dispatch.projectId,
             })
           ),
         );
+        if (!Array.isArray(versions)) {
+          throw new Error("The version list response was not an array.");
+        }
         numbers = new Map(
           versions.map((version) => [version.id, version.number]),
         );
@@ -2940,6 +2947,12 @@ function decodePageCursor(token: string | null): {readonly createdAt: string; re
 interface VersionListPage {
   readonly nextCursor: {readonly createdAt: string; readonly id: string} | null;
   readonly versions: readonly VersionRecord[];
+}
+
+function isVersionPage(
+  result: readonly VersionRecord[] | VersionPage,
+): result is VersionPage {
+  return !Array.isArray(result);
 }
 
 function paginateVersionList(

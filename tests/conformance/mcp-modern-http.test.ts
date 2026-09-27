@@ -1504,6 +1504,46 @@ describe("modern MCP HTTP", () => {
     expect(combinedIds).toEqual(versionIds);
     expect(new Set(combinedIds).size).toBe(versionCount);
 
+    // Keyset stability: a version published after the first page must not
+    // appear when continuing from that page's cursor.
+    const midTraversal = await publishVersion(previousVersionId, versionCount);
+    versionIds.unshift(midTraversal.version.id);
+    previousVersionId = midTraversal.version.id;
+
+    const resumedPage = versionListResultSchema.parse((await callTool(
+      server,
+      installation.apiToken,
+      {
+        arguments: {
+          artifactId: committedArtifactId,
+          cursor: firstPage.nextCursor,
+          limit: pageSize,
+        },
+        name: "artifact_version_list",
+      },
+    )).structuredContent);
+    expect(resumedPage.versions.map((version) => version.id))
+      .toEqual(secondPage.versions.map((version) => version.id));
+
+    // A cursor past the oldest row returns an empty final page.
+    const emptyPage = versionListResultSchema.parse((await callTool(
+      server,
+      installation.apiToken,
+      {
+        arguments: {
+          artifactId: committedArtifactId,
+          cursor: Buffer.from(JSON.stringify({
+            createdAt: "1970-01-01T00:00:00.000Z",
+            id: "zzzzzzzz",
+          }), "utf8").toString("base64url"),
+          limit: pageSize,
+        },
+        name: "artifact_version_list",
+      },
+    )).structuredContent);
+    expect(emptyPage.versions).toHaveLength(0);
+    expect(emptyPage.nextCursor).toBeNull();
+
     const invalidCursor = await mcpRequest(
       server,
       installation.apiToken,

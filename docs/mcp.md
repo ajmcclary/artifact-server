@@ -79,6 +79,8 @@ key with a different manifest before commit returns `IDEMPOTENCY_CONFLICT`.
 both are omitted it returns every saved version, preserving compatibility with
 callers that expect the full list. Passing `limit` pages newest-first; each page
 includes a `nextCursor` for the following page, or `null` on the final page.
+Pages are read with a bounded keyset query at the store boundary, so mid-traversal
+publications do not duplicate or omit the original set.
 Modern stateless MCP HTTP and legacy compatibility are both supported.
 Subscriptions remain unavailable until a shared event service has its own
 replay, authorization, and recovery proof.

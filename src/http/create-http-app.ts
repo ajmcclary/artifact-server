@@ -1659,12 +1659,17 @@ export function createHttpApp(
       ArtifactManagementService.use((management) =>
         management.listVersions({
           artifactId: context.req.param("artifactId"),
+          cursor: null,
+          limit: null,
           principal: context.get("principal"),
           projectId: requestedProjectId(context),
         })
       ),
     );
     const requestUrl = responseApplicationUrl(context, dependencies);
+    if (!Array.isArray(versions)) {
+      return context.json({error: "The version list response was not an array."}, 500);
+    }
     return context.json({
       artifactId: context.req.param("artifactId"),
       versions: versions.map((version) => versionResponse(

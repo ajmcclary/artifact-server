@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-25",
-  "commit": "443ac13",
+  "recordedAt": "2026-09-27",
+  "commit": "9ba8339",
   "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions.",
   "providers": [
     {
@@ -9,10 +9,10 @@
       "version": "quay.io/keycloak/keycloak@sha256:09a381c715ab0b111835b70f2905955274843a219c6f27efb348e4d9f4086858",
       "scope": "local OIDC integration via pnpm test:oidc",
       "results": {
-        "authorizationCodeSignIn": "pass (2026-09-24, oidc-keycloak.json, 4/4)",
-        "unadmittedIdentityRefusedBrowser": "pass (2026-09-24)",
-        "resourceBoundAccessTokenAtMcp": "pass (2026-09-24)",
-        "unadmittedIdentityRefusedMcp": "pass (2026-09-24)",
+        "authorizationCodeSignIn": "pass (2026-09-27, oidc-keycloak.json, 4/4)",
+        "unadmittedIdentityRefusedBrowser": "pass (2026-09-27)",
+        "resourceBoundAccessTokenAtMcp": "pass (2026-09-27)",
+        "unadmittedIdentityRefusedMcp": "pass (2026-09-27)",
         "keyRotation": "untested",
         "providerRevocation": "untested",
         "logout": "pass (2026-09-25): codex mcp logout removed the local grant and CIMD login restored OAuth successfully",
@@ -70,17 +70,17 @@
     {
       "name": "Claude Code",
       "version": "2.1.233",
-      "status": "pass (2026-08-16, dated): CIMD registration, browser approval, tool call, refresh, revocation after access-token expiry; current installed version is 2.1.281 (bridge-qualified 2026-09-24, not identity-qualified)"
+      "status": "pass (2026-08-16, dated): CIMD registration, browser approval, tool call, refresh, revocation after access-token expiry; current installed version is 2.1.283 (bridge-qualified 2026-09-24 at 2.1.282, not identity-qualified)"
     },
     {
       "name": "Cursor Agent",
       "version": "3.15.6",
-      "status": "partial (2026-08-16, dated): DCR registration, browser approval, tool discovery; model tool call not run (product login separate from MCP OAuth)"
+      "status": "partial (2026-08-16, dated): DCR registration, browser approval, tool discovery; model tool call not run (product login separate from MCP OAuth); current installed versions are cursor-agent 2026.07.16-899851b and Cursor editor 3.12.17, not re-qualified"
     },
     {
       "name": "Visual Studio Code",
       "version": "1.132.1",
-      "status": "untested (2026-08-16): no agent surface installed for an MCP tool call"
+      "status": "untested (2026-08-16): no agent surface installed for an MCP tool call; current installed version is 1.138.0, still untested"
     },
     {
       "name": "claude.ai",

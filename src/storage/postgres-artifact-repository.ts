@@ -1798,6 +1798,51 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  async listArtifactVersionsPage(
+    projectId: string,
+    artifactId: string,
+    cursor: PageCursor | null,
+    limit: number,
+  ): Promise<PageResult<VersionRecord>> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const artifact = yield* this.#readArtifactOrNull(
+        projectId,
+        artifactId,
+        false,
+      );
+      if (artifact === null) return {items: [], nextCursor: null};
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT
+          id,
+          artifact_id AS "artifactId",
+          number,
+          manifest_digest AS "manifestDigest",
+          entry_path AS "entryPath",
+          routing_mode AS "routingMode",
+          content_token AS "contentToken",
+          publisher_principal_id AS "publisherPrincipalId",
+          project_id AS "projectId", created_at AS "createdAt"
+         FROM versions
+         WHERE installation_id = $1 AND project_id = $2 AND artifact_id = $3
+           AND ($4::text IS NULL OR created_at < $4::text
+             OR (created_at = $4::text AND id < $5))
+         ORDER BY created_at DESC, id DESC
+         LIMIT $6`,
+        [
+          installationId,
+          projectId,
+          artifactId,
+          cursor?.createdAt ?? null,
+          cursor?.id ?? null,
+          limit + 1,
+        ],
+      );
+      return pageFromRows(z.array(versionRowSchema).parse(rows), limit);
+    }));
+  }
+
   async listArtifacts(command: ListArtifacts): Promise<ArtifactPage> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {

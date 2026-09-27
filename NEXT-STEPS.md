@@ -6,9 +6,9 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-T01, T02, T04, T05, T06, T07, T08, T12, T13 and T18 are closed with their
+T01, T02, T04, T05, T06, T07, T08, T12, T13, T17 and T18 are closed with their
 remaining gaps
-recorded; all other tasks (T03, T09–T11, T14–T17, T19–T27) are open. Task IDs are
+recorded; all other tasks (T03, T09–T11, T14–T16, T19–T27) are open. Task IDs are
 planning
 identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
@@ -35,7 +35,7 @@ it does not authorize future live runs or paid-plan changes.
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
 | 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. T09 resumable preparation landed September 27 and its manifest writes are now bounded and atomically fenced; T10's bounded cleanup slice landed the same day. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
-| 9 | T15/T16/T17 MCP and identity/host qualification | Bound agent results and qualify current auth/delivery behavior. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth; 2–4 per host |
+| 9 | T15/T16 MCP and identity qualification (T17 host qualification closed September 27) | Bound agent results and qualify current auth behavior at current client versions. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth |
 | 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
 
 Effort is an initial engineering estimate including focused tests, not a delivery
@@ -1389,6 +1389,22 @@ gate.
   per-request floor is authentication and construction constants. One run on
   one machine; no tail claim. Remaining open: the live supported-client matrix
   (L gate) and Cloudflare Worker surface qualification.
+- **Progress, September 27:** `artifact_version_list` pagination is now bounded
+  at the store boundary instead of the tool layer. A new
+  `listArtifactVersionsPage` repository port returns one keyset page
+  (`createdAt, id` descending) directly from SQLite, Postgres and D1; the
+  application service accepts a `ListArtifactVersionsCommand` and routes
+  bounded calls through the paged port while the unbounded path (`limit`
+  omitted) is byte-for-byte unchanged, and the MCP tool no longer
+  sorts/slices the full result in memory when `cursor`/`limit` are given.
+  MCP-024-B/F are re-proven through the bounded path (keyset stability across
+  pages, empty terminal page), with new store-level suites for SQLite
+  (`tests/storage/sqlite-version-pagination.test.ts`), D1
+  (`deploy/cloudflare/tests/d1-version-pagination.test.ts`) and Postgres
+  (`tests/integration/postgres-version-pagination.test.ts`, run by the E
+  gate). The V, E and X gates pass on this change. Remaining open: the
+  Cloudflare Worker MCP surface qualification and the live supported-client
+  matrix (L gate).
 - **Do:** add compatible compact artifact projections and paged manifest/history
   reads; complete manifests must remain explicitly available. Expose T05 recovery
   through the same services with bounded structured errors. Record SDK and wire
@@ -1454,6 +1470,20 @@ gate.
   provider-side revocation, server API-key rotation, cross-replica deactivation
   and re-qualification of the other dated client rows at current versions
   remain open.
+- **Matrix refresh, September 27:**
+  [identity-qualification-matrix.json](./project/evidence/identity-qualification-matrix.json)
+  is re-recorded at commit `9ba8339`. `pnpm test:oidc` re-passed 4/4 against
+  the pinned Keycloak image today
+  ([oidc-keycloak.json](./project/evidence/oidc-keycloak.json)), so the
+  Keycloak provider rows are current rather than dated. The client rows now
+  name the currently installed versions — Codex CLI 0.155.1 (unchanged, still
+  the only identity-qualified current client), Claude Code 2.1.283 installed
+  (bridge-qualified at 2.1.282, identity still dated August 16), Cursor agent
+  2026.07.16-899851b with Cursor editor 3.12.17 (not re-qualified), and VS
+  Code 1.138.0 (still untested). Live WorkOS Production mutations (key
+  rotation, provider revocation, cross-replica deactivation) and
+  re-qualification of the dated August 16 rows at current client versions
+  remain approval-gated and open; no new live provider action was taken.
 - **Do:** qualify WorkOS and configured OIDC discovery, exact-resource audience,
   PKCE/registration, key rotation, refresh, provider revocation, logout and
   cross-replica deactivation. Record actual production MCP/Audit entitlements
@@ -1555,6 +1585,17 @@ gate.
   rationale in each adapter README; the jitter cap is measured live once via
   OpenCode and shared by the common bridge core. Pi's live proofs landed
   September 25 (see above). Remaining open: the T15/T16 live client matrix.
+- **Closed, September 27:** live bridge qualification is complete at the
+  recorded host versions — Pi 0.84.4 6/6, omp 18.2.11 6/6, OpenCode 1.18.32
+  7/7 and Claude Code 2.1.282 3/3 — covering round trip, FIFO drain, session
+  rebind, fail-open dormancy, lost-acknowledgement redelivery at lease expiry,
+  duplicate-claim admission, the 1–30-second jitter cap, and compaction holds
+  on every host whose compaction signal crosses the bridge boundary (not
+  applicable to claude-channel). Host refusal stays structural-only on every
+  host, labeled as such in each adapter README with its rationale. The
+  remaining item named in the live-behavior notes, the live client matrix, is
+  T15/T16 scope and stays open there; T17 has no remaining bridge work and its
+  citizenship rules remain binding for any future adapter change.
 - **Do:** reconcile version-specific Pi/OpenCode staging evidence with READMEs;
   qualify omp and remaining Claude Channels/host cases. Cover compaction holds,
   session deletion, host refusal, missing API/configuration, lost acknowledgement,

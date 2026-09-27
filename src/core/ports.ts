@@ -39,6 +39,7 @@ import type {
   StagedUpload,
   StagedUploadFile,
   UploadStatus,
+  VersionPage,
   VersionRecord,
   VersionContent,
 } from "./model.js";
@@ -705,6 +706,12 @@ export interface ArtifactRepository {
     projectId: string,
     artifactId: string,
   ): Promise<readonly VersionRecord[]>;
+  listArtifactVersionsPage(
+    projectId: string,
+    artifactId: string,
+    cursor: PageCursor | null,
+    limit: number,
+  ): Promise<VersionPage>;
   restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState>;
 }
 
