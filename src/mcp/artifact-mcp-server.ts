@@ -10,7 +10,7 @@ import {
   type ToolAnnotations,
   type ToolCallback,
 } from "@modelcontextprotocol/server";
-import {type Effect, Redacted} from "effect";
+import {Duration, Effect, Redacted} from "effect";
 import {z} from "zod";
 
 import {AgentDispatchService} from "../application/agent-dispatch.js";
@@ -201,6 +201,14 @@ const artifactStateSchema = z.object({
 const publishedVersionSchema = artifactStateSchema.extend({
   links: z.object({artifact: z.url(), review: z.url(), version: z.url()}).strict(),
 }).strict();
+const commitUploadResultSchema = z.discriminatedUnion("status", [
+  publishedVersionSchema.extend({status: z.literal("committed")}).strict(),
+  z.object({
+    installed: z.number().int().nonnegative(),
+    status: z.literal("preparing"),
+    total: z.number().int().nonnegative(),
+  }).strict(),
+]);
 const linkPathSchema = z.string().min(1).max(4_096);
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const sourceBindingSchema = z.object({
@@ -1339,28 +1347,29 @@ export function createArtifactMcpServer(
         ]),
         uploadId: z.string().min(1).max(200),
       }).strict(),
-      outputSchema: publishedVersionSchema,
+      outputSchema: commitUploadResultSchema,
       annotations: idempotentWriteAnnotations,
     },
     async ({idempotencyKey, projectId, target, uploadId}) => toolResult(async () => {
-      const published = await runMcpApplicationEffect(
+      const result = await runMcpApplicationEffect(
         dependencies,
-        StagedUploadService.use((uploads) =>
-          uploads.commitUpload({
-            idempotencyKey,
-            principal: identity.principal,
-            projectId,
-            target,
-            uploadId,
-          })
+        commitUploadWithRetry({
+          idempotencyKey,
+          principal: identity.principal,
+          projectId,
+          target,
+          uploadId,
+        }),
+      );
+      return {
+        ...publishedVersionProjection(
+          applicationUrl,
+          dependencies.contentDomain,
+          result,
         ),
-      );
-      return publishedVersionProjection(
-        applicationUrl,
-        dependencies.contentDomain,
-        published,
-      );
-    }, publicationSummary),
+        status: "committed" as const,
+      };
+    }, commitUploadSummary),
   );
 
   registerNudgedTool(
@@ -2818,6 +2827,60 @@ function publicationSummary(published: {
     `Review and comment: ${published.links.review}`,
     `Raw artifact: ${published.links.version}`,
   ].join("\n");
+}
+
+const maximumMcpCommitPreparationRetries = 9;
+
+function commitUploadWithRetry(command: {
+  readonly idempotencyKey: string;
+  readonly principal: Principal;
+  readonly projectId: string | null;
+  readonly target: {
+    readonly accessSetting: "account_required" | "public_link";
+    readonly kind: "new_artifact";
+    readonly name: string;
+    readonly tags: readonly string[];
+  } | {
+    readonly artifactId: string;
+    readonly expectedCurrentVersionId: string;
+    readonly kind: "new_version";
+  };
+  readonly uploadId: string;
+}): Effect.Effect<PublishedVersion, unknown, ApplicationServices> {
+  return Effect.gen(function*() {
+    let lastPreparing: {readonly installed: number; readonly total: number} | undefined;
+    for (let attempt = 0; attempt <= maximumMcpCommitPreparationRetries; attempt += 1) {
+      const result = yield* StagedUploadService.use((uploads) => uploads.commitUpload(command));
+      if (result.kind === "committed") {
+        return result.publication;
+      }
+      lastPreparing = result;
+      if (attempt === maximumMcpCommitPreparationRetries) {
+        break;
+      }
+      const delaySeconds = Math.min(2 ** attempt, 30);
+      yield* Effect.sleep(Duration.seconds(delaySeconds));
+    }
+    const progress = lastPreparing ?? {installed: 0, total: 0};
+    return yield* Effect.fail(new Error(
+      `UPLOAD_STILL_PREPARING: The upload is still preparing (${progress.installed}/${progress.total} files). Re-run artifact_commit_upload with the same idempotency key to resume.`,
+    ));
+  });
+}
+
+function commitUploadSummary(result: {
+  readonly status: "committed";
+  readonly artifact: {readonly name: string};
+  readonly links: {readonly review: string; readonly version: string};
+} | {
+  readonly status: "preparing";
+  readonly installed: number;
+  readonly total: number;
+}): string {
+  if (result.status === "preparing") {
+    return `Preparing upload: ${result.installed} of ${result.total} files installed. Retry with the same idempotency key.`;
+  }
+  return publicationSummary(result);
 }
 
 function failureResult(cause: unknown) {

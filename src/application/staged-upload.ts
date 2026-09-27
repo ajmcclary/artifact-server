@@ -50,6 +50,10 @@ import {
   ProjectManagementService,
 } from "./project-management.js";
 import {parseIdempotencyKey} from "./idempotency-key.js";
+import {
+  PublicationPreparationService,
+  type PublicationPreparationFailure,
+} from "./publication-preparation.js";
 
 const uploadLifetimeMilliseconds = 60 * 60 * 1_000;
 const singleWriteDeadlineMilliseconds = 10 * 60 * 1_000;
@@ -68,6 +72,11 @@ export interface CreateStagedUploadCommand {
 export type CreateStagedUploadResult =
   | {readonly kind: "committed"; readonly publication: PublishedVersion}
   | {readonly kind: "upload"; readonly resumed: boolean; readonly upload: StagedUpload};
+
+/** Result of committing a staged upload. */
+export type CommitStagedUploadResult =
+  | {readonly kind: "committed"; readonly publication: PublishedVersion}
+  | {readonly kind: "preparing"; readonly installed: number; readonly total: number};
 
 /** Input for streaming one file into the staged upload slot its URL names. */
 export interface UploadStagedFileCommand {
@@ -208,12 +217,13 @@ export type StagedUploadFailure =
   | StagingStorageFailure
   | PublishArtifactFailure
   | ProjectManagementFailure
+  | PublicationPreparationFailure
   | AuthorizationDenied;
 
 interface StagedUploadOperations {
   readonly commitUpload: (
     command: CommitStagedUploadCommand,
-  ) => Effect.Effect<PublishedVersion, StagedUploadFailure>;
+  ) => Effect.Effect<CommitStagedUploadResult, StagedUploadFailure>;
   readonly createUpload: (
     command: CreateStagedUploadCommand,
   ) => Effect.Effect<CreateStagedUploadResult, StagedUploadFailure>;
@@ -237,7 +247,7 @@ export class StagedUploadService extends Context.Service<
     StagedUploadService,
     never,
     PublishArtifactService | AuthorizationService
-      | ProjectManagementService
+      | ProjectManagementService | PublicationPreparationService
   > =>
     Layer.effect(
       StagedUploadService,
@@ -245,11 +255,13 @@ export class StagedUploadService extends Context.Service<
         const authorization = yield* AuthorizationService;
         const publish = yield* PublishArtifactService;
         const projects = yield* ProjectManagementService;
+        const preparation = yield* PublicationPreparationService;
         return makeStagedUploadService(
           dependencies,
           publish,
           authorization,
           projects,
+          preparation,
         );
       }),
     );
@@ -260,6 +272,7 @@ function makeStagedUploadService(
   publish: PublishArtifactService["Service"],
   authorization: AuthorizationOperations,
   projects: ProjectManagementService["Service"],
+  preparation: PublicationPreparationService["Service"],
 ): StagedUploadOperations {
   const requiredUpload = Effect.fn("StagedUploadService.requiredUpload")(
     function*(projectId: string, uploadId: string, principalId: string) {
@@ -577,6 +590,7 @@ function makeStagedUploadService(
     signal: AbortSignal | undefined,
   ): PublicationFileSource => {
     const source = {
+      installed: file.installedAt !== null,
       open: Effect.fn("StagedUploadService.openPublicationSource")(
       function*(): Effect.fn.Return<
         ReadableStream<Uint8Array>,
@@ -616,7 +630,7 @@ function makeStagedUploadService(
   const commitUpload = Effect.fn("StagedUploadService.commitUpload")(
     function*(
     command: CommitStagedUploadCommand,
-  ): Effect.fn.Return<PublishedVersion, StagedUploadFailure> {
+  ): Effect.fn.Return<CommitStagedUploadResult, StagedUploadFailure> {
       yield* authorization.requirePublicationPreparation(command.principal);
       // An explicit project can be archived after a successful commit. Let the
       // repository replay that exact idempotent result; it still rejects every
@@ -647,6 +661,33 @@ function makeStagedUploadService(
           message: "Every declared upload file must be verified before commit.",
         });
       }
+
+      if (upload.status === uploadStatuses.open) {
+        const prepareResult = yield* Effect.catchTag(
+          preparation.prepareUpload({upload}),
+          "UploadPreparationLeaseLost",
+          () =>
+            Effect.gen(function*() {
+              const latest = yield* requiredUpload(
+                project.id,
+                command.uploadId,
+                command.principal.id,
+              );
+              const installed = latest.files.filter(
+                (file) => file.installedAt !== null,
+              ).length;
+              return {
+                kind: "preparing" as const,
+                installed,
+                total: latest.files.length,
+              };
+            }),
+        );
+        if (prepareResult.kind === "preparing") {
+          return prepareResult;
+        }
+      }
+
       const files = upload.files.map((file) =>
         publicationSource(upload, file, signal));
       const source = {
@@ -656,8 +697,8 @@ function makeStagedUploadService(
         uploadId: upload.id,
       };
       switch (command.target.kind) {
-        case "new_artifact":
-          return yield* expirePublicationAtDeadline(signal,
+        case "new_artifact": {
+          const publication = yield* expirePublicationAtDeadline(signal,
             publish.publishPreparedNew({
             accessSetting: command.target.accessSetting,
             files,
@@ -669,8 +710,10 @@ function makeStagedUploadService(
             source,
             tags: command.target.tags ?? [],
             }));
-        case "new_version":
-          return yield* expirePublicationAtDeadline(signal,
+          return {kind: "committed" as const, publication};
+        }
+        case "new_version": {
+          const publication = yield* expirePublicationAtDeadline(signal,
             publish.publishPreparedVersion({
             artifactId: command.target.artifactId,
             expectedCurrentVersionId: command.target.expectedCurrentVersionId,
@@ -681,6 +724,8 @@ function makeStagedUploadService(
             projectId: project.id,
             source,
             }));
+          return {kind: "committed" as const, publication};
+        }
       }
       return yield* Effect.die(
         new Error(

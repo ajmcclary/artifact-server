@@ -67,6 +67,24 @@ async function publishFixture(
     storageToken,
     createdAt,
   );
+  const claim = await store.claimUploadPreparation(
+    uploadId,
+    createdAt,
+    "2026-09-21T01:00:00.000Z",
+  );
+  if (claim === null) throw new Error("Failed to claim upload preparation for fixture.");
+  await store.recordStagedFileInstalled(
+    uploadId,
+    storageToken,
+    claim.attempts,
+    createdAt,
+  );
+  await store.writePreparedManifestEntries(
+    uploadId,
+    claim.attempts,
+    manifest.entries,
+  );
+  await store.markUploadPrepared(uploadId, claim.attempts, createdAt);
   return store.commitNewArtifact({
     accessSetting: "account_required",
     artifactId,

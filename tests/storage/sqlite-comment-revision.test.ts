@@ -60,6 +60,10 @@ async function publishFixture(
     storageToken,
     createdAt,
   );
+  await repository.claimUploadPreparation(uploadId, createdAt, "2026-09-21T00:10:00.000Z");
+  await repository.recordStagedFileInstalled(uploadId, storageToken, 1, createdAt);
+  await repository.writePreparedManifestEntries(uploadId, 1, manifest.entries);
+  await repository.markUploadPrepared(uploadId, 1, createdAt);
   const published = await repository.commitNewArtifact({
     accessSetting: "account_required",
     artifactId,

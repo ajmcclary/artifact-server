@@ -59,7 +59,14 @@ import {
 import {
   type StagedUploadDependencies,
   StagedUploadService,
+  type StagingStoragePort,
 } from "../application/staged-upload.js";
+import {
+  PublicationPreparationService,
+  type PublicationPreparationConfig,
+  type PublicationPreparationDependencies,
+} from "../application/publication-preparation.js";
+import {maximumDeclaredFiles} from "../core/publishing-limits.js";
 import {
   type ProjectManagementDependencies,
   ProjectManagementService,
@@ -187,6 +194,11 @@ export interface ApplicationAdapters {
     readonly concurrency: number;
     readonly settleDelayMilliseconds: number;
   };
+  /**
+   * Sizes each publication-preparation pass. Defaults to installing all declared
+   * files in one pass, preserving single-request behavior on Node runtimes.
+   */
+  readonly publicationPreparationConfig?: PublicationPreparationConfig;
 }
 
 /** Node-only linked-artifact adapters supplied by the local deployment. */
@@ -222,6 +234,7 @@ export function createApplicationLayer(
   | ProjectGitHistoryService
   | ProjectManagementService
   | PublicLinkAdministrationService
+  | PublicationPreparationService
   | StagedUploadService
 > {
   const clock = {
@@ -302,37 +315,79 @@ export function createApplicationLayer(
         }),
     },
   };
+  const stagingPort: StagingStoragePort = {
+    open: (uploadId, storageToken) =>
+      Effect.tryPromise({
+        try: () => adapters.staging.open(uploadId, storageToken),
+        catch: (cause) =>
+          new StagingStorageFailure({cause, operation: "open"}),
+      }),
+    put: (write) =>
+      Effect.tryPromise({
+        try: (fiberSignal) => adapters.staging.put({
+          ...write,
+          signal: combineAbortSignals(fiberSignal, write.signal),
+        }),
+        catch: (cause) =>
+          cause instanceof FileVerificationError
+            ? new UploadedFileMismatch({
+              message:
+                "The uploaded bytes do not match the declared size and SHA-256 fingerprint.",
+            })
+            : new StagingStorageFailure({cause, operation: "put"}),
+      }),
+    remove: (uploadId, storageToken) =>
+      Effect.tryPromise({
+        try: () => adapters.staging.remove(uploadId, storageToken),
+        catch: (cause) =>
+          new StagingStorageFailure({cause, operation: "remove"}),
+      }),
+  };
+  const preparationDependencies: PublicationPreparationDependencies = {
+    blobs: publishBlobs,
+    clock,
+    config: adapters.publicationPreparationConfig ?? {filesPerPass: maximumDeclaredFiles},
+    repository: {
+      claimUploadPreparation: (uploadId, now, leaseExpiresAt) =>
+        adapters.repository.claimUploadPreparation(uploadId, now, leaseExpiresAt),
+      countPreparedManifestEntries: (uploadId) =>
+        adapters.repository.countPreparedManifestEntries(uploadId),
+      extendStagedUploadExpiry: (uploadId, attempts, newExpiresAt) =>
+        adapters.repository.extendStagedUploadExpiry(uploadId, attempts, newExpiresAt),
+      findStagedUpload: (projectId, uploadId, principalId) =>
+        adapters.repository.findStagedUpload(projectId, uploadId, principalId),
+      markUploadPrepared: (uploadId, attempts, preparedAt) =>
+        adapters.repository.markUploadPrepared(uploadId, attempts, preparedAt),
+      recordStagedFileInstalled: (uploadId, storageToken, attempts, installedAt) =>
+        adapters.repository.recordStagedFileInstalled(
+          uploadId,
+          storageToken,
+          attempts,
+          installedAt,
+        ),
+      releaseUploadPreparation: (uploadId, attempts) =>
+        adapters.repository.releaseUploadPreparation(uploadId, attempts),
+      renewUploadPreparation: (uploadId, attempts, now, leaseExpiresAt) =>
+        adapters.repository.renewUploadPreparation(
+          uploadId,
+          attempts,
+          now,
+          leaseExpiresAt,
+        ),
+      writePreparedManifestEntries: (uploadId, attempts, entries) =>
+        adapters.repository.writePreparedManifestEntries(
+          uploadId,
+          attempts,
+          entries,
+        ),
+    },
+    staging: stagingPort,
+  };
+  const preparationLayer = PublicationPreparationService.layer(preparationDependencies);
   const stagedDependencies: StagedUploadDependencies = {
     clock,
     ids: adapters.ids,
-    staging: {
-      open: (uploadId, storageToken) =>
-        Effect.tryPromise({
-          try: () => adapters.staging.open(uploadId, storageToken),
-          catch: (cause) =>
-            new StagingStorageFailure({cause, operation: "open"}),
-        }),
-      put: (write) =>
-        Effect.tryPromise({
-          try: (fiberSignal) => adapters.staging.put({
-            ...write,
-            signal: combineAbortSignals(fiberSignal, write.signal),
-          }),
-          catch: (cause) =>
-            cause instanceof FileVerificationError
-              ? new UploadedFileMismatch({
-                message:
-                  "The uploaded bytes do not match the declared size and SHA-256 fingerprint.",
-              })
-              : new StagingStorageFailure({cause, operation: "put"}),
-        }),
-      remove: (uploadId, storageToken) =>
-        Effect.tryPromise({
-          try: () => adapters.staging.remove(uploadId, storageToken),
-          catch: (cause) =>
-            new StagingStorageFailure({cause, operation: "remove"}),
-        }),
-    },
+    staging: stagingPort,
     uploads: {
       createStagedUpload: (command) =>
         Effect.tryPromise({
@@ -1057,7 +1112,7 @@ export function createApplicationLayer(
     Layer.provideMerge(authorizationLayer),
   );
   const stagedLayer = StagedUploadService.layer(stagedDependencies).pipe(
-    Layer.provideMerge(Layer.mergeAll(publishLayer, projectLayer)),
+    Layer.provideMerge(Layer.mergeAll(publishLayer, projectLayer, preparationLayer)),
   );
   const cleanupLayer = ExpiredStagingCleanupService.layer({
     clock,
@@ -1153,7 +1208,7 @@ export function createApplicationLayer(
       secrets: contentDependencies.secrets,
     }).pipe(
       Layer.provideMerge(
-        Layer.mergeAll(authorizationLayer, projectLayer, stagedLayer),
+        Layer.mergeAll(authorizationLayer, projectLayer, stagedLayer, preparationLayer),
       ),
     );
   const commentLayer = ArtifactCommentService.layer(commentDependencies).pipe(
@@ -1179,6 +1234,7 @@ export function createApplicationLayer(
     identityLayer,
     interactiveLoginLayer,
     stagedLayer,
+    preparationLayer,
     contentLayer,
     cleanupLayer,
     linkedLayer,

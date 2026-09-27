@@ -42,19 +42,12 @@ import {
 import type { ApplicationClock } from "./application-clock.js";
 import { parseIdempotencyKey } from "./idempotency-key.js";
 import { parseArtifactTags } from "./artifact-tags.js";
+import {
+  installPublicationFile,
+  type PublicationFileSource,
+} from "./install-publication-file.js";
 
-/** An immutable file source that can be opened during publication. */
-export interface PublicationFileSource {
-  readonly path: string;
-  readonly sha256: string;
-  readonly size: number;
-  readonly signal?: AbortSignal;
-  readonly staged?: {
-    readonly storageToken: string;
-    readonly uploadId: string;
-  };
-  open(): Effect.Effect<ReadableStream<Uint8Array>, StagingStorageFailure>;
-}
+export type {PublicationFileSource} from "./install-publication-file.js";
 
 /** Input for publishing an already parsed and fingerprinted artifact. */
 export interface PublishPreparedNewArtifactCommand {
@@ -234,35 +227,10 @@ function makePublishArtifactService(
               new Error(`The publication source for ${entry.path} is missing.`),
             );
           }
-          const storeByStream = source.open().pipe(
-            Effect.flatMap((body) => {
-              const write = {
-                body,
-                sha256: entry.sha256,
-                size: entry.size,
-              };
-              return dependencies.blobs.put(source.signal === undefined
-                ? write
-                : {...write, signal: source.signal});
-            }),
-          );
-          if (
-            source.staged === undefined ||
-            dependencies.blobs.promote === undefined
-          ) {
-            return storeByStream;
+          if (source.installed === true) {
+            return Effect.void;
           }
-          const {staged} = source;
-          return dependencies.blobs.promote({
-            sha256: entry.sha256,
-            size: entry.size,
-            storageToken: staged.storageToken,
-            uploadId: staged.uploadId,
-          }).pipe(
-            // A promotion that cannot seal or install create-only degrades to
-            // the proven verified-stream path rather than failing the commit.
-            Effect.catch(() => storeByStream),
-          );
+          return installPublicationFile(dependencies.blobs, source);
         },
         {concurrency: 4, discard: true},
       );

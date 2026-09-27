@@ -27,6 +27,7 @@ import type {
 } from "../../src/http/create-http-app.js";
 import type {CaptureHooks} from "../../src/local/linked-source-engine.js";
 import type {Clock} from "../../src/core/ports.js";
+import type {PublicationPreparationConfig} from "../../src/application/publication-preparation.js";
 import {localOwnerBrowserAccess} from "../../src/core/browser-access.js";
 import type {BrowserAccess} from "../../src/core/browser-access.js";
 import {defaultCompletedRequestLogSampleRate} from
@@ -106,6 +107,7 @@ export async function startTestServer(
     readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
     readonly observability?: boolean;
     readonly port?: number;
+    readonly publicationPreparationConfig?: PublicationPreparationConfig;
     readonly webAssetsRoot?: string;
   } = {},
 ): Promise<RunningTestServer> {
@@ -190,6 +192,9 @@ export async function startTestServer(
   }
   if (options.mcpOAuthResource !== undefined) {
     config = {...config, mcpOAuthResource: options.mcpOAuthResource};
+  }
+  if (options.publicationPreparationConfig !== undefined) {
+    config = {...config, publicationPreparationConfig: options.publicationPreparationConfig};
   }
   if (options.webAssetsRoot !== undefined) {
     config = {...config, webAssetsRoot: options.webAssetsRoot};

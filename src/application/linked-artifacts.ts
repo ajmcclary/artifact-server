@@ -59,6 +59,10 @@ import {
   type StagedUploadFailure,
   StagedUploadService,
 } from "./staged-upload.js";
+import {
+  type PublicationPreparationFailure,
+  PublicationPreparationService,
+} from "./publication-preparation.js";
 
 const liveBootstrapLifetimeMilliseconds = 2 * 60 * 1_000;
 const liveTokenPrefix = "live-";
@@ -211,6 +215,7 @@ export type LinkedArtifactFailure =
   | BlobStorageFailure
   | StagingStorageFailure
   | ProjectManagementFailure
+  | PublicationPreparationFailure
   | StagedUploadFailure;
 
 /** Failures an implicit comment-time capture can surface to comment policy. */
@@ -343,7 +348,7 @@ export class LinkedArtifactService extends Context.Service<
   ): Layer.Layer<
     LinkedArtifactService,
     never,
-    AuthorizationService | ProjectManagementService | StagedUploadService
+    AuthorizationService | ProjectManagementService | PublicationPreparationService | StagedUploadService
   > =>
     Layer.effect(
       LinkedArtifactService,
@@ -351,11 +356,13 @@ export class LinkedArtifactService extends Context.Service<
         const authorization = yield* AuthorizationService;
         const projects = yield* ProjectManagementService;
         const staged = yield* StagedUploadService;
+        const preparation = yield* PublicationPreparationService;
         return makeLinkedArtifactService(
           dependencies,
           authorization,
           projects,
           staged,
+          preparation,
         );
       }),
     );
@@ -407,6 +414,7 @@ function makeLinkedArtifactService(
   authorization: AuthorizationOperations,
   projects: ProjectManagementService["Service"],
   staged: StagedUploadService["Service"],
+  preparation: PublicationPreparationService["Service"],
 ): LinkedArtifactOperations {
   const runEngine = <A>(
     run: () => Promise<A>,
@@ -504,17 +512,6 @@ function makeLinkedArtifactService(
     },
   );
 
-  const storeCaptureBlob = Effect.fn("LinkedArtifactService.storeCaptureBlob")(
-    function*(capture: CapturedSourceSpool) {
-      const body = yield* runEngine(() => capture.openStream());
-      yield* dependencies.blobs.put({
-        body,
-        sha256: capture.sha256,
-        size: capture.size,
-      });
-    },
-  );
-
   const linkArtifact = Effect.fn("LinkedArtifactService.linkArtifact")(
     function*(command: LinkArtifactCommand) {
       yield* authorization.requireArtifactCreation(command.principal);
@@ -564,6 +561,12 @@ function makeLinkedArtifactService(
             principal: command.principal,
             projectId: project.id,
           });
+          const prepareResult = yield* preparation.prepareUpload({upload});
+          if (prepareResult.kind === "preparing") {
+            return yield* Effect.die(
+              new Error("A linked capture unexpectedly returned a preparing result."),
+            );
+          }
           const commitTime = DateTime.formatIso(yield* dependencies.clock.now);
           yield* dependencies.publication.assertPublicationSourceReady(
             {
@@ -575,7 +578,6 @@ function makeLinkedArtifactService(
             upload.manifest.digest,
             commitTime,
           );
-          yield* storeCaptureBlob(capture);
           return yield* dependencies.bindings.commitLinkedArtifact({
             accessSetting: accessSettings.accountRequired,
             artifactId: dependencies.ids.artifactId(),
@@ -664,6 +666,12 @@ function makeLinkedArtifactService(
           principal: input.principal,
           projectId: input.projectId,
         });
+        const prepareResult = yield* preparation.prepareUpload({upload});
+        if (prepareResult.kind === "preparing") {
+          return yield* Effect.die(
+            new Error("A linked capture unexpectedly returned a preparing result."),
+          );
+        }
         const commitTime = DateTime.formatIso(yield* dependencies.clock.now);
         yield* dependencies.publication.assertPublicationSourceReady(
           {
@@ -675,7 +683,6 @@ function makeLinkedArtifactService(
           upload.manifest.digest,
           commitTime,
         );
-        yield* storeCaptureBlob(capture);
         return yield* dependencies.bindings.commitCapturedVersion({
           artifactId: input.artifactId,
           authorizedByPrincipalId: input.principal.authorizedByPrincipalId,

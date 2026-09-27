@@ -8,7 +8,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import {Effect, Option, Schema, type Redacted} from "effect";
+import {Duration, Effect, Option, Schema, type Redacted} from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -130,6 +130,11 @@ const committedUploadResponseSchema = Schema.Struct({
   replayed: Schema.Boolean,
   status: Schema.Literal("committed"),
   version: versionSchema,
+});
+const preparingUploadResponseSchema = Schema.Struct({
+  installed: nonnegativeIntegerSchema,
+  status: Schema.Literal("preparing"),
+  total: nonnegativeIntegerSchema,
 });
 const stagedUploadResponseSchema = Schema.Struct({
   commitUrl: Schema.URLFromString,
@@ -1110,14 +1115,22 @@ const assertPreparedFileStable = Effect.fn("FilePublicationClient.assertPrepared
   },
 );
 
-const commitUpload = Effect.fn("FilePublicationClient.commitUpload")(
+
+
+type CommitAttemptResult =
+  | {readonly kind: "committed"; readonly publication: FilePublicationResult}
+  | {readonly kind: "preparing"; readonly installed: number; readonly total: number};
+
+const maximumCommitPreparationRetries = 9;
+
+const tryCommitUpload = Effect.fn("FilePublicationClient.tryCommitUpload")(
   function*(
     apiToken: Redacted.Redacted,
     idempotencyKey: string,
     target: CommitPublicationTarget,
     commitUrl: URL,
   ): Effect.fn.Return<
-    FilePublicationResult,
+    CommitAttemptResult,
     FilePublicationProtocolError,
     HttpClient.HttpClient
   > {
@@ -1129,7 +1142,75 @@ const commitUpload = Effect.fn("FilePublicationClient.commitUpload")(
       {target},
       "commit_upload",
     );
-    return yield* executeJson(request, publishResponseSchema, "commit_upload");
+    const response = yield* HttpClient.execute(request).pipe(
+      Effect.mapError(() => protocolFailure(
+        "commit_upload",
+        "Artifact Server could not be reached.",
+      )),
+    );
+    if (response.status === 202) {
+      const preparing = yield* HttpClientResponse.schemaBodyJson(
+        preparingUploadResponseSchema,
+      )(response).pipe(
+        Effect.mapError(() => protocolFailure(
+          "commit_upload",
+          "Artifact Server returned an invalid preparation-progress response.",
+          202,
+        )),
+      );
+      return {kind: "preparing" as const, ...preparing};
+    }
+    if (response.status < 200 || response.status >= 300) {
+      return yield* failureFromResponse(response, "commit_upload");
+    }
+    const publication = yield* HttpClientResponse.schemaBodyJson(publishResponseSchema)(response).pipe(
+      Effect.mapError(() => protocolFailure(
+        "commit_upload",
+        "Artifact Server returned an invalid success response.",
+        response.status,
+      )),
+    );
+    return {kind: "committed" as const, publication};
+  },
+);
+
+const commitUpload = Effect.fn("FilePublicationClient.commitUpload")(
+  function*(
+    apiToken: Redacted.Redacted,
+    idempotencyKey: string,
+    target: CommitPublicationTarget,
+    commitUrl: URL,
+  ): Effect.fn.Return<
+    FilePublicationResult,
+    FilePublicationProtocolError,
+    HttpClient.HttpClient
+  > {
+    let lastPreparing: {readonly installed: number; readonly total: number} | undefined;
+    for (let attempt = 0; attempt <= maximumCommitPreparationRetries; attempt += 1) {
+      const result = yield* tryCommitUpload(
+        apiToken,
+        idempotencyKey,
+        target,
+        commitUrl,
+      );
+      if (result.kind === "committed") {
+        return result.publication;
+      }
+      lastPreparing = result;
+      if (attempt === maximumCommitPreparationRetries) {
+        break;
+      }
+      const delaySeconds = Math.min(2 ** attempt, 30);
+      yield* Effect.sleep(Duration.seconds(delaySeconds));
+    }
+    const progress = lastPreparing ?? {installed: 0, total: 0};
+    return yield* new FilePublicationProtocolError({
+      message:
+        `The upload is still preparing (${progress.installed}/${progress.total} files). Re-run the same publish with the same idempotency key to resume.`,
+      operation: "commit_upload",
+      serverCode: null,
+      status: 202,
+    });
   },
 );
 

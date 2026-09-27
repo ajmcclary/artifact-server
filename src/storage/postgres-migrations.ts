@@ -676,6 +676,37 @@ const addArtifactCommentRevision = Effect.gen(function*() {
     ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0`);
 });
 
+const addStagedUploadPreparation = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`ALTER TABLE staged_uploads
+    ADD COLUMN IF NOT EXISTS preparation_state TEXT NOT NULL DEFAULT 'none'
+      CHECK (preparation_state IN ('none', 'claimed', 'prepared')),
+    ADD COLUMN IF NOT EXISTS preparation_attempts INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS preparation_lease_expires_at TEXT,
+    ADD COLUMN IF NOT EXISTS prepared_at TEXT`);
+  yield* sql.unsafe(`ALTER TABLE staged_upload_files
+    ADD COLUMN IF NOT EXISTS installed_at TEXT`);
+  yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS staged_uploads_preparation
+    ON staged_uploads (status, preparation_state, preparation_lease_expires_at)`);
+});
+
+const addPreparedManifestEntries = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`CREATE TABLE prepared_manifest_entries (
+    installation_id TEXT NOT NULL,
+    upload_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    size BIGINT NOT NULL CHECK (size >= 0),
+    media_type TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
+    PRIMARY KEY (installation_id, upload_id, path),
+    FOREIGN KEY (installation_id, upload_id)
+      REFERENCES staged_uploads(installation_id, id)
+      ON DELETE CASCADE
+  )`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -691,10 +722,12 @@ const migrationLoader = Migrator.fromRecord({
   "0012_git_history_reconciliation_index": indexGitHistoryReconciliation,
   "0013_staged_upload_idempotency": addStagedUploadIdempotencyKey,
   "0014_artifact_comment_revision": addArtifactCommentRevision,
+  "0015_staged_upload_preparation": addStagedUploadPreparation,
+  "0016_prepared_manifest_entries": addPreparedManifestEntries,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 14;
+export const requiredPostgresSchemaVersion = 16;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -791,6 +824,12 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 14,
     name: "artifact_comment_revision",
+  }, {
+    migration_id: 15,
+    name: "staged_upload_preparation",
+  }, {
+    migration_id: 16,
+    name: "prepared_manifest_entries",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

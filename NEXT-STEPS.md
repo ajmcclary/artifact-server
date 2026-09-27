@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 26, 2026. This is the implementation backlog resulting from
+Updated September 27, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -916,6 +916,57 @@ gate.
   **Cost:** read-only inventory/local emulation first, live requests within actual allowance.
 
 ### T09 Design bounded Cloudflare preparation with atomic final visibility
+
+- **Slice 1 progress, September 27:** resumable, chunked publication
+  preparation is implemented and specified as PUB-019/PUB-020
+  (`behavior_verified`; design record
+  [publication-preparation.md](./docs/publication-preparation.md)). Preparation
+  is product behavior over narrow ports on all three stores (SQLite schema 17,
+  Postgres migration 0016, D1 schema 14): `staged_uploads` carries a fenced
+  single-owner claim (`preparation_state`, `preparation_attempts`,
+  `preparation_lease_expires_at`; 45-second lease, 15-second renewal, the
+  git-history fencing shape) and `staged_upload_files.installed_at` is durable
+  per-file installation progress. Each bounded pass re-verifies the staged
+  source (size + SHA-256, or sealed `promote` with the proven stream fallback),
+  installs content-addressed blobs create-only, refreshes the upload expiry,
+  and records progress; a stalled owner loses its lease and cannot record or
+  finalize afterward. Commit drives preparation: an incomplete commit returns
+  HTTP 202 `status: "preparing"` with progress counts, and the file client and
+  MCP retry with the same idempotency key until the operation commits — one
+  operation identity, exactly one version. The Worker composition sets
+  `filesPerPass: 5`, sized to the Workers Free 50-subrequest / 50-D1-query
+  envelope with headroom; Node runtimes keep single-request behavior. A bounded
+  local Wrangler-D1 probe
+  ([d1-final-batch-limits.test.ts](./deploy/cloudflare/tests/d1-final-batch-limits.test.ts))
+  found no batch ceiling up to the 10,000-file cap locally but showed the
+  chunked final batch would exceed the Workers Free 50-query invocation limit
+  at 1,000 files, so Postgres and D1 write an invisible
+  `prepared_manifest_entries` table during preparation and the final
+  transaction commits the manifest with one bounded
+  `INSERT INTO manifest_entries SELECT ...` plus delete — the final batch is
+  ~10 statements regardless of file count, and read paths never see prepared
+  rows. Final visibility stays atomic: the commit transaction asserts every
+  file installed and `preparation_state = 'prepared'`, Postgres re-counts
+  inserted manifest rows against the manifest and rolls back on mismatch, and
+  the D1 batch's `mutation_checks` guard fails the whole batch unless the
+  inserted manifest count is exact. Hostile proof: forced per-pass budgets
+  across a process restart, stalled-owner reclaim with stale-owner fencing,
+  changed-source conflict, concurrent finalization (one version, loser
+  replays), injected blob-store outage mid- and post-preparation (no partial
+  or visible version, no dangling pointer, retry completes one version), and
+  staged-source replacement failing closed (PUB-019-B/F, PUB-020-B/F in
+  `tests/conformance/publication-preparation.test.ts`); a Worker
+  `unstable_dev` test drives a multi-file publish through real 202 passes with
+  the production `filesPerPass: 5`. Gates V (full
+  `BROWSER_CRITICAL_ENGINES=all pnpm verify:iteration`, exit 0), H, O, E and X
+  passed; the external-storage baseline recorded the named 48-file workload at
+  p95 561.55 ms with no investigation warnings (previous container repetitions
+  were 393.97–427.58 ms — a single post-change run consistent with the added
+  durable per-file progress writes; recorded, no regression claim either way).
+  Remaining gaps: live Worker multi-pass commit re-qualification is
+  approval-gated (the September 25 probe proved committed replay only), and
+  T10's bounded cleanup with active-preparation protection beyond the
+  expiry-refresh hook is separate follow-up work.
 
 - **Current:** [publication](./src/application/publish-artifact.ts) installs files
   in one operation; D1/R2 invocation limits are not the same as Node limits.

@@ -54,6 +54,15 @@ export const uploadStatuses = {
 export type UploadStatus =
   (typeof uploadStatuses)[keyof typeof uploadStatuses];
 
+export const preparationStates = {
+  claimed: "claimed",
+  none: "none",
+  prepared: "prepared",
+} as const;
+
+export type PreparationState =
+  (typeof preparationStates)[keyof typeof preparationStates];
+
 /** Stable identity reserved for the project created with every installation. */
 export const defaultProjectId = "prj_default";
 
@@ -239,6 +248,7 @@ export interface ContentSessionRecord {
 
 export interface StagedUploadFile {
   readonly entry: ManifestEntry;
+  readonly installedAt: string | null;
   readonly storageToken: string;
   readonly uploadedAt: string | null;
 }
@@ -250,6 +260,10 @@ interface StagedUploadBase {
   readonly id: string;
   readonly idempotencyKey: string | null;
   readonly manifest: CanonicalManifest;
+  readonly preparedAt: string | null;
+  readonly preparationAttempts: number;
+  readonly preparationLeaseExpiresAt: string | null;
+  readonly preparationState: PreparationState;
   readonly principalId: string;
   readonly projectId: string;
 }

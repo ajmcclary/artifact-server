@@ -32,6 +32,7 @@ import {
   dispatchedThreadFilters,
   fileDispositions,
   parseStoredAgentCapabilities,
+  preparationStates,
   routingModes,
   uploadStatuses,
   type AgentDispatchCreation,
@@ -56,6 +57,7 @@ import {
   type CommentThreadState,
   type ContentBootstrapRecord,
   type ContentSessionRecord,
+  type ManifestEntry,
   type PageCursor,
   defaultProjectId,
   defaultProjectName,
@@ -108,8 +110,10 @@ import type {
   StagedUploadFileSlot,
   UpdateCommentReply,
   UpdateCommentThread,
+  UploadPreparationClaim,
 } from "../core/ports.js";
 import {principalKinds, type PrincipalKind} from "../core/identity.js";
+import {UploadPreparationLeaseLost} from "../core/upload-preparation.js";
 import type {
   ProjectGitHistoryProgress,
   StoredProjectGitHistorySetting,
@@ -157,6 +161,11 @@ const routingModeSchema = z.enum([routingModes.static, routingModes.spa]);
 const uploadStatusSchema = z.enum([
   uploadStatuses.committed,
   uploadStatuses.open,
+]);
+const preparationStateSchema = z.enum([
+  preparationStates.claimed,
+  preparationStates.none,
+  preparationStates.prepared,
 ]);
 const artifactActionKindSchema = z.enum([
   artifactActionKinds.changeAccess,
@@ -330,6 +339,10 @@ const stagedUploadRowSchema = z.object({
   id: z.string(),
   idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
+  preparedAt: z.string().nullable(),
+  preparationAttempts: nonnegativeIntegerSchema,
+  preparationLeaseExpiresAt: z.string().nullable(),
+  preparationState: preparationStateSchema,
   principalId: z.string(),
   projectId: z.string(),
   routingMode: routingModeSchema,
@@ -337,6 +350,7 @@ const stagedUploadRowSchema = z.object({
 });
 const stagedUploadFileRowSchema = z.object({
   disposition: dispositionSchema,
+  installedAt: z.string().nullable(),
   mediaType: z.string(),
   path: z.string(),
   sha256: z.string(),
@@ -355,7 +369,9 @@ const expiredStagedUploadRowSchema = z.object({
 const stagedUploadCommitRowSchema = z.object({
   expiresAt: z.string(),
   fileCount: nonnegativeIntegerSchema,
+  installedCount: nonnegativeIntegerSchema,
   manifestDigest: z.string(),
+  preparationState: preparationStateSchema,
   readyCount: nonnegativeIntegerSchema,
   status: uploadStatusSchema,
 });
@@ -1416,6 +1432,7 @@ export class PostgresArtifactRepository implements
           1,
           command.manifest,
           command.principalId,
+          command.source.uploadId,
         );
         yield* sql`UPDATE artifacts SET current_version_id = ${command.versionId}
           WHERE installation_id = ${installationId}
@@ -1507,6 +1524,7 @@ export class PostgresArtifactRepository implements
           nextNumber,
           command.manifest,
           command.principalId,
+          command.source.uploadId,
         );
         const updated = yield* sql`UPDATE artifacts
           SET current_version_id = ${command.versionId}
@@ -2326,7 +2344,11 @@ export class PostgresArtifactRepository implements
           manifest_digest AS "manifestDigest", entry_path AS "entryPath",
           routing_mode AS "routingMode", created_at AS "createdAt",
           expires_at AS "expiresAt", committed_version_id AS "committedVersionId",
-          idempotency_key AS "idempotencyKey"
+          idempotency_key AS "idempotencyKey",
+          preparation_state AS "preparationState",
+          preparation_attempts AS "preparationAttempts",
+          preparation_lease_expires_at AS "preparationLeaseExpiresAt",
+          prepared_at AS "preparedAt"
          FROM staged_uploads
          WHERE installation_id = $1 AND project_id = $2
            AND principal_id = $3 AND idempotency_key = $4`,
@@ -2361,7 +2383,8 @@ export class PostgresArtifactRepository implements
       const fileRows = yield* sql.unsafe<object>(
         `SELECT storage_token AS "storageToken", path, size,
           media_type AS "mediaType", sha256, disposition,
-          uploaded_at AS "uploadedAt"
+          uploaded_at AS "uploadedAt",
+          installed_at AS "installedAt"
          FROM staged_upload_files
          WHERE installation_id = $1 AND upload_id = $2
            AND storage_token = $3`,
@@ -2378,6 +2401,7 @@ export class PostgresArtifactRepository implements
             sha256: row.sha256,
             size: row.size,
           },
+          installedAt: row.installedAt,
           storageToken: row.storageToken,
           uploadedAt: row.uploadedAt,
         },
@@ -2429,6 +2453,8 @@ export class PostgresArtifactRepository implements
             AND status = 'open' AND expires_at <= ${expiredBefore}
           FOR UPDATE`;
         if (selected.length === 0) return false;
+        yield* sql`DELETE FROM prepared_manifest_entries
+          WHERE installation_id = ${installationId} AND upload_id = ${uploadId}`;
         yield* sql`DELETE FROM staged_upload_files
           WHERE installation_id = ${installationId} AND upload_id = ${uploadId}`;
         const deleted = yield* sql`DELETE FROM staged_uploads
@@ -2492,6 +2518,219 @@ export class PostgresArtifactRepository implements
         }
         return undefined;
       }));
+    }));
+  }
+
+  async claimUploadPreparation(
+    uploadId: string,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<UploadPreparationClaim | null> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(`
+        UPDATE staged_uploads
+        SET preparation_state = 'claimed',
+          preparation_attempts = preparation_attempts + 1,
+          preparation_lease_expires_at = $1
+        WHERE installation_id = $2 AND id = $3
+          AND status = 'open'
+          AND (
+            preparation_state = 'none'
+            OR (
+              preparation_state = 'claimed'
+              AND preparation_lease_expires_at IS NOT NULL
+              AND preparation_lease_expires_at <= $4
+            )
+          )
+        RETURNING preparation_state AS "preparationState",
+          preparation_attempts AS "attempts",
+          preparation_lease_expires_at AS "leaseExpiresAt"
+      `, [leaseExpiresAt, installationId, uploadId, now]);
+      const parsed = z.object({
+        attempts: nonnegativeIntegerSchema,
+        leaseExpiresAt: z.string(),
+        preparationState: preparationStateSchema,
+      }).nullable().parse(rows[0] ?? null);
+      if (parsed === null) return null;
+      return {...parsed, uploadId};
+    }));
+  }
+
+  async renewUploadPreparation(
+    uploadId: string,
+    attempts: number,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const updated = yield* sql.unsafe<object>(`
+        UPDATE staged_uploads
+        SET preparation_lease_expires_at = $1
+        WHERE installation_id = $2 AND id = $3
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = $4
+          AND preparation_lease_expires_at IS NOT NULL
+          AND preparation_lease_expires_at > $5
+        RETURNING id
+      `, [leaseExpiresAt, installationId, uploadId, attempts, now]);
+      return updated.length === 1;
+    }));
+  }
+
+  async recordStagedFileInstalled(
+    uploadId: string,
+    storageToken: string,
+    attempts: number,
+    installedAt: string,
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const updated = yield* sql.unsafe<object>(`
+        UPDATE staged_upload_files AS file
+        SET installed_at = $1
+        FROM staged_uploads AS upload
+        WHERE file.installation_id = $2
+          AND file.upload_id = $3
+          AND file.storage_token = $4
+          AND upload.installation_id = file.installation_id
+          AND upload.id = file.upload_id
+          AND upload.status = 'open'
+          AND upload.preparation_state = 'claimed'
+          AND upload.preparation_attempts = $5
+        RETURNING file.path
+      `, [installedAt, installationId, uploadId, storageToken, attempts]);
+      if (updated.length !== 1) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    }));
+  }
+
+  async markUploadPrepared(
+    uploadId: string,
+    attempts: number,
+    preparedAt: string,
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const updated = yield* sql.unsafe<object>(`
+        UPDATE staged_uploads
+        SET preparation_state = 'prepared',
+          prepared_at = $1
+        WHERE installation_id = $2 AND id = $3
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = $4
+        RETURNING id
+      `, [preparedAt, installationId, uploadId, attempts]);
+      if (updated.length !== 1) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    }));
+  }
+
+  async writePreparedManifestEntries(
+    uploadId: string,
+    attempts: number,
+    entries: readonly ManifestEntry[],
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const claimed = yield* sql.unsafe<object>(`
+        SELECT 1 FROM staged_uploads
+        WHERE installation_id = $1 AND id = $2
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = $3
+      `, [installationId, uploadId, attempts]);
+      if (claimed.length !== 1) {
+        throw new UploadPreparationLeaseLost();
+      }
+      yield* sql`DELETE FROM prepared_manifest_entries
+        WHERE installation_id = ${installationId} AND upload_id = ${uploadId}`;
+      if (entries.length > 0) {
+        const entriesJson = JSON.stringify(entries.map((entry) => ({
+          disposition: entry.disposition,
+          media_type: entry.mediaType,
+          path: entry.path,
+          sha256: entry.sha256,
+          size: entry.size,
+        })));
+        yield* sql.unsafe<object>(`
+          INSERT INTO prepared_manifest_entries (
+            installation_id, upload_id, path, size, media_type, sha256, disposition
+          ) SELECT $1, $2, entry.path, entry.size, entry.media_type,
+              entry.sha256, entry.disposition
+            FROM jsonb_to_recordset($3::jsonb) AS entry(
+              path TEXT, size BIGINT, media_type TEXT, sha256 TEXT,
+              disposition TEXT
+            )
+        `, [installationId, uploadId, entriesJson]);
+      }
+      return undefined;
+    }));
+  }
+
+  async countPreparedManifestEntries(uploadId: string): Promise<number> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<{count: number}>(`
+        SELECT COUNT(*) AS count
+        FROM prepared_manifest_entries
+        WHERE installation_id = $1 AND upload_id = $2
+      `, [installationId, uploadId]);
+      return rows[0]?.count ?? 0;
+    }));
+  }
+
+  async extendStagedUploadExpiry(
+    uploadId: string,
+    attempts: number,
+    newExpiresAt: string,
+  ): Promise<boolean> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const updated = yield* sql.unsafe<object>(`
+        UPDATE staged_uploads
+        SET expires_at = $1
+        WHERE installation_id = $2 AND id = $3
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = $4
+        RETURNING id
+      `, [newExpiresAt, installationId, uploadId, attempts]);
+      return updated.length === 1;
+    }));
+  }
+
+  async releaseUploadPreparation(
+    uploadId: string,
+    attempts: number,
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql.unsafe<object>(`
+        UPDATE staged_uploads
+        SET preparation_state = 'none',
+          preparation_lease_expires_at = NULL
+        WHERE installation_id = $1 AND id = $2
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = $3
+      `, [installationId, uploadId, attempts]);
+      return undefined;
     }));
   }
 
@@ -4107,6 +4346,7 @@ export class PostgresArtifactRepository implements
     number: number,
     manifest: CommitNewArtifact["manifest"],
     publisherPrincipalId: string,
+    uploadId: string,
   ): Effect.Effect<void, unknown, SqlClient> {
     const installationId = this.#installationId;
     return Effect.gen({self: this}, function*() {
@@ -4119,27 +4359,30 @@ export class PostgresArtifactRepository implements
         ${manifest.digest}, ${manifest.entryPath}, ${manifest.routingMode},
         ${contentToken}, ${publisherPrincipalId}, ${createdAt}
       )`;
-      if (manifest.entries.length > 0) {
-        const entriesJson = JSON.stringify(manifest.entries.map((entry) => ({
-          disposition: entry.disposition,
-          media_type: entry.mediaType,
-          path: entry.path,
-          sha256: entry.sha256,
-          size: entry.size,
-        })));
-        yield* sql.unsafe<object>(
-          `INSERT INTO manifest_entries (
-            installation_id, version_id, path, size, media_type, sha256,
-            disposition
-          ) SELECT $1, $2, entry.path, entry.size, entry.media_type,
-              entry.sha256, entry.disposition
-            FROM jsonb_to_recordset($3::jsonb) AS entry(
-              path TEXT, size BIGINT, media_type TEXT, sha256 TEXT,
-              disposition TEXT
-            )`,
-          [installationId, versionId, entriesJson],
-        );
+      yield* sql.unsafe(
+        `INSERT INTO manifest_entries (
+          installation_id, version_id, path, size, media_type, sha256, disposition
+        )
+        SELECT $1, $2, path, size, media_type, sha256, disposition
+        FROM prepared_manifest_entries
+        WHERE upload_id = $3`,
+        [installationId, versionId, uploadId],
+      );
+      const insertedRows = yield* sql.unsafe(
+        `SELECT COUNT(*)::int AS count FROM manifest_entries
+        WHERE installation_id = $1 AND version_id = $2`,
+        [installationId, versionId],
+      );
+      const inserted = z.object({count: nonnegativeIntegerSchema}).parse(insertedRows[0]);
+      if (inserted.count !== manifest.entries.length) {
+        yield* new UploadIncomplete({
+          message: "The prepared manifest is incomplete for commit.",
+        });
       }
+      yield* sql.unsafe(
+        `DELETE FROM prepared_manifest_entries WHERE upload_id = $1`,
+        [uploadId],
+      );
     });
   }
 
@@ -4209,7 +4452,8 @@ export class PostgresArtifactRepository implements
       const sql = yield* SqlClient;
       const uploadRows = yield* sql.unsafe<object>(
         `SELECT status, expires_at AS "expiresAt",
-          manifest_digest AS "manifestDigest"
+          manifest_digest AS "manifestDigest",
+          preparation_state AS "preparationState"
          FROM staged_uploads
          WHERE installation_id = $1 AND project_id = $2
            AND id = $3 AND principal_id = $4
@@ -4219,6 +4463,7 @@ export class PostgresArtifactRepository implements
       const uploadRow = z.object({
         expiresAt: z.string(),
         manifestDigest: z.string(),
+        preparationState: preparationStateSchema,
         status: uploadStatusSchema,
       }).nullable().parse(uploadRows[0] ?? null);
       if (uploadRow === null) {
@@ -4228,13 +4473,15 @@ export class PostgresArtifactRepository implements
       }
       const countRows = yield* sql.unsafe<object>(
         `SELECT COUNT(*) AS "fileCount",
-          COUNT(*) FILTER (WHERE uploaded_at IS NOT NULL) AS "readyCount"
+          COUNT(*) FILTER (WHERE uploaded_at IS NOT NULL) AS "readyCount",
+          COUNT(*) FILTER (WHERE installed_at IS NOT NULL) AS "installedCount"
          FROM staged_upload_files
          WHERE installation_id = $1 AND upload_id = $2`,
         [installationId, source.uploadId],
       );
       const counts = z.object({
         fileCount: nonnegativeIntegerSchema,
+        installedCount: nonnegativeIntegerSchema,
         readyCount: nonnegativeIntegerSchema,
       }).parse(countRows[0]);
       const upload = stagedUploadCommitRowSchema.parse({
@@ -4252,10 +4499,12 @@ export class PostgresArtifactRepository implements
       if (
         upload.fileCount === 0 ||
         upload.readyCount !== upload.fileCount ||
+        upload.installedCount !== upload.fileCount ||
+        upload.preparationState !== preparationStates.prepared ||
         upload.manifestDigest !== manifestDigest
       ) {
         return yield* new UploadIncomplete({
-          message: "Every declared upload file must be verified before commit.",
+          message: "Every declared upload file must be installed and prepared before commit.",
         });
       }
       return undefined;
@@ -4319,7 +4568,11 @@ export class PostgresArtifactRepository implements
           manifest_digest AS "manifestDigest", entry_path AS "entryPath",
           routing_mode AS "routingMode", created_at AS "createdAt",
           expires_at AS "expiresAt", committed_version_id AS "committedVersionId",
-          idempotency_key AS "idempotencyKey"
+          idempotency_key AS "idempotencyKey",
+          preparation_state AS "preparationState",
+          preparation_attempts AS "preparationAttempts",
+          preparation_lease_expires_at AS "preparationLeaseExpiresAt",
+          prepared_at AS "preparedAt"
          FROM staged_uploads
          WHERE installation_id = $1 AND project_id = $2
            AND id = $3 AND principal_id = $4`,
@@ -4340,7 +4593,8 @@ export class PostgresArtifactRepository implements
       const fileRows = yield* sql.unsafe<object>(
         `SELECT storage_token AS "storageToken", path, size,
           media_type AS "mediaType", sha256, disposition,
-          uploaded_at AS "uploadedAt"
+          uploaded_at AS "uploadedAt",
+          installed_at AS "installedAt"
          FROM staged_upload_files
          WHERE installation_id = $1 AND upload_id = $2
          ORDER BY path`,
@@ -4374,6 +4628,7 @@ export class PostgresArtifactRepository implements
         }
         return {
           entry,
+          installedAt: file.installedAt,
           storageToken: file.storageToken,
           uploadedAt: file.uploadedAt,
         };
@@ -4385,6 +4640,10 @@ export class PostgresArtifactRepository implements
         id: header.id,
         idempotencyKey: header.idempotencyKey,
         manifest,
+        preparedAt: header.preparedAt,
+        preparationAttempts: header.preparationAttempts,
+        preparationLeaseExpiresAt: header.preparationLeaseExpiresAt,
+        preparationState: header.preparationState,
         principalId: header.principalId,
         projectId: header.projectId,
       };

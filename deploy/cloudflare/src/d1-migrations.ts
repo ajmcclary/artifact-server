@@ -8,7 +8,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 12;
+export const requiredD1SchemaVersion = 14;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -117,7 +117,12 @@ const schemaSql = `
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     committed_version_id TEXT REFERENCES versions(id),
-    idempotency_key TEXT
+    idempotency_key TEXT,
+    preparation_state TEXT NOT NULL DEFAULT 'none'
+      CHECK (preparation_state IN ('none', 'claimed', 'prepared')),
+    preparation_attempts INTEGER NOT NULL DEFAULT 0,
+    preparation_lease_expires_at TEXT,
+    prepared_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS staged_upload_files (
@@ -129,8 +134,19 @@ const schemaSql = `
     sha256 TEXT NOT NULL,
     disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
     uploaded_at TEXT,
+    installed_at TEXT,
     PRIMARY KEY (upload_id, storage_token),
     UNIQUE (upload_id, path)
+  );
+
+  CREATE TABLE IF NOT EXISTS prepared_manifest_entries (
+    upload_id TEXT NOT NULL REFERENCES staged_uploads(id),
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL CHECK (size >= 0),
+    media_type TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
+    PRIMARY KEY (upload_id, path)
   );
 
   CREATE TABLE IF NOT EXISTS content_bootstraps (
@@ -627,6 +643,8 @@ export async function migrateD1(
     await addArtifactSearchNameIfMissing(database);
     await addStagedUploadIdempotencyKeyIfMissing(database);
     await addArtifactCommentRevisionIfMissing(database);
+    await addStagedUploadPreparationColumnsIfMissing(database);
+    await addPreparedManifestEntriesTableIfMissing(database);
   }
   await database.batch([
     database.prepare(`
@@ -698,6 +716,63 @@ async function addArtifactCommentRevisionIfMissing(
       ALTER TABLE artifacts ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0
     `).run();
   }
+}
+
+async function addStagedUploadPreparationColumnsIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const uploadColumns = await database.prepare(
+    "PRAGMA table_info(staged_uploads)",
+  ).all<{name: string}>();
+  const uploadNames = new Set(uploadColumns.results.map((column) => column.name));
+  if (!uploadNames.has("preparation_state")) {
+    await database.prepare(`
+      ALTER TABLE staged_uploads ADD COLUMN preparation_state TEXT NOT NULL DEFAULT 'none'
+    `).run();
+  }
+  if (!uploadNames.has("preparation_attempts")) {
+    await database.prepare(`
+      ALTER TABLE staged_uploads ADD COLUMN preparation_attempts INTEGER NOT NULL DEFAULT 0
+    `).run();
+  }
+  if (!uploadNames.has("preparation_lease_expires_at")) {
+    await database.prepare(`
+      ALTER TABLE staged_uploads ADD COLUMN preparation_lease_expires_at TEXT
+    `).run();
+  }
+  if (!uploadNames.has("prepared_at")) {
+    await database.prepare(`
+      ALTER TABLE staged_uploads ADD COLUMN prepared_at TEXT
+    `).run();
+  }
+  const fileColumns = await database.prepare(
+    "PRAGMA table_info(staged_upload_files)",
+  ).all<{name: string}>();
+  if (!fileColumns.results.some((column) => column.name === "installed_at")) {
+    await database.prepare(`
+      ALTER TABLE staged_upload_files ADD COLUMN installed_at TEXT
+    `).run();
+  }
+}
+
+async function addPreparedManifestEntriesTableIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const tables = await database.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'prepared_manifest_entries'",
+  ).first<{name: string}>();
+  if (tables !== null) return;
+  await database.prepare(`
+    CREATE TABLE prepared_manifest_entries (
+      upload_id TEXT NOT NULL REFERENCES staged_uploads(id),
+      path TEXT NOT NULL,
+      size INTEGER NOT NULL CHECK (size >= 0),
+      media_type TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
+      PRIMARY KEY (upload_id, path)
+    )
+  `).run();
 }
 
 async function addGitHistoryMirrorColumnsIfMissing(

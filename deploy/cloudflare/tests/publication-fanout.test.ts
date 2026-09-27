@@ -63,19 +63,18 @@ describe("Cloudflare D1 publication fan-out", () => {
   it("round-trips a manifest that spans several statement chunks", async () => {
     const files = declaredFiles();
     const uploadPlan = await stageUpload(files);
-    const commitResponse = await worker.fetch(uploadPlan.commitUrl, {
-      body: JSON.stringify({target: {
+    const {status: commitStatus, body: commitBody} = await commitUntilDone(
+      uploadPlan.commitUrl,
+      {
         accessSetting: "account_required",
         kind: "new_artifact",
         name: "Chunked publication",
         tags: [],
-      }}),
-      headers: mutationHeaders("cloudflare-fanout-publish-1"),
-      method: "POST",
-    });
-    const commitBody = await commitResponse.text();
-    if (commitResponse.status !== 201) {
-      throw new Error(`Publishing failed with ${commitResponse.status}: ${commitBody}`);
+      },
+      "cloudflare-fanout-publish-1",
+    );
+    if (commitStatus !== 201) {
+      throw new Error(`Publishing failed with ${commitStatus}: ${commitBody}`);
     }
     const publication = publicationSchema.parse(JSON.parse(commitBody));
 
@@ -121,18 +120,16 @@ describe("Cloudflare D1 publication fan-out", () => {
       await stageUpload(declaredFiles("rollback")),
     ];
     const racedStatuses = await Promise.all(racingPlans.map(async (plan) => {
-      const response = await worker.fetch(plan.commitUrl, {
-        body: JSON.stringify({target: {
+      const {status} = await commitUntilDone(
+        plan.commitUrl,
+        {
           accessSetting: "account_required",
           kind: "new_artifact",
           name: rollbackArtifactName,
           tags: [],
-        }}),
-        headers: mutationHeaders("cloudflare-fanout-rollback-1"),
-        method: "POST",
-      });
-      const status = response.status;
-      await response.arrayBuffer();
+        },
+        "cloudflare-fanout-rollback-1",
+      );
       return status;
     }));
     const statuses = racedStatuses.toSorted((left, right) => left - right);
@@ -251,6 +248,36 @@ async function findD1DatabaseFile(directory: string): Promise<string> {
     throw new Error("The Worker did not persist a local D1 database file.");
   }
   return join(found.parentPath, found.name);
+}
+
+async function commitUntilDone(
+  commitUrl: string,
+  target: {
+    readonly accessSetting: "account_required";
+    readonly kind: "new_artifact";
+    readonly name: string;
+    readonly tags: readonly string[];
+  },
+  idempotencyKey: string,
+  maxAttempts = 20,
+): Promise<{readonly body: string; readonly status: number}> {
+  const attempt = async (remaining: number): Promise<{readonly body: string; readonly status: number}> => {
+    const response = await worker.fetch(commitUrl, {
+      body: JSON.stringify({target}),
+      headers: mutationHeaders(idempotencyKey),
+      method: "POST",
+    });
+    const body = await response.text();
+    if (response.status !== 202) {
+      return {body, status: response.status};
+    }
+    if (remaining <= 1) {
+      throw new Error(`Commit did not complete after ${maxAttempts} attempts.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return attempt(remaining - 1);
+  };
+  return attempt(maxAttempts);
 }
 
 function bearerHeaders() {

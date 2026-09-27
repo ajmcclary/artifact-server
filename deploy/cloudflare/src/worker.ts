@@ -141,6 +141,13 @@ function getRuntime(environment: WorkerEnvironment): Promise<CloudflareRuntime> 
   return runtimePromise;
 }
 
+// Workers Free allows 50 subrequests and 50 D1 queries per invocation, and
+// each file installation costs roughly 2 R2 subrequests + 1 D1 query. The
+// prepared-manifest final batch is ~10 D1 statements. A filesPerPass of 5
+// keeps a single commit invocation well inside both limits with headroom.
+// See project/performance/CLOUDFLARE-COST-ENVELOPE.md.
+const cloudflarePublicationFilesPerPass = 5;
+
 async function createCloudflareRuntime(
   environment: WorkerEnvironment,
 ): Promise<CloudflareRuntime> {
@@ -192,6 +199,9 @@ async function createCloudflareRuntime(
       hostedAuthentication?.interactiveIdentityProvider ?? null,
     localBootstrapCredential: null,
     protectBootstrapAdministrator: false,
+    publicationPreparationConfig: {
+      filesPerPass: cloudflarePublicationFilesPerPass,
+    },
     repository,
     staging,
   };

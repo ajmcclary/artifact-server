@@ -68,6 +68,10 @@ https://developers.cloudflare.com/workers/platform/limits/
 Sources: https://developers.cloudflare.com/d1/platform/pricing/,
 https://developers.cloudflare.com/d1/platform/limits/
 
+#### Measured local D1 batch behavior (2026-09-26)
+
+A bounded local Wrangler-D1 probe (`deploy/cloudflare/tests/d1-final-batch-limits.test.ts`, `ARTIFACT_SERVER_D1_FINAL_BATCH_LIMITS=1`) found no `database.batch()` statement ceiling up to at least 632 statements carrying 10,000 manifest rows. Wall times on this machine were roughly 170 ms for a 632-statement final-commit batch and 68 ms for the equivalent two-statement `INSERT ... SELECT` plus `DELETE` prepared-manifest path. The local binding did not enforce the documented Workers per-invocation query limit; a batch of 5,000 trivial statements succeeded locally. These are binding-only measurements and do not establish live Worker CPU or plan enforcement.
+
 ### R2
 
 - Free tier: 10 GB-month storage, 1 million Class A operations/month, 10 million

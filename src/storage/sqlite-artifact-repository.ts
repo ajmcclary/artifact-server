@@ -17,6 +17,7 @@ import {
   UploadFileNotFound,
   UploadIncomplete,
   UploadNotFound,
+  UploadPreparationLeaseLost,
   VersionNotFound,
   ProjectConflict,
   ProjectArchived,
@@ -39,6 +40,7 @@ import {
   dispatchedThreadFilters,
   fileDispositions,
   parseStoredAgentCapabilities,
+  preparationStates,
   routingModes,
   sourceFreshnessStates,
   uploadStatuses,
@@ -122,6 +124,7 @@ import type {
   SourceBindingWrite,
   StagedUploadRepository,
   StagedUploadFileSlot,
+  UploadPreparationClaim,
 } from "../core/ports.js";
 import {
   agentDispatchLeaseMilliseconds,
@@ -167,6 +170,12 @@ const uploadStatusSchema = z.enum([
   uploadStatuses.open,
 ]);
 const routingModeSchema = z.enum([routingModes.static, routingModes.spa]);
+const preparationStateSchema = z.enum([
+  preparationStates.claimed,
+  preparationStates.none,
+  preparationStates.prepared,
+]);
+const nonnegativeIntegerSchema = z.number().int().nonnegative();
 const artifactActionKindSchema = z.enum([
   artifactActionKinds.capture,
   artifactActionKinds.changeAccess,
@@ -306,6 +315,10 @@ const stagedUploadBaseRowSchema = z.object({
   id: z.string(),
   idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
+  preparedAt: z.string().nullable(),
+  preparationAttempts: nonnegativeIntegerSchema,
+  preparationLeaseExpiresAt: z.string().nullable(),
+  preparationState: preparationStateSchema,
   principalId: z.string(),
   projectId: z.string(),
   routingMode: routingModeSchema,
@@ -322,6 +335,7 @@ const stagedUploadRowSchema = z.discriminatedUnion("status", [
 ]);
 const stagedUploadFileRowSchema = z.object({
   disposition: dispositionSchema,
+  installedAt: z.string().nullable(),
   mediaType: z.string(),
   path: z.string(),
   sha256: z.string(),
@@ -2542,7 +2556,11 @@ export class SqliteArtifactRepository implements
             created_at AS createdAt,
             expires_at AS expiresAt,
             committed_version_id AS committedVersionId,
-            idempotency_key AS idempotencyKey
+            idempotency_key AS idempotencyKey,
+            preparation_state AS preparationState,
+            preparation_attempts AS preparationAttempts,
+            preparation_lease_expires_at AS preparationLeaseExpiresAt,
+            prepared_at AS preparedAt
           FROM staged_uploads
           WHERE project_id = ? AND principal_id = ? AND idempotency_key = ?`,
         )
@@ -2572,7 +2590,8 @@ export class SqliteArtifactRepository implements
         this.#database.prepare(`
           SELECT storage_token AS storageToken, path, size,
             media_type AS mediaType, sha256, disposition,
-            uploaded_at AS uploadedAt
+            uploaded_at AS uploadedAt,
+            installed_at AS installedAt
           FROM staged_upload_files
           WHERE upload_id = ? AND storage_token = ?
         `).get(uploadId, storageToken) ?? null,
@@ -2587,6 +2606,7 @@ export class SqliteArtifactRepository implements
             sha256: row.sha256,
             size: row.size,
           },
+          installedAt: row.installedAt,
           storageToken: row.storageToken,
           uploadedAt: row.uploadedAt,
         },
@@ -2635,12 +2655,213 @@ export class SqliteArtifactRepository implements
             AND upload.status = 'open' AND upload.expires_at <= ?
         )
       `).run(uploadId, expiredBefore);
+      this.#database.prepare(`
+        DELETE FROM prepared_manifest_entries
+        WHERE upload_id = ? AND EXISTS (
+          SELECT 1 FROM staged_uploads upload
+          WHERE upload.id = prepared_manifest_entries.upload_id
+            AND upload.status = 'open' AND upload.expires_at <= ?
+        )
+      `).run(uploadId, expiredBefore);
       const deleted = this.#database.prepare(`
         DELETE FROM staged_uploads
         WHERE id = ? AND status = 'open' AND expires_at <= ?
       `).run(uploadId, expiredBefore);
       return deleted.changes === 1;
     }));
+  }
+
+  claimUploadPreparation(
+    uploadId: string,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<UploadPreparationClaim | null> {
+    return Promise.resolve().then(() => {
+      const row = this.#database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'claimed',
+          preparation_attempts = preparation_attempts + 1,
+          preparation_lease_expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND (
+            preparation_state = 'none'
+            OR (
+              preparation_state = 'claimed'
+              AND preparation_lease_expires_at IS NOT NULL
+              AND preparation_lease_expires_at <= ?
+            )
+          )
+        RETURNING preparation_state AS preparationState,
+          preparation_attempts AS attempts,
+          preparation_lease_expires_at AS leaseExpiresAt
+      `).get(leaseExpiresAt, uploadId, now);
+      const parsed = z.object({
+        attempts: nonnegativeIntegerSchema,
+        leaseExpiresAt: z.string(),
+        preparationState: preparationStateSchema,
+      }).nullable().parse(row ?? null);
+      if (parsed === null) return null;
+      return {...parsed, uploadId};
+    });
+  }
+
+  renewUploadPreparation(
+    uploadId: string,
+    attempts: number,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean> {
+    return Promise.resolve().then(() => {
+      const updated = this.#database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_lease_expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+          AND preparation_lease_expires_at IS NOT NULL
+          AND preparation_lease_expires_at > ?
+        RETURNING id
+      `).get(leaseExpiresAt, uploadId, attempts, now);
+      return updated !== undefined;
+    });
+  }
+
+  recordStagedFileInstalled(
+    uploadId: string,
+    storageToken: string,
+    attempts: number,
+    installedAt: string,
+  ): Promise<void> {
+    return Promise.resolve().then(() => {
+      const updated = this.#database.prepare(`
+        UPDATE staged_upload_files
+        SET installed_at = ?
+        WHERE upload_id = ?
+          AND storage_token = ?
+          AND EXISTS (
+            SELECT 1 FROM staged_uploads u
+            WHERE u.id = staged_upload_files.upload_id
+              AND u.status = 'open'
+              AND u.preparation_state = 'claimed'
+              AND u.preparation_attempts = ?
+          )
+        RETURNING path
+      `).get(installedAt, uploadId, storageToken, attempts);
+      if (updated === undefined) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    });
+  }
+
+  markUploadPrepared(
+    uploadId: string,
+    attempts: number,
+    preparedAt: string,
+  ): Promise<void> {
+    return Promise.resolve().then(() => {
+      const updated = this.#database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'prepared',
+          prepared_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+        RETURNING id
+      `).get(preparedAt, uploadId, attempts);
+      if (updated === undefined) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    });
+  }
+
+  writePreparedManifestEntries(
+    uploadId: string,
+    attempts: number,
+    entries: readonly ManifestEntry[],
+  ): Promise<void> {
+    return Promise.resolve().then(() => this.#transaction(() => {
+      const claimed = this.#database.prepare(`
+        SELECT 1 FROM staged_uploads
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).get(uploadId, attempts);
+      if (claimed === undefined) {
+        throw new UploadPreparationLeaseLost();
+      }
+      this.#database.prepare(`
+        DELETE FROM prepared_manifest_entries WHERE upload_id = ?
+      `).run(uploadId);
+      const insert = this.#database.prepare(`
+        INSERT INTO prepared_manifest_entries (
+          upload_id, path, size, media_type, sha256, disposition
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const entry of entries) {
+        insert.run(
+          uploadId,
+          entry.path,
+          entry.size,
+          entry.mediaType,
+          entry.sha256,
+          entry.disposition,
+        );
+      }
+      return undefined;
+    }));
+  }
+
+  countPreparedManifestEntries(uploadId: string): Promise<number> {
+    return Promise.resolve().then(() => {
+      const row = this.#database.prepare(`
+        SELECT COUNT(*) AS count FROM prepared_manifest_entries WHERE upload_id = ?
+      `).get(uploadId);
+      const parsed = z.object({count: z.number()}).nullable().parse(row ?? null);
+      return parsed?.count ?? 0;
+    });
+  }
+
+  extendStagedUploadExpiry(
+    uploadId: string,
+    attempts: number,
+    newExpiresAt: string,
+  ): Promise<boolean> {
+    return Promise.resolve().then(() => {
+      const updated = this.#database.prepare(`
+        UPDATE staged_uploads
+        SET expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+        RETURNING id
+      `).get(newExpiresAt, uploadId, attempts);
+      return updated !== undefined;
+    });
+  }
+
+  releaseUploadPreparation(
+    uploadId: string,
+    attempts: number,
+  ): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.#database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'none',
+          preparation_lease_expires_at = NULL
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).run(uploadId, attempts);
+      return undefined;
+    });
   }
 
   markStagedFileUploaded(
@@ -5107,6 +5328,10 @@ export class SqliteArtifactRepository implements
         expires_at TEXT NOT NULL,
         committed_version_id TEXT REFERENCES versions(id),
         idempotency_key TEXT,
+        preparation_state TEXT NOT NULL DEFAULT 'none' CHECK (preparation_state IN ('none', 'claimed', 'prepared')),
+        preparation_attempts INTEGER NOT NULL DEFAULT 0,
+        preparation_lease_expires_at TEXT,
+        prepared_at TEXT,
         CHECK (
           (status = 'open' AND committed_version_id IS NULL)
           OR (status = 'committed' AND committed_version_id IS NOT NULL)
@@ -5122,6 +5347,17 @@ export class SqliteArtifactRepository implements
         sha256 TEXT NOT NULL,
         disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
         uploaded_at TEXT,
+        installed_at TEXT,
+        PRIMARY KEY (upload_id, path)
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS prepared_manifest_entries (
+        upload_id TEXT NOT NULL REFERENCES staged_uploads(id),
+        path TEXT NOT NULL,
+        size INTEGER NOT NULL CHECK (size >= 0),
+        media_type TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
         PRIMARY KEY (upload_id, path)
       ) STRICT;
 
@@ -5202,6 +5438,7 @@ export class SqliteArtifactRepository implements
     this.#addGitHistoryMirrorTablesIfMissing();
     this.#addStagedUploadIdempotencyKeyIfMissing();
     this.#addArtifactCommentRevisionIfMissing();
+    this.#addStagedUploadPreparationColumnsIfMissing();
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS projects_active_created
         ON projects (archived_at, created_at, id);
@@ -5350,6 +5587,44 @@ export class SqliteArtifactRepository implements
         ALTER TABLE artifacts ADD COLUMN comment_revision INTEGER NOT NULL DEFAULT 0
       `);
     }
+  }
+
+  #addStagedUploadPreparationColumnsIfMissing(): void {
+    const uploadColumns = this.#tableColumns("staged_uploads");
+    if (!uploadColumns.includes("preparation_state")) {
+      this.#database.exec(`
+        ALTER TABLE staged_uploads ADD COLUMN preparation_state TEXT NOT NULL DEFAULT 'none'
+          CHECK (preparation_state IN ('none', 'claimed', 'prepared'))
+      `);
+    }
+    if (!uploadColumns.includes("preparation_attempts")) {
+      this.#database.exec(`
+        ALTER TABLE staged_uploads ADD COLUMN preparation_attempts INTEGER NOT NULL DEFAULT 0
+      `);
+    }
+    if (!uploadColumns.includes("preparation_lease_expires_at")) {
+      this.#database.exec(
+        "ALTER TABLE staged_uploads ADD COLUMN preparation_lease_expires_at TEXT",
+      );
+    }
+    if (!uploadColumns.includes("prepared_at")) {
+      this.#database.exec("ALTER TABLE staged_uploads ADD COLUMN prepared_at TEXT");
+    }
+    const fileColumns = this.#tableColumns("staged_upload_files");
+    if (!fileColumns.includes("installed_at")) {
+      this.#database.exec("ALTER TABLE staged_upload_files ADD COLUMN installed_at TEXT");
+    }
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS prepared_manifest_entries (
+        upload_id TEXT NOT NULL REFERENCES staged_uploads(id),
+        path TEXT NOT NULL,
+        size INTEGER NOT NULL CHECK (size >= 0),
+        media_type TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        disposition TEXT NOT NULL CHECK (disposition IN ('inline', 'attachment')),
+        PRIMARY KEY (upload_id, path)
+      ) STRICT
+    `);
   }
 
   // One nullable column group on the artifact record carries every linked
@@ -5789,6 +6064,7 @@ export class SqliteArtifactRepository implements
       | "content_sessions"
       | "git_history_project_settings"
       | "idempotency_records"
+      | "staged_upload_files"
       | "staged_uploads"
       | "versions",
   ): readonly string[] {
@@ -5827,7 +6103,11 @@ export class SqliteArtifactRepository implements
           created_at AS createdAt,
           expires_at AS expiresAt,
           committed_version_id AS committedVersionId,
-          idempotency_key AS idempotencyKey
+          idempotency_key AS idempotencyKey,
+          preparation_state AS preparationState,
+          preparation_attempts AS preparationAttempts,
+          preparation_lease_expires_at AS preparationLeaseExpiresAt,
+          prepared_at AS preparedAt
         FROM staged_uploads
         WHERE project_id = ? AND id = ? AND principal_id = ?`,
       )
@@ -5849,7 +6129,8 @@ export class SqliteArtifactRepository implements
           media_type AS mediaType,
           sha256 AS sha256,
           disposition AS disposition,
-          uploaded_at AS uploadedAt
+          uploaded_at AS uploadedAt,
+          installed_at AS installedAt
         FROM staged_upload_files
         WHERE upload_id = ?
         ORDER BY path`,
@@ -5883,6 +6164,7 @@ export class SqliteArtifactRepository implements
       }
       return {
         entry,
+        installedAt: file.installedAt,
         storageToken: file.storageToken,
         uploadedAt: file.uploadedAt,
       };
@@ -5894,6 +6176,10 @@ export class SqliteArtifactRepository implements
       id: header.id,
       idempotencyKey: header.idempotencyKey,
       manifest,
+      preparedAt: header.preparedAt,
+      preparationAttempts: header.preparationAttempts,
+      preparationLeaseExpiresAt: header.preparationLeaseExpiresAt,
+      preparationState: header.preparationState,
       principalId: header.principalId,
       projectId: header.projectId,
     };

@@ -1,6 +1,7 @@
 import type {
   AccessSetting,
   AgentDispatchCreation,
+  ManifestEntry,
   AgentDispatchPage,
   AgentDispatchRecord,
   AgentDispatchState,
@@ -34,6 +35,7 @@ import type {
   RegisteredAgentRecord,
   SourceBindingRecord,
   SourceFreshness,
+  PreparationState,
   StagedUpload,
   StagedUploadFile,
   UploadStatus,
@@ -726,8 +728,21 @@ export interface ContentSessionRepository {
   ): Promise<ContentSessionRecord | null>;
 }
 
+export interface UploadPreparationClaim {
+  readonly attempts: number;
+  readonly leaseExpiresAt: string;
+  readonly preparationState: PreparationState;
+  readonly uploadId: string;
+}
+
 export interface StagedUploadRepository {
+  claimUploadPreparation(
+    uploadId: string,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<UploadPreparationClaim | null>;
   createStagedUpload(command: CreateStagedUpload): Promise<StagedUpload>;
+  releaseUploadPreparation(uploadId: string, attempts: number): Promise<void>;
   findStagedUploadFileSlot(
     projectId: string,
     uploadId: string,
@@ -751,6 +766,23 @@ export interface StagedUploadRepository {
     storageToken: string,
     uploadedAt: string,
   ): Promise<void>;
+  renewUploadPreparation(
+    uploadId: string,
+    attempts: number,
+    now: string,
+    leaseExpiresAt: string,
+  ): Promise<boolean>;
+  recordStagedFileInstalled(
+    uploadId: string,
+    storageToken: string,
+    attempts: number,
+    installedAt: string,
+  ): Promise<void>;
+  markUploadPrepared(
+    uploadId: string,
+    attempts: number,
+    preparedAt: string,
+  ): Promise<void>;
   listExpiredStagedUploads(
     expiredBefore: string,
     limit: number,
@@ -758,6 +790,17 @@ export interface StagedUploadRepository {
   removeExpiredStagedUpload(
     uploadId: string,
     expiredBefore: string,
+  ): Promise<boolean>;
+  writePreparedManifestEntries(
+    uploadId: string,
+    attempts: number,
+    entries: readonly ManifestEntry[],
+  ): Promise<void>;
+  countPreparedManifestEntries(uploadId: string): Promise<number>;
+  extendStagedUploadExpiry(
+    uploadId: string,
+    attempts: number,
+    newExpiresAt: string,
   ): Promise<boolean>;
 }
 

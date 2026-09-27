@@ -274,7 +274,7 @@ function testFile(
   };
 }
 
-async function requireSuccessfulUploads(
+export async function requireSuccessfulUploads(
   pending: Promise<readonly Response[]>,
 ): Promise<void> {
   const responses = await pending;

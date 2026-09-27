@@ -6,6 +6,7 @@ import type {
   ExternalMcpBearerVerifier,
 } from "../application/authentication.js";
 import type {InteractiveIdentityProvider} from "../application/interactive-login.js";
+import type {PublicationPreparationConfig} from "../application/publication-preparation.js";
 import type {Clock} from "../core/ports.js";
 import type {BrowserAccess} from "../core/browser-access.js";
 import {SystemClock, SystemIdGenerator} from "../core/system.js";
@@ -90,6 +91,7 @@ export interface ExternalStorageRuntimeConfig {
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly objectStorage: ObjectStorageProviderFactory;
   readonly postgresMaxConnections?: number;
+  readonly publicationPreparationConfig?: PublicationPreparationConfig;
   readonly runtimeLifecycle?: RuntimeLifecycle;
   readonly serviceVersion?: string;
   readonly stagingCleanupPolicy?: StagingCleanupPolicy;
@@ -180,6 +182,11 @@ export async function createExternalStorageRuntime(
       staging,
       stagingCleanupPolicy,
     };
+    if (config.publicationPreparationConfig !== undefined) {
+      Object.assign(applicationAdapters, {
+        publicationPreparationConfig: config.publicationPreparationConfig,
+      });
+    }
     if (gitHistoryProvider !== null) {
       Object.assign(applicationAdapters, {gitHistoryProvider});
     }

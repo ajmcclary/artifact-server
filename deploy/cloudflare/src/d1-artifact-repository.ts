@@ -25,6 +25,7 @@ import {
   VersionNotFound,
 } from "../../../src/core/errors.js";
 import {principalKinds} from "../../../src/core/identity.js";
+import {UploadPreparationLeaseLost} from "../../../src/core/upload-preparation.js";
 import type {
   ProjectGitHistoryProgress,
   ProjectGitHistoryStore,
@@ -42,6 +43,7 @@ import {
   dispatchedThreadFilters,
   fileDispositions,
   parseStoredAgentCapabilities,
+  preparationStates,
   routingModes,
   uploadStatuses,
   type AgentDispatchCreation,
@@ -115,6 +117,7 @@ import type {
   StagedUploadFileSlot,
   UpdateCommentReply,
   UpdateCommentThread,
+  UploadPreparationClaim,
 } from "../../../src/core/ports.js";
 import {
   agentDispatchLeaseMilliseconds,
@@ -152,6 +155,11 @@ const routingModeSchema = z.enum([routingModes.static, routingModes.spa]);
 const uploadStatusSchema = z.enum([
   uploadStatuses.committed,
   uploadStatuses.open,
+]);
+const preparationStateSchema = z.enum([
+  preparationStates.claimed,
+  preparationStates.none,
+  preparationStates.prepared,
 ]);
 const actionSchema = z.enum([
   artifactActionKinds.changeAccess,
@@ -332,6 +340,10 @@ const stagedUploadBaseSchema = z.object({
   id: z.string(),
   idempotencyKey: z.string().nullable(),
   manifestDigest: z.string(),
+  preparedAt: z.string().nullable(),
+  preparationAttempts: z.number().int().nonnegative(),
+  preparationLeaseExpiresAt: z.string().nullable(),
+  preparationState: preparationStateSchema,
   principalId: z.string(),
   projectId: z.string(),
   routingMode: routingModeSchema,
@@ -348,6 +360,7 @@ const stagedUploadSchema = z.discriminatedUnion("status", [
 ]);
 const stagedFileSchema = z.object({
   disposition: dispositionSchema,
+  installedAt: z.string().nullable(),
   mediaType: z.string(),
   path: z.string(),
   sha256: z.string(),
@@ -366,7 +379,9 @@ const expiredStagedUploadRowSchema = z.object({
 const stagedCommitSchema = z.object({
   expiresAt: z.string(),
   fileCount: z.number().int().nonnegative(),
+  installedCount: z.number().int().nonnegative(),
   manifestDigest: z.string(),
+  preparationState: preparationStateSchema,
   readyCount: z.number().int().nonnegative(),
   status: uploadStatusSchema,
 });
@@ -617,8 +632,8 @@ export type D1ArtifactRepository = AgentDispatchRepository & ArtifactRepository 
  * https://developers.cloudflare.com/d1/platform/limits/
  */
 const maximumBoundParametersPerStatement = 100;
-const manifestEntryColumns = [
-  "version_id",
+const preparedManifestEntryColumns = [
+  "upload_id",
   "path",
   "size",
   "media_type",
@@ -811,7 +826,11 @@ export function createD1ArtifactRepository(
         manifest_digest AS manifestDigest, entry_path AS entryPath,
         routing_mode AS routingMode, created_at AS createdAt,
         expires_at AS expiresAt, committed_version_id AS committedVersionId,
-        idempotency_key AS idempotencyKey
+        idempotency_key AS idempotencyKey,
+        preparation_state AS preparationState,
+        preparation_attempts AS preparationAttempts,
+        preparation_lease_expires_at AS preparationLeaseExpiresAt,
+        prepared_at AS preparedAt
       FROM staged_uploads
       WHERE project_id = ? AND id = ? AND principal_id = ?
     `).bind(projectId, uploadId, principalId)
@@ -827,7 +846,8 @@ export function createD1ArtifactRepository(
     const filesResult = await database.prepare(`
       SELECT storage_token AS storageToken, path, size,
         media_type AS mediaType, sha256, disposition,
-        uploaded_at AS uploadedAt
+        uploaded_at AS uploadedAt,
+        installed_at AS installedAt
       FROM staged_upload_files WHERE upload_id = ? ORDER BY path
     `).bind(uploadId).all<z.input<typeof stagedFileSchema>>();
     const files = filesResult.results.map((file) => stagedFileSchema.parse(file));
@@ -852,10 +872,19 @@ export function createD1ArtifactRepository(
         sha256: file.sha256,
         size: file.size,
       },
+      installedAt: file.installedAt,
       storageToken: file.storageToken,
       uploadedAt: file.uploadedAt,
     }));
-    return {...upload, files: stagedFiles, manifest};
+    return {
+      ...upload,
+      files: stagedFiles,
+      manifest,
+      preparedAt: upload.preparedAt,
+      preparationAttempts: upload.preparationAttempts,
+      preparationLeaseExpiresAt: upload.preparationLeaseExpiresAt,
+      preparationState: upload.preparationState,
+    };
   };
   const assertSourceReady = async (
     source: PublicationSource,
@@ -865,8 +894,10 @@ export function createD1ArtifactRepository(
     const row = await database.prepare(`
       SELECT u.status, u.expires_at AS expiresAt,
         u.manifest_digest AS manifestDigest,
+        u.preparation_state AS preparationState,
         COUNT(f.storage_token) AS fileCount,
-        COALESCE(SUM(CASE WHEN f.uploaded_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS readyCount
+        COALESCE(SUM(CASE WHEN f.uploaded_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS readyCount,
+        COALESCE(SUM(CASE WHEN f.installed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS installedCount
       FROM staged_uploads u
       LEFT JOIN staged_upload_files f ON f.upload_id = u.id
       WHERE u.project_id = ? AND u.id = ? AND u.principal_id = ?
@@ -883,10 +914,12 @@ export function createD1ArtifactRepository(
     }
     if (
       upload.fileCount === 0 || upload.readyCount !== upload.fileCount ||
+      upload.installedCount !== upload.fileCount ||
+      upload.preparationState !== preparationStates.prepared ||
       upload.manifestDigest !== manifestDigest
     ) {
       throw new UploadIncomplete({
-        message: "Every declared upload file must be verified before commit.",
+        message: "Every declared upload file must be installed and prepared before commit.",
       });
     }
   };
@@ -1012,7 +1045,8 @@ export function createD1ArtifactRepository(
         AND a.deleted_at IS NULL AND u.project_id = ? AND u.principal_id = ?
         AND u.status = 'committed' AND u.committed_version_id = ?
         AND i.input_digest = ? AND i.artifact_id = ? AND i.version_id = ?
-        AND i.operation = 'publish'`,
+        AND i.operation = 'publish'
+        AND (SELECT COUNT(*) FROM manifest_entries WHERE version_id = ?) = ?`,
     [
       command.source.uploadId,
       command.idempotencyKey,
@@ -1025,6 +1059,8 @@ export function createD1ArtifactRepository(
       command.inputDigest,
       command.artifactId,
       command.versionId,
+      command.versionId,
+      command.manifest.entries.length,
     ],
   );
   const managementGuardStatements = (
@@ -1079,18 +1115,17 @@ export function createD1ArtifactRepository(
       command.principalId,
       command.createdAt,
     ),
-    ...insertRowsStatements(
-      "manifest_entries",
-      manifestEntryColumns,
-      command.manifest.entries.map((entry) => [
-        command.versionId,
-        entry.path,
-        entry.size,
-        entry.mediaType,
-        entry.sha256,
-        entry.disposition,
-      ]),
-    ),
+    database.prepare(`
+      INSERT INTO manifest_entries (
+        version_id, path, size, media_type, sha256, disposition
+      )
+      SELECT ?, path, size, media_type, sha256, disposition
+      FROM prepared_manifest_entries
+      WHERE upload_id = ?
+    `).bind(command.versionId, command.source.uploadId),
+    database.prepare(`
+      DELETE FROM prepared_manifest_entries WHERE upload_id = ?
+    `).bind(command.source.uploadId),
   ];
   const mirrorJobStatement = (
     projectId: string,
@@ -2411,7 +2446,11 @@ export function createD1ArtifactRepository(
           manifest_digest AS manifestDigest, entry_path AS entryPath,
           routing_mode AS routingMode, created_at AS createdAt,
           expires_at AS expiresAt, committed_version_id AS committedVersionId,
-          idempotency_key AS idempotencyKey
+          idempotency_key AS idempotencyKey,
+          preparation_state AS preparationState,
+          preparation_attempts AS preparationAttempts,
+          preparation_lease_expires_at AS preparationLeaseExpiresAt,
+          prepared_at AS preparedAt
         FROM staged_uploads
         WHERE project_id = ? AND principal_id = ? AND idempotency_key = ?
       `).bind(projectId, principalId, idempotencyKey)
@@ -2436,7 +2475,8 @@ export function createD1ArtifactRepository(
       const fileRow = await database.prepare(`
         SELECT storage_token AS storageToken, path, size,
           media_type AS mediaType, sha256, disposition,
-          uploaded_at AS uploadedAt
+          uploaded_at AS uploadedAt,
+          installed_at AS installedAt
         FROM staged_upload_files
         WHERE upload_id = ? AND storage_token = ?
       `).bind(uploadId, storageToken).first<z.input<typeof stagedFileSchema>>();
@@ -2451,6 +2491,7 @@ export function createD1ArtifactRepository(
             sha256: file.sha256,
             size: file.size,
           },
+          installedAt: file.installedAt,
           storageToken: file.storageToken,
           uploadedAt: file.uploadedAt,
         },
@@ -2492,6 +2533,182 @@ export function createD1ArtifactRepository(
         }
         throw new UploadFileNotFound({message: "The staged upload file does not exist."});
       }
+      return undefined;
+    },
+
+    claimUploadPreparation: async (
+      uploadId: string,
+      now: string,
+      leaseExpiresAt: string,
+    ): Promise<UploadPreparationClaim | null> => {
+      const row = await database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'claimed',
+          preparation_attempts = preparation_attempts + 1,
+          preparation_lease_expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND (
+            preparation_state = 'none'
+            OR (
+              preparation_state = 'claimed'
+              AND preparation_lease_expires_at IS NOT NULL
+              AND preparation_lease_expires_at <= ?
+            )
+          )
+        RETURNING preparation_state AS preparationState,
+          preparation_attempts AS preparationAttempts,
+          preparation_lease_expires_at AS preparationLeaseExpiresAt
+      `).bind(leaseExpiresAt, uploadId, now)
+        .first<{
+          preparationState: string;
+          preparationAttempts: number;
+          preparationLeaseExpiresAt: string;
+        }>();
+      if (row === null) return null;
+      const parsed = z.object({
+        attempts: z.number().int().nonnegative(),
+        leaseExpiresAt: z.string(),
+        preparationState: preparationStateSchema,
+      }).parse({
+        attempts: row.preparationAttempts,
+        leaseExpiresAt: row.preparationLeaseExpiresAt,
+        preparationState: row.preparationState,
+      });
+      return {...parsed, uploadId};
+    },
+
+    renewUploadPreparation: async (
+      uploadId: string,
+      attempts: number,
+      now: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> => {
+      const result = await database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_lease_expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+          AND preparation_lease_expires_at IS NOT NULL
+          AND preparation_lease_expires_at > ?
+      `).bind(leaseExpiresAt, uploadId, attempts, now).run();
+      return result.meta.changes === 1;
+    },
+
+    recordStagedFileInstalled: async (
+      uploadId: string,
+      storageToken: string,
+      attempts: number,
+      installedAt: string,
+    ): Promise<void> => {
+      const result = await database.prepare(`
+        UPDATE staged_upload_files SET installed_at = ?
+        WHERE upload_id = ? AND storage_token = ? AND EXISTS (
+          SELECT 1 FROM staged_uploads u
+          WHERE u.id = staged_upload_files.upload_id
+            AND u.status = 'open'
+            AND u.preparation_state = 'claimed'
+            AND u.preparation_attempts = ?
+        )
+      `).bind(installedAt, uploadId, storageToken, attempts).run();
+      if (result.meta.changes !== 1) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    },
+
+    markUploadPrepared: async (
+      uploadId: string,
+      attempts: number,
+      preparedAt: string,
+    ): Promise<void> => {
+      const result = await database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'prepared',
+          prepared_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).bind(preparedAt, uploadId, attempts).run();
+      if (result.meta.changes !== 1) {
+        throw new UploadPreparationLeaseLost();
+      }
+      return undefined;
+    },
+
+    writePreparedManifestEntries: async (
+      uploadId: string,
+      attempts: number,
+      entries: readonly ManifestEntry[],
+    ): Promise<void> => {
+      const claimed = await database.prepare(`
+        SELECT 1 FROM staged_uploads
+        WHERE id = ? AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).bind(uploadId, attempts).first();
+      if (claimed === null) {
+        throw new UploadPreparationLeaseLost();
+      }
+      await database.prepare(`
+        DELETE FROM prepared_manifest_entries WHERE upload_id = ?
+      `).bind(uploadId).run();
+      if (entries.length === 0) return undefined;
+      const statements = insertRowsStatements(
+        "prepared_manifest_entries",
+        preparedManifestEntryColumns,
+        entries.map((entry) => [
+          uploadId,
+          entry.path,
+          entry.size,
+          entry.mediaType,
+          entry.sha256,
+          entry.disposition,
+        ]),
+      );
+      await database.batch([...statements]);
+      return undefined;
+    },
+
+    countPreparedManifestEntries: async (uploadId: string): Promise<number> => {
+      const row = await database.prepare(`
+        SELECT COUNT(*) AS count FROM prepared_manifest_entries WHERE upload_id = ?
+      `).bind(uploadId).first<{count: number}>();
+      return row?.count ?? 0;
+    },
+
+    extendStagedUploadExpiry: async (
+      uploadId: string,
+      attempts: number,
+      newExpiresAt: string,
+    ): Promise<boolean> => {
+      const result = await database.prepare(`
+        UPDATE staged_uploads
+        SET expires_at = ?
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).bind(newExpiresAt, uploadId, attempts).run();
+      return result.meta.changes === 1;
+    },
+
+    releaseUploadPreparation: async (
+      uploadId: string,
+      attempts: number,
+    ): Promise<void> => {
+      await database.prepare(`
+        UPDATE staged_uploads
+        SET preparation_state = 'none',
+          preparation_lease_expires_at = NULL
+        WHERE id = ?
+          AND status = 'open'
+          AND preparation_state = 'claimed'
+          AND preparation_attempts = ?
+      `).bind(uploadId, attempts).run();
       return undefined;
     },
 
@@ -2696,6 +2913,14 @@ export function createD1ArtifactRepository(
     ): Promise<boolean> => {
       const results = await database.batch([
         database.prepare(`
+          DELETE FROM prepared_manifest_entries
+          WHERE upload_id = ? AND EXISTS (
+            SELECT 1 FROM staged_uploads upload
+            WHERE upload.id = prepared_manifest_entries.upload_id
+              AND upload.status = 'open' AND upload.expires_at <= ?
+          )
+        `).bind(uploadId, expiredBefore),
+        database.prepare(`
           DELETE FROM staged_upload_files
           WHERE upload_id = ? AND EXISTS (
             SELECT 1 FROM staged_uploads upload
@@ -2708,7 +2933,7 @@ export function createD1ArtifactRepository(
           WHERE id = ? AND status = 'open' AND expires_at <= ?
         `).bind(uploadId, expiredBefore),
       ]);
-      return results[1]?.meta.changes === 1;
+      return results[2]?.meta.changes === 1;
     },
     listArtifacts: async (command: ListArtifacts): Promise<ArtifactPage> => {
       const commentFilterSql = command.comments === "with"

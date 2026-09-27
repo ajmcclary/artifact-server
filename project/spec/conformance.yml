@@ -835,6 +835,44 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-25T00:34:07.203Z"
 
+  - id: PUB-019
+    kind: behavior
+    behavior: A bounded runtime may prepare a publication in resumable chunks — verifying each staged file's size and SHA-256 and installing it as an immutable content-addressed blob across multiple bounded passes — with durable per-file progress, a fenced single-owner claim with lease renewal and expiration, and no visible version until finalization; an interrupted, expired, or superseded preparation is reclaimed or resumed by a later attempt of the same operation without re-installing verified files.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: product}
+    acceptance:
+      behavior: {id: PUB-019-B, description: "Force a small per-pass budget and publish a multi-file artifact across several bounded passes and a process restart, observing durable per-file progress, no re-installation of verified files, and exactly one committed version."}
+      failure: {id: PUB-019-F, description: "A stalled preparation owner loses its expired lease to a successor and cannot record progress or finalize afterward, and an expired preparation whose source changed conflicts instead of silently replacing."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local (SQLite, bounded-pass service through the real HTTP boundary), pinned-Postgres store fencing, and local Wrangler-D1 two-handle claim races pass. The live Worker path is unproven — no live multi-pass commit has run against the deployed runtime; live re-qualification is approval-gated (the September 25 probe shape covers committed replay only).
+    depends_on: [PUB-003, PUB-004, PUB-015]
+    evidence:
+      - deployment: local
+        tests: [PUB-019-B, PUB-019-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-27T16:38:56.000Z"
+
+  - id: PUB-020
+    kind: behavior
+    behavior: Final publication visibility stays atomic and singular however preparation was bounded or interrupted — the version, manifest entries, action record, idempotency result, conditional current-pointer update and staged-upload seal commit in one transaction only after every blob is durably installed, concurrent finalization of one operation produces exactly one version with the loser replaying the recorded result, and a lost commit response replays the committed publication without touching staging.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: product}
+    acceptance:
+      behavior: {id: PUB-020-B, description: "Retry an interrupted or response-lost commit and race two concurrent finalizations of one operation, observing exactly one version, one atomic record set, and replayed committed results."}
+      failure: {id: PUB-020-F, description: "A blob-storage outage during or after preparation and a staged source replaced after verification leave no partial or visible version, no dangling current pointer, and no lost committed replay."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local (SQLite through the real HTTP boundary, concurrent finalize and injected outage/source-replacement races), pinned-Postgres and local Wrangler-D1 commit guards pass. The live Worker path is unproven — no live multi-pass commit has run against the deployed runtime; live re-qualification is approval-gated (the September 25 probe shape covers committed replay only).
+    depends_on: [PUB-005, PUB-006, PUB-008, PUB-019]
+    evidence:
+      - deployment: local
+        tests: [PUB-020-B, PUB-020-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-27T16:38:56.000Z"
+
   - id: CLI-001
     kind: security
     behavior: The Artifact Server CLI keeps profiles by exact server origin and account; remote interactive login uses browser authorization and operating-system credential storage, local mode uses private user-only state without visible secrets, and CI uses scoped service credentials from its secret manager.

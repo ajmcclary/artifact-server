@@ -13,6 +13,7 @@ export default defineConfig({
       "tests/integration/external-storage-runtime.test.ts",
       "tests/integration/postgres-pool-shutdown.test.ts",
       "tests/integration/postgres-staged-upload-idempotency.test.ts",
+      "tests/integration/postgres-staged-upload-preparation.test.ts",
     ],
     pool: "forks",
     testTimeout: 60_000,

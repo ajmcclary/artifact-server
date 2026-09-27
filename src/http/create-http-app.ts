@@ -18,6 +18,7 @@ import {
 } from "../application/application-runtime.js";
 import {
   type CreateStagedUploadCommand,
+  type CommitStagedUploadResult,
   StagedUploadService,
 } from "../application/staged-upload.js";
 import { AuthenticationService } from "../application/authentication.js";
@@ -2303,13 +2304,10 @@ export function createHttpApp(
           })
         ),
       );
-      return context.json(
-        publishResponse(
-          responseApplicationUrl(context, dependencies),
-          dependencies.contentDomain,
-          result,
-        ),
-        result.replayed ? 200 : 201,
+      return commitUploadResponse(
+        context,
+        dependencies,
+        result,
       );
     },
   );
@@ -2915,6 +2913,31 @@ function publishResponse(
     replayed: published.replayed,
     version: published.version,
   };
+}
+
+function commitUploadResponse(
+  context: Context<HttpEnvironment>,
+  dependencies: HttpAppDependencies,
+  result: CommitStagedUploadResult,
+): Response {
+  if (result.kind === "preparing") {
+    return context.json(
+      {
+        installed: result.installed,
+        status: "preparing",
+        total: result.total,
+      },
+      202,
+    );
+  }
+  return context.json(
+    publishResponse(
+      responseApplicationUrl(context, dependencies),
+      dependencies.contentDomain,
+      result.publication,
+    ),
+    result.publication.replayed ? 200 : 201,
+  );
 }
 
 /**

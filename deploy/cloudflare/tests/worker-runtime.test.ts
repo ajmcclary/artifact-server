@@ -15,12 +15,20 @@ const uploadPlanSchema = z.object({
   files: z.array(z.object({
     path: z.string(),
     uploadUrl: z.url(),
-  })).length(1),
+  })).min(1),
+});
+const preparingResponseSchema = z.object({
+  installed: z.number().int().nonnegative(),
+  status: z.literal("preparing"),
+  total: z.number().int().nonnegative(),
 });
 const publicationSchema = z.object({
   artifact: z.object({id: z.string()}),
   links: z.object({artifact: z.url(), version: z.url()}),
   version: z.object({id: z.string(), number: z.number().int().positive()}),
+});
+const committedUploadSchema = publicationSchema.extend({
+  replayed: z.boolean(),
 });
 const artifactListSchema = z.object({
   artifacts: z.array(z.object({artifact: z.object({id: z.string()})})),
@@ -245,6 +253,108 @@ describe("Cloudflare Worker runtime", () => {
     expect(actions.status).toBe(200);
     expect(actionListSchema.parse(await actions.json()).actions)
       .toHaveLength(2);
+  }, 30_000);
+
+  it("publishes a multi-file artifact through the real filesPerPass: 5 budget via 202 preparing responses", async () => {
+    const fileCount = 7;
+    const files = Array.from({length: fileCount}, (_, index) => {
+      const bytes = new TextEncoder().encode(`<p>File ${index}</p>`);
+      return {
+        bytes,
+        mediaType: "text/html; charset=utf-8",
+        path: `file-${index}.html`,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    });
+
+    const createUpload = await worker.fetch(`${origin}/api/v1/uploads`, {
+      body: JSON.stringify({
+        entryPath: "file-0.html",
+        files: files.map((file) => ({
+          mediaType: file.mediaType,
+          path: file.path,
+          sha256: file.sha256,
+          size: file.size,
+        })),
+      }),
+      headers: authenticatedJsonHeaders(),
+      method: "POST",
+    });
+    expect(createUpload.status).toBe(201);
+    const uploadPlan = uploadPlanSchema.parse(await createUpload.json());
+
+    await Promise.all(files.map((file) => {
+      const plannedFile = uploadPlan.files.find((planned) => planned.path === file.path);
+      if (plannedFile === undefined) {
+        throw new Error(`The upload plan is missing ${file.path}.`);
+      }
+      return worker.fetch(plannedFile.uploadUrl, {
+        body: file.bytes,
+        headers: {Authorization: `Bearer ${apiToken}`},
+        method: "PUT",
+      });
+    }));
+
+    const target = {
+      accessSetting: "public_link" as const,
+      kind: "new_artifact" as const,
+      name: "Cloudflare bounded publish",
+    };
+
+    const first = await worker.fetch(uploadPlan.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: {
+        ...authenticatedJsonHeaders(),
+        "Idempotency-Key": "cloudflare-bounded-publish-1",
+      },
+      method: "POST",
+    });
+    expect(first.status).toBe(202);
+    const firstBody = preparingResponseSchema.parse(await first.json());
+    expect(firstBody.status).toBe("preparing");
+    expect(firstBody.installed).toBe(5);
+    expect(firstBody.total).toBe(fileCount);
+
+    const second = await worker.fetch(uploadPlan.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: {
+        ...authenticatedJsonHeaders(),
+        "Idempotency-Key": "cloudflare-bounded-publish-1",
+      },
+      method: "POST",
+    });
+    expect(second.status).toBe(201);
+    const publication = publicationSchema.parse(await second.json());
+
+    const versions = await worker.fetch(
+      `${origin}/api/v1/artifacts/${publication.artifact.id}/versions`,
+      {headers: {Authorization: `Bearer ${apiToken}`}},
+    );
+    expect(versions.status).toBe(200);
+    expect(versionListSchema.parse(await versions.json()).versions)
+      .toHaveLength(1);
+
+    await Promise.all(files.map(async (file) => {
+      const renderedUrl = new URL(publication.links.version);
+      renderedUrl.pathname = `/${file.path}`;
+      const rendered = await worker.fetch(renderedUrl.toString());
+      expect(rendered.status).toBe(200);
+      expect(await rendered.text()).toBe(new TextDecoder().decode(file.bytes));
+    }));
+
+    const retry = await worker.fetch(uploadPlan.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: {
+        ...authenticatedJsonHeaders(),
+        "Idempotency-Key": "cloudflare-bounded-publish-1",
+      },
+      method: "POST",
+    });
+    expect(retry.status).toBe(200);
+    const replay = committedUploadSchema.parse(await retry.json());
+    expect(replay.replayed).toBe(true);
+    expect(replay.version.id).toBe(publication.version.id);
   }, 30_000);
 });
 

@@ -297,6 +297,12 @@ export class UploadNotFound extends Schema.TaggedError<UploadNotFound>()(
   messageField,
 ) {}
 
+/** A durable preparation claim changed owners or expired before the owner could act. */
+export class UploadPreparationLeaseLost extends Schema.TaggedError<UploadPreparationLeaseLost>()(
+  "UploadPreparationLeaseLost",
+  {},
+) {}
+
 /** The requested artifact cannot be opened without an authorized session. */
 export class ContentNotPublic extends Schema.TaggedError<ContentNotPublic>()(
   "ContentNotPublic",
@@ -360,9 +366,11 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "changeAccessSetting",
       "changeTags",
       "claimAgentDispatch",
+      "claimUploadPreparation",
       "clearCommentThreads",
       "commitNewArtifact",
       "commitVersion",
+      "countPreparedManifestEntries",
       "createAgentDispatch",
       "createCommentReply",
       "createCommentThread",
@@ -416,13 +424,19 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "versionContainsPath",
       "createProject",
       "estimateProjectGitHistory",
+      "extendStagedUploadExpiry",
       "findProject",
       "listProjects",
+      "markUploadPrepared",
       "readProjectGitHistorySetting",
       "readProjectGitHistoryProgress",
+      "recordStagedFileInstalled",
+      "releaseUploadPreparation",
       "renameProject",
+      "renewUploadPreparation",
       "setProjectArchive",
       "storeProjectGitHistorySetting",
+      "writePreparedManifestEntries",
     ]),
   },
 ) {}

@@ -279,7 +279,7 @@ async function publishPrivateArtifact(runtime: ApplicationRuntime) {
       uploadId: upload.id,
     })),
   );
-  return runtime.runPromise(
+  const commitResult = await runtime.runPromise(
     StagedUploadService.use((stagedUploads) => stagedUploads.commitUpload({
       idempotencyKey: `private-content-${crypto.randomUUID()}`,
       principal: testPrincipal,
@@ -292,6 +292,10 @@ async function publishPrivateArtifact(runtime: ApplicationRuntime) {
       uploadId: upload.id,
     })),
   );
+  if (commitResult.kind !== "committed") {
+    throw new Error(`Fixture upload unexpectedly returned ${commitResult.kind}.`);
+  }
+  return commitResult.publication;
 }
 
 class ControlledClock implements Clock {

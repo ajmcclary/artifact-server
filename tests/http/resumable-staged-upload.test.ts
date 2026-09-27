@@ -2,6 +2,7 @@ import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
 import {
+  apiHeaders,
   createTestInstallation,
   removeTestInstallation,
   type RunningTestServer,
@@ -11,6 +12,8 @@ import {
 import {
   commitStagedUpload,
   createStagedUpload,
+  parsePublishResponse,
+  requireSuccessfulUploads,
   testSiteFile,
   uploadEveryStagedFile,
   uploadStagedFile,
@@ -32,6 +35,16 @@ const committedUploadSchema = z.object({
   status: z.literal("committed"),
   version: z.object({id: z.string(), number: z.number().int().positive()}).loose(),
 }).loose();
+const preparingResponseSchema = z.object({
+  installed: z.number().int().nonnegative(),
+  status: z.literal("preparing"),
+  total: z.number().int().nonnegative(),
+});
+const artifactListSchema = z.object({
+  artifacts: z.array(z.object({
+    artifact: z.object({id: z.string()}),
+  })),
+});
 
 class MutableTestClock implements Clock {
   #now: Date;
@@ -334,5 +347,81 @@ describe("resumable staged uploads over HTTP", () => {
     expect(response.status).toBe(422);
     const body = errorSchema.parse(await response.json());
     expect(body.error.code).toBe("INVALID_INPUT");
+  });
+
+  test("a bounded multi-file commit returns 202 preparing then retries to committed", async () => {
+    server = await startTestServer(installation, {
+      clock,
+      publicationPreparationConfig: {filesPerPass: 1},
+    });
+    const entry = testSiteFile("entry", "text/html; charset=utf-8", "index.html");
+    const asset1 = testSiteFile("asset1", "text/plain", "asset1.txt");
+    const asset2 = testSiteFile("asset2", "text/plain", "asset2.txt");
+    const key = "bounded-prepare-key-0001";
+    const upload = await createStagedUpload(
+      server,
+      installation,
+      entry.path,
+      [entry, asset1, asset2],
+      undefined,
+      "static",
+      key,
+    );
+    await requireSuccessfulUploads(
+      uploadEveryStagedFile(installation, upload.body, [entry, asset1, asset2]),
+    );
+
+    const target = {
+      accessSetting: "account_required" as const,
+      kind: "new_artifact" as const,
+      name: "Bounded prepare artifact",
+    };
+    const first = await fetch(upload.body.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: apiHeaders(installation, key),
+      method: "POST",
+    });
+    expect(first.status).toBe(202);
+    const firstBody = preparingResponseSchema.parse(await first.json());
+    expect(firstBody.status).toBe("preparing");
+    expect(firstBody.installed).toBe(1);
+    expect(firstBody.total).toBe(3);
+
+    const listBefore = await fetch(`${server.baseUrl}/api/v1/artifacts`, {
+      headers: {Authorization: `Bearer ${installation.apiToken}`},
+    });
+    expect(listBefore.status).toBe(200);
+    const listBody = artifactListSchema.parse(await listBefore.json());
+    expect(listBody.artifacts).toHaveLength(0);
+
+    const second = await fetch(upload.body.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: apiHeaders(installation, key),
+      method: "POST",
+    });
+    expect(second.status).toBe(202);
+    const secondBody = preparingResponseSchema.parse(await second.json());
+    expect(secondBody.status).toBe("preparing");
+    expect(secondBody.installed).toBe(2);
+    expect(secondBody.total).toBe(3);
+
+    const third = await fetch(upload.body.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: apiHeaders(installation, key),
+      method: "POST",
+    });
+    expect(third.status).toBe(201);
+    const committed = parsePublishResponse(await third.json());
+    expect(committed.replayed).toBe(false);
+
+    const fourth = await fetch(upload.body.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: apiHeaders(installation, key),
+      method: "POST",
+    });
+    expect(fourth.status).toBe(200);
+    const replay = parsePublishResponse(await fourth.json());
+    expect(replay.replayed).toBe(true);
+    expect(replay.version.id).toBe(committed.version.id);
   });
 });

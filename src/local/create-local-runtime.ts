@@ -8,6 +8,7 @@ import type {
   ExternalMcpBearerVerifier,
 } from "../application/authentication.js";
 import type { InteractiveIdentityProvider } from "../application/interactive-login.js";
+import type { PublicationPreparationConfig } from "../application/publication-preparation.js";
 import type { Clock } from "../core/ports.js";
 import type {BrowserAccess} from "../core/browser-access.js";
 import { SystemClock, SystemIdGenerator } from "../core/system.js";
@@ -111,6 +112,7 @@ export interface LocalRuntimeConfig {
   readonly localBootstrapToken?: string;
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly observability?: boolean;
+  readonly publicationPreparationConfig?: PublicationPreparationConfig;
   readonly runtimeLifecycle?: RuntimeLifecycle;
   readonly installationId?: string;
   readonly serviceVersion?: string;
@@ -248,6 +250,12 @@ export async function createLocalRuntime(
     staging,
     stagingCleanupPolicy,
   };
+  if (config.publicationPreparationConfig !== undefined) {
+    applicationAdapters = {
+      ...applicationAdapters,
+      publicationPreparationConfig: config.publicationPreparationConfig,
+    };
+  }
   if (gitHistoryProvider !== null) {
     Object.assign(applicationAdapters, {gitHistoryProvider});
   }

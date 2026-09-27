@@ -272,6 +272,14 @@ async function stageUpload(
     file.storageToken,
     createdAt,
   )));
+  const leaseExpiresAt = new Date(Date.parse(createdAt) + 10 * 60 * 1_000).toISOString();
+  await repository.claimUploadPreparation(uploadId, createdAt, leaseExpiresAt);
+  const attempts = 1;
+  await Promise.all(files.map((file) =>
+    repository.recordStagedFileInstalled(uploadId, file.storageToken, attempts, createdAt),
+  ));
+  await repository.writePreparedManifestEntries(uploadId, attempts, manifest.entries);
+  await repository.markUploadPrepared(uploadId, attempts, createdAt);
   return {
     kind: "staged_upload",
     principalId,

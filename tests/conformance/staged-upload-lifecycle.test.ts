@@ -252,24 +252,32 @@ describe("staged upload lifecycle", () => {
       kind: "new_artifact" as const,
       name: "Committed upload",
     };
-    const committed = await runStaged(runtime, (service) => service.commitUpload({
+    const committedResult = await runStaged(runtime, (service) => service.commitUpload({
       idempotencyKey: "committed-upload-stable-retry",
       principal: testPrincipal(live.principalId),
       target,
       uploadId: live.id,
     }));
+    if (committedResult.kind !== "committed") {
+      throw new Error(`Expected committed result, got ${committedResult.kind}.`);
+    }
+    const committed = committedResult.publication;
 
     clock.set(new Date(live.expiresAt));
     await rm(path.join(dataDirectory, "staging", live.id), {
       force: true,
       recursive: true,
     });
-    const replay = await runStaged(runtime, (service) => service.commitUpload({
+    const replayResult = await runStaged(runtime, (service) => service.commitUpload({
       idempotencyKey: "committed-upload-stable-retry",
       principal: testPrincipal(live.principalId),
       target,
       uploadId: live.id,
     }));
+    if (replayResult.kind !== "committed") {
+      throw new Error(`Expected committed replay, got ${replayResult.kind}.`);
+    }
+    const replay = replayResult.publication;
     expect(replay.replayed).toBe(true);
     expect(replay.version.id).toBe(committed.version.id);
 
