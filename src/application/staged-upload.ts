@@ -173,11 +173,19 @@ export interface StagedUploadRepositoryPort {
   >;
   listExpiredStagedUploads(
     expiredBefore: string,
+    now: string,
     limit: number,
   ): Effect.Effect<readonly ExpiredStagedUpload[], ArtifactRepositoryFailure>;
+  removeExpiredStagedFile(
+    uploadId: string,
+    storageToken: string,
+    expiredBefore: string,
+    now: string,
+  ): Effect.Effect<void, ArtifactRepositoryFailure>;
   removeExpiredStagedUpload(
     uploadId: string,
     expiredBefore: string,
+    now: string,
   ): Effect.Effect<boolean, ArtifactRepositoryFailure>;
 }
 
@@ -325,6 +333,7 @@ function makeStagedUploadService(
 
   const removeExpiredStagedUpload = (
     upload: StagedUpload,
+    now: string,
   ): Effect.Effect<void, StagingStorageFailure | ArtifactRepositoryFailure> =>
     Effect.gen(function*() {
       yield* Effect.forEach(
@@ -335,6 +344,7 @@ function makeStagedUploadService(
       yield* dependencies.uploads.removeExpiredStagedUpload(
         upload.id,
         upload.expiresAt,
+        now,
       );
     });
 
@@ -390,7 +400,7 @@ function makeStagedUploadService(
         }
         const now = yield* dependencies.clock.now;
         if (DateTime.isLessThanOrEqualTo(DateTime.makeUnsafe(existing.expiresAt), now)) {
-          yield* removeExpiredStagedUpload(existing);
+          yield* removeExpiredStagedUpload(existing, DateTime.formatIso(now));
           const upload = yield* createKeyBoundUpload(
             project.id,
             manifest,

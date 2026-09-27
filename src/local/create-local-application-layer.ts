@@ -346,7 +346,10 @@ export function createApplicationLayer(
   const preparationDependencies: PublicationPreparationDependencies = {
     blobs: publishBlobs,
     clock,
-    config: adapters.publicationPreparationConfig ?? {filesPerPass: maximumDeclaredFiles},
+    config: adapters.publicationPreparationConfig ?? {
+      filesPerPass: maximumDeclaredFiles,
+      preparedEntriesPerPass: maximumDeclaredFiles,
+    },
     repository: {
       claimUploadPreparation: (uploadId, now, leaseExpiresAt) =>
         adapters.repository.claimUploadPreparation(uploadId, now, leaseExpiresAt),
@@ -430,14 +433,28 @@ export function createApplicationLayer(
         ),
         catch: (cause) => repositoryFailure("findStagedUploadFileSlot", cause),
       }),
-      listExpiredStagedUploads: (expiredBefore, limit) =>
+      listExpiredStagedUploads: (expiredBefore, now, limit) =>
         Effect.tryPromise({
           try: () => adapters.repository.listExpiredStagedUploads(
             expiredBefore,
+            now,
             limit,
           ),
           catch: (cause) => repositoryFailure(
             "listExpiredStagedUploads",
+            cause,
+          ),
+        }),
+      removeExpiredStagedFile: (uploadId, storageToken, expiredBefore, now) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.removeExpiredStagedFile(
+            uploadId,
+            storageToken,
+            expiredBefore,
+            now,
+          ),
+          catch: (cause) => repositoryFailure(
+            "removeExpiredStagedFile",
             cause,
           ),
         }),
@@ -470,11 +487,12 @@ export function createApplicationLayer(
             return repositoryFailure("markStagedFileUploaded", cause);
           },
         }),
-      removeExpiredStagedUpload: (uploadId, expiredBefore) =>
+      removeExpiredStagedUpload: (uploadId, expiredBefore, now) =>
         Effect.tryPromise({
           try: () => adapters.repository.removeExpiredStagedUpload(
             uploadId,
             expiredBefore,
+            now,
           ),
           catch: (cause) => repositoryFailure(
             "removeExpiredStagedUpload",

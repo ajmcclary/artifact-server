@@ -225,6 +225,12 @@ export class InvalidPagination extends Schema.TaggedError<InvalidPagination>()(
   messageField,
 ) {}
 
+/** A cleanup pass budget contains an invalid file or duration limit. */
+export class InvalidCleanupBudget extends Schema.TaggedError<InvalidCleanupBudget>()(
+  "InvalidCleanupBudget",
+  messageField,
+) {}
+
 /** A manifest contains no files. */
 export class EmptyManifest extends Schema.TaggedError<EmptyManifest>()(
   "EmptyManifest",
@@ -417,6 +423,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "observeAgentDispatchAddressed",
       "recordAgentActivity",
       "registerAgent",
+      "removeExpiredStagedFile",
       "removeExpiredStagedUpload",
       "restoreVersion",
       "updateCommentReply",
@@ -512,6 +519,7 @@ const artifactServerFailureSchema = Schema.Union([
   InvalidArtifactTags,
   InvalidIdempotencyKey,
   InvalidPagination,
+  InvalidCleanupBudget,
   EmptyManifest,
   MissingManifestEntry,
   InvalidManifestFile,

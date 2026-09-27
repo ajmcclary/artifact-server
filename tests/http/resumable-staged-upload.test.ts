@@ -352,7 +352,7 @@ describe("resumable staged uploads over HTTP", () => {
   test("a bounded multi-file commit returns 202 preparing then retries to committed", async () => {
     server = await startTestServer(installation, {
       clock,
-      publicationPreparationConfig: {filesPerPass: 1},
+      publicationPreparationConfig: {filesPerPass: 1, preparedEntriesPerPass: 1},
     });
     const entry = testSiteFile("entry", "text/html; charset=utf-8", "index.html");
     const asset1 = testSiteFile("asset1", "text/plain", "asset1.txt");

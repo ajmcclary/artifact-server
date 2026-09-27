@@ -143,10 +143,19 @@ function getRuntime(environment: WorkerEnvironment): Promise<CloudflareRuntime> 
 
 // Workers Free allows 50 subrequests and 50 D1 queries per invocation, and
 // each file installation costs roughly 2 R2 subrequests + 1 D1 query. The
-// prepared-manifest final batch is ~10 D1 statements. A filesPerPass of 5
-// keeps a single commit invocation well inside both limits with headroom.
+// prepared-manifest write uses 2 guard statements + ceil(entriesPerPass/16)
+// chunk statements. With filesPerPass:5 and preparedEntriesPerPass:512, a
+// single commit invocation stays inside the D1 query limit with headroom.
 // See project/performance/CLOUDFLARE-COST-ENVELOPE.md.
 const cloudflarePublicationFilesPerPass = 5;
+const cloudflarePublicationPreparedEntriesPerPass = 512;
+
+// Cleanup removes one R2 object per staged file and several D1 statements per
+// upload (one per file row plus the final upload-row batch). Keep the file
+// count well below the Workers Free 50-subrequest and 50-statement ceilings
+// and a duration below the cron invocation wall-clock timeout.
+const cloudflareCleanupMaxFiles = 10;
+const cloudflareCleanupMaxDurationMilliseconds = 25_000;
 
 async function createCloudflareRuntime(
   environment: WorkerEnvironment,
@@ -201,6 +210,7 @@ async function createCloudflareRuntime(
     protectBootstrapAdministrator: false,
     publicationPreparationConfig: {
       filesPerPass: cloudflarePublicationFilesPerPass,
+      preparedEntriesPerPass: cloudflarePublicationPreparedEntriesPerPass,
     },
     repository,
     staging,
@@ -244,7 +254,11 @@ async function createCloudflareRuntime(
     cleanupStaging: async () => {
       const report = await applicationRuntime.runPromise(
         ExpiredStagingCleanupService.use((cleanup) =>
-          cleanup.runPass({limit: 100})),
+          cleanup.runPass({
+            limit: 100,
+            maxDurationMilliseconds: cloudflareCleanupMaxDurationMilliseconds,
+            maxFiles: cloudflareCleanupMaxFiles,
+          })),
       );
       if (report.failed > 0) {
         throw new Error("One or more expired staging uploads could not be removed.");

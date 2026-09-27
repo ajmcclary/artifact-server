@@ -954,16 +954,18 @@ export function createD1ArtifactRepository(
     table: string,
     columns: readonly string[],
     rows: readonly (readonly (number | string | null)[])[],
+    options: {readonly orIgnore?: boolean} = {},
   ): readonly D1PreparedStatement[] => {
     const rowsPerStatement = Math.floor(
       maximumBoundParametersPerStatement / columns.length,
     );
     const rowPlaceholders = `(${columns.map(() => "?").join(", ")})`;
+    const conflictClause = options.orIgnore ? "OR IGNORE " : "";
     const statements: D1PreparedStatement[] = [];
     for (let start = 0; start < rows.length; start += rowsPerStatement) {
       const chunk = rows.slice(start, start + rowsPerStatement);
       statements.push(database.prepare(
-        `INSERT INTO ${table} (${columns.join(", ")})
+        `INSERT ${conflictClause}INTO ${table} (${columns.join(", ")})
           VALUES ${chunk.map(() => rowPlaceholders).join(", ")}`,
       ).bind(...chunk.flat()));
     }
@@ -2644,19 +2646,6 @@ export function createD1ArtifactRepository(
       attempts: number,
       entries: readonly ManifestEntry[],
     ): Promise<void> => {
-      const claimed = await database.prepare(`
-        SELECT 1 FROM staged_uploads
-        WHERE id = ? AND status = 'open'
-          AND preparation_state = 'claimed'
-          AND preparation_attempts = ?
-      `).bind(uploadId, attempts).first();
-      if (claimed === null) {
-        throw new UploadPreparationLeaseLost();
-      }
-      await database.prepare(`
-        DELETE FROM prepared_manifest_entries WHERE upload_id = ?
-      `).bind(uploadId).run();
-      if (entries.length === 0) return undefined;
       const statements = insertRowsStatements(
         "prepared_manifest_entries",
         preparedManifestEntryColumns,
@@ -2668,8 +2657,26 @@ export function createD1ArtifactRepository(
           entry.sha256,
           entry.disposition,
         ]),
+        {orIgnore: true},
       );
-      await database.batch([...statements]);
+      try {
+        await database.batch([
+          ...mutationGuardStatements(
+            `prepare-manifest:${uploadId}:${attempts}`,
+            `SELECT 1 FROM staged_uploads
+              WHERE id = ? AND status = 'open'
+                AND preparation_state = 'claimed'
+                AND preparation_attempts = ?`,
+            [uploadId, attempts],
+          ),
+          ...statements,
+        ]);
+      } catch (cause) {
+        if (cause instanceof Error && /constraint|unique/iu.test(cause.message)) {
+          throw new UploadPreparationLeaseLost();
+        }
+        throw cause;
+      }
       return undefined;
     },
 
@@ -2883,12 +2890,14 @@ export function createD1ArtifactRepository(
     },
     listExpiredStagedUploads: async (
       expiredBefore: string,
+      now: string,
       limit: number,
     ): Promise<readonly ExpiredStagedUpload[]> => {
       const result = await database.prepare(`
         WITH selected AS (
           SELECT id FROM staged_uploads
           WHERE status = 'open' AND expires_at <= ?
+            AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
           ORDER BY expires_at, id
           LIMIT ?
         )
@@ -2896,7 +2905,7 @@ export function createD1ArtifactRepository(
         FROM selected
         JOIN staged_upload_files file ON file.upload_id = selected.id
         ORDER BY selected.id, file.storage_token
-      `).bind(expiredBefore, limit)
+      `).bind(expiredBefore, now, limit)
         .all<z.input<typeof expiredStagedUploadRowSchema>>();
       const grouped = new Map<string, Array<{readonly storageToken: string}>>();
       for (const candidate of result.results) {
@@ -2907,9 +2916,26 @@ export function createD1ArtifactRepository(
       }
       return [...grouped].map(([id, files]) => ({files, id}));
     },
+    removeExpiredStagedFile: async (
+      uploadId: string,
+      storageToken: string,
+      expiredBefore: string,
+      now: string,
+    ): Promise<void> => {
+      await database.prepare(`
+        DELETE FROM staged_upload_files
+        WHERE upload_id = ? AND storage_token = ? AND EXISTS (
+          SELECT 1 FROM staged_uploads upload
+          WHERE upload.id = staged_upload_files.upload_id
+            AND upload.status = 'open' AND upload.expires_at <= ?
+            AND (upload.preparation_lease_expires_at IS NULL OR upload.preparation_lease_expires_at <= ?)
+        )
+      `).bind(uploadId, storageToken, expiredBefore, now).run();
+    },
     removeExpiredStagedUpload: async (
       uploadId: string,
       expiredBefore: string,
+      now: string,
     ): Promise<boolean> => {
       const results = await database.batch([
         database.prepare(`
@@ -2918,20 +2944,23 @@ export function createD1ArtifactRepository(
             SELECT 1 FROM staged_uploads upload
             WHERE upload.id = prepared_manifest_entries.upload_id
               AND upload.status = 'open' AND upload.expires_at <= ?
+              AND (upload.preparation_lease_expires_at IS NULL OR upload.preparation_lease_expires_at <= ?)
           )
-        `).bind(uploadId, expiredBefore),
+        `).bind(uploadId, expiredBefore, now),
         database.prepare(`
           DELETE FROM staged_upload_files
           WHERE upload_id = ? AND EXISTS (
             SELECT 1 FROM staged_uploads upload
             WHERE upload.id = staged_upload_files.upload_id
               AND upload.status = 'open' AND upload.expires_at <= ?
+              AND (upload.preparation_lease_expires_at IS NULL OR upload.preparation_lease_expires_at <= ?)
           )
-        `).bind(uploadId, expiredBefore),
+        `).bind(uploadId, expiredBefore, now),
         database.prepare(`
           DELETE FROM staged_uploads
           WHERE id = ? AND status = 'open' AND expires_at <= ?
-        `).bind(uploadId, expiredBefore),
+            AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
+        `).bind(uploadId, expiredBefore, now),
       ]);
       return results[2]?.meta.changes === 1;
     },

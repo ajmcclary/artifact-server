@@ -50,6 +50,7 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
     case "InvalidArtifactTags":
     case "InvalidIdempotencyKey":
     case "InvalidPagination":
+    case "InvalidCleanupBudget":
     case "EmptyManifest":
     case "MissingManifestEntry":
     case "InvalidManifestFile":

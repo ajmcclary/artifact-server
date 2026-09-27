@@ -2412,6 +2412,7 @@ export class PostgresArtifactRepository implements
 
   async listExpiredStagedUploads(
     expiredBefore: string,
+    now: string,
     limit: number,
   ): Promise<readonly ExpiredStagedUpload[]> {
     const installationId = this.#installationId;
@@ -2421,6 +2422,7 @@ export class PostgresArtifactRepository implements
         WITH selected AS (
           SELECT id FROM staged_uploads
           WHERE installation_id = $1 AND status = 'open' AND expires_at <= $2
+            AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= $4)
           ORDER BY expires_at, id
           LIMIT $3
         )
@@ -2429,7 +2431,7 @@ export class PostgresArtifactRepository implements
         JOIN staged_upload_files file
           ON file.installation_id = $1 AND file.upload_id = selected.id
         ORDER BY selected.id, file.storage_token
-      `, [installationId, expiredBefore, limit]);
+      `, [installationId, expiredBefore, limit, now]);
       const grouped = new Map<string, Array<{readonly storageToken: string}>>();
       for (const row of z.array(expiredStagedUploadRowSchema).parse(rows)) {
         const files = grouped.get(row.id) ?? [];
@@ -2440,9 +2442,35 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  async removeExpiredStagedFile(
+    uploadId: string,
+    storageToken: string,
+    expiredBefore: string,
+    now: string,
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`DELETE FROM staged_upload_files
+        WHERE installation_id = ${installationId}
+          AND upload_id = ${uploadId}
+          AND storage_token = ${storageToken}
+          AND EXISTS (
+            SELECT 1 FROM staged_uploads upload
+            WHERE upload.installation_id = ${installationId}
+              AND upload.id = ${uploadId}
+              AND upload.status = 'open'
+              AND upload.expires_at <= ${expiredBefore}
+              AND (upload.preparation_lease_expires_at IS NULL
+                OR upload.preparation_lease_expires_at <= ${now})
+          )`;
+    }));
+  }
+
   async removeExpiredStagedUpload(
     uploadId: string,
     expiredBefore: string,
+    now: string,
   ): Promise<boolean> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen(function*() {
@@ -2451,6 +2479,7 @@ export class PostgresArtifactRepository implements
         const selected = yield* sql`SELECT id FROM staged_uploads
           WHERE installation_id = ${installationId} AND id = ${uploadId}
             AND status = 'open' AND expires_at <= ${expiredBefore}
+            AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ${now})
           FOR UPDATE`;
         if (selected.length === 0) return false;
         yield* sql`DELETE FROM prepared_manifest_entries
@@ -2460,6 +2489,7 @@ export class PostgresArtifactRepository implements
         const deleted = yield* sql`DELETE FROM staged_uploads
           WHERE installation_id = ${installationId} AND id = ${uploadId}
             AND status = 'open' AND expires_at <= ${expiredBefore}
+            AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ${now})
           RETURNING id`;
         return deleted.length === 1;
       }));
@@ -2645,37 +2675,39 @@ export class PostgresArtifactRepository implements
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
-      const claimed = yield* sql.unsafe<object>(`
-        SELECT 1 FROM staged_uploads
-        WHERE installation_id = $1 AND id = $2
-          AND status = 'open'
-          AND preparation_state = 'claimed'
-          AND preparation_attempts = $3
-      `, [installationId, uploadId, attempts]);
-      if (claimed.length !== 1) {
-        throw new UploadPreparationLeaseLost();
-      }
-      yield* sql`DELETE FROM prepared_manifest_entries
-        WHERE installation_id = ${installationId} AND upload_id = ${uploadId}`;
-      if (entries.length > 0) {
-        const entriesJson = JSON.stringify(entries.map((entry) => ({
-          disposition: entry.disposition,
-          media_type: entry.mediaType,
-          path: entry.path,
-          sha256: entry.sha256,
-          size: entry.size,
-        })));
-        yield* sql.unsafe<object>(`
-          INSERT INTO prepared_manifest_entries (
-            installation_id, upload_id, path, size, media_type, sha256, disposition
-          ) SELECT $1, $2, entry.path, entry.size, entry.media_type,
-              entry.sha256, entry.disposition
-            FROM jsonb_to_recordset($3::jsonb) AS entry(
-              path TEXT, size BIGINT, media_type TEXT, sha256 TEXT,
-              disposition TEXT
-            )
-        `, [installationId, uploadId, entriesJson]);
-      }
+      yield* sql.withTransaction(Effect.gen(function*() {
+        const claimed = yield* sql.unsafe<object>(`
+          SELECT 1 FROM staged_uploads
+          WHERE installation_id = $1 AND id = $2
+            AND status = 'open'
+            AND preparation_state = 'claimed'
+            AND preparation_attempts = $3
+        `, [installationId, uploadId, attempts]);
+        if (claimed.length !== 1) {
+          throw new UploadPreparationLeaseLost();
+        }
+        if (entries.length > 0) {
+          const entriesJson = JSON.stringify(entries.map((entry) => ({
+            disposition: entry.disposition,
+            media_type: entry.mediaType,
+            path: entry.path,
+            sha256: entry.sha256,
+            size: entry.size,
+          })));
+          yield* sql.unsafe<object>(`
+            INSERT INTO prepared_manifest_entries (
+              installation_id, upload_id, path, size, media_type, sha256, disposition
+            ) SELECT $1, $2, entry.path, entry.size, entry.media_type,
+                entry.sha256, entry.disposition
+              FROM jsonb_to_recordset($3::jsonb) AS entry(
+                path TEXT, size BIGINT, media_type TEXT, sha256 TEXT,
+                disposition TEXT
+              )
+              ON CONFLICT (installation_id, upload_id, path) DO NOTHING
+          `, [installationId, uploadId, entriesJson]);
+        }
+        return undefined;
+      }));
       return undefined;
     }));
   }
@@ -2685,7 +2717,7 @@ export class PostgresArtifactRepository implements
     return this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
       const rows = yield* sql.unsafe<{count: number}>(`
-        SELECT COUNT(*) AS count
+        SELECT COUNT(*)::int AS count
         FROM prepared_manifest_entries
         WHERE installation_id = $1 AND upload_id = $2
       `, [installationId, uploadId]);

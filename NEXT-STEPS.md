@@ -34,7 +34,7 @@ it does not authorize future live runs or paid-plan changes.
 | 5 | T05 Publication reconciliation and file resume (closed September 24) | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
-| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
+| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. T09 resumable preparation landed September 27 and its manifest writes are now bounded and atomically fenced; T10's bounded cleanup slice landed the same day. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
 | 9 | T15/T16/T17 MCP and identity/host qualification | Bound agent results and qualify current auth/delivery behavior. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth; 2–4 per host |
 | 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
 
@@ -967,6 +967,40 @@ gate.
   approval-gated (the September 25 probe proved committed replay only), and
   T10's bounded cleanup with active-preparation protection beyond the
   expiry-refresh hook is separate follow-up work.
+- **Slice 2 progress, September 27:** manifest preparation writes are now
+  bounded and atomically fenced. `writePreparedManifestEntries` takes a
+  manifest-order prefix slice (new `preparedEntriesPerPass` on
+  `PublicationPreparationConfig`; the Worker sets 512, so a pass costs
+  2 + ceil(512/16) = 34 D1 statements and a 1,000-file manifest fits the
+  Workers Free 50-query invocation envelope across passes driven by the
+  existing 202 retry loop; Node runtimes keep single-request behavior)
+  instead of deleting and rewriting the full manifest every pass. The D1
+  write is one atomic batch — a `mutation_checks` guard pair asserting the
+  open/claimed attempt plus `INSERT OR IGNORE` chunks — with no separate
+  SELECT or DELETE, so a stale owner fails with `UploadPreparationLeaseLost`
+  and cannot delete a successor's rows; Postgres wraps its ownership check
+  and `INSERT ... SELECT jsonb_to_recordset` in one transaction with
+  `ON CONFLICT DO NOTHING`; SQLite keeps its transaction with
+  insert-or-ignore slices. Partial prepared rows are durable progress
+  because the manifest is immutable per upload. A deterministic two-handle
+  D1 test
+  ([d1-prepared-manifest-fencing.test.ts](./deploy/cloudflare/tests/d1-prepared-manifest-fencing.test.ts))
+  pauses a stale owner across a successor takeover and proves the stale
+  slice write is fenced while the successor's rows survive byte-identical,
+  and that a fresh repository instance resumes mid-preparation and converges
+  to the exact manifest; the conformance harness now forces
+  `preparedEntriesPerPass: 1` through the real 202 loop including across a
+  process restart with the PUB-019/020 claims unchanged. The design record's
+  "one fenced transaction" note now describes the per-store reality
+  ([publication-preparation.md](./docs/publication-preparation.md)). Local
+  gates (`pnpm check` including `check:cloudflare`, full conformance suite)
+  passed at the slice commit; the full iteration/smoke/external-storage
+  gates run at slice handoff. Remaining gaps: live Worker multi-pass commit
+  re-qualification stays approval-gated — the prepared probe shape is a
+  multi-file upload whose bounded per-pass budgets force several 202
+  `preparing` passes on the live Worker, then commit, idempotent replay and
+  list through the real workers.dev boundary, extending the September 25
+  runtime-stage probe.
 
 - **Current:** [publication](./src/application/publish-artifact.ts) installs files
   in one operation; D1/R2 invocation limits are not the same as Node limits.
@@ -985,8 +1019,34 @@ gate.
 
 ### T10 Bound cleanup and separate staging lifecycles
 
-- **Current:** [cleanup](./src/application/expired-staging-cleanup.ts) limits upload
-  count but walks all files; successful staging is retained.
+- **First-slice progress, September 27:** uncommitted expired-staging
+  cleanup is now bounded by files and wall-clock time as well as upload
+  count, and can no longer delete active staging. `runPass` accepts
+  validated optional `maxFiles`/`maxDurationMilliseconds` budgets; Node
+  runtimes keep unbounded defaults while the Worker cron passes
+  `limit: 100`, `maxFiles: 10`, `maxDurationMilliseconds: 25_000`, sized to
+  the Workers Free subrequest/statement envelope with headroom for the
+  concurrent Git-history drain. The report's new `budgetExhausted` flag and
+  an honest `remaining` count distinguish "nothing left" from "ran out of
+  budget". Continuation is durable: each staged file's row is deleted with
+  its storage object (new `removeExpiredStagedFile` port) and the upload row
+  only after all its files, so a budget-split or interrupted pass resumes by
+  re-selection. Active-preparation protection: all three stores exclude
+  uploads with an unexpired `preparation_lease_expires_at` at selection AND
+  at delete time, so a claim taken between selection and delete fences the
+  delete. Conformance proof with real stores and a controlled clock covers
+  an actively claimed upload never being selected, the delete-time lease
+  fence, reclamation of a large expired upload across bounded passes
+  including a mid-walk interruption, and honest budget-exhaustion reporting.
+  Local gates (`pnpm check` including `check:cloudflare`, full conformance
+  suite) passed at the slice commit; the full iteration/smoke/
+  external-storage gates run at slice handoff. Remaining:
+  successful-staging reclamation stays a deferred PUB-009/OPS-006 policy
+  decision (T24), and the lost-commit-replay-after-cleanup clause of "Done
+  when" is unchanged because no newly permitted cleanup exists yet.
+- **Current:** [cleanup](./src/application/expired-staging-cleanup.ts) bounds upload
+  count, file count and wall-clock time per pass with durable continuation; successful
+  staging is retained.
 - **Do first:** bound uncommitted cleanup by files/operations/time with durable
   continuation, interruption-safe retry and active-write/prepare protection.
   **Do later:** only after T05, specify successful-staging reclamation independent

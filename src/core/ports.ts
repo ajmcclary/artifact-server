@@ -785,12 +785,26 @@ export interface StagedUploadRepository {
   ): Promise<void>;
   listExpiredStagedUploads(
     expiredBefore: string,
+    now: string,
     limit: number,
   ): Promise<readonly ExpiredStagedUpload[]>;
+  removeExpiredStagedFile(
+    uploadId: string,
+    storageToken: string,
+    expiredBefore: string,
+    now: string,
+  ): Promise<void>;
   removeExpiredStagedUpload(
     uploadId: string,
     expiredBefore: string,
+    now: string,
   ): Promise<boolean>;
+  /**
+   * Insert a manifest-order prefix slice idempotently. The service only hands
+   * the missing suffix starting at the current prepared count, so stores must
+   * insert (or ignore duplicates) rather than delete existing rows. The call
+   * must fence on the active preparation claim inside the same atomic unit.
+   */
   writePreparedManifestEntries(
     uploadId: string,
     attempts: number,

@@ -353,6 +353,7 @@ describe("staged upload lifecycle", () => {
     const tooEarly = await runCleanup(runtime, 100);
     expect(tooEarly).toEqual({
       alreadyAbsent: 0,
+      budgetExhausted: false,
       deleted: 0,
       failed: 0,
       remaining: 0,
@@ -417,6 +418,331 @@ describe("staged upload lifecycle", () => {
     await expect(staging.open(uploadId, storageToken)).rejects
       .toThrow(/ENOENT|no such file/u);
   });
+
+  test("cleanup skips an expired upload with an unexpired preparation lease", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("leased cleanup proof");
+    const file = {
+      mediaType: "text/plain",
+      path: "leased.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: file.path,
+        files: [file],
+        principal: testPrincipal("leased-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    const slot = upload.files[0];
+    if (slot === undefined) throw new Error("The lease fixture has no file slot.");
+    await runStaged(runtime, (service) => service.uploadFile({
+      body: byteStream(bytes),
+      ownerId: upload.principalId,
+      projectId: upload.projectId,
+      storageToken: slot.storageToken,
+      uploadId: upload.id,
+    }));
+
+    const leaseUntil = new Date(
+      new Date(upload.expiresAt).getTime() + 60 * 60 * 1_000,
+    );
+    const claim = await repository.claimUploadPreparation(
+      upload.id,
+      clock.now().toISOString(),
+      leaseUntil.toISOString(),
+    );
+    if (claim === null) throw new Error("Failed to claim upload for lease test.");
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    const report = await runCleanup(runtime, 100);
+    expect(report).toMatchObject({
+      budgetExhausted: false,
+      deleted: 0,
+      failed: 0,
+      selected: 0,
+    });
+    const stillThere = await repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    );
+    expect(stillThere).not.toBeNull();
+    const staged = await staging.open(upload.id, slot.storageToken);
+    expect(staged.size).toBe(bytes.byteLength);
+    await staged.body.cancel();
+  });
+
+  test("cleanup delete-time fence refuses an upload whose lease is claimed after selection", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("fence cleanup proof");
+    const file = {
+      mediaType: "text/plain",
+      path: "fenced.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: file.path,
+        files: [file],
+        principal: testPrincipal("fence-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    const slot = upload.files[0];
+    if (slot === undefined) throw new Error("The fence fixture has no file slot.");
+    await runStaged(runtime, (service) => service.uploadFile({
+      body: byteStream(bytes),
+      ownerId: upload.principalId,
+      projectId: upload.projectId,
+      storageToken: slot.storageToken,
+      uploadId: upload.id,
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    const cleanupTime = clock.now().toISOString();
+    const expiredBefore = new Date(
+      new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000,
+    ).toISOString();
+    const selected = await repository.listExpiredStagedUploads(
+      expiredBefore,
+      cleanupTime,
+      100,
+    );
+    expect(selected).toHaveLength(1);
+
+    const leaseUntil = new Date(
+      new Date(upload.expiresAt).getTime() + 60 * 60 * 1_000,
+    );
+    const claim = await repository.claimUploadPreparation(
+      upload.id,
+      cleanupTime,
+      leaseUntil.toISOString(),
+    );
+    if (claim === null) throw new Error("Failed to claim upload for fence test.");
+
+    const removed = await repository.removeExpiredStagedUpload(
+      upload.id,
+      expiredBefore,
+      cleanupTime,
+    );
+    expect(removed).toBe(false);
+    const stillThere = await repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    );
+    expect(stillThere).not.toBeNull();
+  });
+
+  test("cleanup reclaims a large expired upload over budget-bounded passes", async () => {
+    expect.hasAssertions();
+    const fileCount = 10;
+    const files = Array.from({length: fileCount}, (_, index) => {
+      const bytes = new TextEncoder().encode(`bounded-${index}.txt`);
+      return {
+        mediaType: "text/plain",
+        path: `bounded-${index}.txt`,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    });
+    const firstFile = files[0];
+    if (firstFile === undefined) throw new Error("The fixture has no file.");
+
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: firstFile.path,
+        files,
+        principal: testPrincipal("bounded-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    await Promise.all(files.map((file, index) => {
+      const slot = upload.files[index];
+      if (slot === undefined) throw new Error(`The fixture has no slot at index ${index}.`);
+      return runStaged(runtime, (service) => service.uploadFile({
+        body: byteStream(new TextEncoder().encode(file.path)),
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
+        storageToken: slot.storageToken,
+        uploadId: upload.id,
+      }));
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    let passes = 0;
+    while (passes < 20) {
+      passes += 1;
+      // Sequential passes are the behavior under test: each pass must see
+      // the durable progress left by the previous one.
+      // eslint-disable-next-line no-await-in-loop
+      const report = await runCleanup(runtime, 100, {maxFiles: 3});
+      if (!report.budgetExhausted) break;
+      expect(report.selected).toBe(1);
+    }
+
+    await expect(repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    )).resolves.toBeNull();
+    await Promise.all(upload.files.map(async (slot) =>
+      expect(staging.open(upload.id, slot.storageToken)).rejects
+        .toThrow(/ENOENT|no such file/u),
+    ));
+  });
+
+  test("cleanup reports budget exhaustion honestly and resumes after interruption", async () => {
+    expect.hasAssertions();
+    const files = Array.from({length: 5}, (_, index) => {
+      const bytes = new TextEncoder().encode(`resume-${index}.txt`);
+      return {
+        mediaType: "text/plain",
+        path: `resume-${index}.txt`,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    });
+    const firstFile = files[0];
+    if (firstFile === undefined) throw new Error("The resume fixture has no file.");
+
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: firstFile.path,
+        files,
+        principal: testPrincipal("resume-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    await Promise.all(files.map((file, index) => {
+      const slot = upload.files[index];
+      if (slot === undefined) throw new Error(`The fixture has no slot at index ${index}.`);
+      return runStaged(runtime, (service) => service.uploadFile({
+        body: byteStream(new TextEncoder().encode(file.path)),
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
+        storageToken: slot.storageToken,
+        uploadId: upload.id,
+      }));
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    const first = await runCleanup(runtime, 100, {maxFiles: 2});
+    expect(first).toMatchObject({
+      budgetExhausted: true,
+      deleted: 0,
+      failed: 0,
+      remaining: 1,
+      selected: 1,
+    });
+
+    const second = await runCleanup(runtime, 100, {maxFiles: 2});
+    expect(second).toMatchObject({
+      budgetExhausted: true,
+      deleted: 0,
+      failed: 0,
+      remaining: 1,
+      selected: 1,
+    });
+
+    const third = await runCleanup(runtime, 100, {maxFiles: 2});
+    expect(third).toMatchObject({
+      budgetExhausted: false,
+      deleted: 1,
+      failed: 0,
+      remaining: 0,
+      selected: 1,
+    });
+
+    await expect(repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    )).resolves.toBeNull();
+  });
+
+  test("cleanup stops a pass when its wall-clock budget expires", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("time budget proof");
+    const file = {
+      mediaType: "text/plain",
+      path: "time-budget.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+
+    const advancingClock = new AdvancingClock(
+      new Date("2026-08-13T00:00:00.000Z"),
+      2,
+    );
+    const advancingRuntime = ManagedRuntime.make(createLocalApplicationLayer({
+      apiToken: Redacted.make("test-api-token"),
+      blobs,
+      bootstrapAdministratorEmail: "admin@example.test",
+      clock: advancingClock,
+      dispatches: repository,
+      externalApiBearerVerifier: null,
+      externalMcpBearerVerifier: null,
+      externalMcpOAuthVerifier: null,
+      ids: new SystemIdGenerator(),
+      identityRepository,
+      installationId: "test-installation",
+      interactiveIdentityProvider: null,
+      localBootstrapCredential: null,
+      protectBootstrapAdministrator: false,
+      repository,
+      staging,
+    }));
+    await advancingRuntime.context();
+    try {
+      const uploadResult = await advancingRuntime.runPromise(StagedUploadService.use((service) =>
+        service.createUpload({
+          entryPath: file.path,
+          files: [file],
+          principal: testPrincipal("time-budget-principal"),
+        })));
+      if (uploadResult.kind === "committed") {
+        throw new Error("Fixture upload unexpectedly returned a committed publication.");
+      }
+      const upload = uploadResult.upload;
+      const slot = upload.files[0];
+      if (slot === undefined) throw new Error("The time-budget fixture has no file slot.");
+      await advancingRuntime.runPromise(StagedUploadService.use((service) => service.uploadFile({
+        body: byteStream(bytes),
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
+        storageToken: slot.storageToken,
+        uploadId: upload.id,
+      })));
+
+      advancingClock.base.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+      const report = await advancingRuntime.runPromise(
+        ExpiredStagingCleanupService.use((service) =>
+          service.runPass({limit: 100, maxDurationMilliseconds: 1})),
+      );
+      expect(report.budgetExhausted).toBe(true);
+      expect(report.selected).toBeGreaterThanOrEqual(1);
+      expect(report.deleted).toBe(0);
+    } finally {
+      await advancingRuntime.dispose();
+    }
+  });
 });
 
 function testPrincipal(
@@ -454,6 +780,24 @@ class ControlledClock implements Clock {
   }
 }
 
+class AdvancingClock implements Clock {
+  readonly base: ControlledClock;
+  readonly stepMilliseconds: number;
+  #calls = 0;
+
+  constructor(initial: Date, stepMilliseconds: number) {
+    this.base = new ControlledClock(initial);
+    this.stepMilliseconds = stepMilliseconds;
+  }
+
+  now(): Date {
+    this.#calls += 1;
+    return new Date(
+      this.base.now().getTime() + this.#calls * this.stepMilliseconds,
+    );
+  }
+}
+
 function byteStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start: (controller) => {
@@ -475,9 +819,10 @@ function runStaged<A, E>(
 function runCleanup(
   runtime: ApplicationRuntime,
   limit: number,
+  budgets?: {maxDurationMilliseconds?: number; maxFiles?: number},
 ) {
   return runtime.runPromise(ExpiredStagingCleanupService.use((service) =>
-    service.runPass({limit})));
+    service.runPass({limit, ...budgets})));
 }
 
 async function expectStagedFailure<A, E extends {_tag: string}>(

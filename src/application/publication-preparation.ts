@@ -13,6 +13,7 @@ import {
 import {
   preparationStates,
   uploadStatuses,
+  type ManifestEntry,
   type StagedUpload,
   type StagedUploadFile,
 } from "../core/model.js";
@@ -67,6 +68,8 @@ export interface PublicationPreparationBlobs {
 export interface PublicationPreparationConfig {
   /** Maximum number of files installed in one invocation. */
   readonly filesPerPass: number;
+  /** Maximum number of manifest entries written in one invocation. */
+  readonly preparedEntriesPerPass: number;
 }
 
 /** Dependencies used to construct the publication preparation service. */
@@ -129,26 +132,31 @@ function makePublicationPreparationService(
   const ensurePreparedManifestEntries = (
     upload: StagedUpload,
     attempts: number,
-  ): Effect.Effect<void, ArtifactRepositoryFailure | UploadPreparationLeaseLost> =>
+  ): Effect.Effect<boolean, ArtifactRepositoryFailure | UploadPreparationLeaseLost> =>
     Effect.gen(function*() {
       const count = yield* Effect.tryPromise({
         try: () => dependencies.repository.countPreparedManifestEntries(upload.id),
         catch: (cause) => repositoryFailure("countPreparedManifestEntries", cause),
       });
-      if (count === upload.manifest.entries.length) return undefined;
-      yield* writePreparedManifestEntries(upload, attempts);
-      return undefined;
+      if (count === upload.manifest.entries.length) return true;
+      const entriesToWrite = upload.manifest.entries.slice(
+        count,
+        count + dependencies.config.preparedEntriesPerPass,
+      );
+      yield* writePreparedManifestEntries(upload, attempts, entriesToWrite);
+      return count + entriesToWrite.length >= upload.manifest.entries.length;
     });
 
   const writePreparedManifestEntries = (
     upload: StagedUpload,
     attempts: number,
+    entries: readonly ManifestEntry[],
   ): Effect.Effect<void, ArtifactRepositoryFailure | UploadPreparationLeaseLost> =>
     Effect.tryPromise({
       try: () => dependencies.repository.writePreparedManifestEntries(
         upload.id,
         attempts,
-        upload.manifest.entries,
+        entries,
       ),
       catch: (cause) =>
         cause instanceof UploadPreparationLeaseLost
@@ -373,7 +381,14 @@ function makePublicationPreparationService(
         // All files are installed but the upload is not marked prepared yet.
         // Claim and finalize in one pass.
         const claimResult = yield* claim(upload);
-        yield* ensurePreparedManifestEntries(upload, claimResult.attempts);
+        const entriesComplete = yield* ensurePreparedManifestEntries(
+          upload,
+          claimResult.attempts,
+        );
+        if (!entriesComplete) {
+          yield* release(upload.id, claimResult.attempts);
+          return {kind: "preparing", installed: total, total};
+        }
         yield* markPrepared(upload, claimResult.attempts);
         return {kind: "prepared" as const};
       }
@@ -382,10 +397,13 @@ function makePublicationPreparationService(
       const filesToInstall = uninstalled.slice(0, dependencies.config.filesPerPass);
       yield* installBatch(upload, claimResult.attempts, filesToInstall, claimResult.leaseExpiresAt);
       yield* refreshUploadExpiry(upload, claimResult.attempts);
-      yield* ensurePreparedManifestEntries(upload, claimResult.attempts);
+      const entriesComplete = yield* ensurePreparedManifestEntries(
+        upload,
+        claimResult.attempts,
+      );
 
       const remainingUninstalled = total - (installedCount + filesToInstall.length);
-      if (remainingUninstalled > 0) {
+      if (!entriesComplete || remainingUninstalled > 0) {
         yield* release(upload.id, claimResult.attempts);
         return {kind: "preparing", installed: total - remainingUninstalled, total};
       }

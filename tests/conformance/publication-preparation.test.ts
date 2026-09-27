@@ -41,6 +41,7 @@ import type {
   OpenedBlobRange,
   StoredBlob,
 } from "../../src/core/ports.js";
+import {maximumDeclaredFiles} from "../../src/core/publishing-limits.js";
 import {SystemIdGenerator} from "../../src/core/system.js";
 import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
@@ -85,7 +86,7 @@ describe("publication preparation", () => {
     staging = new LocalStagingStore(path.join(dataDirectory, "staging"));
     blobs = new LocalBlobStore(path.join(dataDirectory, "blobs"));
     countingBlobs = new CountingBlobStore(blobs);
-    runtime = makeRuntime(countingBlobs, {filesPerPass: 1});
+    runtime = makeRuntime(countingBlobs, {filesPerPass: 1, preparedEntriesPerPass: 1});
     await runtime.context();
   });
 
@@ -140,7 +141,7 @@ describe("publication preparation", () => {
     // the same SQLite database, blob store, and staging with new service
     // instances. The durable per-file progress must resume.
     await runtime.dispose();
-    runtime = makeRuntime(countingBlobs, {filesPerPass: 1});
+    runtime = makeRuntime(countingBlobs, {filesPerPass: 1, preparedEntriesPerPass: 1});
     await runtime.context();
 
     const second = await runPreparation(runtime, (service) =>
@@ -320,7 +321,7 @@ describe("publication preparation", () => {
     try {
       server = await startTestServer(installation, {
         clock: controlledClock,
-        publicationPreparationConfig: {filesPerPass: 10},
+        publicationPreparationConfig: {filesPerPass: 10, preparedEntriesPerPass: 1},
       });
       const entry = testSiteFile("entry", "text/html; charset=utf-8", "index.html");
       const asset = testSiteFile("asset", "text/plain", "asset.txt");
@@ -416,7 +417,7 @@ describe("publication preparation", () => {
 
     const failingBlobs = new FailingBlobStore(blobs);
     await runtime.dispose();
-    runtime = makeRuntime(failingBlobs, {filesPerPass: 1});
+    runtime = makeRuntime(failingBlobs, {filesPerPass: 1, preparedEntriesPerPass: 1});
     await runtime.context();
 
     const uploadResult = await runStaged(runtime, (service) =>
@@ -750,10 +751,14 @@ describe("publication preparation", () => {
 
   function makeRuntime(
     blobStore: BlobStore,
-    config: {filesPerPass: number},
+    config: {filesPerPass: number; preparedEntriesPerPass?: number},
   ): ApplicationRuntime {
     const clock: ApplicationClock = {
       now: Effect.sync(() => DateTime.makeUnsafe(controlledClock.now())),
+    };
+    const preparationConfig = {
+      preparedEntriesPerPass: maximumDeclaredFiles,
+      ...config,
     };
     const baseLayer = createLocalApplicationLayer({
       apiToken: Redacted.make("test-api-token"),
@@ -772,7 +777,7 @@ describe("publication preparation", () => {
       protectBootstrapAdministrator: false,
       repository,
       staging,
-      publicationPreparationConfig: config,
+      publicationPreparationConfig: preparationConfig,
     });
     const preparationBlobs: PublicationPreparationBlobs = {
       put: (write) =>
@@ -791,7 +796,7 @@ describe("publication preparation", () => {
     const boundedPreparationLayer = PublicationPreparationService.layer({
       blobs: preparationBlobs,
       clock,
-      config,
+      config: preparationConfig,
       repository,
       staging: preparationStaging,
     });
