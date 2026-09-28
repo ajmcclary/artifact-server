@@ -171,6 +171,11 @@ export interface StagedUploadRepositoryPort {
     | ProjectArchived
     | ArtifactRepositoryFailure
   >;
+  claimExpiredStagedUploadForCleanup(
+    uploadId: string,
+    expiredBefore: string,
+    now: string,
+  ): Effect.Effect<boolean, ArtifactRepositoryFailure>;
   listExpiredStagedUploads(
     expiredBefore: string,
     now: string,

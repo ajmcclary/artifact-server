@@ -11,6 +11,7 @@ export default defineConfig({
     fileParallelism: false,
     include: [
       "tests/integration/external-storage-runtime.test.ts",
+      "tests/integration/postgres-expired-staging-cleanup.test.ts",
       "tests/integration/postgres-pool-shutdown.test.ts",
       "tests/integration/postgres-staged-upload-idempotency.test.ts",
       "tests/integration/postgres-staged-upload-preparation.test.ts",

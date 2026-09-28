@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 27, 2026. This is the implementation backlog resulting from
+Updated September 28, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -34,7 +34,7 @@ it does not authorize future live runs or paid-plan changes.
 | 5 | T05 Publication reconciliation and file resume (closed September 24) | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
-| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. T09 resumable preparation landed September 27 and its manifest writes are now bounded and atomically fenced; T10's bounded cleanup slice landed the same day. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
+| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. T09 resumable preparation landed September 27 and its manifest writes are now bounded and atomically fenced; T10's bounded cleanup slice landed the same day, and its cleanup claim (September 28) now excludes racing preparation claims durably across SQLite, Postgres and D1. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
 | 9 | T15/T16 MCP and identity qualification (T17 host qualification closed September 27) | Bound agent results and qualify current auth behavior at current client versions. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth |
 | 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
 
@@ -1021,7 +1021,7 @@ gate.
 
 - **First-slice progress, September 27:** uncommitted expired-staging
   cleanup is now bounded by files and wall-clock time as well as upload
-  count, and can no longer delete active staging. `runPass` accepts
+  count. `runPass` accepts
   validated optional `maxFiles`/`maxDurationMilliseconds` budgets; Node
   runtimes keep unbounded defaults while the Worker cron passes
   `limit: 100`, `maxFiles: 10`, `maxDurationMilliseconds: 25_000`, sized to
@@ -1033,19 +1033,40 @@ gate.
   only after all its files, so a budget-split or interrupted pass resumes by
   re-selection. Active-preparation protection: all three stores exclude
   uploads with an unexpired `preparation_lease_expires_at` at selection AND
-  at delete time, so a claim taken between selection and delete fences the
-  delete. Conformance proof with real stores and a controlled clock covers
+  at row-delete time. Conformance proof with real stores and a controlled
+  clock covers
   an actively claimed upload never being selected, the delete-time lease
   fence, reclamation of a large expired upload across bounded passes
   including a mid-walk interruption, and honest budget-exhaustion reporting.
   Local gates (`pnpm check` including `check:cloudflare`, full conformance
   suite) passed at the slice commit; the full iteration/smoke/
-  external-storage gates run at slice handoff. Remaining:
+  external-storage gates run at slice handoff.
+- **Cleanup-claim follow-up, September 28:** review found the September 27
+  fence protected only the database rows: `cleanOne` removed the storage
+  object *before* the fenced row delete, so a preparation claim landing
+  after selection left an active preparation with a file row but missing
+  bytes, and the race test drove the fence directly rather than through
+  `storage.remove`. Cleanup now takes a durable claim first: a new
+  `claimExpiredStagedUploadForCleanup` port atomically stamps
+  `cleanup_claimed_at` on the expired upload before any object is removed,
+  and `claimUploadPreparation` in all three stores refuses uploads with a
+  cleanup claim, so either cleanup wins (preparation permanently excluded,
+  removal proceeds) or the preparation lease wins (cleanup reports the new
+  honest `claimRejected` count and touches nothing). The claim survives
+  crashes: an interrupted pass keeps excluding preparation, and re-selection
+  plus idempotent re-claim finishes reclamation on the next pass. Schema
+  change is additive only (SQLite `ALTER TABLE`, Postgres migration 0017, D1
+  schema 15). Deterministic service-level conformance tests now drive the
+  real `runPass` through `storage.remove` with the hostile claim
+  interleaving (SQLite), with matching repository-level exclusion, fencing,
+  and crash/retry suites on Postgres and D1. Remaining:
   successful-staging reclamation stays a deferred PUB-009/OPS-006 policy
   decision (T24), and the lost-commit-replay-after-cleanup clause of "Done
   when" is unchanged because no newly permitted cleanup exists yet.
 - **Current:** [cleanup](./src/application/expired-staging-cleanup.ts) bounds upload
-  count, file count and wall-clock time per pass with durable continuation; successful
+  count, file count and wall-clock time per pass with durable continuation, and
+  claims an expired upload (`cleanup_claimed_at`) before removing its objects so
+  a racing preparation claim is refused in every store; successful
   staging is retained.
 - **Do first:** bound uncommitted cleanup by files/operations/time with durable
   continuation, interruption-safe retry and active-write/prepare protection.

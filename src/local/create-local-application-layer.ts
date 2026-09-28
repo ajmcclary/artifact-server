@@ -433,6 +433,18 @@ export function createApplicationLayer(
         ),
         catch: (cause) => repositoryFailure("findStagedUploadFileSlot", cause),
       }),
+      claimExpiredStagedUploadForCleanup: (uploadId, expiredBefore, now) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.claimExpiredStagedUploadForCleanup(
+            uploadId,
+            expiredBefore,
+            now,
+          ),
+          catch: (cause) => repositoryFailure(
+            "claimExpiredStagedUploadForCleanup",
+            cause,
+          ),
+        }),
       listExpiredStagedUploads: (expiredBefore, now, limit) =>
         Effect.tryPromise({
           try: () => adapters.repository.listExpiredStagedUploads(

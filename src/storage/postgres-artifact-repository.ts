@@ -2487,6 +2487,24 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  async claimExpiredStagedUploadForCleanup(
+    uploadId: string,
+    expiredBefore: string,
+    now: string,
+  ): Promise<boolean> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const claimed = yield* sql`UPDATE staged_uploads
+        SET cleanup_claimed_at = ${now}
+        WHERE installation_id = ${installationId} AND id = ${uploadId}
+          AND status = 'open' AND expires_at <= ${expiredBefore}
+          AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ${now})
+        RETURNING id`;
+      return claimed.length === 1;
+    }));
+  }
+
   async removeExpiredStagedFile(
     uploadId: string,
     storageToken: string,
@@ -2611,6 +2629,7 @@ export class PostgresArtifactRepository implements
           preparation_lease_expires_at = $1
         WHERE installation_id = $2 AND id = $3
           AND status = 'open'
+          AND cleanup_claimed_at IS NULL
           AND (
             preparation_state = 'none'
             OR (

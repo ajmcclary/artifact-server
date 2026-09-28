@@ -16,7 +16,7 @@ import {
   principalKinds,
   type Principal,
 } from "../../src/core/identity.js";
-import type {Clock} from "../../src/core/ports.js";
+import type {Clock, ExpiredStagedUpload, StagingStore} from "../../src/core/ports.js";
 import {SystemIdGenerator} from "../../src/core/system.js";
 import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
@@ -27,21 +27,18 @@ import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-reposi
 describe("staged upload lifecycle", () => {
   let clock: ControlledClock;
   let dataDirectory: string;
+  let databasePath: string;
   let blobs: LocalBlobStore;
   let repository: SqliteArtifactRepository;
   let identityRepository: SqliteIdentityRepository;
   let runtime: ApplicationRuntime;
   let staging: LocalStagingStore;
 
-  beforeEach(async () => {
-    dataDirectory = await mkdtemp(path.join(tmpdir(), "artifact-upload-lifecycle-"));
-    clock = new ControlledClock(new Date("2026-08-13T00:00:00.000Z"));
-    const databasePath = path.join(dataDirectory, "artifact-server.db");
-    blobs = new LocalBlobStore(path.join(dataDirectory, "blobs"));
-    repository = new SqliteArtifactRepository(databasePath);
-    identityRepository = new SqliteIdentityRepository(databasePath);
-    staging = new LocalStagingStore(path.join(dataDirectory, "staging"));
-    runtime = ManagedRuntime.make(createLocalApplicationLayer({
+  const createRuntime = (overrides?: {
+    repository?: SqliteArtifactRepository;
+    staging?: StagingStore;
+  }): ApplicationRuntime =>
+    ManagedRuntime.make(createLocalApplicationLayer({
       apiToken: Redacted.make("test-api-token"),
       blobs,
       bootstrapAdministratorEmail: "admin@example.test",
@@ -56,9 +53,19 @@ describe("staged upload lifecycle", () => {
       interactiveIdentityProvider: null,
       localBootstrapCredential: null,
       protectBootstrapAdministrator: false,
-      repository,
-      staging,
+      repository: overrides?.repository ?? repository,
+      staging: overrides?.staging ?? staging,
     }));
+
+  beforeEach(async () => {
+    dataDirectory = await mkdtemp(path.join(tmpdir(), "artifact-upload-lifecycle-"));
+    clock = new ControlledClock(new Date("2026-08-13T00:00:00.000Z"));
+    databasePath = path.join(dataDirectory, "artifact-server.db");
+    blobs = new LocalBlobStore(path.join(dataDirectory, "blobs"));
+    repository = new SqliteArtifactRepository(databasePath);
+    identityRepository = new SqliteIdentityRepository(databasePath);
+    staging = new LocalStagingStore(path.join(dataDirectory, "staging"));
+    runtime = createRuntime();
     await runtime.context();
   });
 
@@ -354,6 +361,7 @@ describe("staged upload lifecycle", () => {
     expect(tooEarly).toEqual({
       alreadyAbsent: 0,
       budgetExhausted: false,
+      claimRejected: 0,
       deleted: 0,
       failed: 0,
       remaining: 0,
@@ -542,6 +550,225 @@ describe("staged upload lifecycle", () => {
       upload.principalId,
     );
     expect(stillThere).not.toBeNull();
+  });
+
+  test("PUB-009-F: a preparation claim racing cleanup object removal is refused", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("racing cleanup proof");
+    const file = {
+      mediaType: "text/plain",
+      path: "racing.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: file.path,
+        files: [file],
+        principal: testPrincipal("racing-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    const slot = upload.files[0];
+    if (slot === undefined) throw new Error("The race fixture has no file slot.");
+    await runStaged(runtime, (service) => service.uploadFile({
+      body: byteStream(bytes),
+      ownerId: upload.principalId,
+      projectId: upload.projectId,
+      storageToken: slot.storageToken,
+      uploadId: upload.id,
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    const claimAttempts: Array<unknown> = [];
+    const racingStaging: StagingStore = {
+      open: (uploadId, storageToken) => staging.open(uploadId, storageToken),
+      put: (write) => staging.put(write),
+      remove: async (uploadId, storageToken) => {
+        // The hostile claim lands at the exact moment cleanup removes the
+        // object; cleanup must already hold its own claim, refusing this one.
+        claimAttempts.push(await repository.claimUploadPreparation(
+          uploadId,
+          clock.now().toISOString(),
+          new Date(clock.now().getTime() + 60 * 60 * 1_000).toISOString(),
+        ));
+        await staging.remove(uploadId, storageToken);
+      },
+    };
+    const racingRuntime = createRuntime({staging: racingStaging});
+    try {
+      const report = await runCleanup(racingRuntime, 100);
+      expect(report).toMatchObject({
+        claimRejected: 0,
+        deleted: 1,
+        failed: 0,
+        selected: 1,
+      });
+    } finally {
+      await racingRuntime.dispose();
+    }
+    expect(claimAttempts).toEqual([null]);
+    await expect(repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    )).resolves.toBeNull();
+    await expect(staging.open(upload.id, slot.storageToken)).rejects
+      .toThrow(/ENOENT|no such file/u);
+  });
+
+  test("cleanup skips an upload claimed between selection and removal", async () => {
+    expect.hasAssertions();
+    const bytes = new TextEncoder().encode("selection race proof");
+    const file = {
+      mediaType: "text/plain",
+      path: "selection-race.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: file.path,
+        files: [file],
+        principal: testPrincipal("selection-race-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    const slot = upload.files[0];
+    if (slot === undefined) throw new Error("The selection fixture has no file slot.");
+    await runStaged(runtime, (service) => service.uploadFile({
+      body: byteStream(bytes),
+      ownerId: upload.principalId,
+      projectId: upload.projectId,
+      storageToken: slot.storageToken,
+      uploadId: upload.id,
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    const leaseUntil = new Date(clock.now().getTime() + 60 * 60 * 1_000).toISOString();
+    // A second connection to the same database claims the upload after cleanup
+    // selects it but before cleanup claims it; cleanup must leave the upload
+    // untouched.
+    const racingRepository = new class extends SqliteArtifactRepository {
+      override async listExpiredStagedUploads(
+        expiredBefore: string,
+        now: string,
+        limit: number,
+      ): Promise<readonly ExpiredStagedUpload[]> {
+        const selected = await super.listExpiredStagedUploads(
+          expiredBefore,
+          now,
+          limit,
+        );
+        await this.claimUploadPreparation(upload.id, now, leaseUntil);
+        return selected;
+      }
+    }(databasePath);
+    const racingRuntime = createRuntime({repository: racingRepository});
+    try {
+      const report = await runCleanup(racingRuntime, 100);
+      expect(report).toMatchObject({
+        claimRejected: 1,
+        deleted: 0,
+        failed: 0,
+        selected: 1,
+      });
+    } finally {
+      await racingRuntime.dispose();
+      racingRepository.close();
+    }
+    const stillThere = await repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    );
+    expect(stillThere).not.toBeNull();
+    const staged = await staging.open(upload.id, slot.storageToken);
+    expect(staged.size).toBe(bytes.byteLength);
+    await staged.body.cancel();
+  });
+
+  test("an interrupted cleanup pass keeps excluding preparation and a retry finishes", async () => {
+    expect.hasAssertions();
+    const files = ["interrupted-a.txt", "interrupted-b.txt"].map((name) => {
+      const bytes = new TextEncoder().encode(name);
+      return {
+        mediaType: "text/plain",
+        path: name,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    });
+    const firstFile = files[0];
+    if (firstFile === undefined) throw new Error("The interruption fixture has no file.");
+    const uploadResult = await runStaged(runtime, (service) =>
+      service.createUpload({
+        entryPath: firstFile.path,
+        files,
+        principal: testPrincipal("interrupted-cleanup-principal"),
+      })
+    );
+    if (uploadResult.kind === "committed") {
+      throw new Error("Fixture upload unexpectedly returned a committed publication.");
+    }
+    const upload = uploadResult.upload;
+    await Promise.all(files.map((file, index) => {
+      const slot = upload.files[index];
+      if (slot === undefined) throw new Error(`The fixture has no slot at index ${index}.`);
+      return runStaged(runtime, (service) => service.uploadFile({
+        body: byteStream(new TextEncoder().encode(file.path)),
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
+        storageToken: slot.storageToken,
+        uploadId: upload.id,
+      }));
+    }));
+
+    clock.set(new Date(new Date(upload.expiresAt).getTime() + 5 * 60 * 1_000));
+    let crashArmed = true;
+    const crashingStaging: StagingStore = {
+      open: (uploadId, storageToken) => staging.open(uploadId, storageToken),
+      put: (write) => staging.put(write),
+      remove: async (uploadId, storageToken) => {
+        if (crashArmed) {
+          crashArmed = false;
+          throw new Error("Simulated cleanup crash after the cleanup claim.");
+        }
+        await staging.remove(uploadId, storageToken);
+      },
+    };
+    const crashingRuntime = createRuntime({staging: crashingStaging});
+    try {
+      const first = await runCleanup(crashingRuntime, 100);
+      expect(first).toMatchObject({deleted: 0, failed: 1, selected: 1});
+    } finally {
+      await crashingRuntime.dispose();
+    }
+
+    const claim = await repository.claimUploadPreparation(
+      upload.id,
+      clock.now().toISOString(),
+      new Date(clock.now().getTime() + 60 * 60 * 1_000).toISOString(),
+    );
+    expect(claim).toBeNull();
+
+    const retry = await runCleanup(runtime, 100);
+    expect(retry).toMatchObject({deleted: 1, failed: 0, selected: 1});
+    await expect(repository.findStagedUpload(
+      upload.projectId,
+      upload.id,
+      upload.principalId,
+    )).resolves.toBeNull();
+    await Promise.all(upload.files.map((slot) =>
+      expect(staging.open(upload.id, slot.storageToken)).rejects
+        .toThrow(/ENOENT|no such file/u),
+    ));
   });
 
   test("cleanup reclaims a large expired upload over budget-bounded passes", async () => {

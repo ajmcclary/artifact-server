@@ -37,7 +37,8 @@ entity graph:
 
 - `staged_uploads`: `preparation_state` (`none | claimed | prepared`),
   `preparation_attempts` (fencing counter), `preparation_lease_expires_at`,
-  `prepared_at`.
+  `prepared_at`, and `cleanup_claimed_at` (nullable) — the durable
+  expired-staging cleanup claim that preparation claims exclude.
 - `staged_upload_files`: `installed_at` (nullable) — durable per-file
   installation progress.
 
@@ -56,7 +57,11 @@ Each preparation pass:
    staging fails closed at re-verification; no progress is recorded for it.
 3. Records `installed_at` per file durably before the pass ends, and refreshes
    the upload's `expires_at` (bounded renewal by the owning principal) so
-   expired-staging cleanup never races an active preparation.
+   expired-staging cleanup never races an active preparation. Cleanup
+   additionally stamps a durable `cleanup_claimed_at` on an expired upload
+   before removing any staging object, and preparation claims refuse
+   cleanup-claimed uploads in every store, so even a claim racing the removal
+   window cannot be left with rows whose bytes are gone.
 
 Early blob installation is safe: blobs are content-addressed, create-only and
 immutable, nothing becomes visible before the final transaction, and orphaned

@@ -654,6 +654,7 @@ requirements:
       failure: {id: PUB-009-F, description: "Cleanup cannot delete a blob referenced by a committed version or one involved in a concurrent commit."}
     deployments: *all
     status: behavior_verified
+    proof_gap: The PUB-009-F failure proof is the SQLite service-level race driven through the real cleanup pass and storage removal; the matching repository-level exclusion, fencing, and crash/retry suites also pass on pinned Postgres (tests/integration/postgres-expired-staging-cleanup.test.ts, recorded in project/evidence/external-storage-runtime.json) and local Wrangler-D1 (deploy/cloudflare/tests/d1-expired-staging-cleanup.test.ts). Successful-staging reclamation stays a deferred policy decision (T24).
     depends_on: [PUB-005]
     evidence:
       - deployment: local
@@ -661,6 +662,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-17T03:17:21.421Z"
+      - deployment: local
+        tests: [PUB-009-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-09-28T12:52:53.566Z"
       - deployment: cloudflare
         tests: [PUB-009-B]
         result: pass
@@ -4280,7 +4286,7 @@ requirements:
       failure: {id: OPS-006-F, description: "Cleanup may delete only expired uncommitted staging records and cannot select a committed or possibly referenced blob."}
     deployments: *all
     status: implementing
-    proof_gap: Cleanup-selection failure evidence exists, but no one OPS-006-B acceptance run combines publication, a concurrent publish race, restore, process restart, and retention beyond staging expiry.
+    proof_gap: Cleanup-selection failure evidence exists, and the durable cleanup claim that excludes a racing preparation while staging objects are removed is proved at the service level on SQLite and at the repository level on pinned Postgres and local Wrangler-D1 (September 28). No one OPS-006-B acceptance run combines publication, a concurrent publish race, restore, process restart, and retention beyond staging expiry.
     depends_on: [PUB-009, ART-007]
     evidence:
       - deployment: local

@@ -2659,6 +2659,22 @@ export class SqliteArtifactRepository implements
     });
   }
 
+  claimExpiredStagedUploadForCleanup(
+    uploadId: string,
+    expiredBefore: string,
+    now: string,
+  ): Promise<boolean> {
+    return Promise.resolve().then(() => {
+      const claimed = this.#database.prepare(`
+        UPDATE staged_uploads
+        SET cleanup_claimed_at = ?
+        WHERE id = ? AND status = 'open' AND expires_at <= ?
+          AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
+      `).run(now, uploadId, expiredBefore, now);
+      return claimed.changes === 1;
+    });
+  }
+
   listExpiredStagedUploads(
     expiredBefore: string,
     now: string,
@@ -2754,6 +2770,7 @@ export class SqliteArtifactRepository implements
           preparation_lease_expires_at = ?
         WHERE id = ?
           AND status = 'open'
+          AND cleanup_claimed_at IS NULL
           AND (
             preparation_state = 'none'
             OR (
@@ -5399,6 +5416,7 @@ export class SqliteArtifactRepository implements
         preparation_attempts INTEGER NOT NULL DEFAULT 0,
         preparation_lease_expires_at TEXT,
         prepared_at TEXT,
+        cleanup_claimed_at TEXT,
         CHECK (
           (status = 'open' AND committed_version_id IS NULL)
           OR (status = 'committed' AND committed_version_id IS NOT NULL)
@@ -5676,6 +5694,11 @@ export class SqliteArtifactRepository implements
     }
     if (!uploadColumns.includes("prepared_at")) {
       this.#database.exec("ALTER TABLE staged_uploads ADD COLUMN prepared_at TEXT");
+    }
+    if (!uploadColumns.includes("cleanup_claimed_at")) {
+      this.#database.exec(
+        "ALTER TABLE staged_uploads ADD COLUMN cleanup_claimed_at TEXT",
+      );
     }
     const fileColumns = this.#tableColumns("staged_upload_files");
     if (!fileColumns.includes("installed_at")) {

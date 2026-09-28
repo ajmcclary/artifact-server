@@ -8,7 +8,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 14;
+export const requiredD1SchemaVersion = 15;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -122,7 +122,8 @@ const schemaSql = `
       CHECK (preparation_state IN ('none', 'claimed', 'prepared')),
     preparation_attempts INTEGER NOT NULL DEFAULT 0,
     preparation_lease_expires_at TEXT,
-    prepared_at TEXT
+    prepared_at TEXT,
+    cleanup_claimed_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS staged_upload_files (
@@ -644,6 +645,7 @@ export async function migrateD1(
     await addStagedUploadIdempotencyKeyIfMissing(database);
     await addArtifactCommentRevisionIfMissing(database);
     await addStagedUploadPreparationColumnsIfMissing(database);
+    await addStagedUploadCleanupClaimIfMissing(database);
     await addPreparedManifestEntriesTableIfMissing(database);
   }
   await database.batch([
@@ -752,6 +754,19 @@ async function addStagedUploadPreparationColumnsIfMissing(
     await database.prepare(`
       ALTER TABLE staged_upload_files ADD COLUMN installed_at TEXT
     `).run();
+  }
+}
+
+async function addStagedUploadCleanupClaimIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const columns = await database.prepare(
+    "PRAGMA table_info(staged_uploads)",
+  ).all<{name: string}>();
+  if (!columns.results.some((column) => column.name === "cleanup_claimed_at")) {
+    await database.prepare(
+      "ALTER TABLE staged_uploads ADD COLUMN cleanup_claimed_at TEXT",
+    ).run();
   }
 }
 

@@ -174,7 +174,7 @@ These fixes remove the obvious read-amplification and crash-durability problems 
 | Concurrent streams/pools multiply across publications and replicas | Measure total buffered bytes, pool wait and provider throttling; do not increase the current concurrency of four or default pool of ten from intuition. | T01/T14 |
 | Review polling and conversation reads amplify client traffic | Seven-second visible polling also leaves deleted/filtered-out records stale; revision/refetch must prove coherent multi-page snapshots and hot-project costs. | T06 |
 | Git work is not bounded by per-version file-copy limits alone | Enablement enumerates missing history in one foreground operation; claims can be out of version order; the Node provider clones accumulated history in memory. Preserve strict order before optimizing mirror throughput. | T03/T18 |
-| Cleanup bounds uploads, not file operations | One expired upload may contain many files. Successful staging remains retained, and general blob GC remains disabled. | T10/T25 |
+| Cleanup bounds passes, files and wall-clock time | Bounded reclamation with durable continuation landed September 27, and a durable cleanup claim (September 28) excludes racing preparation claims before any object removal in all three stores. Successful staging remains retained, and general blob GC remains disabled. | T10/T25 |
 | Worker/D1 limits differ from Node/Postgres | Already-implemented R2/assets/Cron do not prove a free-tier many-file envelope. Qualify actual query, parameter, object-operation and CPU limits before chunked preparation. | T08/T09 |
 
 Task definitions and gates are in [NEXT-STEPS.md](../../NEXT-STEPS.md). These are

@@ -372,6 +372,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "changeAccessSetting",
       "changeTags",
       "claimAgentDispatch",
+      "claimExpiredStagedUploadForCleanup",
       "claimUploadPreparation",
       "clearCommentThreads",
       "commitNewArtifact",

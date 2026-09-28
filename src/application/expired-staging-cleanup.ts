@@ -22,6 +22,7 @@ export interface RunExpiredStagingCleanupCommand {
 export interface ExpiredStagingCleanupReport {
   readonly alreadyAbsent: number;
   readonly budgetExhausted: boolean;
+  readonly claimRejected: number;
   readonly deleted: number;
   readonly failed: number;
   readonly remaining: number;
@@ -30,6 +31,11 @@ export interface ExpiredStagingCleanupReport {
 
 /** Repository operations required to remove expired staging records safely. */
 export interface ExpiredStagingCleanupRepository {
+  readonly claimExpiredStagedUploadForCleanup: (
+    uploadId: string,
+    expiredBefore: string,
+    now: string,
+  ) => Effect.Effect<boolean, ArtifactRepositoryFailure>;
   readonly listExpiredStagedUploads: (
     expiredBefore: string,
     now: string,
@@ -123,6 +129,9 @@ function makeExpiredStagingCleanupService(
       now: string,
       budget: {filesRemaining: number},
     ) {
+      const claimed = yield* dependencies.repository
+        .claimExpiredStagedUploadForCleanup(upload.id, expiredBefore, now);
+      if (!claimed) return "claim-rejected" as const;
       for (const file of upload.files) {
         if (budget.filesRemaining <= 0) {
           return "budget-exhausted" as const;
@@ -180,6 +189,7 @@ function makeExpiredStagingCleanupService(
       let deleted = 0;
       let failed = 0;
       let alreadyAbsent = 0;
+      let claimRejected = 0;
       let budgetExhausted = false;
       for (const upload of uploads) {
         if (deadline !== null && DateTime.isGreaterThan(
@@ -205,6 +215,8 @@ function makeExpiredStagingCleanupService(
           deleted += 1;
         } else if (result.success === false) {
           alreadyAbsent += 1;
+        } else if (result.success === "claim-rejected") {
+          claimRejected += 1;
         } else {
           budgetExhausted = true;
           break;
@@ -214,6 +226,7 @@ function makeExpiredStagingCleanupService(
       const report: ExpiredStagingCleanupReport = {
         alreadyAbsent,
         budgetExhausted,
+        claimRejected,
         deleted,
         failed,
         remaining,
@@ -222,6 +235,7 @@ function makeExpiredStagingCleanupService(
       yield* Effect.logInfo("Expired staging cleanup pass completed.").pipe(
         Effect.annotateLogs({
           cleanup_budget_exhausted: report.budgetExhausted,
+          cleanup_claim_rejected: report.claimRejected,
           cleanup_deleted: report.deleted,
           cleanup_failed: report.failed,
           cleanup_already_absent: report.alreadyAbsent,

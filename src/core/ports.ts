@@ -790,6 +790,18 @@ export interface StagedUploadRepository {
     attempts: number,
     preparedAt: string,
   ): Promise<void>;
+  /**
+   * Atomically move an expired, unprepared upload into the terminal `cleanup`
+   * preparation state before any staging object is removed. Preparation claims
+   * never match that state, so a successful claim excludes preparation for the
+   * whole removal; a failed claim means an active preparation lease appeared
+   * after selection and cleanup must leave the upload untouched.
+   */
+  claimExpiredStagedUploadForCleanup(
+    uploadId: string,
+    expiredBefore: string,
+    now: string,
+  ): Promise<boolean>;
   listExpiredStagedUploads(
     expiredBefore: string,
     now: string,

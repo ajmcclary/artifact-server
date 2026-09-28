@@ -707,6 +707,12 @@ const addPreparedManifestEntries = Effect.gen(function*() {
   )`);
 });
 
+const addStagedUploadCleanupClaim = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`ALTER TABLE staged_uploads
+    ADD COLUMN IF NOT EXISTS cleanup_claimed_at TEXT`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -724,10 +730,11 @@ const migrationLoader = Migrator.fromRecord({
   "0014_artifact_comment_revision": addArtifactCommentRevision,
   "0015_staged_upload_preparation": addStagedUploadPreparation,
   "0016_prepared_manifest_entries": addPreparedManifestEntries,
+  "0017_staged_upload_cleanup_claim": addStagedUploadCleanupClaim,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 16;
+export const requiredPostgresSchemaVersion = 17;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -830,6 +837,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 16,
     name: "prepared_manifest_entries",
+  }, {
+    migration_id: 17,
+    name: "staged_upload_cleanup_claim",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

@@ -2550,6 +2550,7 @@ export function createD1ArtifactRepository(
           preparation_lease_expires_at = ?
         WHERE id = ?
           AND status = 'open'
+          AND cleanup_claimed_at IS NULL
           AND (
             preparation_state = 'none'
             OR (
@@ -2915,6 +2916,19 @@ export function createD1ArtifactRepository(
       ).all<z.input<typeof versionRowSchema>>();
       const parsed = result.results.map((row) => versionRowSchema.parse(row));
       return pageResult(parsed.slice(0, limit), parsed, limit);
+    },
+    claimExpiredStagedUploadForCleanup: async (
+      uploadId: string,
+      expiredBefore: string,
+      now: string,
+    ): Promise<boolean> => {
+      const result = await database.prepare(`
+        UPDATE staged_uploads
+        SET cleanup_claimed_at = ?
+        WHERE id = ? AND status = 'open' AND expires_at <= ?
+          AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
+      `).bind(now, uploadId, expiredBefore, now).run();
+      return result.meta.changes === 1;
     },
     listExpiredStagedUploads: async (
       expiredBefore: string,
