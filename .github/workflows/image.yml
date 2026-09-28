@@ -33,7 +33,7 @@ jobs:
           build-args: |
             IMAGE_REVISION=${{ github.sha }}
             IMAGE_SOURCE=https://github.com/ajmcclary/artifact-server
-            IMAGE_VERSION=0.1.1
+            IMAGE_VERSION=0.1.3
 
       - name: Print digest
         run: echo "digest=${{ steps.build.outputs.digest }}"

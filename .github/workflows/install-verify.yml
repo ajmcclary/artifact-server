@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Release tag to verify
         required: true
-        default: v0.1.1
+        default: v0.1.3
         type: string
       source_run_id:
         description: Tagged Release dry-run ID; leave empty to verify a published release
