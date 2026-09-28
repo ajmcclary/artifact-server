@@ -12,6 +12,7 @@ import {
 
 const apiToken = "cloudflare-test-api-token-0000000000000001";
 const origin = "https://artifacts.example.test";
+const qualificationOrigin = "https://probe-runtime-mcp-test.example.workers.dev";
 const contentDomain = "content.example.test";
 
 let persistPath: string;
@@ -69,9 +70,14 @@ describe("account probe runtime qualification", () => {
   it("runs the exact live probe flow, including several 202 preparing passes, against the local Worker", async () => {
     const probeFetch: QualificationFetch = (url, options) =>
       worker.fetch(url.toString(), options === undefined ? {} : {...options});
-    const result = await qualifyRuntime(new URL(origin), apiToken, probeFetch);
-    expect(result.passed).toBe(true);
+    const result = await qualifyRuntime(
+      new URL(qualificationOrigin),
+      apiToken,
+      probeFetch,
+    );
     expect(result.evidence.health).toBe(200);
+    expect(result.evidence.mcp?.["unauthorized"]).toBe(401);
+    expect(result.passed).toBe(true);
     expect(result.evidence.unauthorized).toBe(401);
     expect(result.evidence.commit).toBe(201);
     expect(result.evidence.replay).toBe(200);

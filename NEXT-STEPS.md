@@ -1547,12 +1547,49 @@ gate.
   limits. [Claude Code and Codex CLI](./project/evidence/mcp-manifest-hosts-2026-09-28.json)
   then traversed the same exact local manifest with the new tool and matched
   its digest and paths. The updated probe has not run on a deployed Worker.
-- **Do next:** reconnect the named Alchemy Cloudflare profile, refresh the
-  account allowance and overage snapshot, and run the prepared bounded MCP
-  Worker probe only with authorization for that metered run. Qualify Cursor model
+- **Do next:** rerun the bounded MCP Worker probe after refreshing the
+  Paid-plan snapshot and obtaining authorization for the metered retry. Qualify Cursor model
   calls and VS Code Copilot only when those products are available. Preserve
   the full-manifest compatibility path, bounded structured errors, and stateless
   request behavior. Hosted OAuth lifecycle remains T16 work.
+- **Paid-plan preflight, September 28:** Alchemy's case-sensitive `Cloudflare`
+  auth provider is now connected in the `default` profile with 11 scoped OAuth
+  permissions for the intended account. Workers Paid and R2 Paid are active;
+  the current cycle shows $0.00 billable usage and ample included Worker, D1
+  and R2 capacity for the bounded probe. The private MCP stage and its exact
+  `probe-` Worker, D1 and R2 names were verified absent. The older Wrangler
+  OAuth grant cannot read Worker versions, so the probe must use the scoped
+  Alchemy grant for both Alchemy and Wrangler calls. See the
+  [dated preflight](./project/evidence/cloudflare-mcp-paid-preflight-2026-09-28.json)
+  and [cost envelope](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  The first live run was authorized against this changed Paid-plan basis; its
+  result is recorded below.
+- **First Paid-plan live probe, September 28:** the exact private
+  `probe-runtime-mcp-20260928` deployment passed its plan, created the three
+  expected resources, served authenticated HTTP publication and a 12-file
+  multi-pass commit (two 202 preparation responses), replayed and listed the
+  committed versions, then destroyed the Worker and deleted the exact D1/R2
+  resources. Non-probe inventories were unchanged. MCP qualification failed:
+  unauthenticated and invalid-token `/mcp` requests returned 403 instead of
+  401, before discovery or tool calls. The
+  [retained failure](./project/evidence/cloudflare-mcp-paid-failed-attempt-2026-09-28.json)
+  keeps runtime and cleanup separate. A local regression now drives the
+  account probe through a workers.dev hostname and reproduces that 403. The
+  qualification-only request rewrite now aligns `Host` with the configured
+  application hostname while preserving the incoming `Origin`; focused Worker
+  and account-probe tests pass. A fresh metered retry remains unrun.
+- **Retry preflight, September 28:** the full `pnpm verify:iteration` gate
+  passed after the workers.dev Host fix (441 main, 70 Cloudflare, 37 browser
+  tests; [run summary](./project/evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json)).
+  The scoped OAuth grant refreshed, and the exact stage, Worker, D1 database
+  and R2 bucket remain absent. The dashboard still shows $0.00 billable usage,
+  but the first run's account-wide D1 written-row counter rose by about 355,
+  including possible unrelated work and index writes, so the earlier
+  under-150-row estimate is not a sound retry bound. The
+  [fresh preflight](./project/evidence/cloudflare-mcp-retry-preflight-2026-09-28.json)
+  uses a conservative under-250 Worker request, under-1,000 D1 written-row,
+  under-100 R2 Class A and under-100 Class B planning envelope. A metered
+  retry has not yet run or been authorized against this revised envelope.
 - **Done when:** large results are bounded without silent truncation, auth matches
   HTTP/browser, conflicts retain expected-version semantics, and current clients
   complete the real workflow. **Gates:** V/H/E/X/P; L client matrix.

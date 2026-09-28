@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T19:46:19Z",
+  "repositoryCommit": "136a4b7",
+  "qualification": "T15 bounded Cloudflare Worker MCP runtime probe",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+  "accountMatch": "Alchemy default profile, Wrangler account, and dashboard matched the earlier intended account",
+  "providerProfile": {
+    "name": "default",
+    "provider": "Cloudflare",
+    "method": "oauth",
+    "status": "connected",
+    "scopeNames": [
+      "account-settings.read",
+      "d1.read",
+      "d1.write",
+      "memberships.read",
+      "secrets-store.read",
+      "secrets-store.write",
+      "workers-r2.read",
+      "workers-r2.write",
+      "workers-scripts.edit",
+      "workers-scripts.read",
+      "workers-scripts.write"
+    ],
+    "credentialFileMode": "0o600"
+  },
+  "privateProbeConfiguration": {
+    "sha256": "793824304ee4172a962533f14d5ea6ee057369aa6b3d388cd413611116d2d0f0",
+    "fileMode": "0o600",
+    "stage": "probe-runtime-mcp-20260928",
+    "environment": "development",
+    "ingress": "private",
+    "stateStore": "cloudflare",
+    "browserLoginProviderConfigured": true
+  },
+  "exactResourceNames": {
+    "worker": "probe-artifact-server-probe-mcp-20260928-deve-23aa733e",
+    "database": "probe-artifact-server-probe-mcp-20260928-development-pr-f2ca2642",
+    "bucket": "probe-artifact-server-probe-mcp-20260928-development-p-d5294dec"
+  },
+  "preflight": {
+    "alchemyStageAbsent": true,
+    "probeD1DatabaseAbsent": true,
+    "probeR2BucketAbsent": true,
+    "probeWorkerAbsent": true,
+    "existingWorkerReadableWithAlchemyOAuth": true,
+    "nonProbeResourcesUntouched": true,
+    "focusedLocalWorkerTests": "7/7 passed"
+  },
+  "dashboardSnapshot": {
+    "billingCycle": "2026-09-23 to 2026-10-23",
+    "workersPlan": "Workers Paid active",
+    "r2Plan": "R2 Paid active",
+    "workersRequestsCurrentPeriod": 627,
+    "workersCpuMillisecondsCurrentPeriod": 5995,
+    "d1RowsReadCurrentPeriodApprox": 1040,
+    "d1RowsWrittenCurrentPeriod": 975,
+    "d1BillableUsageUsd": 0.0,
+    "r2ClassAOperationsCurrentPeriod": 210,
+    "r2ClassBOperationsCurrentPeriod": 79,
+    "r2StorageGbMonthsCurrentPeriod": 0,
+    "r2BillableUsageUsd": 0.0,
+    "billableUsageSummaryUsd": 0.0
+  },
+  "publishedAllowances": {
+    "workersPaid": "10 million requests and 30 million CPU milliseconds monthly included; $0.30 per additional million requests and $0.02 per additional million CPU milliseconds",
+    "d1Paid": "25 billion rows read, 50 million rows written, and 5 GB storage monthly included; $0.001 per additional million reads, $1 per additional million writes, and $0.75 per additional GB-month",
+    "r2Standard": "1 million Class A operations, 10 million Class B operations, and 10 GB-months included; $4.50 per additional million Class A and $0.36 per additional million Class B operations; $0.015 per additional GB-month"
+  },
+  "pricingSources": [
+    "https://developers.cloudflare.com/workers/platform/pricing/",
+    "https://developers.cloudflare.com/d1/platform/pricing/",
+    "https://developers.cloudflare.com/r2/pricing/"
+  ],
+  "boundedProbeMaximum": {
+    "workerRequests": "under 100",
+    "d1RowsWritten": "under 150",
+    "r2ClassAOperations": "under 35",
+    "r2ClassBOperations": "under 20"
+  },
+  "status": "preflight_ready; no live probe resources created by this task",
+  "credentialsRetainedInRepository": false
+}

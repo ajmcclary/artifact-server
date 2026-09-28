@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T20:29:15Z",
+  "qualification": "T15 bounded Cloudflare Worker MCP runtime retry",
+  "repositoryHeadAtRead": "136a4b7",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+  "accountPlan": "Workers Paid active; R2 Paid active; no plan change",
+  "oauthProfile": {
+    "name": "default",
+    "provider": "Cloudflare",
+    "method": "oauth",
+    "status": "refreshed successfully",
+    "scopes": "the 11 selected Cloudflare scopes plus offline_access",
+    "credentialFileMode": "0600"
+  },
+  "privateProbeConfigurationSha256": "793824304ee4172a962533f14d5ea6ee057369aa6b3d388cd413611116d2d0f0",
+  "stage": "probe-runtime-mcp-20260928",
+  "exactResourceNames": {
+    "worker": "probe-artifact-server-probe-mcp-20260928-deve-23aa733e",
+    "database": "probe-artifact-server-probe-mcp-20260928-development-pr-f2ca2642",
+    "bucket": "probe-artifact-server-probe-mcp-20260928-development-p-d5294dec"
+  },
+  "preflight": {
+    "alchemyStageAbsent": true,
+    "probeWorkerAbsent": true,
+    "probeD1DatabaseAbsent": true,
+    "probeR2BucketAbsent": true,
+    "nonProbeR2BucketCount": 1,
+    "nonProbeD1DatabaseCount": 0,
+    "focusedWorkerTests": "7/7 passed",
+    "canonicalGate": "project/evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json; exit 0"
+  },
+  "previousRun": {
+    "evidence": "project/evidence/cloudflare-mcp-paid-failed-attempt-2026-09-28.json",
+    "httpPublicationAndMultiPass": "passed",
+    "mcpBoundary": "failed at Host guard; corrected locally",
+    "exactCleanup": "passed",
+    "nonProbeInventoryUnchanged": "passed"
+  },
+  "dashboardSnapshot": {
+    "billingCycle": "2026-09-23 to 2026-10-23",
+    "workersRequestsCurrentPeriod": 738,
+    "workersCpuMillisecondsCurrentPeriod": 7475,
+    "d1RowsWrittenCurrentPeriodApprox": 1330,
+    "d1BillableUsageUsd": 0.0,
+    "r2ClassAOperationsShown": 210,
+    "r2ClassBOperationsShown": 79,
+    "r2StorageGbMonthsShown": 0,
+    "r2BillableUsageUsd": 0.0,
+    "r2UsageMayLag": true,
+    "billableUsageSummaryUsd": 0.0
+  },
+  "firstRunCounterChange": {
+    "workersRequests": 111,
+    "workersCpuMilliseconds": 1480,
+    "d1RowsWrittenApprox": 355,
+    "attribution": "account-level counters across the observation window; includes possible unrelated activity and D1 index writes"
+  },
+  "retryPlanningEnvelope": {
+    "workersRequests": "under 250",
+    "d1RowsWritten": "under 1000",
+    "r2ClassAOperations": "under 100",
+    "r2ClassBOperations": "under 100",
+    "note": "Conservative approval envelope based on the fixed probe workflow and observed account deltas, not a hard billing limiter."
+  },
+  "publishedAllowances": {
+    "workersPaid": "10 million requests and 30 million CPU milliseconds monthly included; $0.30 per additional million requests and $0.02 per additional million CPU milliseconds",
+    "d1Paid": "25 billion rows read, 50 million rows written, and 5 GB storage monthly included; $0.001 per additional million reads, $1 per additional million writes, and $0.75 per additional GB-month",
+    "r2Standard": "1 million Class A operations, 10 million Class B operations, and 10 GB-months included; $4.50 per additional million Class A and $0.36 per additional million Class B operations; $0.015 per additional GB-month"
+  },
+  "pricingSources": [
+    "https://developers.cloudflare.com/workers/platform/pricing/",
+    "https://developers.cloudflare.com/d1/platform/pricing/",
+    "https://developers.cloudflare.com/r2/pricing/"
+  ],
+  "status": "ready_for_authorized_retry; no retry resources created",
+  "credentialsRetainedInRepository": false
+}

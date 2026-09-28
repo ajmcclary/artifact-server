@@ -159,11 +159,15 @@ shared parser in `src/deployment/index.ts`.
 Log in to the approved Cloudflare account:
 
 ```sh
-pnpm exec alchemy login --profile default alchemy.run.ts
+pnpm exec alchemy profile edit --profile default --add Cloudflare
+pnpm exec alchemy profile show --profile default
 pnpm exec wrangler login
 ```
 
-Alchemy uses its own profile rather than Wrangler's login. Its Cloudflare state
+The Alchemy auth provider name is case-sensitive: `Cloudflare`, not
+`cloudflare`. For an existing connection, use `--reconfigure Cloudflare`
+instead of `--add Cloudflare`. Alchemy uses its own profile rather than
+Wrangler's login. Its Cloudflare state
 store needs account-level Secrets Store access as well as the Worker, D1, and R2
 permissions. Confirm the operator or API token can access Secrets Store before
 bootstrap; a Worker administration role alone may be insufficient.
@@ -172,7 +176,7 @@ CAUTION: Get approval before you run the next command. The command creates an
 account-level Worker and Secrets Store values.
 
 ```sh
-pnpm exec alchemy cloudflare bootstrap --profile default
+pnpm exec alchemy provider cloudflare bootstrap --profile default
 ```
 
 The state store is an account prerequisite. The Artifact Server stack does not

@@ -303,3 +303,72 @@ Cloudflare provider. The retained full local failure record is
 no resources were created and no metered runtime work occurred. Resume only
 after the named profile is reconnected and a fresh `probe-runtime-` stage is
 selected and verified absent.
+
+### T15 refreshed paid-plan preflight, September 28, 2026
+
+The operator confirmed that Workers Paid was activated to apply for Cloudflare
+Artifacts. At 19:45 UTC the intended account's dashboard showed **Workers Paid**
+and **R2 Paid** active, with $0.00 billable usage in the September 23–October 23
+cycle. Workers & Pages showed 627 requests and 5,995 CPU milliseconds; D1 showed
+about 1,040 rows read, 975 written and no metered storage; R2 billing showed
+210 Class A operations, 79 Class B operations and 0 GB-months. This supersedes
+the Free-plan assumption for a new T15 run, while preserving the earlier
+snapshot as historical evidence. The already-active Workers Paid subscription
+has a $5/month base; the probe requests no subscription change.
+
+Current published Paid allowances are 10 million Worker requests and 30 million
+CPU milliseconds per month, 25 billion D1 rows read and 50 million written per
+month, and the R2 Standard free tier of 1 million Class A operations, 10 million
+Class B operations and 10 GB-months. Beyond those amounts, usage is metered;
+see [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/),
+[D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and
+[R2 pricing](https://developers.cloudflare.com/r2/pricing/) for the current
+rates and rounding. The existing probe's under-100 Worker requests,
+under-150 D1 written rows, under-35 R2 Class A and under-20 Class B operation
+bound fits inside the observed remaining allowances. No zero-cost claim is
+made beyond this bounded run.
+
+The `default` Alchemy profile now holds a scoped Cloudflare OAuth connection
+for the intended account. The private MCP probe configuration is mode 0600,
+names only exact `probe-` resources, and its stage is absent. Using the Alchemy
+grant for read-only Wrangler inventory proved the proposed Worker, D1 database
+and R2 bucket names absent; the older Wrangler OAuth grant could not read even
+the existing state-store Worker's versions, so it must not be used for the
+probe. The local account-probe and Worker tests passed 7/7. The dated,
+secret-free [preflight record](../evidence/cloudflare-mcp-paid-preflight-2026-09-28.json)
+contains the account hash, scope names, usage and exact resource inventory.
+Live deployment still requires authorization against this refreshed Paid-plan
+snapshot.
+
+The first authorized run on the refreshed plan finished September 28 with a
+failed MCP leg, not a passing T15 qualification. The bounded deployment and
+HTTP/multi-pass publication succeeded, and the exact Worker, D1 and R2
+resources were cleaned; non-probe inventories matched before and after. The
+MCP requests for missing and invalid tokens both returned 403 from the Host
+guard before discovery, against the expected 401. The
+[retained failed-attempt summary](../evidence/cloudflare-mcp-paid-failed-attempt-2026-09-28.json)
+and its source record preserve the result. Local reproduction against a
+workers.dev qualification URL now passes after a qualification-only Host
+normalization that leaves Origin checks intact. A second metered run requires
+a fresh allowance snapshot and authorization; this local fix alone does not
+qualify the deployed Worker.
+
+At the 20:28 UTC retry preflight, Workers & Pages still showed $0.00 billable
+usage with 738 requests and 7,475 CPU milliseconds in the current cycle. D1
+showed about 1,330 rows written, no billable usage and no remaining probe
+database. R2 billing still displayed 210 Class A, 79 Class B and 0 GB-months
+with $0.00 billable usage; that tile may lag the just-finished probe. Between
+the two dashboard reads, account-wide counters moved by 111 Worker requests,
+1,480 CPU milliseconds and about 355 D1 written rows. These deltas include any
+other account activity and D1 index writes, so they are not exact probe usage.
+They do show that the earlier under-150 D1-row estimate is too low as an
+approval bound. The next run uses a conservative planning envelope of under
+250 Worker requests, under 1,000 D1 written rows and under 100 R2 Class A
+and 100 Class B operations. The fixed probe workflow limits the shape, but
+these billing estimates are not hard service-enforced caps. All are far below
+the observed remaining Paid inclusions. The scoped OAuth grant was refreshed,
+the exact stage and all three `probe-` names are absent again, and the full
+local iteration gate passed. See the
+[retry preflight](../evidence/cloudflare-mcp-retry-preflight-2026-09-28.json)
+and [gate summary](../evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json).
+The metered retry still needs its own authorization.

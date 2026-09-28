@@ -465,7 +465,12 @@ function prepareRequest(
     )
   ) {
     url.hostname = runtime.applicationHostname;
-    return new Request(url, request);
+    const prepared = new Request(url, request);
+    // Qualification requests arrive at the temporary workers.dev hostname.
+    // Keep the MCP Host check tied to the configured application hostname
+    // after this explicitly allowed route rewrite; Origin remains untouched.
+    prepared.headers.set("Host", runtime.applicationHostname);
+    return prepared;
   }
   return null;
 }

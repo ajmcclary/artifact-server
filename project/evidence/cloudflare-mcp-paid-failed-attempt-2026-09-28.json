@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T19:50:12.325Z",
+  "provider": "cloudflare",
+  "qualification": "T15 bounded Worker MCP runtime, first Paid-plan run",
+  "sourceEvidence": "deploy/cloudflare/evidence/account-probe-2026-09-28T19-50-12-325Z.json",
+  "sourceEvidenceSha256": "e065bcbdb6e61551be48486d192a5c806d9f105e834dcc31626a51a28c4b6d7c",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+  "configurationSha256": "793824304ee4172a962533f14d5ea6ee057369aa6b3d388cd413611116d2d0f0",
+  "stage": "probe-runtime-mcp-20260928",
+  "status": "failed_after_clean_deployment_lifecycle",
+  "failedCheck": "runtimeQualified",
+  "httpRuntime": {
+    "health": 200,
+    "ready": 200,
+    "unauthorized": 401,
+    "upload": 201,
+    "uploadFile": 200,
+    "commit": 201,
+    "replay": 200,
+    "list": 200,
+    "multiUpload": 201,
+    "multiFileUploads": 12,
+    "multiPreparingPasses": [
+      {
+        "installed": 5,
+        "total": 12
+      },
+      {
+        "installed": 10,
+        "total": 12
+      }
+    ],
+    "multiCommit": 201,
+    "multiReplay": 200,
+    "multiList": 200
+  },
+  "mcpBoundary": {
+    "unauthorized": 403,
+    "invalidToken": 403,
+    "get": 405,
+    "delete": 405,
+    "hostileOrigin": 403,
+    "discoveryNotReached": true
+  },
+  "cleanup": {
+    "workerDestroyed": true,
+    "bucketEmptied": true,
+    "cleanupSucceeded": true,
+    "nonProbeDurableInventoryUnchanged": true
+  },
+  "diagnosis": "The workers.dev qualification request URL was rewritten to the configured application host, but the original Host header remained workers.dev. MCP Host validation rejected both unauthenticated cases with 403 before bearer handling. A local workers.dev regression reproduced 403 and passes after the qualification-only Host normalization; Origin validation remains unchanged.",
+  "liveMcpQualified": false,
+  "credentialsRetainedInRepository": false
+}
