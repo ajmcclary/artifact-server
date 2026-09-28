@@ -68,6 +68,26 @@ const QualificationList = Schema.Struct({
     artifact: Schema.Struct({id: Schema.String}),
   })),
 });
+const QualificationMultiUpload = Schema.Struct({
+  commitUrl: Schema.String,
+  files: Schema.Array(Schema.Struct({
+    path: Schema.String,
+    uploadUrl: Schema.String,
+  })),
+});
+const QualificationPreparing = Schema.Struct({
+  installed: Schema.Number,
+  status: Schema.Literal("preparing"),
+  total: Schema.Number,
+});
+const QualificationPublication = Schema.Struct({
+  artifact: Schema.Struct({id: Schema.String}),
+  version: Schema.Struct({id: Schema.String}),
+});
+const QualificationReplay = Schema.Struct({
+  replayed: Schema.Literal(true),
+  version: Schema.Struct({id: Schema.String}),
+});
 const CloudflareCursor = Schema.String.check(Schema.isMinLength(1));
 const R2ObjectListResponse = Schema.Struct({
   result: Schema.Array(Schema.Struct({key: Schema.String})),
@@ -400,8 +420,8 @@ const rewriteQualificationUrl = (qualificationUrl, value) => {
   return target;
 };
 
-const requestStatus = async (url, options) => {
-  const response = await fetch(url, options);
+const requestStatus = async (fetchLike, url, options) => {
+  const response = await fetchLike(url, options);
   return {
     body: await response.text(),
     status: response.status,
@@ -496,11 +516,14 @@ const parseResponseDocument = (response) => {
   }
 };
 
-const awaitHealthyRuntime = async (qualificationUrl, attempts) => {
-  const response = await requestStatus(new URL("/health", qualificationUrl));
+const awaitHealthyRuntime = async (fetchLike, qualificationUrl, attempts) => {
+  const response = await requestStatus(
+    fetchLike,
+    new URL("/health", qualificationUrl),
+  );
   if (response.status === 200 || attempts <= 1) return response;
   await delay(500);
-  return awaitHealthyRuntime(qualificationUrl, attempts - 1);
+  return awaitHealthyRuntime(fetchLike, qualificationUrl, attempts - 1);
 };
 
 const parseQualificationUrl = (value) => {
@@ -514,13 +537,24 @@ const parseQualificationUrl = (value) => {
   }
 };
 
-const qualifyRuntime = async (qualificationUrl, apiToken) => {
+export const qualifyRuntime = async (
+  qualificationUrl,
+  apiToken,
+  fetchLike = fetch,
+) => {
   const evidence = {
     artifactIdSha256: null,
     commit: null,
     failureBodies: {},
     health: null,
     list: null,
+    multiArtifactIdSha256: null,
+    multiCommit: null,
+    multiFileUploads: null,
+    multiList: null,
+    multiPreparingPasses: null,
+    multiReplay: null,
+    multiUpload: null,
     ready: null,
     replay: null,
     unauthorized: null,
@@ -534,11 +568,11 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     }
   };
   try {
-    const health = await awaitHealthyRuntime(qualificationUrl, 20);
+    const health = await awaitHealthyRuntime(fetchLike, qualificationUrl, 20);
     recordResponse("health", health);
-    const ready = await requestStatus(new URL("/ready", qualificationUrl));
+    const ready = await requestStatus(fetchLike, new URL("/ready", qualificationUrl));
     recordResponse("ready", ready);
-    const unauthorized = await requestStatus(
+    const unauthorized = await requestStatus(fetchLike,
       new URL("/api/v1/artifacts", qualificationUrl),
     );
     recordResponse("unauthorized", unauthorized);
@@ -546,7 +580,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     const bytes = new TextEncoder().encode(
       "<main>Live Cloudflare qualification</main>",
     );
-    const upload = await requestStatus(
+    const upload = await requestStatus(fetchLike,
       new URL("/api/v1/uploads", qualificationUrl),
       {
         body: JSON.stringify({
@@ -572,7 +606,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     }
     const plannedFile = uploadDocument.files[0];
     if (plannedFile === undefined) return {evidence, passed: false};
-    const uploadedFile = await requestStatus(
+    const uploadedFile = await requestStatus(fetchLike,
       rewriteQualificationUrl(qualificationUrl, plannedFile.uploadUrl),
       {
         body: bytes,
@@ -592,7 +626,7 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
       "Content-Type": "application/json",
       "Idempotency-Key": "cloudflare-live-runtime-qualification",
     };
-    const commit = await requestStatus(
+    const commit = await requestStatus(fetchLike,
       rewriteQualificationUrl(qualificationUrl, uploadDocument.commitUrl),
       {body: commitBody, headers: commitHeaders, method: "POST"},
     );
@@ -603,12 +637,12 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     }
     const artifactId = commitDocument.artifact.id;
     evidence.artifactIdSha256 = sha256(artifactId);
-    const replay = await requestStatus(
+    const replay = await requestStatus(fetchLike,
       rewriteQualificationUrl(qualificationUrl, uploadDocument.commitUrl),
       {body: commitBody, headers: commitHeaders, method: "POST"},
     );
     recordResponse("replay", replay);
-    const list = await requestStatus(
+    const list = await requestStatus(fetchLike,
       new URL("/api/v1/artifacts", qualificationUrl),
       {headers: {Authorization: `Bearer ${apiToken}`}},
     );
@@ -616,6 +650,132 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
     const listDocument = parseResponseDocument(list);
     const listed = Schema.is(QualificationList)(listDocument) &&
       listDocument.artifacts.some((item) => item.artifact.id === artifactId);
+
+    // Multi-pass publication: twelve files against the production
+    // filesPerPass: 5 budget must produce several 202 preparing responses
+    // before the atomic commit, replay and list (PUB-019/PUB-020 live).
+    const multiFileCount = 12;
+    const multiFiles = Array.from({length: multiFileCount}, (_, index) => {
+      const fileBytes = new TextEncoder().encode(
+        `<p>Live multi-pass qualification file ${index}</p>`,
+      );
+      return {
+        bytes: fileBytes,
+        mediaType: "text/html; charset=utf-8",
+        path: `file-${index}.html`,
+        sha256: createHash("sha256").update(fileBytes).digest("hex"),
+        size: fileBytes.byteLength,
+      };
+    });
+    const multiUpload = await requestStatus(fetchLike,
+      new URL("/api/v1/uploads", qualificationUrl),
+      {
+        body: JSON.stringify({
+          entryPath: "file-0.html",
+          files: multiFiles.map((file) => ({
+            mediaType: file.mediaType,
+            path: file.path,
+            sha256: file.sha256,
+            size: file.size,
+          })),
+        }),
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    recordResponse("multiUpload", multiUpload);
+    const multiUploadDocument = parseResponseDocument(multiUpload);
+    if (!Schema.is(QualificationMultiUpload)(multiUploadDocument)) {
+      return {evidence, passed: false};
+    }
+    const multiPuts = await Promise.all(multiFiles.map(async (file) => {
+      const plannedMultiFile = multiUploadDocument.files.find(
+        (planned) => planned.path === file.path,
+      );
+      if (plannedMultiFile === undefined) return {status: 0};
+      const put = await requestStatus(fetchLike,
+        rewriteQualificationUrl(qualificationUrl, plannedMultiFile.uploadUrl),
+        {
+          body: file.bytes,
+          headers: {Authorization: `Bearer ${apiToken}`},
+          method: "PUT",
+        },
+      );
+      return {status: put.status};
+    }));
+    evidence.multiFileUploads =
+      multiPuts.filter((put) => put.status === 200).length;
+    const multiCommitBody = JSON.stringify({target: {
+      accessSetting: "public_link",
+      kind: "new_artifact",
+      name: "Live Cloudflare multi-pass qualification",
+      tags: ["cloudflare", "qualification", "multipass"],
+    }});
+    const multiCommitHeaders = {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "cloudflare-live-multipass-qualification",
+    };
+    const commitMultiPass = async (attemptsRemaining, passes) => {
+      const commitAttempt = await requestStatus(fetchLike,
+        rewriteQualificationUrl(qualificationUrl, multiUploadDocument.commitUrl),
+        {body: multiCommitBody, headers: multiCommitHeaders, method: "POST"},
+      );
+      if (commitAttempt.status !== 202) {
+        return {commit: commitAttempt, malformed: false, passes};
+      }
+      const preparingDocument = parseResponseDocument(commitAttempt);
+      if (!Schema.is(QualificationPreparing)(preparingDocument)) {
+        return {commit: commitAttempt, malformed: true, passes};
+      }
+      const nextPasses = [...passes, {
+        installed: preparingDocument.installed,
+        total: preparingDocument.total,
+      }];
+      if (attemptsRemaining <= 1) {
+        return {commit: undefined, malformed: false, passes: nextPasses};
+      }
+      await delay(1000);
+      return commitMultiPass(attemptsRemaining - 1, nextPasses);
+    };
+    const multiCommitResult = await commitMultiPass(8, []);
+    evidence.multiPreparingPasses = multiCommitResult.passes;
+    if (multiCommitResult.malformed) {
+      recordResponse("multiCommit", multiCommitResult.commit);
+      return {evidence, passed: false};
+    }
+    if (multiCommitResult.commit === undefined) {
+      evidence.multiCommit = "preparing-not-finished";
+      return {evidence, passed: false};
+    }
+    const multiCommit = multiCommitResult.commit;
+    recordResponse("multiCommit", multiCommit);
+    const multiCommitDocument = parseResponseDocument(multiCommit);
+    if (!Schema.is(QualificationPublication)(multiCommitDocument)) {
+      return {evidence, passed: false};
+    }
+    evidence.multiArtifactIdSha256 = sha256(multiCommitDocument.artifact.id);
+    const multiReplay = await requestStatus(fetchLike,
+      rewriteQualificationUrl(qualificationUrl, multiUploadDocument.commitUrl),
+      {body: multiCommitBody, headers: multiCommitHeaders, method: "POST"},
+    );
+    recordResponse("multiReplay", multiReplay);
+    const multiReplayDocument = parseResponseDocument(multiReplay);
+    const multiReplayed = Schema.is(QualificationReplay)(multiReplayDocument) &&
+      multiReplayDocument.version.id === multiCommitDocument.version.id;
+    const multiList = await requestStatus(fetchLike,
+      new URL("/api/v1/artifacts", qualificationUrl),
+      {headers: {Authorization: `Bearer ${apiToken}`}},
+    );
+    recordResponse("multiList", multiList);
+    const multiListDocument = parseResponseDocument(multiList);
+    const multiListed = Schema.is(QualificationList)(multiListDocument) &&
+      multiListDocument.artifacts.some(
+        (item) => item.artifact.id === multiCommitDocument.artifact.id,
+      );
     const passed = evidence.health === 200 &&
       evidence.ready === 200 &&
       evidence.unauthorized === 401 &&
@@ -624,7 +784,16 @@ const qualifyRuntime = async (qualificationUrl, apiToken) => {
       evidence.commit === 201 &&
       evidence.replay === 200 &&
       evidence.list === 200 &&
-      listed;
+      listed &&
+      evidence.multiUpload === 201 &&
+      evidence.multiFileUploads === multiFileCount &&
+      multiCommitResult.passes.length >= 2 &&
+      multiCommitResult.passes.every((pass) => pass.total === multiFileCount) &&
+      evidence.multiCommit === 201 &&
+      evidence.multiReplay === 200 &&
+      multiReplayed &&
+      evidence.multiList === 200 &&
+      multiListed;
     return {evidence, passed};
   } catch {
     return {evidence, passed: false};
@@ -1125,4 +1294,8 @@ const main = async () => {
   }
 };
 
-await main();
+const isDirectRun = process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+  await main();
+}

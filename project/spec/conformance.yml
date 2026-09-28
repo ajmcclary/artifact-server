@@ -851,7 +851,7 @@ requirements:
       failure: {id: PUB-019-F, description: "A stalled preparation owner loses its expired lease to a successor and cannot record progress or finalize afterward, and an expired preparation whose source changed conflicts instead of silently replacing."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local (SQLite, bounded-pass service through the real HTTP boundary), pinned-Postgres store fencing, and local Wrangler-D1 two-handle claim races pass. The live Worker path is unproven — no live multi-pass commit has run against the deployed runtime; live re-qualification is approval-gated (the September 25 probe shape covers committed replay only).
+    proof_gap: Local (SQLite, bounded-pass service through the real HTTP boundary), pinned-Postgres store fencing, and local Wrangler-D1 two-handle claim races pass. The live Worker multi-pass commit is now qualified (September 28, project/evidence/cloudflare-runtime.json). A 12-file upload forced two 202 preparing passes (installed 5, then 10 of 12) through the real workers.dev boundary before one atomic 201 commit. The live run did not exercise the process-restart or stalled-owner fencing legs; those remain local and pinned-store proof.
     depends_on: [PUB-003, PUB-004, PUB-015]
     evidence:
       - deployment: local
@@ -859,6 +859,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-27T16:38:56.000Z"
+      - deployment: cloudflare
+        tests: [PUB-019-B]
+        result: pass
+        run: project/evidence/cloudflare-runtime.json
+        recorded_at: "2026-09-28T14:21:43.151Z"
 
   - id: PUB-020
     kind: behavior
@@ -870,7 +875,7 @@ requirements:
       failure: {id: PUB-020-F, description: "A blob-storage outage during or after preparation and a staged source replaced after verification leave no partial or visible version, no dangling current pointer, and no lost committed replay."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local (SQLite through the real HTTP boundary, concurrent finalize and injected outage/source-replacement races), pinned-Postgres and local Wrangler-D1 commit guards pass. The live Worker path is unproven — no live multi-pass commit has run against the deployed runtime; live re-qualification is approval-gated (the September 25 probe shape covers committed replay only).
+    proof_gap: Local (SQLite through the real HTTP boundary, concurrent finalize and injected outage/source-replacement races), pinned-Postgres and local Wrangler-D1 commit guards pass. The live Worker commit and replay are now qualified (September 28, project/evidence/cloudflare-runtime.json). The 12-file operation committed exactly once through bounded 202 passes, the same idempotency key replayed 200 with the same version id, and the artifact appeared in the authenticated list through the real workers.dev boundary. The concurrent-finalization, outage and source-replacement legs remain local and pinned-store proof.
     depends_on: [PUB-005, PUB-006, PUB-008, PUB-019]
     evidence:
       - deployment: local
@@ -878,6 +883,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-27T16:38:56.000Z"
+      - deployment: cloudflare
+        tests: [PUB-020-B]
+        result: pass
+        run: project/evidence/cloudflare-runtime.json
+        recorded_at: "2026-09-28T14:21:43.151Z"
 
   - id: CLI-001
     kind: security
@@ -4285,15 +4295,15 @@ requirements:
       behavior: {id: OPS-006-B, description: "Publish, race, restore, restart, and wait beyond staging expiry and confirm every committed version and referenced byte remains."}
       failure: {id: OPS-006-F, description: "Cleanup may delete only expired uncommitted staging records and cannot select a committed or possibly referenced blob."}
     deployments: *all
-    status: implementing
-    proof_gap: Cleanup-selection failure evidence exists, and the durable cleanup claim that excludes a racing preparation while staging objects are removed is proved at the service level on SQLite and at the repository level on pinned Postgres and local Wrangler-D1 (September 28). No one OPS-006-B acceptance run combines publication, a concurrent publish race, restore, process restart, and retention beyond staging expiry.
+    status: behavior_verified
+    proof_gap: Cleanup-selection failure evidence exists, the durable cleanup claim that excludes a racing preparation while staging objects are removed is proved at the service level on SQLite and at the repository level on pinned Postgres and local Wrangler-D1 (September 28), and the combined OPS-006-B acceptance run now passes locally (September 28). One run publishes two artifacts through the real HTTP boundary, races a concurrent finalization of one operation (exactly one version, loser replays), restores from a data-directory copy, restarts, advances past staging expiry through a real cleanup pass that reclaims an abandoned upload, and verifies every committed byte remains byte-identical throughout. The combined run remains unrun on cloudflare, aws and gcp.
     depends_on: [PUB-009, ART-007]
     evidence:
       - deployment: local
-        tests: [OPS-006-F]
+        tests: [OPS-006-B, OPS-006-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-08-17T03:17:21.421Z"
+        recorded_at: "2026-09-28T13:50:35.000Z"
       - deployment: cloudflare
         tests: [OPS-006-F]
         result: pass

@@ -3,9 +3,10 @@
   "provider": "cloudflare",
   "deployment": "cloudflare",
   "qualification": "private-application-core",
-  "startedAt": "2026-09-25T22:20:52.317Z",
-  "finishedAt": "2026-09-25T22:22:35.066Z",
-  "sourceEvidenceSha256": "b7c4ba312fee6d3a9a67ce65f7e746226610bc5a54fda9f47f1eba2dddf5bd6d",
+  "startedAt": "2026-09-28T14:20:11.775Z",
+  "finishedAt": "2026-09-28T14:21:43.151Z",
+  "sourceEvidence": "deploy/cloudflare/evidence/account-probe-2026-09-28T14-21-43-151Z.json",
+  "sourceEvidenceSha256": "fac4101dd62e81b78197aeb9d6eb81958dd61beb972695efa45520427ab0f0bd",
   "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
   "passed": true,
   "dnsChanged": false,
@@ -15,7 +16,8 @@
     "bucketEmptied": true,
     "cleanupSucceeded": true,
     "deploymentOutputValid": true,
-    "durableDataRetainedBeforeCleanup": true,
+    "dnsChangesExcluded": true,
+    "durableDataRetained": true,
     "exactResourceIdsCaptured": true,
     "initialInventoryClear": true,
     "nativePlanNoWrites": true,
@@ -32,8 +34,38 @@
     "uploadFile": 200,
     "commit": 201,
     "idempotentReplay": 200,
-    "list": 200
+    "list": 200,
+    "multiUpload": 201,
+    "multiFileUploads": 12,
+    "multiCommit": 201,
+    "multiReplay": 200,
+    "multiList": 200
   },
+  "multiPassPublication": {
+    "fileCount": 12,
+    "filesPerPass": 5,
+    "preparingPasses": [
+      {"installed": 5, "total": 12},
+      {"installed": 10, "total": 12}
+    ],
+    "note": "Twelve staged files against the production filesPerPass: 5 Worker budget produced two live 202 preparing responses through the real workers.dev boundary before one atomic 201 commit; the same idempotency key replayed 200 with the same version id and the artifact appeared in the authenticated list. Restart and hostile fencing legs are proved locally and on pinned stores, not in this live run. Byte read-through is out of scope live: version content is served from a per-version token subdomain of the content domain, which does not resolve for the private-ingress probe deployment."
+  },
+  "testResults": [
+    {
+      "name": "live Cloudflare multi-pass publication qualification",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "PUB-019-B (live): a 12-file publication prepared over two bounded 202 passes on the deployed Worker and committed exactly one version",
+          "status": "passed"
+        },
+        {
+          "title": "PUB-020-B (live): the committed multi-pass operation replayed idempotently (200, same version id) and listed through the real workers.dev boundary",
+          "status": "passed"
+        }
+      ]
+    }
+  ],
   "remainingAtCheckpoint": [
     "public domain and TLS qualification",
     "WorkOS browser and MCP authorization",

@@ -1001,18 +1001,55 @@ gate.
   `preparing` passes on the live Worker, then commit, idempotent replay and
   list through the real workers.dev boundary, extending the September 25
   runtime-stage probe.
+- **Probe preparation, September 28:** the runtime-stage account probe
+  (`deploy/cloudflare/scripts/account-probe.mjs`) now drives exactly that
+  shape: after the existing single-file checks it creates a 12-file upload,
+  drives a bounded commit loop that must observe at least two 202
+  `preparing` passes against the production `filesPerPass: 5` budget before
+  the 201 commit, replays the commit for a 200 naming the same version, and
+  lists the artifact. `qualifyRuntime` takes an injectable fetch and the
+  exact probe code is validated locally against the real Worker bundle
+  ([account-probe-runtime.test.ts](./deploy/cloudflare/tests/account-probe-runtime.test.ts),
+  passes `[5, 10]` observed locally). Live byte read-through is out of
+  scope: version content is served from a per-version token subdomain of
+  the content domain, which does not resolve for the private-ingress probe
+  deployment, so byte proof stays with the local Worker suite and the
+  phase-11 qualification. The estimated footprint (~30 Worker requests,
+  <100 D1 rows written, ~26 R2 Class A + 13 Class B operations) is recorded
+  in [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  Remaining before the metered run: refresh the dated plan/allowance/overage
+  snapshot from the account dashboard (last observed 2026-09-23) and obtain
+  explicit authorization for this specific probe.
+- **Live Worker qualification, September 28:** the operator re-confirmed the
+  Workers Free / R2 $0-base allowance snapshot and authorized the specific
+  probe, which then passed end to end
+  ([account-probe-2026-09-28T14-21-43-151Z.json](./deploy/cloudflare/evidence/account-probe-2026-09-28T14-21-43-151Z.json),
+  summarized in [cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  On the deployed Worker the 12-file upload produced two live 202
+  `preparing` responses (installed 5, then 10 of 12) through the real
+  workers.dev boundary before one atomic 201 commit; the same idempotency
+  key replayed 200 with the same version id and the artifact appeared in
+  the authenticated list. The lifecycle stayed clean: exact `probe-`
+  resources created, no-drift repeat deploy, destroyed and deleted, and
+  non-probe inventories unchanged. The PUB-019/PUB-020 ledger entries now
+  carry cloudflare evidence for the live multi-pass commit and replay; the
+  restart, stalled-owner fencing, concurrent-finalization, outage and
+  source-replacement legs remain local and pinned-store proof, honestly
+  scoped in each proof_gap.
 
-- **Current:** [publication](./src/application/publish-artifact.ts) installs files
-  in one operation; D1/R2 invocation limits are not the same as Node limits.
-- **Do:** after T08, design resumable chunked verify/install work with durable
-  operation progress and expiration/ownership. Keep the final manifest/version,
-  action, idempotency and expected-current result atomic. A large manifest does
-  not become small merely because blob work was moved earlier: qualify statement
-  bytes, parameter/query counts and D1 transaction limits or specify an invisible
-  prepared-manifest representation before implementing it.
+
+- **Current:** resumable chunked verify/install with durable per-file progress,
+  fenced single-owner expiration/ownership and an atomic final commit is
+  implemented as PUB-019/PUB-020 on all three stores (see the slice progress
+  above); the Worker runs bounded passes (`filesPerPass: 5`,
+  `preparedEntriesPerPass: 512`) while Node runtimes keep single-request
+  behavior. The live Worker multi-pass commit, replay and list were
+  qualified September 28 (see the qualification note above).
 - **Done when:** forced per-invocation budgets, restart, concurrent finalize,
   provider outage and source replacement cannot expose partial versions or
-  lose a committed replay. **Gates:** V/H/O, Cloudflare runtime suite and L;
+  lose a committed replay — proved locally and on pinned stores, and the
+  multi-pass commit, idempotent replay and list now also ran against the
+  deployed Worker (September 28). **Gates:** V/H/O, Cloudflare runtime suite and L;
   E/X for changed shared composition. **Contracts:** PUB-001/003–008, ARC-004,
   DEP-007; new prepare/finalize IDs. **Dependencies:** T02/T05/T08.
   **Cost:** no new paid orchestrator; reject a design that cannot fit the chosen plan.
@@ -1063,17 +1100,35 @@ gate.
   successful-staging reclamation stays a deferred PUB-009/OPS-006 policy
   decision (T24), and the lost-commit-replay-after-cleanup clause of "Done
   when" is unchanged because no newly permitted cleanup exists yet.
+- **Combined OPS-006-B proof, September 28:** one acceptance run
+  ([ops-006-retention.test.ts](./tests/conformance/ops-006-retention.test.ts))
+  now combines publication, a concurrent publish race, restore, restart and
+  retention beyond staging expiry. Through the real HTTP boundary with a
+  controlled clock it publishes two artifacts, races a concurrent
+  finalization of one operation (statuses 200/201, exactly one version),
+  leaves an abandoned staged upload behind, restores from a data-directory
+  copy, restarts again, advances past upload expiry plus the cleanup settle
+  delay, runs a real cleanup pass that reclaims the abandoned upload
+  (committing it afterward answers 404), and verifies every committed
+  version and referenced byte of both artifacts remains byte-identical
+  after each transition. The ledger's OPS-006 entry is now
+  `behavior_verified` with the combined run recorded locally; the combined
+  run remains unrun on cloudflare, aws and gcp.
 - **Current:** [cleanup](./src/application/expired-staging-cleanup.ts) bounds upload
   count, file count and wall-clock time per pass with durable continuation, and
   claims an expired upload (`cleanup_claimed_at`) before removing its objects so
   a racing preparation claim is refused in every store; successful
   staging is retained.
-- **Do first:** bound uncommitted cleanup by files/operations/time with durable
-  continuation, interruption-safe retry and active-write/prepare protection.
-  **Do later:** only after T05, specify successful-staging reclamation independent
+- **Done September 27–28:** uncommitted cleanup is bounded by
+  files/operations/time with durable continuation, interruption-safe retry
+  and active-write/prepare protection (durable cleanup claims), and the
+  combined OPS-006-B acceptance run passes locally.
+- **Do later:** only after T05, specify successful-staging reclamation independent
   of idempotent replay, backups and active preparations. Amend PUB-009/OPS-006
   deliberately for that new lifecycle. Abort abandoned provider multipart work
-  through its adapter; do not age-delete immutable blobs.
+  through its adapter; do not age-delete immutable blobs. Re-run the combined
+  OPS-006-B proof on cloudflare, aws and gcp when those deployments are next
+  qualified.
 - **Done when:** a large expired upload resumes over many passes, cleanup racing
   write/finalize is safe, and lost commit responses still replay after any newly
   permitted cleanup. **Gates:** V/H/O/E/X, Cloudflare runtime suite.

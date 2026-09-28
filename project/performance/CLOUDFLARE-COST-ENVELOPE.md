@@ -215,3 +215,48 @@ summarized in `project/evidence/cloudflare-runtime.json`) deployed, qualified
 and cleaned its exact `probe-` resources, refreshing the runtime qualification
 with a WorkOS browser-login provider configured; request counts were the
 bounded probe set only, far under the Free daily request cap.
+
+## T09 multi-pass probe (run 2026-09-28, passed)
+
+Account snapshot re-confirmed by the operator on 2026-09-28: Workers Free,
+R2 active at $0/month base, allowances and overage behavior unchanged from
+the dated values above. The operator explicitly authorized this specific
+probe shape on 2026-09-28. The run
+(`deploy/cloudflare/evidence/account-probe-2026-09-28T14-21-43-151Z.json`,
+summarized in `project/evidence/cloudflare-runtime.json`) passed: the
+12-file upload produced two live `202 preparing` responses (installed 5,
+then 10 of 12) before one atomic `201` commit, the idempotent replay
+returned `200` with the same version id, the artifact listed, and all
+lifecycle checks (exact resource creation, no-drift repeat deploy, destroy,
+probe-resource deletion, unchanged non-probe inventories) passed. The
+observed footprint matched the estimate below — about 30 Worker requests
+and a few dozen D1 rows and R2 operations over 91 seconds, far inside the
+free envelope.
+
+The next proposed live run extends the 2026-09-25 runtime-stage probe with a
+multi-pass publication: a 12-file upload against the production
+`filesPerPass: 5` budget, expecting at least two `202 preparing` responses
+before the atomic `201` commit, an idempotent `200` replay naming the same
+version, and the artifact present in the authenticated list. The exact probe
+code is validated locally against the real Worker bundle
+(`deploy/cloudflare/tests/account-probe-runtime.test.ts`, which drives
+`qualifyRuntime` from `deploy/cloudflare/scripts/account-probe.mjs` through
+`unstable_dev`).
+
+Estimated footprint of the extended probe, worst case:
+
+- ~30 Worker requests (health polling, readiness, the unauthenticated check,
+  one single-file and one 12-file staged upload, three commit attempts, two
+  replays, two lists) against the 100,000/day Free cap.
+- Well under 100 D1 rows written (two versions, 13 manifest rows, prepared
+  entries, idempotency/action rows) against the 100,000 rows/day Free cap.
+- Roughly 26 R2 Class A operations (staging puts plus content-addressed blob
+  puts) and 13 Class B (commit-time staging reads); staging deletes are
+  free-billed. All far inside the 1M Class A / 10M Class B monthly allowance.
+- Probe-only `probe-` D1/R2/Worker resources are created and destroyed by the
+  probe itself; retained bytes return to zero.
+
+The pre-run requirements (dated dashboard re-confirmation, recorded snapshot,
+explicit authorization for this specific probe shape) were met on 2026-09-28
+and the run passed, as recorded above. Any future live run needs its own
+fresh snapshot and authorization.
