@@ -260,3 +260,45 @@ The pre-run requirements (dated dashboard re-confirmation, recorded snapshot,
 explicit authorization for this specific probe shape) were met on 2026-09-28
 and the run passed, as recorded above. Any future live run needs its own
 fresh snapshot and authorization.
+
+## T15 MCP Worker probe (pre-run snapshot, 2026-09-28)
+
+The operator authorized the bounded T15 Worker MCP qualification in this task.
+The selected account was checked by matching its SHA-256 account ID hash to the
+September 28 runtime evidence (`76a11419…1ac85`, full value in
+`project/evidence/cloudflare-runtime.json`). The Cloudflare dashboard's
+Subscriptions page shows Workers Free active and R2 Paid active; the latter
+has $0 base and usage-based overage. Billable usage for September 23–28 shows
+$0.00 cost, 210 R2 Class A operations of the first 1 million included, 79
+Class B operations of the first 10 million included, and 0 GB-months of the
+first 10 GB-months included. The Workers account home showed 100 Worker
+invocations in its last-24-hour tile; this is not a full daily allowance
+measurement. [Workers Free limits](https://developers.cloudflare.com/workers/platform/limits/)
+remain 100,000 requests/day and 50 subrequests/invocation, with hard failure
+at the daily cap. [D1 Free pricing](https://developers.cloudflare.com/d1/platform/pricing/)
+remains 5 million rows read/day, 100,000 rows written/day and 5 GB total,
+with query failure on cap. [R2 Standard pricing](https://developers.cloudflare.com/r2/pricing/)
+remains 1 million Class A, 10 million Class B and 10 GB-months included;
+overage is $4.50/million Class A, $0.36/million Class B and $0.015/GB-month.
+No plan change is requested.
+
+The probe reuses the exact private runtime-stage configuration and `probe-`
+resource lifecycle. It adds MCP discovery, catalog, capability, authorization,
+unavailable linked-file, one-file version publication with upload-plan and
+committed replay, compact/full reads and two one-item version pages, plus
+hostile input checks. The added MCP leg is bounded at under 30 Worker
+requests, fewer than 30 D1 rows written and fewer than 5 R2 Class A/B
+operations; the complete account probe remains under 100 Worker requests,
+150 D1 rows written, 35 Class A and 20 Class B operations. This is far below
+the observed remaining allowance. The probe's exact-resource teardown is
+part of this authorized run; non-probe resources must stay unchanged.
+
+The first attempt on 2026-09-28 stopped before plan or deployment. Wrangler
+matched the intended account, but `alchemy state ls` could not verify the
+previous stage because the `default` Alchemy profile currently has no
+Cloudflare provider. The retained full local failure record is
+`deploy/cloudflare/evidence/account-probe-2026-09-28T15-28-00-751Z.json`
+(redacted repository summary: `project/evidence/cloudflare-mcp-live-attempt.json`);
+no resources were created and no metered runtime work occurred. Resume only
+after the named profile is reconnected and a fresh `probe-runtime-` stage is
+selected and verified absent.

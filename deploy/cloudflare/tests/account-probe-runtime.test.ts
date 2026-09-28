@@ -83,5 +83,30 @@ describe("account probe runtime qualification", () => {
     expect(result.evidence.multiCommit).toBe(201);
     expect(result.evidence.multiReplay).toBe(200);
     expect(result.evidence.multiList).toBe(200);
+    expect(result.evidence.mcp).toMatchObject({
+      unauthorized: 401,
+      invalidToken: 401,
+      get: 405,
+      delete: 405,
+      hostileOrigin: 403,
+      discovery: 200,
+      toolsList: 200,
+      templatesList: 200,
+      capabilities: 200,
+      mismatchedName: 400,
+      unavailableLink: 200,
+      createUpload: 200,
+      resumedUpload: 200,
+      conflict: 200,
+      uploadFile: 200,
+      commit: 200,
+      committedReplay: 200,
+      compact: 200,
+      full: 200,
+      invalidProjection: 200,
+      firstPage: 200,
+      secondPage: 200,
+      invalidCursor: 200,
+    });
   }, 60_000);
 });

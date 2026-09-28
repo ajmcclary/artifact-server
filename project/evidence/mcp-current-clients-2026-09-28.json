@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28",
+  "repositoryHeadAtRead": "ca26428",
+  "scope": "Current installed MCP clients against either the existing Production server or a temporary real local HTTP installation. This is transport and representative read-tool evidence, not a complete publish, refresh, revocation, or reconnect matrix.",
+  "clients": [
+    {
+      "name": "Codex CLI",
+      "version": "0.155.1",
+      "surface": "existing Backend.app Production MCP registration",
+      "result": "artifact_capabilities tool call passed and returned deployment.mode=remote; the deployed response omitted protocol era and revision",
+      "workflowQualified": false
+    },
+    {
+      "name": "Claude Code",
+      "version": "2.1.283",
+      "surface": "temporary MCP configuration against real local HTTP installation",
+      "result": "artifact_capabilities tool call passed with deployment.mode=local after explicitly allowing that read-only tool; no persistent server registration was added",
+      "workflowQualified": false
+    },
+    {
+      "name": "Cursor Agent",
+      "version": "2026.07.16-899851b",
+      "surface": "temporary project MCP configuration against real local HTTP installation",
+      "result": "MCP server initialized and listed 33 tools including artifact_capabilities; model tool call could not start because Cursor Agent requires login or CURSOR_API_KEY. Temporary MCP approval was disabled afterward.",
+      "workflowQualified": false
+    },
+    {
+      "name": "Visual Studio Code",
+      "version": "1.138.0",
+      "surface": "installed extensions inventory",
+      "result": "GitHub Copilot agent extension is absent, so no MCP agent tool call was available",
+      "workflowQualified": false
+    }
+  ],
+  "temporaryFixtureRemoved": true,
+  "credentialsRetainedInRepository": false
+}

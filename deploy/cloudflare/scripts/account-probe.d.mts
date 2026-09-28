@@ -23,6 +23,7 @@ export interface QualificationEvidence {
   readonly failureBodies: Record<string, string>;
   readonly health: number | null;
   readonly list: number | null;
+  readonly mcp: Readonly<Record<string, number | null>> | null;
   readonly multiArtifactIdSha256: string | null;
   readonly multiCommit: number | string | null;
   readonly multiFileUploads: number | null;

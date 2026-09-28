@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-27",
-  "commit": "9ba8339",
-  "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions.",
+  "recordedAt": "2026-09-28",
+  "commit": "ca26428",
+  "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions. The September 28 checks are host inventory and bounded Codex CLI and Claude Code read-tool calls plus Cursor tool discovery, not a full client workflow. See project/evidence/mcp-current-clients-2026-09-28.json.",
   "providers": [
     {
       "name": "Keycloak (pinned container)",
@@ -65,22 +65,22 @@
     {
       "name": "Codex CLI",
       "version": "0.155.1 current; 0.147.0 historical",
-      "status": "pass (2026-09-25): existing Backend.app Production environment, CIMD, S256 PKCE, exact resource audience, browser consent, and artifact_capabilities tool call; pass (2026-08-16, dated): DCR, refresh, server-side revoke and reconnect"
+      "status": "pass (2026-09-28, Codex CLI 0.155.1): existing artifact-server OAuth registration called artifact_capabilities on Backend.app Production and returned deployment.mode=remote; that deployed response omitted protocol era/revision, so it does not prove current repository MCP-021 behavior or a complete publish workflow. Pass (2026-09-25): CIMD, S256 PKCE, exact resource audience, browser consent and artifact_capabilities. Pass (2026-08-16, dated): DCR, refresh, server-side revoke and reconnect."
     },
     {
       "name": "Claude Code",
-      "version": "2.1.233",
-      "status": "pass (2026-08-16, dated): CIMD registration, browser approval, tool call, refresh, revocation after access-token expiry; current installed version is 2.1.283 (bridge-qualified 2026-09-24 at 2.1.282, not identity-qualified)"
+      "version": "2.1.283 installed; 2.1.233 historical",
+      "status": "pass (2026-09-28, 2.1.283): a temporary MCP configuration called artifact_capabilities on a real local HTTP installation and returned deployment.mode=local; no persistent Artifact Server registration was added. Hosted identity, publication, refresh and revocation remain untested at this version. Pass (2026-08-16, dated at 2.1.233): CIMD registration, browser approval, tool call, refresh and revocation after access-token expiry. Bridge qualification at 2.1.282 is separate from MCP identity qualification."
     },
     {
       "name": "Cursor Agent",
-      "version": "3.15.6",
-      "status": "partial (2026-08-16, dated): DCR registration, browser approval, tool discovery; model tool call not run (product login separate from MCP OAuth); current installed versions are cursor-agent 2026.07.16-899851b and Cursor editor 3.12.17, not re-qualified"
+      "version": "cursor-agent 2026.07.16-899851b; Cursor editor 3.12.17 previously observed; 3.15.6 historical agent version",
+      "status": "partial (2026-09-28): a temporary project MCP configuration initialized the real local HTTP server and listed 33 tools; the model tool call was blocked because Cursor Agent requires login or CURSOR_API_KEY. Temporary approval was disabled afterward. Partial (2026-08-16, dated): DCR registration, browser approval and tool discovery; model tool call was not run."
     },
     {
       "name": "Visual Studio Code",
-      "version": "1.132.1",
-      "status": "untested (2026-08-16): no agent surface installed for an MCP tool call; current installed version is 1.138.0, still untested"
+      "version": "1.138.0 installed; 1.132.1 historical",
+      "status": "untested (2026-09-28): no GitHub Copilot agent extension is installed; code --list-extensions shows Claude Code and Cline, so the specified VS Code agent MCP call cannot be qualified on this installation."
     },
     {
       "name": "claude.ai",

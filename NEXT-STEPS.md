@@ -6,10 +6,10 @@ and [repository reconciliation](./project/research/immutable-artifact-engineerin
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
-T01, T02, T04, T05, T06, T07, T08, T12, T13, T17 and T18 are closed with their
-remaining gaps
-recorded; all other tasks (T03, T09–T11, T14–T16, T19–T27) are open. Task IDs are
-planning
+T01, T02, T04, T05, T06, T07, T08, T09, T12, T13, T17 and T18 are closed with
+their remaining gaps recorded. T10's bounded uncommitted-cleanup slice is done;
+its successful-staging policy and provider qualification remain open. All other
+tasks (T03, T10–T11, T14–T16, T19–T27) are open. Task IDs are planning
 identifiers, not new
 conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
 of product promises and proof; [AGENTS.md](./AGENTS.md) remains binding.
@@ -34,7 +34,7 @@ it does not authorize future live runs or paid-plan changes.
 | 5 | T05 Publication reconciliation and file resume (closed September 24) | Recover lost responses and interrupted transfers without duplicate versions. | Retention semantics in T24; T02. | 4–7 days |
 | 6 | T06 Review revision and authoritative refetch (closed September 24) | Remove deleted/dispatched records on other clients reliably. | T01; snapshot contract. | 3–6 days |
 | 7 | T07 Browser evidence and critical engine matrix (closed September 24) | Produce fresh failure evidence and durable isolation/convergence proof. | None for finalization; T06 for convergence cases. | 3–6 days |
-| 8 | T08 (closed September 26) then T09/T10 Cloudflare limits and bounded work | Establish a supported workload and resumable preparation/maintenance. T09 resumable preparation landed September 27 and its manifest writes are now bounded and atomically fenced; T10's bounded cleanup slice landed the same day, and its cleanup claim (September 28) now excludes racing preparation claims durably across SQLite, Postgres and D1. | T01, T02, T05. | 3–5 days qualification; 5–10 preparation; 3–5 cleanup |
+| 8 | T08/T09 closed; T10 policy and provider follow-up | The bounded publication and uncommitted-cleanup work is done. T10 still needs a separate successful-staging retention decision and provider qualification when those deployments are exercised. | T24 for new retention policy; provider access for live proof. | Conditional follow-up |
 | 9 | T15/T16 MCP and identity qualification (T17 host qualification closed September 27) | Bound agent results and qualify current auth behavior at current client versions. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth |
 | 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
 
@@ -1045,6 +1045,10 @@ gate.
   `preparedEntriesPerPass: 512`) while Node runtimes keep single-request
   behavior. The live Worker multi-pass commit, replay and list were
   qualified September 28 (see the qualification note above).
+- **Closed, September 28:** the specified bounded preparation, atomic final
+  visibility, local hostile/restart proof and deployed Worker multi-pass/replay
+  qualification meet this task's completion criteria. Remaining proof gaps stay
+  on the PUB-019/PUB-020 ledger entries; they do not reopen this planning task.
 - **Done when:** forced per-invocation budgets, restart, concurrent finalize,
   provider outage and source replacement cannot expose partial versions or
   lose a committed replay — proved locally and on pinned stores, and the
@@ -1444,9 +1448,9 @@ gate.
   commit, returns the committed publication after commit, and reports
   `IDEMPOTENCY_CONFLICT` when the key is reused with a different manifest.
   `artifact_version_list` now accepts optional `cursor`/`limit` and returns a
-  `nextCursor`; omitting both arguments still returns the full list. The page is
-  built at the tool layer over the service's full ordered result; a future
-  store-level bounded query should replace the in-memory sort/slice. New
+  `nextCursor`; omitting both arguments still returns the full list. The first
+  implementation paged at the tool layer; the September 27 store-level change
+  below replaced that in-memory sort/slice. New
   conformance IDs MCP-021, MCP-022, MCP-023, and MCP-024 are behavior-verified
   locally in `project/spec/conformance.yml`. Remaining open at that point:
   server/catalog construction measurement, the live supported-client matrix
@@ -1481,6 +1485,33 @@ gate.
   gate). The V, E and X gates pass on this change. Remaining open: the
   Cloudflare Worker MCP surface qualification and the live supported-client
   matrix (L gate).
+- **Worker boundary progress, September 28:** the local Wrangler Worker now
+  exercises real `/mcp` requests for discovery, tools/templates, deployment
+  capabilities, unauthenticated and invalid-token refusal, hostile Origin,
+  unsupported methods, mismatched tool headers, unavailable linked files,
+  upload-plan and committed replay, conflict, compact/full reads, and bounded
+  version pages including malformed input
+  (`deploy/cloudflare/tests/worker-runtime.test.ts`). The exact account probe
+  now includes the same bounded MCP flow and passes against `unstable_dev`
+  (`deploy/cloudflare/tests/account-probe-runtime.test.ts`; focused run:
+  `project/evidence/cloudflare-mcp-local.json`, 7/7); `pnpm
+  check:cloudflare` passed 69/69. The attempted live probe stopped before any
+  deployment because the Alchemy `default` profile has no Cloudflare provider
+  configured in this session. The redacted failure summary is
+  `project/evidence/cloudflare-mcp-live-attempt.json`, with the full local
+  probe record retained under `deploy/cloudflare/evidence/`.
+  Live Worker MCP qualification remains open. The current Codex CLI 0.155.1
+  called `artifact_capabilities` against existing Production successfully;
+  that deployed server returned `deployment.mode: remote` but no protocol
+  fields, so it does not prove the current repository's MCP-021 behavior.
+  Claude Code 2.1.283 called `artifact_capabilities` successfully against a
+  temporary real local HTTP installation using a temporary MCP configuration;
+  Cursor agent 2026.07.16-899851b discovered its 33 tools but its model call
+  requires a Cursor login or API key. VS Code 1.138.0 has no Copilot agent
+  extension installed. The temporary fixture was removed and no persistent
+  client registration was added; the precise matrix is
+  `project/evidence/mcp-current-clients-2026-09-28.json`. Full publication,
+  hosted OAuth, refresh, revocation, and reconnect rows remain unqualified.
 - **Do:** add compatible compact artifact projections and paged manifest/history
   reads; complete manifests must remain explicitly available. Expose T05 recovery
   through the same services with bounded structured errors. Record SDK and wire

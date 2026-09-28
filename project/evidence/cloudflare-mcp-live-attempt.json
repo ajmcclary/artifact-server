@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28",
+  "provider": "cloudflare",
+  "qualification": "T15 MCP Worker runtime",
+  "sourceEvidence": "deploy/cloudflare/evidence/account-probe-2026-09-28T15-28-00-751Z.json",
+  "sourceEvidenceSha256": "b357b6cd8f02005740c9ed5cd1e80bd4f9466f366e7b1386d2b1024c604d2cdd",
+  "accountIdSha256": "76a114191d4a69e786c04545a1d25032e58e71cb989f9b13df1c922d0161ac85",
+  "status": "blocked_before_deployment",
+  "stoppedReason": "stage-exists-or-unverifiable",
+  "diagnosis": "Wrangler authenticated to the intended account, but Alchemy state ls could not verify stage absence because the default profile has no Cloudflare provider configured in this session.",
+  "providerResourcesCreated": false,
+  "runtimeMcpQualified": false,
+  "nextStep": "Reconnect the named Alchemy Cloudflare profile, verify a fresh probe-runtime stage is absent, then run the prepared private probe configuration."
+}

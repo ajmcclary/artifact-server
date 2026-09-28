@@ -62,6 +62,7 @@ const QualificationUpload = Schema.Struct({
 });
 const QualificationCommit = Schema.Struct({
   artifact: Schema.Struct({id: Schema.String}),
+  version: Schema.Struct({id: Schema.String}),
 });
 const QualificationList = Schema.Struct({
   artifacts: Schema.Array(Schema.Struct({
@@ -87,6 +88,58 @@ const QualificationPublication = Schema.Struct({
 const QualificationReplay = Schema.Struct({
   replayed: Schema.Literal(true),
   version: Schema.Struct({id: Schema.String}),
+});
+const McpEnvelope = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  result: Schema.Struct({resultType: Schema.Literal("complete")}),
+});
+const McpDiscovery = Schema.Struct({
+  supportedVersions: Schema.Array(Schema.String),
+});
+const McpToolList = Schema.Struct({
+  tools: Schema.Array(Schema.Struct({name: Schema.String})),
+});
+const McpTemplateList = Schema.Struct({
+  resourceTemplates: Schema.Array(Schema.Struct({name: Schema.String})),
+});
+const McpToolResult = Schema.Struct({
+  content: Schema.Array(Schema.Struct({text: Schema.String})),
+  isError: Schema.optionalKey(Schema.Boolean),
+  structuredContent: Schema.optionalKey(Schema.Unknown),
+});
+const McpCapabilities = Schema.Struct({
+  deployment: Schema.Struct({mode: Schema.Literal("remote")}),
+  protocol: Schema.Struct({
+    era: Schema.Literal("modern"),
+    version: Schema.Literal("2026-07-28"),
+  }),
+  publishing: Schema.Struct({localPathTool: Schema.Literal(false)}),
+});
+const McpUpload = Schema.Struct({
+  files: Schema.Array(Schema.Struct({uploadUrl: Schema.String})),
+  kind: Schema.Literal("upload"),
+  uploadId: Schema.String,
+});
+const McpPublication = Schema.Struct({
+  artifact: Schema.Struct({id: Schema.String}),
+  version: Schema.Struct({id: Schema.String}),
+});
+const McpManifest = Schema.Struct({
+  current: Schema.Struct({manifest: Schema.Struct({
+    digest: Schema.String,
+    entryCount: Schema.Number,
+    entryPath: Schema.String,
+  })}),
+});
+const McpFullManifest = Schema.Struct({
+  current: Schema.Struct({manifest: Schema.Struct({
+    digest: Schema.String,
+    entries: Schema.Array(Schema.Struct({path: Schema.String})),
+  })}),
+});
+const McpVersionPage = Schema.Struct({
+  nextCursor: Schema.NullOr(Schema.String),
+  versions: Schema.Array(Schema.Struct({id: Schema.String})),
 });
 const CloudflareCursor = Schema.String.check(Schema.isMinLength(1));
 const R2ObjectListResponse = Schema.Struct({
@@ -537,6 +590,238 @@ const parseQualificationUrl = (value) => {
   }
 };
 
+const qualifyMcpRuntime = async (
+  fetchLike,
+  qualificationUrl,
+  apiToken,
+  artifactId,
+  currentVersionId,
+) => {
+  const evidence = {
+    unauthorized: null,
+    invalidToken: null,
+    get: null,
+    delete: null,
+    hostileOrigin: null,
+    discovery: null,
+    toolsList: null,
+    templatesList: null,
+    capabilities: null,
+    mismatchedName: null,
+    unavailableLink: null,
+    createUpload: null,
+    resumedUpload: null,
+    conflict: null,
+    uploadFile: null,
+    commit: null,
+    committedReplay: null,
+    compact: null,
+    full: null,
+    invalidProjection: null,
+    firstPage: null,
+    secondPage: null,
+    invalidCursor: null,
+  };
+  const fail = () => ({evidence, passed: false});
+  const mcpRequest = async (method, parameters, token = apiToken, extraHeaders = {}) => {
+    const headers = {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": method,
+      ...extraHeaders,
+    };
+    if (token !== null) headers.Authorization = `Bearer ${token}`;
+    return requestStatus(fetchLike, new URL("/mcp", qualificationUrl), {
+      body: JSON.stringify({
+        id: randomBytes(8).toString("hex"),
+        jsonrpc: "2.0",
+        method,
+        params: {
+          ...parameters,
+          _meta: {
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "io.modelcontextprotocol/clientInfo": {
+              name: "artifact-server-cloudflare-account-probe",
+              version: "1",
+            },
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          },
+        },
+      }),
+      headers,
+      method: "POST",
+    });
+  };
+  const mcpResult = (response) => {
+    const document = parseResponseDocument(response);
+    return Schema.is(McpEnvelope)(document) ? document.result : undefined;
+  };
+  const mcpTool = async (name, args) => {
+    const response = await mcpRequest("tools/call", {
+      arguments: args,
+      name,
+    }, apiToken, {"Mcp-Name": name});
+    const result = mcpResult(response);
+    return {
+      response,
+      result: Schema.is(McpToolResult)(result) ? result : undefined,
+    };
+  };
+
+  evidence.unauthorized = (await mcpRequest("server/discover", {}, null)).status;
+  evidence.invalidToken = (await mcpRequest("server/discover", {}, "invalid-token")).status;
+  evidence.get = (await requestStatus(fetchLike,
+    new URL("/mcp", qualificationUrl), {method: "GET"})).status;
+  evidence.delete = (await requestStatus(fetchLike,
+    new URL("/mcp", qualificationUrl), {method: "DELETE"})).status;
+  evidence.hostileOrigin = (await mcpRequest("server/discover", {}, apiToken, {
+    Origin: "https://attacker.example",
+  })).status;
+  if (evidence.unauthorized !== 401 || evidence.invalidToken !== 401 ||
+      evidence.get !== 405 || evidence.delete !== 405 ||
+      evidence.hostileOrigin !== 403) return fail();
+
+  const discovery = await mcpRequest("server/discover", {});
+  evidence.discovery = discovery.status;
+  if (discovery.status !== 200 ||
+      !Schema.is(McpDiscovery)(mcpResult(discovery)) ||
+      !mcpResult(discovery).supportedVersions.includes("2026-07-28")) return fail();
+  const listed = await mcpRequest("tools/list", {});
+  evidence.toolsList = listed.status;
+  const toolList = mcpResult(listed);
+  if (listed.status !== 200 || !Schema.is(McpToolList)(toolList) ||
+      !["artifact_capabilities", "artifact_get", "artifact_version_list",
+        "artifact_create_upload", "artifact_commit_upload"].every(
+        (name) => toolList.tools.some((tool) => tool.name === name)
+      )) return fail();
+  const templates = await mcpRequest("resources/templates/list", {});
+  evidence.templatesList = templates.status;
+  if (templates.status !== 200 ||
+      !Schema.is(McpTemplateList)(mcpResult(templates)) ||
+      mcpResult(templates).resourceTemplates.length === 0) return fail();
+
+  const capabilities = await mcpTool("artifact_capabilities", {});
+  evidence.capabilities = capabilities.response.status;
+  if (capabilities.response.status !== 200 ||
+      !Schema.is(McpCapabilities)(capabilities.result?.structuredContent)) return fail();
+  evidence.mismatchedName = (await mcpRequest("tools/call", {
+    arguments: {}, name: "artifact_capabilities",
+  }, apiToken, {"Mcp-Name": "artifact_get"})).status;
+  const unavailableLink = await mcpTool("artifact_link", {
+    path: "/tmp/outside-cloudflare-root",
+  });
+  evidence.unavailableLink = unavailableLink.response.status;
+  if (evidence.mismatchedName !== 400 ||
+      unavailableLink.result?.isError !== true ||
+      !unavailableLink.result.content.some((item) =>
+        item.text.includes("CAPABILITY_UNAVAILABLE")
+      )) return fail();
+
+  const bytes = new TextEncoder().encode("Cloudflare MCP qualification version\n");
+  const file = {
+    mediaType: "text/plain",
+    path: "mcp-proof.txt",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size: bytes.byteLength,
+  };
+  const idempotencyKey = "cloudflare-live-mcp-qualification";
+  const uploadArguments = {entryPath: file.path, files: [file], idempotencyKey};
+  const created = await mcpTool("artifact_create_upload", uploadArguments);
+  evidence.createUpload = created.response.status;
+  const upload = created.result?.structuredContent;
+  if (created.response.status !== 200 || !Schema.is(McpUpload)(upload) ||
+      upload.files.length !== 1) return fail();
+  const resumed = await mcpTool("artifact_create_upload", uploadArguments);
+  evidence.resumedUpload = resumed.response.status;
+  const resumedContent = resumed.result?.structuredContent;
+  if (resumed.response.status !== 200 || !Schema.is(McpUpload)(resumedContent) ||
+      resumedContent.uploadId !== upload.uploadId ||
+      resumedContent.resumed !== true) return fail();
+  const conflict = await mcpTool("artifact_create_upload", {
+    ...uploadArguments,
+    files: [{...file, sha256: "0".repeat(64)}],
+  });
+  evidence.conflict = conflict.response.status;
+  if (conflict.response.status !== 200 || conflict.result?.isError !== true ||
+      !conflict.result.content.some((item) =>
+        item.text.includes("IDEMPOTENCY_CONFLICT")
+      )) return fail();
+  const uploaded = await requestStatus(fetchLike,
+    rewriteQualificationUrl(qualificationUrl, upload.files[0].uploadUrl),
+    {body: bytes, headers: {Authorization: `Bearer ${apiToken}`}, method: "PUT"},
+  );
+  evidence.uploadFile = uploaded.status;
+  if (uploaded.status !== 200) return fail();
+  const committed = await mcpTool("artifact_commit_upload", {
+    idempotencyKey,
+    target: {
+      artifactId,
+      expectedCurrentVersionId: currentVersionId,
+      kind: "new_version",
+    },
+    uploadId: upload.uploadId,
+  });
+  evidence.commit = committed.response.status;
+  const publication = committed.result?.structuredContent;
+  if (committed.response.status !== 200 ||
+      !Schema.is(McpPublication)(publication) ||
+      publication.artifact.id !== artifactId ||
+      publication.version.id === currentVersionId) return fail();
+  const recovered = await mcpTool("artifact_create_upload", uploadArguments);
+  evidence.committedReplay = recovered.response.status;
+  const recoveredContent = recovered.result?.structuredContent;
+  if (recovered.response.status !== 200 ||
+      recoveredContent?.kind !== "committed" ||
+      recoveredContent.publication?.version?.id !== publication.version.id) return fail();
+
+  const compact = await mcpTool("artifact_get", {artifactId, projection: "compact"});
+  evidence.compact = compact.response.status;
+  const compactContent = compact.result?.structuredContent;
+  if (compact.response.status !== 200 ||
+      !Schema.is(McpManifest)(compactContent) ||
+      compactContent.current.manifest.entryCount !== 1 ||
+      Object.hasOwn(compactContent.current.manifest, "entries")) return fail();
+  const full = await mcpTool("artifact_get", {artifactId});
+  evidence.full = full.response.status;
+  const fullContent = full.result?.structuredContent;
+  if (full.response.status !== 200 ||
+      !Schema.is(McpFullManifest)(fullContent) ||
+      fullContent.current.manifest.digest !== compactContent.current.manifest.digest ||
+      fullContent.current.manifest.entries.length !== 1) return fail();
+  const invalidProjection = await mcpTool("artifact_get", {
+    artifactId, projection: "summary",
+  });
+  evidence.invalidProjection = invalidProjection.response.status;
+  if (invalidProjection.result?.isError !== true) return fail();
+
+  const firstPage = await mcpTool("artifact_version_list", {artifactId, limit: 1});
+  evidence.firstPage = firstPage.response.status;
+  const firstContent = firstPage.result?.structuredContent;
+  if (firstPage.response.status !== 200 ||
+      !Schema.is(McpVersionPage)(firstContent) ||
+      firstContent.versions.length !== 1 ||
+      firstContent.versions[0].id !== publication.version.id ||
+      firstContent.nextCursor === null) return fail();
+  const secondPage = await mcpTool("artifact_version_list", {
+    artifactId, cursor: firstContent.nextCursor, limit: 1,
+  });
+  evidence.secondPage = secondPage.response.status;
+  const secondContent = secondPage.result?.structuredContent;
+  if (secondPage.response.status !== 200 ||
+      !Schema.is(McpVersionPage)(secondContent) ||
+      secondContent.versions.length !== 1 ||
+      secondContent.versions[0].id !== currentVersionId ||
+      secondContent.nextCursor !== null) return fail();
+  const invalidCursor = await mcpTool("artifact_version_list", {
+    artifactId, cursor: "bad", limit: 1,
+  });
+  evidence.invalidCursor = invalidCursor.response.status;
+  if (invalidCursor.result?.isError !== true) return fail();
+
+  return {evidence, passed: true};
+};
+
 export const qualifyRuntime = async (
   qualificationUrl,
   apiToken,
@@ -548,6 +833,7 @@ export const qualifyRuntime = async (
     failureBodies: {},
     health: null,
     list: null,
+    mcp: null,
     multiArtifactIdSha256: null,
     multiCommit: null,
     multiFileUploads: null,
@@ -776,6 +1062,14 @@ export const qualifyRuntime = async (
       multiListDocument.artifacts.some(
         (item) => item.artifact.id === multiCommitDocument.artifact.id,
       );
+    const mcpResult = await qualifyMcpRuntime(
+      fetchLike,
+      qualificationUrl,
+      apiToken,
+      artifactId,
+      commitDocument.version.id,
+    );
+    evidence.mcp = mcpResult.evidence;
     const passed = evidence.health === 200 &&
       evidence.ready === 200 &&
       evidence.unauthorized === 401 &&
@@ -793,7 +1087,8 @@ export const qualifyRuntime = async (
       evidence.multiReplay === 200 &&
       multiReplayed &&
       evidence.multiList === 200 &&
-      multiListed;
+      multiListed &&
+      mcpResult.passed;
     return {evidence, passed};
   } catch {
     return {evidence, passed: false};

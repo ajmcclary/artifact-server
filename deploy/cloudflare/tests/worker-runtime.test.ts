@@ -3,6 +3,11 @@ import {mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+} from "@modelcontextprotocol/server";
 import {z} from "zod";
 import {unstable_dev, type Unstable_DevWorker} from "wrangler";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
@@ -71,6 +76,177 @@ afterAll(async () => {
 });
 
 describe("Cloudflare Worker runtime", () => {
+  it("qualifies the MCP discovery and authorization boundary", async () => {
+    const unsupportedMethods = await Promise.all(["GET", "DELETE"].map(
+      (method) => worker.fetch(`${origin}/mcp`, {method}),
+    ));
+    for (const response of unsupportedMethods) {
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("POST");
+    }
+    expect((await mcpRequest("server/discover", {}, null)).status).toBe(401);
+    expect((await mcpRequest("server/discover", {}, "invalid-token")).status)
+      .toBe(401);
+    expect((await mcpRequest("server/discover", {}, apiToken, {
+      Origin: "https://attacker.example",
+    })).status).toBe(403);
+
+    const discovery = await mcpRequest("server/discover", {});
+    expect(discovery.status).toBe(200);
+    expect(discovery.headers.has("mcp-session-id")).toBe(false);
+    expect(z.object({result: z.object({
+      supportedVersions: z.array(z.string()).min(1),
+    }).loose()}).parse(await discovery.json()).result.supportedVersions)
+      .toContain("2026-07-28");
+
+    const listed = await mcpRequest("tools/list", {});
+    expect(listed.status).toBe(200);
+    const toolNames = z.object({result: z.object({
+      tools: z.array(z.object({name: z.string()}).loose()),
+    }).loose()}).parse(await listed.json()).result.tools.map((tool) => tool.name);
+    expect(toolNames).toContain("artifact_capabilities");
+    expect(toolNames).toContain("artifact_version_list");
+    expect(toolNames).toContain("artifact_link");
+
+    const templates = await mcpRequest("resources/templates/list", {});
+    expect(templates.status).toBe(200);
+    expect(z.object({result: z.object({
+      resourceTemplates: z.array(z.object({name: z.string()}).loose()),
+    }).loose()}).parse(await templates.json()).result.resourceTemplates.length)
+      .toBeGreaterThan(0);
+
+    const capabilities = await mcpTool("artifact_capabilities", {});
+    expect(capabilities.isError).not.toBe(true);
+    expect(z.object({
+      deployment: z.object({mode: z.literal("remote")}),
+      protocol: z.object({era: z.literal("modern"), version: z.literal("2026-07-28")}),
+      publishing: z.object({localPathTool: z.literal(false)}),
+    }).parse(capabilities.structuredContent)).toBeDefined();
+    const unavailableLink = await mcpTool("artifact_link", {
+      path: "/tmp/outside-cloudflare-root",
+    });
+    expect(unavailableLink.isError).toBe(true);
+    expect(unavailableLink.content[0]?.text).toContain("CAPABILITY_UNAVAILABLE");
+
+    const mismatchedName = await mcpRequest("tools/call", {
+      arguments: {}, name: "artifact_capabilities",
+    }, apiToken, {"Mcp-Name": "artifact_get"});
+    expect(mismatchedName.status).toBe(400);
+  });
+
+  it("qualifies MCP publication recovery, projections and bounded version pages", async () => {
+    const bytes = new TextEncoder().encode("Cloudflare MCP version one\n");
+    const file = {
+      mediaType: "text/plain",
+      path: "page.txt",
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      size: bytes.byteLength,
+    };
+    const idempotencyKey = "cloudflare-mcp-runtime-version-one";
+    const createArguments = {entryPath: file.path, files: [file], idempotencyKey};
+    const first = await mcpTool("artifact_create_upload", createArguments);
+    const upload = z.object({
+      files: z.array(z.object({uploadUrl: z.url()})),
+      kind: z.literal("upload"),
+      resumed: z.literal(false),
+      uploadId: z.string(),
+    }).parse(first.structuredContent);
+    const resumed = await mcpTool("artifact_create_upload", createArguments);
+    expect(resumed.structuredContent).toMatchObject({
+      kind: "upload", resumed: true, uploadId: upload.uploadId,
+    });
+    const conflicting = await mcpTool("artifact_create_upload", {
+      ...createArguments,
+      files: [{...file, sha256: "0".repeat(64)}],
+    });
+    expect(conflicting.isError).toBe(true);
+    expect(conflicting.content[0]?.text).toContain("IDEMPOTENCY_CONFLICT");
+
+    const uploadUrl = upload.files[0]?.uploadUrl;
+    if (uploadUrl === undefined) throw new Error("MCP upload plan has no file.");
+    expect((await worker.fetch(uploadUrl, {
+      body: bytes,
+      headers: {Authorization: `Bearer ${apiToken}`},
+      method: "PUT",
+    })).status).toBe(200);
+    const committed = z.object({
+      artifact: z.object({id: z.string()}),
+      version: z.object({id: z.string()}),
+    }).parse((await mcpTool("artifact_commit_upload", {
+      idempotencyKey,
+      target: {kind: "new_artifact", name: "Worker MCP qualification"},
+      uploadId: upload.uploadId,
+    })).structuredContent);
+    const replayed = await mcpTool("artifact_create_upload", createArguments);
+    expect(replayed.structuredContent).toMatchObject({
+      kind: "committed",
+      publication: {version: {id: committed.version.id}},
+    });
+
+    const compact = await mcpTool("artifact_get", {
+      artifactId: committed.artifact.id, projection: "compact",
+    });
+    const compactManifest = z.object({current: z.object({manifest: z.object({
+      digest: z.string(), entryCount: z.literal(1), entryPath: z.literal("page.txt"),
+    }).loose()})}).parse(compact.structuredContent).current.manifest;
+    expect(compactManifest).not.toHaveProperty("entries");
+    const full = await mcpTool("artifact_get", {artifactId: committed.artifact.id});
+    const fullManifest = z.object({current: z.object({manifest: z.object({
+      digest: z.string(), entries: z.array(z.object({path: z.string()})).length(1),
+    }).loose()})}).parse(full.structuredContent).current.manifest;
+    expect(fullManifest.digest).toBe(compactManifest.digest);
+    expect(fullManifest.entries[0]?.path).toBe("page.txt");
+    expect((await mcpTool("artifact_get", {
+      artifactId: committed.artifact.id, projection: "summary",
+    })).isError).toBe(true);
+
+    const nextBytes = new TextEncoder().encode("Cloudflare MCP version two\n");
+    const nextFile = {...file,
+      sha256: createHash("sha256").update(nextBytes).digest("hex"),
+      size: nextBytes.byteLength,
+    };
+    const nextUpload = z.object({
+      files: z.array(z.object({uploadUrl: z.url()})),
+      uploadId: z.string(),
+    }).parse((await mcpTool("artifact_create_upload", {
+      entryPath: nextFile.path, files: [nextFile],
+    })).structuredContent);
+    if (nextUpload.files[0] === undefined) throw new Error("Second upload plan is empty.");
+    expect((await worker.fetch(nextUpload.files[0].uploadUrl, {
+      body: nextBytes,
+      headers: {Authorization: `Bearer ${apiToken}`},
+      method: "PUT",
+    })).status).toBe(200);
+    const next = z.object({version: z.object({id: z.string()})}).parse(
+      (await mcpTool("artifact_commit_upload", {
+        idempotencyKey: "cloudflare-mcp-runtime-version-two",
+        target: {
+          artifactId: committed.artifact.id,
+          expectedCurrentVersionId: committed.version.id,
+          kind: "new_version",
+        },
+        uploadId: nextUpload.uploadId,
+      })).structuredContent,
+    );
+    const firstPage = z.object({
+      nextCursor: z.string(),
+      versions: z.array(z.object({id: z.string()})).length(1),
+    }).parse((await mcpTool("artifact_version_list", {
+      artifactId: committed.artifact.id, limit: 1,
+    })).structuredContent);
+    expect(firstPage.versions[0]?.id).toBe(next.version.id);
+    const secondPage = z.object({
+      nextCursor: z.null(),
+      versions: z.array(z.object({id: z.string()})).length(1),
+    }).parse((await mcpTool("artifact_version_list", {
+      artifactId: committed.artifact.id, cursor: firstPage.nextCursor, limit: 1,
+    })).structuredContent);
+    expect(secondPage.versions[0]?.id).toBe(committed.version.id);
+    expect((await mcpTool("artifact_version_list", {
+      artifactId: committed.artifact.id, cursor: "bad", limit: 1,
+    })).isError).toBe(true);
+  }, 60_000);
+
   it("serves the management application only from its configured origin", async () => {
     const shell = await worker.fetch(`${origin}/review?project=prj_default`);
     const shellHtml = await shell.text();
@@ -404,6 +580,82 @@ describe("Cloudflare Worker without a browser-login provider", () => {
     expect(retried.status).toBe(503);
   }, 30_000);
 });
+
+type McpToolArguments = {
+  readonly artifactId?: string;
+  readonly cursor?: string;
+  readonly entryPath?: string;
+  readonly files?: ReadonlyArray<{
+    readonly mediaType: string;
+    readonly path: string;
+    readonly sha256: string;
+    readonly size: number;
+  }>;
+  readonly idempotencyKey?: string;
+  readonly limit?: number;
+  readonly path?: string;
+  readonly projection?: string;
+  readonly target?: {
+    readonly artifactId?: string;
+    readonly expectedCurrentVersionId?: string;
+    readonly kind: "new_artifact" | "new_version";
+    readonly name?: string;
+  };
+  readonly uploadId?: string;
+};
+
+type McpRequestParameters = {
+  readonly arguments?: McpToolArguments;
+  readonly name?: string;
+};
+
+async function mcpRequest(
+  method: string,
+  parameters: McpRequestParameters,
+  token: string | null = apiToken,
+  additionalHeaders: Record<string, string> = {},
+) {
+  const baseHeaders = {
+    ...additionalHeaders,
+    Accept: "application/json, text/event-stream",
+    "Content-Type": "application/json",
+    "MCP-Protocol-Version": "2026-07-28",
+    "Mcp-Method": method,
+  };
+  const headers = token === null
+    ? baseHeaders
+    : {...baseHeaders, Authorization: `Bearer ${token}`};
+  return worker.fetch(`${origin}/mcp`, {
+    body: JSON.stringify({
+      id: crypto.randomUUID(),
+      jsonrpc: "2.0",
+      method,
+      params: {
+        ...parameters,
+        _meta: {
+          [CLIENT_CAPABILITIES_META_KEY]: {},
+          [CLIENT_INFO_META_KEY]: {name: "cloudflare-runtime-test", version: "1"},
+          [PROTOCOL_VERSION_META_KEY]: "2026-07-28",
+        },
+      },
+    }),
+    headers,
+    method: "POST",
+  });
+}
+
+async function mcpTool(name: string, args: McpToolArguments) {
+  const response = await mcpRequest("tools/call", {
+    arguments: args,
+    name,
+  }, apiToken, {"Mcp-Name": name});
+  expect(response.status).toBe(200);
+  return z.object({result: z.object({
+    content: z.array(z.object({text: z.string(), type: z.literal("text")})),
+    isError: z.boolean().optional(),
+    structuredContent: z.unknown().optional(),
+  }).loose()}).parse(await response.json()).result;
+}
 
 async function stageFile(source: string) {
   const bytes = new TextEncoder().encode(source);
