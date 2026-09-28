@@ -178,6 +178,12 @@ export interface ManifestEntry {
   readonly size: number;
 }
 
+/** One path-ordered page from an exact immutable version's manifest. */
+export interface ManifestEntryPage {
+  readonly entries: readonly ManifestEntry[];
+  readonly nextCursor: string | null;
+}
+
 export interface CanonicalManifest {
   readonly digest: string;
   readonly entryPath: string;

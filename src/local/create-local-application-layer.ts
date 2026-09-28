@@ -631,6 +631,16 @@ export function createApplicationLayer(
             ),
           catch: (cause) => repositoryFailure("findVersionRecord", cause),
         }),
+      findVersionMetadata: (projectId, artifactId, versionId) =>
+        Effect.tryPromise({
+          try: () =>
+            adapters.repository.findVersionMetadata(
+              projectId,
+              artifactId,
+              versionId,
+            ),
+          catch: (cause) => repositoryFailure("findVersionMetadata", cause),
+        }),
       listArtifactVersions: (projectId, artifactId) =>
         Effect.tryPromise({
           try: () => adapters.repository.listArtifactVersions(projectId, artifactId),
@@ -646,6 +656,18 @@ export function createApplicationLayer(
               limit,
             ),
           catch: (cause) => repositoryFailure("listArtifactVersionsPage", cause),
+        }),
+      listManifestEntriesPage: (projectId, artifactId, versionId, cursor, limit) =>
+        Effect.tryPromise({
+          try: () =>
+            adapters.repository.listManifestEntriesPage(
+              projectId,
+              artifactId,
+              versionId,
+              cursor,
+              limit,
+            ),
+          catch: (cause) => repositoryFailure("listManifestEntriesPage", cause),
         }),
       listArtifactActions: (command) =>
         Effect.tryPromise({

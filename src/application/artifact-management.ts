@@ -36,6 +36,7 @@ import type {
   ArtifactRecord,
   ArtifactState,
   ArtifactVersion,
+  ManifestEntryPage,
   PageCursor,
   VersionPage,
   VersionRecord,
@@ -79,6 +80,12 @@ export interface ListArtifactVersionsCommand extends ReadArtifactCommand {
 /** Input for reading one exact saved version. */
 export interface ReadArtifactVersionCommand extends ReadArtifactCommand {
   readonly versionId: string;
+}
+
+/** Input for reading a bounded path-ordered page from one immutable manifest. */
+export interface ListManifestEntriesCommand extends ReadArtifactVersionCommand {
+  readonly cursor: string | null;
+  readonly limit: number;
 }
 
 /** Input for restoring one existing saved version as the current version. */
@@ -167,6 +174,11 @@ export interface ArtifactManagementRepository {
     artifactId: string,
     versionId: string,
   ) => Effect.Effect<ArtifactVersion | null, ArtifactRepositoryFailure>;
+  readonly findVersionMetadata: (
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+  ) => Effect.Effect<VersionRecord | null, ArtifactRepositoryFailure>;
   readonly listArtifactVersions: (
     projectId: string,
     artifactId: string,
@@ -177,6 +189,13 @@ export interface ArtifactManagementRepository {
     cursor: PageCursor | null,
     limit: number,
   ) => Effect.Effect<VersionPage, ArtifactRepositoryFailure>;
+  readonly listManifestEntriesPage: (
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    cursor: string | null,
+    limit: number,
+  ) => Effect.Effect<ManifestEntryPage, ArtifactRepositoryFailure>;
   readonly listArtifactActions: (
     command: ListArtifactActions,
   ) => Effect.Effect<ArtifactActionPage, ArtifactRepositoryFailure>;
@@ -236,6 +255,12 @@ interface ArtifactManagementOperations {
   readonly listVersions: (
     command: ListArtifactVersionsCommand,
   ) => Effect.Effect<readonly VersionRecord[] | VersionPage, ArtifactManagementFailure>;
+  readonly listManifestEntries: (
+    command: ListManifestEntriesCommand,
+  ) => Effect.Effect<{
+    readonly page: ManifestEntryPage;
+    readonly version: VersionRecord;
+  }, ArtifactManagementFailure>;
   readonly listArtifactActions: (
     command: ListArtifactActionsCommand,
   ) => Effect.Effect<ArtifactActionPage, ArtifactManagementFailure>;
@@ -446,6 +471,36 @@ function makeArtifactManagementService(
     },
   );
 
+  const listManifestEntries = Effect.fn(
+    "ArtifactManagementService.listManifestEntries",
+  )(function*(command: ListManifestEntriesCommand) {
+    const limit = yield* requirePageSize(command.limit);
+    const project = yield* resolveProjectForRead(
+      command.principal,
+      command.projectId,
+    );
+    const artifact = yield* requireArtifact(project.id, command.artifactId);
+    yield* authorization.requireArtifactRead(command.principal);
+    const version = yield* dependencies.repository.findVersionMetadata(
+      project.id,
+      artifact.id,
+      command.versionId,
+    );
+    if (version === null) {
+      return yield* new VersionNotFound({
+        message: "The saved version does not exist on this artifact.",
+      });
+    }
+    const page = yield* dependencies.repository.listManifestEntriesPage(
+      project.id,
+      artifact.id,
+      version.id,
+      command.cursor,
+      limit,
+    );
+    return {page, version};
+  });
+
   const listArtifacts = Effect.fn("ArtifactManagementService.listArtifacts")(
     function*(command: ListArtifactsCommand) {
       const limit = yield* requirePageSize(command.limit);
@@ -634,6 +689,7 @@ function makeArtifactManagementService(
     listArtifactActions,
     listArtifacts,
     listVersions,
+    listManifestEntries,
     restoreVersion,
   });
 }

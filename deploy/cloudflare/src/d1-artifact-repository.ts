@@ -67,6 +67,7 @@ import {
   type CommentThreadRecord,
   type ContentSessionRecord,
   type ManifestEntry,
+  type ManifestEntryPage,
   type PageCursor,
   type PublishedVersion,
   type ProjectRecord,
@@ -2882,6 +2883,13 @@ export function createD1ArtifactRepository(
         .map((row) => entryRowSchema.parse(row));
       return {manifest: buildManifest(version, stored), version};
     },
+    findVersionMetadata: async (projectId, artifactId, versionId) => {
+      const row = await database.prepare(`${versionSelect}
+        WHERE project_id = ? AND id = ? AND artifact_id = ?
+      `).bind(projectId, versionId, artifactId)
+        .first<z.input<typeof versionRowSchema>>();
+      return row === null ? null : versionRowSchema.parse(row);
+    },
     listArtifactVersions: async (projectId, artifactId) => {
       if (await readArtifactOrNull(projectId, artifactId) === null) return [];
       const result = await database.prepare(`${versionSelect}
@@ -2916,6 +2924,29 @@ export function createD1ArtifactRepository(
       ).all<z.input<typeof versionRowSchema>>();
       const parsed = result.results.map((row) => versionRowSchema.parse(row));
       return pageResult(parsed.slice(0, limit), parsed, limit);
+    },
+    listManifestEntriesPage: async (
+      projectId,
+      artifactId,
+      versionId,
+      cursor,
+      limit,
+    ): Promise<ManifestEntryPage> => {
+      const result = await database.prepare(`
+        SELECT entry.path, entry.size, entry.media_type AS mediaType,
+               entry.sha256, entry.disposition
+        FROM manifest_entries entry
+        JOIN versions version ON version.id = entry.version_id
+        WHERE version.project_id = ? AND version.artifact_id = ?
+          AND version.id = ? AND (? IS NULL OR entry.path > ?)
+        ORDER BY entry.path LIMIT ?
+      `).bind(projectId, artifactId, versionId, cursor, cursor, limit + 1)
+        .all<z.input<typeof entryRowSchema>>();
+      const entries = result.results.map((row) => entryRowSchema.parse(row));
+      return {
+        entries: entries.slice(0, limit),
+        nextCursor: entries.length > limit ? entries[limit - 1]?.path ?? null : null,
+      };
     },
     claimExpiredStagedUploadForCleanup: async (
       uploadId: string,

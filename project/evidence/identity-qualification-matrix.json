@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-09-28",
-  "commit": "ca26428",
-  "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions. The September 28 checks are host inventory and bounded Codex CLI and Claude Code read-tool calls plus Cursor tool discovery, not a full client workflow. See project/evidence/mcp-current-clients-2026-09-28.json.",
+  "commit": "23ef8f5",
+  "scope": "T16 named-client/deployment identity matrix. Each cell is pass, fail, or untested, with exact versions where observed. 'Dated' rows repeat August 16 live results at the versions current then; they are not re-qualification at current client versions. Codex CLI and Claude Code completed local HTTP MCP publication workflows on September 28, recorded in project/evidence/mcp-client-workflow-2026-09-28.json; those local bearer-token runs do not qualify current hosted OAuth, refresh, or revocation. Cursor remains at tool discovery and VS Code has no Copilot agent extension.",
   "providers": [
     {
       "name": "Keycloak (pinned container)",
@@ -65,12 +65,12 @@
     {
       "name": "Codex CLI",
       "version": "0.155.1 current; 0.147.0 historical",
-      "status": "pass (2026-09-28, Codex CLI 0.155.1): existing artifact-server OAuth registration called artifact_capabilities on Backend.app Production and returned deployment.mode=remote; that deployed response omitted protocol era/revision, so it does not prove current repository MCP-021 behavior or a complete publish workflow. Pass (2026-09-25): CIMD, S256 PKCE, exact resource audience, browser consent and artifact_capabilities. Pass (2026-08-16, dated): DCR, refresh, server-side revoke and reconnect."
+      "status": "pass (2026-09-28, Codex CLI 0.155.1): temporary local HTTP MCP configuration completed a fresh publication, compact/full reads, bounded history and committed-plan recovery; it negotiated the current repository's legacy 2025-06-18 protocol. The existing Production OAuth registration called artifact_capabilities and returned deployment.mode=remote, but that deployed response omitted protocol era/revision and did not publish. Pass (2026-09-25): CIMD, S256 PKCE, exact resource audience, browser consent and artifact_capabilities. Pass (2026-08-16, dated): DCR, refresh, server-side revoke and reconnect."
     },
     {
       "name": "Claude Code",
       "version": "2.1.283 installed; 2.1.233 historical",
-      "status": "pass (2026-09-28, 2.1.283): a temporary MCP configuration called artifact_capabilities on a real local HTTP installation and returned deployment.mode=local; no persistent Artifact Server registration was added. Hosted identity, publication, refresh and revocation remain untested at this version. Pass (2026-08-16, dated at 2.1.233): CIMD registration, browser approval, tool call, refresh and revocation after access-token expiry. Bridge qualification at 2.1.282 is separate from MCP identity qualification."
+      "status": "pass (2026-09-28, 2.1.283): a temporary real local HTTP MCP configuration completed a fresh publication, compact/full reads, bounded history, and commit replay from a new client process after server restart; it negotiated the current repository's modern 2026-07-28 protocol. No persistent Artifact Server registration was added. Hosted identity, publication, refresh and revocation remain untested at this version. Pass (2026-08-16, dated at 2.1.233): CIMD registration, browser approval, tool call, refresh and revocation after access-token expiry. Bridge qualification at 2.1.282 is separate from MCP identity qualification."
     },
     {
       "name": "Cursor Agent",

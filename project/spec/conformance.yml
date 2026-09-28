@@ -2358,6 +2358,25 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-24T15:30:10.000Z"
 
+  - id: MCP-025
+    kind: behavior
+    behavior: artifact_manifest_page reads bounded path-ordered entries from one exact immutable version at the repository boundary while artifact_get retains its complete-manifest compatibility path.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-025-B, description: "Page an exact multi-file manifest through the real MCP boundary, observe stable path order with no omissions or duplicates, an immutable digest on every page, and a complete full artifact_get result."}
+      failure: {id: MCP-025-F, description: "Reject malformed or cross-version cursors, missing or foreign versions, and unauthorized callers without returning entries or leaking a different artifact's manifest."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: MCP-025-B/F pass through real local MCP HTTP, with bounded SQLite, pinned-Postgres and local Wrangler-D1 pages including Unicode byte order; the local Worker and exact account-probe flow also pass. Current Codex CLI and Claude Code each traversed the new tool against a disposable local installation. The revised probe has not run on a deployed Worker.
+    depends_on: [MCP-009, MCP-022]
+    evidence:
+      - deployment: local
+        tests: [MCP-025-B, MCP-025-F]
+        result: pass
+        run: project/evidence/mcp-manifest-page-acceptance-2026-09-28.json
+        recorded_at: "2026-09-28T19:01:10Z"
+
   - id: SKL-001
     kind: behavior
     behavior: Artifact Server ships one portable artifact-server skill that routes routine artifact work and explicit server-operation work to separate internal references.

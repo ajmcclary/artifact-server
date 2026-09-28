@@ -1510,14 +1510,49 @@ gate.
   requires a Cursor login or API key. VS Code 1.138.0 has no Copilot agent
   extension installed. The temporary fixture was removed and no persistent
   client registration was added; the precise matrix is
-  `project/evidence/mcp-current-clients-2026-09-28.json`. Full publication,
-  hosted OAuth, refresh, revocation, and reconnect rows remain unqualified.
-- **Do:** add compatible compact artifact projections and paged manifest/history
-  reads; complete manifests must remain explicitly available. Expose T05 recovery
-  through the same services with bounded structured errors. Record SDK and wire
-  revision for primary and legacy clients. Measure server/catalog construction
-  before optimizing it; never cache a principal-bound server globally. Request
-  progress must not imply commit success or create persistent session state.
+  `project/evidence/mcp-current-clients-2026-09-28.json`. At that checkpoint,
+  full publication, hosted OAuth, refresh, revocation, and reconnect rows were
+  unqualified.
+- **Current-client workflow progress, September 28:** Claude Code 2.1.283 and
+  Codex CLI 0.155.1 each completed a fresh one-file publication against a
+  disposable local HTTP installation through real MCP tool calls and a binary
+  PUT: capability discovery, upload plan, HTTP 200 transfer, one commit,
+  compact/full `artifact_get`, and a bounded `artifact_version_list` page.
+  Claude negotiated modern `2026-07-28`; Codex negotiated legacy `2025-06-18`.
+  After a server restart, a fresh Claude process replayed its commit with the
+  same version; a fresh Codex process recovered its already-committed upload
+  plan by idempotency key without another PUT. The redacted exact-client record
+  is [mcp-client-workflow-2026-09-28.json](./project/evidence/mcp-client-workflow-2026-09-28.json);
+  the [client matrix](./project/evidence/mcp-current-clients-2026-09-28.json)
+  distinguishes these local workflows from hosted qualification. The full
+  `pnpm verify:iteration` gate passed on Node 24.15.0
+  ([run summary](./project/evidence/mcp-t15-iteration-2026-09-28.json)). T15 remains
+  open: the live Worker MCP probe is blocked because this session's Alchemy
+  `default` profile has no Cloudflare provider, Cursor Agent still needs its
+  product login or API key for model calls, and this VS Code installation has
+  no Copilot agent extension. Hosted OAuth, refresh and revocation remain T16
+  qualification work.
+- **Manifest-page progress, September 28:** `artifact_manifest_page` is now
+  specified as MCP-025 and reads at most 100 path-ordered entries from one
+  exact immutable version. Its version-bound cursor resumes without loading
+  the whole manifest in SQLite, Postgres or D1; Postgres uses byte ordering to
+  match SQLite/D1, including Unicode paths. Each page carries the immutable
+  digest and an explicit `nextCursor`; the compatible full `artifact_get`
+  remains available. MCP-025-B/F pass through real local HTTP for complete
+  traversal, malformed and cross-version cursors, oversized requests, missing
+  or foreign coordinates and unauthenticated refusal. Pinned Postgres, local
+  Wrangler-D1, the Worker `/mcp` boundary and the exact account probe pass
+  their focused cases. V/H/E/X and the Cloudflare package gate passed; the
+  [evidence](./project/evidence/mcp-manifest-page-2026-09-28.json) records the
+  limits. [Claude Code and Codex CLI](./project/evidence/mcp-manifest-hosts-2026-09-28.json)
+  then traversed the same exact local manifest with the new tool and matched
+  its digest and paths. The updated probe has not run on a deployed Worker.
+- **Do next:** reconnect the named Alchemy Cloudflare profile, refresh the
+  account allowance and overage snapshot, and run the prepared bounded MCP
+  Worker probe only with authorization for that metered run. Qualify Cursor model
+  calls and VS Code Copilot only when those products are available. Preserve
+  the full-manifest compatibility path, bounded structured errors, and stateless
+  request behavior. Hosted OAuth lifecycle remains T16 work.
 - **Done when:** large results are bounded without silent truncation, auth matches
   HTTP/browser, conflicts retain expected-version semantics, and current clients
   complete the real workflow. **Gates:** V/H/E/X/P; L client matrix.

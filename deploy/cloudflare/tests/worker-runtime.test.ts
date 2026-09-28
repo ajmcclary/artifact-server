@@ -105,6 +105,7 @@ describe("Cloudflare Worker runtime", () => {
       tools: z.array(z.object({name: z.string()}).loose()),
     }).loose()}).parse(await listed.json()).result.tools.map((tool) => tool.name);
     expect(toolNames).toContain("artifact_capabilities");
+    expect(toolNames).toContain("artifact_manifest_page");
     expect(toolNames).toContain("artifact_version_list");
     expect(toolNames).toContain("artifact_link");
 
@@ -196,6 +197,22 @@ describe("Cloudflare Worker runtime", () => {
     }).loose()})}).parse(full.structuredContent).current.manifest;
     expect(fullManifest.digest).toBe(compactManifest.digest);
     expect(fullManifest.entries[0]?.path).toBe("page.txt");
+    const manifestPage = z.object({
+      entries: z.array(z.object({path: z.literal("page.txt")}).loose()).length(1),
+      manifest: z.object({digest: z.string()}).loose(),
+      nextCursor: z.null(),
+      versionId: z.literal(committed.version.id),
+    }).loose().parse((await mcpTool("artifact_manifest_page", {
+      artifactId: committed.artifact.id,
+      limit: 1,
+      versionId: committed.version.id,
+    })).structuredContent);
+    expect(manifestPage.manifest.digest).toBe(fullManifest.digest);
+    expect((await mcpTool("artifact_manifest_page", {
+      artifactId: committed.artifact.id,
+      cursor: "invalid-cursor",
+      versionId: committed.version.id,
+    })).isError).toBe(true);
     expect((await mcpTool("artifact_get", {
       artifactId: committed.artifact.id, projection: "summary",
     })).isError).toBe(true);
@@ -602,6 +619,7 @@ type McpToolArguments = {
     readonly name?: string;
   };
   readonly uploadId?: string;
+  readonly versionId?: string;
 };
 
 type McpRequestParameters = {

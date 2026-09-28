@@ -285,8 +285,9 @@ No plan change is requested.
 The probe reuses the exact private runtime-stage configuration and `probe-`
 resource lifecycle. It adds MCP discovery, catalog, capability, authorization,
 unavailable linked-file, one-file version publication with upload-plan and
-committed replay, compact/full reads and two one-item version pages, plus
-hostile input checks. The added MCP leg is bounded at under 30 Worker
+committed replay, compact/full reads, one exact manifest page, two one-item
+version pages, plus hostile cursor and other input checks. The added MCP leg is
+bounded at under 30 Worker
 requests, fewer than 30 D1 rows written and fewer than 5 R2 Class A/B
 operations; the complete account probe remains under 100 Worker requests,
 150 D1 rows written, 35 Class A and 20 Class B operations. This is far below

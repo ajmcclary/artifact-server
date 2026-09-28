@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T19:02:14Z",
+  "repositoryHeadAtRun": "23ef8f58bb6146e6a89fdb329d6eba83279969cf",
+  "requirement": "MCP-025",
+  "scope": "The current uncommitted T15 working tree; local HTTP, SQLite, pinned Postgres, and local Wrangler-D1/Worker boundaries.",
+  "acceptance": {
+    "MCP-025-B": "pass: a real authenticated MCP HTTP client pages a three-file immutable manifest with limit=1, sees the same digest on every page and no missing or duplicate paths, and still receives the complete manifest from artifact_get",
+    "MCP-025-F": "pass: malformed and cross-version cursors, limit=101, missing or foreign artifact/version coordinates, and an unauthenticated caller cannot return manifest entries"
+  },
+  "acceptanceReport": "project/evidence/mcp-manifest-page-acceptance-2026-09-28.json; one focused MCP-025-B/F test passed with no failures",
+  "storeProof": {
+    "sqlite": "pass: five-file exact version, including BMP and supplementary Unicode paths, traverses bounded UTF-8 byte-ordered pages; a foreign artifact returns no entries",
+    "postgres": "pass: the same shape against pinned Postgres with explicit C collation, through verify:external-storage-runtime",
+    "d1": "pass: the same shape against local Wrangler-D1",
+    "worker": "pass: the real local Worker /mcp boundary returns an exact page and refuses a malformed cursor",
+    "accountProbe": "pass locally against unstable_dev: the prepared exact account probe includes one manifest page and an invalid-cursor refusal"
+  },
+  "validation": {
+    "canonicalGate": "project/evidence/mcp-t15-iteration-2026-09-28.json; exit 0; 441/441 main tests, 70/70 Cloudflare tests, 37/37 browser tests",
+    "smoke": "pass: 2/2",
+    "externalStorageRuntime": "pass: 41/41",
+    "externalStoragePerformance": "pass: bounded Postgres/MinIO baseline, no investigation warnings"
+  },
+  "hostProof": "project/evidence/mcp-manifest-hosts-2026-09-28.json; Claude Code 2.1.283 and Codex CLI 0.155.1 paged the same exact local manifest through real agent tool calls and received the same digest and complete path set.",
+  "proofGap": "The revised MCP account probe has not run against a deployed Cloudflare Worker; the Alchemy default profile lacks its Cloudflare provider in this session. Cursor model calls and VS Code Copilot remain unavailable locally.",
+  "credentialsRetainedInRepository": false
+}

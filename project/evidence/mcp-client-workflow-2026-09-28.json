@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T17:37:10Z",
+  "repositoryCommit": "23ef8f58bb6146e6a89fdb329d6eba83279969cf",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "24.15.0",
+    "server": "disposable local HTTP installation with temporary SQLite and disk storage",
+    "transport": "authenticated streamable HTTP MCP at /mcp"
+  },
+  "scope": "Real current agent clients, not an SDK-only test. Both clients called the repository's temporary local server and published exact fixture bytes. No Production server or provider was mutated.",
+  "fixtures": [
+    {
+      "client": "Claude Code",
+      "path": "index.html",
+      "size": 67,
+      "sha256": "a22d57330ac9b30f33178f67f2fa4bbaaa0245bd8d9077360000931c0224f9d3"
+    },
+    {
+      "client": "Codex CLI",
+      "path": "codex.html",
+      "size": 68,
+      "sha256": "0d93451d8a98ba9dbff93941a8b082b940bca1a0769e0fbb32e0cb55916280c9"
+    }
+  ],
+  "clients": [
+    {
+      "name": "Claude Code",
+      "version": "2.1.283",
+      "configuration": "temporary MCP configuration outside the repository; no persistent client registration",
+      "protocol": {"era": "modern", "version": "2026-07-28"},
+      "checks": {
+        "capabilities": "pass: local deployment and modern wire revision",
+        "uploadPlan": "pass: one-file staged upload",
+        "binaryPut": "pass: HTTP 200 without a bearer header",
+        "commit": "pass: one new artifact and version, replayed=false",
+        "compactRead": "pass: entryCount=1 and no manifest entries",
+        "fullRead": "pass: one manifest entry and the same digest",
+        "versionPage": "pass: limit=1 returned the committed version and nextCursor=null",
+        "restartReplay": "pass: after stopping and restarting the server, a fresh Claude Code process replayed the same commit with replayed=true and read the same current version"
+      },
+      "artifactId": "art_66d82cd8-06e5-4427-b396-60ec5aca4b27",
+      "versionId": "ver_9d811ea4-86df-4d41-9f1e-15a9972e33ea",
+      "workflowQualified": true
+    },
+    {
+      "name": "Codex CLI",
+      "version": "0.155.1",
+      "configuration": "temporary command-line MCP override and bearer-token environment variable; no persistent client registration",
+      "protocol": {"era": "legacy", "version": "2025-06-18"},
+      "checks": {
+        "capabilities": "pass: local deployment and legacy wire revision",
+        "uploadPlan": "pass: one-file staged upload with an idempotency key",
+        "binaryPut": "pass: HTTP 200 without a bearer header",
+        "commit": "pass: one new artifact and version, replayed=false",
+        "compactRead": "pass: entryCount=1 and no manifest entries",
+        "fullRead": "pass: one manifest entry and the same digest",
+        "versionPage": "pass: limit=1 returned the committed version and nextCursor=null",
+        "committedPlanRecovery": "pass: a fresh Codex CLI process replayed artifact_create_upload with the same manifest and key; kind=committed, replayed=true, and the same version was returned without a PUT"
+      },
+      "artifactId": "art_edd811fd-b4d9-4492-be32-3d90aa56c3dd",
+      "versionId": "ver_1b4ac14b-558a-4535-b88f-58c639b6e1bc",
+      "workflowQualified": true
+    }
+  ],
+  "limits": [
+    "These are two local one-file publications, not large-result capacity or hosted OAuth evidence.",
+    "The bounded Worker MCP probe is locally tested but has not run on the live Worker; the Alchemy default profile has no Cloudflare provider in this session.",
+    "Cursor Agent still needs its own product login or API key for a model tool call, and this VS Code installation has no Copilot agent extension."
+  ],
+  "temporaryFixtureRemoved": true,
+  "credentialsRetainedInRepository": false
+}

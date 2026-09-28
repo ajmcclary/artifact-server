@@ -24,15 +24,17 @@ const projectId = defaultProjectId;
 const artifactId = "art_d1_paged_versions";
 
 function makeManifest(body: string) {
-  const bytes = new TextEncoder().encode(body);
   return createManifest({
     entryPath: "index.html",
-    files: [{
-      mediaType: "text/html",
-      path: "index.html",
-      sha256: createHash("sha256").update(bytes).digest("hex"),
-      size: bytes.byteLength,
-    }],
+    files: ["a.css", "index.html", "z.js", "\uE000.txt", "\u{1F600}.txt"].map((filePath) => {
+      const bytes = new TextEncoder().encode(`${body}-${filePath}`);
+      return {
+        mediaType: filePath.endsWith(".html") ? "text/html" : "text/plain",
+        path: filePath,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    }),
     routingMode: "static",
   });
 }
@@ -168,6 +170,44 @@ describe("D1 version pagination", () => {
       );
       expect(emptyPage.items).toHaveLength(0);
       expect(emptyPage.nextCursor).toBeNull();
+    } finally {
+      await proxy.dispose();
+    }
+  });
+
+  it("listManifestEntriesPage reads one exact version in bounded path order", async () => {
+    const proxy = await openLocalD1();
+    const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+    const installationId = "d1-manifest-pagination";
+    try {
+      await migrateD1(binding, installationId);
+      const store = createD1ArtifactRepository(binding, installationId);
+      const committed = await commitVersion(
+        store, binding, "upl_manifest", "ver_manifest", "2026-09-20T00:00:00.000Z", null,
+      );
+      const metadata = await store.findVersionMetadata(
+        projectId, artifactId, committed.version.id,
+      );
+      expect(metadata?.manifestDigest).toBe(committed.version.manifestDigest);
+      const first = await store.listManifestEntriesPage(
+        projectId, artifactId, committed.version.id, null, 2,
+      );
+      expect(first.entries.map((entry) => entry.path)).toEqual(["a.css", "index.html"]);
+      expect(first.nextCursor).toBe("index.html");
+      const second = await store.listManifestEntriesPage(
+        projectId, artifactId, committed.version.id, first.nextCursor, 2,
+      );
+      expect(second.entries.map((entry) => entry.path)).toEqual(["z.js", "\uE000.txt"]);
+      expect(second.nextCursor).toBe("\uE000.txt");
+      const third = await store.listManifestEntriesPage(
+        projectId, artifactId, committed.version.id, second.nextCursor, 2,
+      );
+      expect(third.entries.map((entry) => entry.path)).toEqual(["\u{1F600}.txt"]);
+      expect(third.nextCursor).toBeNull();
+      const foreign = await store.listManifestEntriesPage(
+        projectId, "art_other", committed.version.id, null, 2,
+      );
+      expect(foreign.entries).toEqual([]);
     } finally {
       await proxy.dispose();
     }

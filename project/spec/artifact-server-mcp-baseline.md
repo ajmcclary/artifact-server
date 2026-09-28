@@ -322,6 +322,7 @@ Start with a small, explicit tool surface:
 | `artifact_capabilities` | Report the upload workflow, deployment mode, sharing settings, and current limits. |
 | `artifact_list` | Find artifacts the current principal may access. |
 | `artifact_get` | Read artifact metadata, the current immutable version, its complete manifest, and its exact full-screen Review link. |
+| `artifact_manifest_page` | Read one bounded path-ordered page of an exact immutable version's manifest entries without loading or returning the complete manifest. Its opaque cursor is bound to that version. |
 | `artifact_open` | Return the exact full-screen Review link and raw content link for the selected artifact and exact version when requested. The client opens them on the user's computer and prefers Review for human handoff. |
 | `artifact_create_upload` | Create an expiring upload handle and direct-upload plan. |
 | `artifact_commit_upload` | Verify the manifest and publish an immutable version. Return the exact-version review URL as the primary human handoff, plus stable and raw links. |
@@ -344,6 +345,14 @@ Start with a small, explicit tool surface:
 | `comment_delete` | Delete one comment thread with its replies, or one reply. The author, a human administrator, or `artifact:manage:any` may delete. |
 
 Comment threads belong to one exact immutable version, never to "current".
+`artifact_manifest_page` takes an exact `versionId`, at most 100 entries per call,
+and returns the manifest digest, entry path, routing mode, and `nextCursor`.
+Pages use UTF-8 byte order for paths across stores; the complete manifest keeps
+its existing canonical serialization order. The caller follows that cursor until
+null. A cursor from a different version is
+rejected, so a current-pointer change cannot mix entries from two versions.
+`artifact_get` keeps its compatible complete-manifest default and offers a
+compact projection when the caller does not need entry details.
 `artifact_capabilities` reports the comment body and anchor limits and the one
 anchor rule the server enforces: the anchor is opaque client JSON, except that a
 top-level `point` must carry `x` and `y` between 0 and 1. Comment tools require a

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-28T19:00:00Z",
+  "repositoryHeadAtRun": "23ef8f58bb6146e6a89fdb329d6eba83279969cf",
+  "scope": "Current real clients against a disposable local HTTP installation of the T15 working tree. A three-file artifact was published through the local CLI; neither client accessed Production.",
+  "artifactId": "art_3d8c44eb-5374-475e-91f9-286c230ae385",
+  "versionId": "ver_a0b59bd9-e429-4835-9791-32a6a301f41f",
+  "manifestDigest": "cb0ae425b0451bf2b17fde2d9193f18233b182f4676aca43f594daa69be06edd",
+  "expectedPaths": ["a.css", "index.html", "z.js"],
+  "clients": [
+    {
+      "name": "Claude Code",
+      "version": "2.1.283",
+      "result": "pass: called artifact_manifest_page with limit=1, followed two nextCursor values, returned all three paths in order, and kept the same exact version and digest across three pages",
+      "finalCursor": null
+    },
+    {
+      "name": "Codex CLI",
+      "version": "0.155.1",
+      "result": "pass: called artifact_manifest_page with limit=2, followed one nextCursor value, returned all three paths in order, and kept the same exact version and digest across two pages",
+      "finalCursor": null
+    }
+  ],
+  "limits": "Local bearer-token transport and a three-file manifest only; hosted OAuth and a deployed Cloudflare Worker remain unqualified.",
+  "temporaryFixtureRemoved": true,
+  "credentialsRetainedInRepository": false
+}

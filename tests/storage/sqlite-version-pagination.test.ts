@@ -15,15 +15,17 @@ const projectId = defaultProjectId;
 const artifactId = "art_paged_versions";
 
 function makeManifest(body: string) {
-  const bytes = new TextEncoder().encode(body);
   return createManifest({
     entryPath: "index.html",
-    files: [{
-      mediaType: "text/html",
-      path: "index.html",
-      sha256: createHash("sha256").update(bytes).digest("hex"),
-      size: bytes.byteLength,
-    }],
+    files: ["a.css", "index.html", "z.js", "\uE000.txt", "\u{1F600}.txt"].map((filePath) => {
+      const bytes = new TextEncoder().encode(`${body}-${filePath}`);
+      return {
+        mediaType: filePath.endsWith(".html") ? "text/html" : "text/plain",
+        path: filePath,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      };
+    }),
     routingMode: "static",
   });
 }
@@ -212,5 +214,38 @@ describe("sqlite version pagination", () => {
     );
     expect(page.items).toHaveLength(0);
     expect(page.nextCursor).toBeNull();
+  });
+
+  test("listManifestEntriesPage reads one exact version in bounded path order", async () => {
+    const committed = await commitVersion(
+      repository,
+      "upl_manifest",
+      "ver_manifest",
+      "2026-09-20T00:00:00.000Z",
+      null,
+    );
+    const metadata = await repository.findVersionMetadata(
+      projectId, artifactId, committed.version.id,
+    );
+    expect(metadata?.manifestDigest).toBe(committed.version.manifestDigest);
+    const first = await repository.listManifestEntriesPage(
+      projectId, artifactId, committed.version.id, null, 2,
+    );
+    expect(first.entries.map((entry) => entry.path)).toEqual(["a.css", "index.html"]);
+    expect(first.nextCursor).toBe("index.html");
+    const second = await repository.listManifestEntriesPage(
+      projectId, artifactId, committed.version.id, first.nextCursor, 2,
+    );
+    expect(second.entries.map((entry) => entry.path)).toEqual(["z.js", "\uE000.txt"]);
+    expect(second.nextCursor).toBe("\uE000.txt");
+    const third = await repository.listManifestEntriesPage(
+      projectId, artifactId, committed.version.id, second.nextCursor, 2,
+    );
+    expect(third.entries.map((entry) => entry.path)).toEqual(["\u{1F600}.txt"]);
+    expect(third.nextCursor).toBeNull();
+    const foreign = await repository.listManifestEntriesPage(
+      projectId, "art_other", committed.version.id, null, 2,
+    );
+    expect(foreign.entries).toEqual([]);
   });
 });

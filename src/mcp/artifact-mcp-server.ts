@@ -1003,6 +1003,60 @@ export function createArtifactMcpServer(
   );
 
   registerNudgedTool(
+    "artifact_manifest_page",
+    {
+      title: "Page an exact manifest",
+      description:
+        "Read at most 100 path-ordered entries from one immutable version's manifest. Use the exact version ID from artifact_get or artifact_version_list; follow nextCursor until null. The digest and entry path identify the complete immutable manifest, and no page is silently truncated.",
+      inputSchema: z.object({
+        artifactId: artifactIdSchema,
+        cursor: z.string().min(1).max(4_096).nullable().default(null),
+        limit: z.number().int().min(1).max(100).default(50),
+        projectId: optionalProjectIdSchema,
+        versionId: versionIdSchema,
+      }).strict(),
+      outputSchema: z.object({
+        artifactId: z.string(),
+        entries: z.array(manifestEntrySchema).max(100),
+        manifest: z.object({
+          digest: z.string(),
+          entryPath: z.string(),
+          routingMode: z.enum(["static", "spa"]),
+        }).strict(),
+        nextCursor: z.string().nullable(),
+        versionId: z.string(),
+      }).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    async ({artifactId, cursor, limit, projectId, versionId}) => toolResult(async () => {
+      const result = await runMcpApplicationEffect(
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.listManifestEntries({
+            artifactId,
+            cursor: decodeManifestCursor(cursor, versionId),
+            limit,
+            principal: identity.principal,
+            projectId,
+            versionId,
+          })
+        ),
+      );
+      return {
+        artifactId,
+        entries: result.page.entries,
+        manifest: {
+          digest: result.version.manifestDigest,
+          entryPath: result.version.entryPath,
+          routingMode: result.version.routingMode,
+        },
+        nextCursor: encodeManifestCursor(result.page.nextCursor, versionId),
+        versionId,
+      };
+    }),
+  );
+
+  registerNudgedTool(
     "artifact_open",
     {
       title: "Open an artifact",
@@ -2941,6 +2995,26 @@ function decodePageCursor(token: string | null): {readonly createdAt: string; re
     throw new InvalidPagination({
       message: "The artifact page cursor is invalid.",
     });
+  }
+}
+
+function encodeManifestCursor(path: string | null, versionId: string): string | null {
+  return path === null
+    ? null
+    : Buffer.from(JSON.stringify({path, versionId}), "utf8").toString("base64url");
+}
+
+function decodeManifestCursor(token: string | null, versionId: string): string | null {
+  if (token === null) return null;
+  try {
+    const decoded = z.object({
+      path: z.string().min(1).max(1_024),
+      versionId: z.string().min(1).max(200),
+    }).strict().parse(JSON.parse(Buffer.from(token, "base64url").toString("utf8")));
+    if (decoded.versionId !== versionId) throw new Error("Cursor version mismatch.");
+    return decoded.path;
+  } catch {
+    throw new InvalidPagination({message: "The manifest page cursor is invalid."});
   }
 }
 

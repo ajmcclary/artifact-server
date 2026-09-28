@@ -103,6 +103,8 @@ describe("account probe runtime qualification", () => {
       committedReplay: 200,
       compact: 200,
       full: 200,
+      manifestPage: 200,
+      invalidManifestCursor: 200,
       invalidProjection: 200,
       firstPage: 200,
       secondPage: 200,

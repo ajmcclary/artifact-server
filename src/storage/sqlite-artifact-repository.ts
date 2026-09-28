@@ -68,6 +68,7 @@ import {
   type ContentBootstrapRecord,
   type ContentSessionRecord,
   type ManifestEntry,
+  type ManifestEntryPage,
   type PageCursor,
   type PublishedVersion,
   type ProjectRecord,
@@ -1892,6 +1893,16 @@ export class SqliteArtifactRepository implements
     });
   }
 
+  findVersionMetadata(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+  ): Promise<VersionRecord | null> {
+    return Promise.resolve().then(() =>
+      this.#readVersionOrNull(projectId, versionId, artifactId)
+    );
+  }
+
   findCurrentVersion(
     projectId: string | null,
     artifactId: string,
@@ -1985,6 +1996,31 @@ export class SqliteArtifactRepository implements
           limit + 1,
         );
       return pageFromRows(z.array(versionRowSchema).parse(rows), limit);
+    });
+  }
+
+  listManifestEntriesPage(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<ManifestEntryPage> {
+    return Promise.resolve().then(() => {
+      const rows = this.#database.prepare(
+        `SELECT entry.path, entry.size, entry.media_type AS mediaType,
+                entry.sha256, entry.disposition
+         FROM manifest_entries entry
+         JOIN versions version ON version.id = entry.version_id
+         WHERE version.project_id = ? AND version.artifact_id = ?
+           AND version.id = ? AND (? IS NULL OR entry.path > ?)
+         ORDER BY entry.path LIMIT ?`,
+      ).all(projectId, artifactId, versionId, cursor, cursor, limit + 1);
+      const entries = z.array(storedManifestEntryRowSchema).parse(rows);
+      return {
+        entries: entries.slice(0, limit),
+        nextCursor: entries.length > limit ? entries[limit - 1]?.path ?? null : null,
+      };
     });
   }
 

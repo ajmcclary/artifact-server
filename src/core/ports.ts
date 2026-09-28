@@ -2,6 +2,7 @@ import type {
   AccessSetting,
   AgentDispatchCreation,
   ManifestEntry,
+  ManifestEntryPage,
   AgentDispatchPage,
   AgentDispatchRecord,
   AgentDispatchState,
@@ -681,6 +682,11 @@ export interface ArtifactRepository {
     artifactId: string,
     versionId: string,
   ): Promise<ArtifactVersion | null>;
+  findVersionMetadata(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+  ): Promise<VersionRecord | null>;
   findCurrentVersion(
     projectId: string | null,
     artifactId: string,
@@ -712,6 +718,13 @@ export interface ArtifactRepository {
     cursor: PageCursor | null,
     limit: number,
   ): Promise<VersionPage>;
+  listManifestEntriesPage(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<ManifestEntryPage>;
   restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState>;
 }
 

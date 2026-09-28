@@ -70,6 +70,15 @@ in `protocol.era` and `protocol.version`.
 `manifest.digest`, `manifest.entryPath`, `manifest.routingMode`, and
 `manifest.entryCount`.
 
+To inspect entries without placing a large manifest in the agent context, call
+`artifact_manifest_page` with the exact `versionId` returned by `artifact_get`
+or `artifact_version_list`. It returns at most 100 entries in UTF-8 path byte
+order plus
+the immutable manifest digest and `nextCursor`. Follow the cursor until it is
+`null`; the cursor cannot be reused with a different version. The query is
+bounded at the repository on SQLite, Postgres, and D1. The existing full
+`artifact_get` response remains available when explicitly needed.
+
 `artifact_create_upload` accepts an optional `idempotencyKey`. Replaying the same
 key before commit returns the same upload plan with `resumed: true`. After the
 publication commits, the same key returns the committed publication. Reusing the
@@ -116,7 +125,7 @@ opens its raw immutable content. Agents should hand people the Review URL.
 | --- | --- |
 | Discovery | `artifact_capabilities` |
 | Projects | `project_list`, `project_create`, `project_rename`, `project_archive`, `project_unarchive` |
-| Artifacts | `artifact_list`, `artifact_get`, `artifact_open`, `artifact_version_list`, `artifact_diff` |
+| Artifacts | `artifact_list`, `artifact_get`, `artifact_manifest_page`, `artifact_open`, `artifact_version_list`, `artifact_diff` |
 | Publication | `artifact_create_upload`, `artifact_commit_upload` |
 | Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_restore_version`, `artifact_delete` |
 | Linked files | `artifact_link`, `artifact_relink`, `artifact_capture` |

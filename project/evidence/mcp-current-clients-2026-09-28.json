@@ -1,22 +1,26 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-09-28",
-  "repositoryHeadAtRead": "ca26428",
-  "scope": "Current installed MCP clients against either the existing Production server or a temporary real local HTTP installation. This is transport and representative read-tool evidence, not a complete publish, refresh, revocation, or reconnect matrix.",
+  "repositoryHeadAtRead": "23ef8f5",
+  "scope": "Current installed MCP clients against the existing Production server or a temporary real local HTTP installation. Codex CLI and Claude Code completed local publication workflows; hosted OAuth, refresh, revocation, and the remaining clients are separate qualifications.",
+  "localWorkflowEvidence": "project/evidence/mcp-client-workflow-2026-09-28.json",
+  "localManifestPageEvidence": "project/evidence/mcp-manifest-hosts-2026-09-28.json",
   "clients": [
     {
       "name": "Codex CLI",
       "version": "0.155.1",
-      "surface": "existing Backend.app Production MCP registration",
-      "result": "artifact_capabilities tool call passed and returned deployment.mode=remote; the deployed response omitted protocol era and revision",
-      "workflowQualified": false
+      "surface": "existing Backend.app Production MCP registration for read-only capability call; temporary real local HTTP installation for the complete workflow",
+      "result": "Production artifact_capabilities returned deployment.mode=remote but omitted protocol fields. The current local server negotiated legacy 2025-06-18; Codex created and uploaded a file, committed one version, read compact/full projections and a bounded history page, replayed a committed operation, and recovered its committed publication by idempotency key in a fresh process. It later traversed an exact three-file manifest using the new artifact_manifest_page tool in two bounded pages.",
+      "workflowQualified": true,
+      "workflowScope": "local HTTP only; current Production build and hosted OAuth publication remain unqualified"
     },
     {
       "name": "Claude Code",
       "version": "2.1.283",
       "surface": "temporary MCP configuration against real local HTTP installation",
-      "result": "artifact_capabilities tool call passed with deployment.mode=local after explicitly allowing that read-only tool; no persistent server registration was added",
-      "workflowQualified": false
+      "result": "The current local server negotiated modern 2026-07-28; Claude created and uploaded a file, committed one version, read compact/full projections and a bounded history page, then replayed the same commit after a server restart from a fresh client process. It later traversed an exact three-file manifest using the new artifact_manifest_page tool in three bounded pages. No persistent server registration was added.",
+      "workflowQualified": true,
+      "workflowScope": "local HTTP only; hosted OAuth and provider lifecycle remain unqualified"
     },
     {
       "name": "Cursor Agent",

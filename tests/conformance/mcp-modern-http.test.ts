@@ -236,6 +236,7 @@ describe("modern MCP HTTP", () => {
       "artifact_history_clone_token",
       "artifact_list",
       "artifact_get",
+      "artifact_manifest_page",
       "artifact_open",
       "artifact_version_list",
       "artifact_diff",
@@ -1316,6 +1317,106 @@ describe("modern MCP HTTP", () => {
         text: expect.stringContaining("projection"),
       })],
     });
+  });
+
+  test("MCP-025-B MCP-025-F: exact manifest pages are bounded, stable, and authorized", async () => {
+    expect.hasAssertions();
+    const files = new Map([
+      ["a.css", new TextEncoder().encode("body { color: red; }\n")],
+      ["index.html", new TextEncoder().encode("<link rel=stylesheet href=a.css><script src=z.js></script>\n")],
+      ["z.js", new TextEncoder().encode("document.body.dataset.ready = 'yes';\n")],
+    ]);
+    const declared = [...files].map(([filePath, bytes]) =>
+      declaredMcpFile(
+        filePath,
+        filePath.endsWith(".html") ? "text/html"
+          : filePath.endsWith(".css") ? "text/css" : "text/javascript",
+        bytes,
+      )
+    );
+    const uploadResult = await callTool(server, installation.apiToken, {
+      arguments: {entryPath: "index.html", files: declared},
+      name: "artifact_create_upload",
+    });
+    const upload = requireUploadPlan(createUploadResultSchema.parse(uploadResult.structuredContent));
+    await uploadMcpFiles(upload, installation.apiToken, files);
+    const committed = publicationCommitResultSchema.parse(
+      (await callTool(server, installation.apiToken, {
+        arguments: {
+          idempotencyKey: "mcp-manifest-page-proof-001",
+          target: {kind: "new_artifact", name: "Manifest page proof"},
+          uploadId: upload.uploadId,
+        },
+        name: "artifact_commit_upload",
+      })).structuredContent,
+    );
+    const full = z.object({current: z.object({manifest: z.object({
+      digest: z.string(),
+      entries: z.array(z.object({path: z.string()}).loose()).length(3),
+    })})}).parse((await callTool(server, installation.apiToken, {
+      arguments: {artifactId: committed.artifact.id, projection: "full"},
+      name: "artifact_get",
+    })).structuredContent);
+    const pageSchema = z.object({
+      entries: z.array(z.object({path: z.string()}).loose()).max(1),
+      manifest: z.object({digest: z.string(), entryPath: z.literal("index.html")}).loose(),
+      nextCursor: z.string().nullable(),
+      versionId: z.string(),
+    }).loose();
+    const readPage = async (cursor: string | null) =>
+      pageSchema.parse((await callTool(server, installation.apiToken, {
+        arguments: {
+          artifactId: committed.artifact.id,
+          cursor,
+          limit: 1,
+          versionId: committed.version.id,
+        },
+        name: "artifact_manifest_page",
+      })).structuredContent);
+    const first = await readPage(null);
+    const second = await readPage(first.nextCursor);
+    const third = await readPage(second.nextCursor);
+    const pages = [first, second, third];
+    for (const page of pages) {
+      expect(page.versionId).toBe(committed.version.id);
+      expect(page.manifest.digest).toBe(full.current.manifest.digest);
+    }
+    const paths = pages.flatMap((page) => page.entries.map((entry) => entry.path));
+    expect(first.nextCursor).not.toBeNull();
+    expect(third.nextCursor).toBeNull();
+    expect(paths).toEqual(full.current.manifest.entries.map((entry) => entry.path));
+
+    await Promise.all([
+      {artifactId: committed.artifact.id, cursor: "not-a-cursor", versionId: committed.version.id},
+      {artifactId: committed.artifact.id, cursor: first.nextCursor, versionId: "ver_other"},
+      {artifactId: committed.artifact.id, limit: 101, versionId: committed.version.id},
+      {artifactId: committed.artifact.id, versionId: "ver_missing"},
+      {artifactId: "art_other", versionId: committed.version.id},
+    ].map(async (argumentsToReject) => {
+      const response = await mcpRequest(
+        server,
+        installation.apiToken,
+        "tools/call",
+        {arguments: argumentsToReject, name: "artifact_manifest_page"},
+        {"Mcp-Name": "artifact_manifest_page"},
+      );
+      const body = z.object({result: z.object({
+        isError: z.literal(true),
+        structuredContent: z.unknown().optional(),
+      }).loose()}).parse(await response.json()).result;
+      expect(body.structuredContent ?? {}).not.toHaveProperty("entries");
+    }));
+    const unauthorized = await mcpRequest(
+      server,
+      null,
+      "tools/call",
+      {
+        arguments: {artifactId: committed.artifact.id, versionId: committed.version.id},
+        name: "artifact_manifest_page",
+      },
+      {"Mcp-Name": "artifact_manifest_page"},
+    );
+    expect(unauthorized.status).toBe(401);
   });
 
   test("MCP-023-B MCP-023-F: artifact_create_upload recovers a committed publication by idempotency key", async () => {

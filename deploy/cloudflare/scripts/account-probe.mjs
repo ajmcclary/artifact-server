@@ -141,6 +141,12 @@ const McpVersionPage = Schema.Struct({
   nextCursor: Schema.NullOr(Schema.String),
   versions: Schema.Array(Schema.Struct({id: Schema.String})),
 });
+const McpManifestPage = Schema.Struct({
+  entries: Schema.Array(Schema.Struct({path: Schema.String})),
+  manifest: Schema.Struct({digest: Schema.String}),
+  nextCursor: Schema.NullOr(Schema.String),
+  versionId: Schema.String,
+});
 const CloudflareCursor = Schema.String.check(Schema.isMinLength(1));
 const R2ObjectListResponse = Schema.Struct({
   result: Schema.Array(Schema.Struct({key: Schema.String})),
@@ -691,7 +697,7 @@ const qualifyMcpRuntime = async (
   evidence.toolsList = listed.status;
   const toolList = mcpResult(listed);
   if (listed.status !== 200 || !Schema.is(McpToolList)(toolList) ||
-      !["artifact_capabilities", "artifact_get", "artifact_version_list",
+      !["artifact_capabilities", "artifact_get", "artifact_manifest_page", "artifact_version_list",
         "artifact_create_upload", "artifact_commit_upload"].every(
         (name) => toolList.tools.some((tool) => tool.name === name)
       )) return fail();
@@ -789,6 +795,23 @@ const qualifyMcpRuntime = async (
       !Schema.is(McpFullManifest)(fullContent) ||
       fullContent.current.manifest.digest !== compactContent.current.manifest.digest ||
       fullContent.current.manifest.entries.length !== 1) return fail();
+  const manifestPage = await mcpTool("artifact_manifest_page", {
+    artifactId, limit: 1, versionId: publication.version.id,
+  });
+  evidence.manifestPage = manifestPage.response.status;
+  const manifestPageContent = manifestPage.result?.structuredContent;
+  if (manifestPage.response.status !== 200 ||
+      !Schema.is(McpManifestPage)(manifestPageContent) ||
+      manifestPageContent.versionId !== publication.version.id ||
+      manifestPageContent.entries.length !== 1 ||
+      manifestPageContent.entries[0].path !== file.path ||
+      manifestPageContent.manifest.digest !== fullContent.current.manifest.digest ||
+      manifestPageContent.nextCursor !== null) return fail();
+  const invalidManifestCursor = await mcpTool("artifact_manifest_page", {
+    artifactId, cursor: "invalid-cursor", versionId: publication.version.id,
+  });
+  evidence.invalidManifestCursor = invalidManifestCursor.response.status;
+  if (invalidManifestCursor.result?.isError !== true) return fail();
   const invalidProjection = await mcpTool("artifact_get", {
     artifactId, projection: "summary",
   });

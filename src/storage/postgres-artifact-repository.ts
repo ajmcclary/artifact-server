@@ -58,6 +58,7 @@ import {
   type ContentBootstrapRecord,
   type ContentSessionRecord,
   type ManifestEntry,
+  type ManifestEntryPage,
   type PageCursor,
   defaultProjectId,
   defaultProjectName,
@@ -1738,6 +1739,16 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  async findVersionMetadata(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+  ): Promise<VersionRecord | null> {
+    return this.#database.run(
+      this.#readVersionOrNull(projectId, versionId, artifactId),
+    );
+  }
+
   async findCurrentVersion(
     projectId: string | null,
     artifactId: string,
@@ -1840,6 +1851,37 @@ export class PostgresArtifactRepository implements
         ],
       );
       return pageFromRows(z.array(versionRowSchema).parse(rows), limit);
+    }));
+  }
+
+  async listManifestEntriesPage(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<ManifestEntryPage> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT entry.path, entry.size, entry.media_type AS "mediaType",
+                entry.sha256, entry.disposition
+         FROM manifest_entries entry
+         JOIN versions version
+           ON version.installation_id = entry.installation_id
+          AND version.id = entry.version_id
+         WHERE version.installation_id = $1 AND version.project_id = $2
+           AND version.artifact_id = $3 AND version.id = $4
+           AND ($5::text IS NULL OR entry.path COLLATE "C" > $5 COLLATE "C")
+         ORDER BY entry.path COLLATE "C" LIMIT $6`,
+        [installationId, projectId, artifactId, versionId, cursor, limit + 1],
+      );
+      const entries = z.array(storedManifestEntryRowSchema).parse(rows);
+      return {
+        entries: entries.slice(0, limit),
+        nextCursor: entries.length > limit ? entries[limit - 1]?.path ?? null : null,
+      };
     }));
   }
 
