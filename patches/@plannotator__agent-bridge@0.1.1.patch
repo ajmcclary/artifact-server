@@ -1,0 +1,33 @@
+diff --git a/index.ts b/index.ts
+index 47153f0a446edfa3089c90f16c568eee67ebee2a..6348e783a9e29441466f0f9aebe52beb06045b21 100644
+--- a/index.ts
++++ b/index.ts
+@@ -251,16 +251,16 @@ export function renderBundleMessage(
+ ): string {
+   const lines: string[] = [];
+   lines.push(
+-    `Artifact Server: ${bundle.senderDisplayName} sent ` +
++    `Artifact Server: ${sanitizeBundleText(bundle.senderDisplayName)} sent ` +
+       `${bundle.items.length} annotation(s) to address.`,
+   );
+   const note = sanitizeBundleText(bundle.note ?? "").trim();
+   if (note !== "") lines.push(note);
+   lines.push("");
+   bundle.items.forEach((item, index) => {
+-    const place = item.path === null
++    const place = sanitizeBundleText(item.path === null
+       ? `[${item.artifactName} · version ${item.versionNumber}]`
+-      : `[${item.artifactName} · version ${item.versionNumber} · ${item.path}]`;
++      : `[${item.artifactName} · version ${item.versionNumber} · ${item.path}]`);
+     const quoted = item.quotedSelection === null
+       ? ""
+       : ` ${quotedSelectionFragment(item.quotedSelection)}`;
+@@ -1099,7 +1099,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     callPort(() =>
+       options.host.notify(
+         `Artifact Server: delivering ${dispatch.threadIds.length} ` +
+-          `annotation(s) from ${dispatch.sender.displayName}.`,
++          `annotation(s) from ${sanitizeBundleText(dispatch.sender.displayName)}.`,
+         "info",
+       )
+     );

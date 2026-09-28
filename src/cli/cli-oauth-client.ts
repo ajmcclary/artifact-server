@@ -41,6 +41,7 @@ const assignedAddressSchema = z.object({
   port: z.number().int().positive(),
 });
 const revocationMetadataSchema = z.object({
+  issuer: z.url(),
   revocation_endpoint: z.url(),
 }).passthrough();
 const ignoreCallbackResult = (): void => undefined;
@@ -160,6 +161,12 @@ export const revokeCliOAuthCredential = Effect.fn("CliOAuth.revoke")(
   ): Effect.fn.Return<boolean> {
     return yield* Effect.promise(async () => {
       try {
+        const savedIssuer = credential.clientInformation.issuer
+          ?? credential.tokens.issuer;
+        if (savedIssuer === undefined || (
+          credential.tokens.issuer !== undefined &&
+          !sameOAuthIssuer(savedIssuer, credential.tokens.issuer)
+        )) return false;
         const discovered = await discoverOAuthServerInfo(
           new URL("/api", origin),
           {resourceMetadataUrl: protectedResourceMetadataUrl(origin)},
@@ -168,6 +175,9 @@ export const revokeCliOAuthCredential = Effect.fn("CliOAuth.revoke")(
           discovered.authorizationServerMetadata,
         );
         if (!metadata.success) return false;
+        if (!sameOAuthIssuer(savedIssuer, metadata.data.issuer)) return false;
+        const revocationEndpoint = new URL(metadata.data.revocation_endpoint);
+        if (!safeOAuthTokenEndpoint(revocationEndpoint)) return false;
         const token = credential.tokens.refresh_token
           ?? credential.tokens.access_token;
         const body = new URLSearchParams({
@@ -177,10 +187,11 @@ export const revokeCliOAuthCredential = Effect.fn("CliOAuth.revoke")(
             ? "access_token"
             : "refresh_token",
         });
-        const response = await fetch(metadata.data.revocation_endpoint, {
+        const response = await fetch(revocationEndpoint, {
           body,
           headers: {"Content-Type": "application/x-www-form-urlencoded"},
           method: "POST",
+          redirect: "error",
           signal: AbortSignal.timeout(10_000),
         });
         return response.ok;
@@ -190,6 +201,24 @@ export const revokeCliOAuthCredential = Effect.fn("CliOAuth.revoke")(
     });
   },
 );
+
+function sameOAuthIssuer(left: string, right: string): boolean {
+  return left === right ||
+    (left.endsWith("/") && left.slice(0, -1) === right) ||
+    (right.endsWith("/") && right.slice(0, -1) === left);
+}
+
+function safeOAuthTokenEndpoint(endpoint: URL): boolean {
+  return endpoint.username === "" && endpoint.password === "" &&
+    endpoint.hash === "" && (
+      endpoint.protocol === "https:" ||
+      (endpoint.protocol === "http:" && (
+        endpoint.hostname === "localhost" ||
+        endpoint.hostname === "127.0.0.1" ||
+        endpoint.hostname === "[::1]"
+      ))
+    );
+}
 
 /** Exact RFC 9728 path for the Artifact Server HTTP API resource. */
 export function protectedResourceMetadataUrl(origin: string): URL {

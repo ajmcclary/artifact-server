@@ -1,5 +1,5 @@
 import {request} from "node:http";
-import {mkdtemp, realpath, rm, symlink, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, realpath, rm, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -227,5 +227,27 @@ describe("linked source paths are canonicalized, root-checked, and self-protecte
     );
     expect(relink.status).toBe(403);
     expect(await relink.text()).not.toContain(outsideFile);
+
+    // A formerly safe binding cannot follow a parent moved to an outside root.
+    const parent = path.join(sourceRoot, "inside");
+    await mkdir(parent);
+    await writeFile(path.join(parent, "match.md"), "allowed\n");
+    await writeFile(path.join(outsideRoot, "match.md"), "outside secret\n");
+    const admitted = await fetch(new URL("/api/v1/artifacts/link", server.baseUrl), {
+      body: JSON.stringify({path: path.join(parent, "match.md")}),
+      headers: apiHeaders(installation, "lnk-006-ancestor-link-0001"),
+      method: "POST",
+    });
+    expect(admitted.status).toBe(201);
+    const ancestorLinked = linkedPublicationSchema.parse(await admitted.json());
+    await rm(parent, {recursive: true});
+    await symlink(outsideRoot, parent);
+    const changed = await fetch(new URL(
+      `/api/v1/artifacts/${ancestorLinked.artifact.id}`,
+      server.baseUrl,
+    ), {headers: {Authorization: `Bearer ${installation.apiToken}`}});
+    expect(changed.status).toBe(200);
+    expect(z.object({sourceBinding: z.object({status: z.string()})}).loose()
+      .parse(await changed.json()).sourceBinding.status).toBe("unreadable");
   });
 });

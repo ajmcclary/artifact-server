@@ -28,12 +28,29 @@ import { readableFile } from "../storage/verified-file.js";
  */
 
 const readChunkBytes = 65_536;
+// macOS sys/fcntl.h: unlike O_NOFOLLOW, this refuses symlinks in every component.
+const macOsNoFollowAny = 0x20000000;
+// Linux O_PATH permits search-only directory traversal without reading directory entries.
+const linuxPathOnly = 0o10000000;
 
 /** Locations of Artifact Server's own durable state, never linkable. */
 export interface SelfProtectedPaths {
   /** The database file; its `-wal`/`-shm` companions are derived from it. */
   readonly databasePath: string;
   readonly dataDirectory: string;
+}
+
+/** Roots fixed at startup and server-owned locations excluded from every open. */
+export interface SourceAccessPolicy {
+  readonly canonicalRoots: readonly string[];
+  readonly protectedPaths: SelfProtectedPaths;
+}
+
+/** Platforms with an open-time, all-component no-symlink path. */
+export function supportsConfinedLinkedSources(
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === "darwin" || platform === "linux";
 }
 
 /** One lazily observed relation between a binding and its source file. */
@@ -68,6 +85,7 @@ export interface CapturedSource {
 
 /** Observation points that let suites exercise mid-read source drift. */
 export interface CaptureHooks {
+  readonly beforeOpen?: () => Promise<void> | void;
   readonly afterFirstRead?: () => Promise<void> | void;
 }
 
@@ -171,49 +189,53 @@ export async function checkSelfProtection(
 }
 
 /**
- * Lazily observe one binding's freshness with a single `lstat`. Never reads
- * bytes, never touches versions, never throws for an absent or unreadable
- * source — those are ordinary freshness states.
+ * Lazily observe one binding through a confined descriptor. Never reads bytes,
+ * never touches versions, and returns ordinary freshness states for an absent
+ * or unreadable source.
  */
 export async function refreshFreshness(
   canonicalPath: string,
   storedFingerprint: string,
+  policy: SourceAccessPolicy,
 ): Promise<SourceFreshnessObservation> {
-  let stats: BigIntStats;
+  let handle: FileHandle;
   try {
-    stats = await lstat(canonicalPath, {bigint: true});
+    handle = await openNoFollow(canonicalPath, policy);
   } catch (error) {
-    const parsed = Schema.decodeUnknownOption(systemErrorSchema)(error);
-    const code = Option.isSome(parsed) ? parsed.value.code : undefined;
     return {
       fingerprint: null,
-      freshness: isMissingCode(code) ? "missing" : "unreadable",
+      freshness: error instanceof SourceMissing ? "missing" : "unreadable",
     };
   }
-  if (!stats.isFile()) {
-    // The bound regular file was replaced by something the live path must
-    // never follow (a symlink, directory, or device).
+  try {
+    const stats = await handle.stat({bigint: true});
+    if (!stats.isFile()) {
+      return {fingerprint: null, freshness: "unreadable"};
+    }
+    const fingerprint = computeFingerprint(stats);
+    return {
+      fingerprint,
+      freshness: fingerprint === storedFingerprint ? "in-sync" : "modified",
+    };
+  } catch {
     return {fingerprint: null, freshness: "unreadable"};
+  } finally {
+    await handle.close();
   }
-  const fingerprint = computeFingerprint(stats);
-  return {
-    fingerprint,
-    freshness: fingerprint === storedFingerprint ? "in-sync" : "modified",
-  };
 }
 
 /**
  * Open one source so that the reported stat and the streamed bytes come from
- * the same descriptor: `O_NOFOLLOW` refuses a symlink at the final path, and
- * the fingerprint is computed on the opened descriptor, so a path swap after
- * the open can never redirect the stream. When an expected fingerprint is
+ * the same descriptor. Every open is confined to a configured root and refuses
+ * symlinks in ancestor and final components. When an expected fingerprint is
  * given, a mismatch on the descriptor aborts with the retryable drift error.
  */
 export async function openVerifiedSource(
   canonicalPath: string,
+  policy: SourceAccessPolicy,
   expectedFingerprint?: string,
 ): Promise<VerifiedSource> {
-  const handle = await openNoFollow(canonicalPath);
+  const handle = await openNoFollow(canonicalPath, policy);
   try {
     const stats = await handle.stat({bigint: true});
     if (!stats.isFile()) {
@@ -249,9 +271,11 @@ export async function openVerifiedSource(
 export async function captureSource(
   canonicalPath: string,
   spoolDirectory: string,
+  policy: SourceAccessPolicy,
   hooks?: CaptureHooks,
 ): Promise<CapturedSource> {
-  const handle = await openNoFollow(canonicalPath);
+  await hooks?.beforeOpen?.();
+  const handle = await openNoFollow(canonicalPath, policy);
   let spool: FileHandle | null = null;
   let spoolPath: string | null = null;
   try {
@@ -333,13 +357,27 @@ function isWithin(parent: string, child: string): boolean {
     && !path.isAbsolute(relative);
 }
 
-async function openNoFollow(canonicalPath: string): Promise<FileHandle> {
+async function openNoFollow(
+  canonicalPath: string,
+  policy: SourceAccessPolicy,
+): Promise<FileHandle> {
+  checkLinkRoots(canonicalPath, policy.canonicalRoots);
+  await checkSelfProtection(canonicalPath, policy.protectedPaths);
   try {
-    return await open(
-      canonicalPath,
-      constants.O_RDONLY | constants.O_NOFOLLOW,
-    );
+    if (process.platform === "darwin") {
+      return await open(
+        canonicalPath,
+        constants.O_RDONLY | constants.O_NONBLOCK | macOsNoFollowAny,
+      );
+    }
+    if (process.platform === "linux") {
+      return await openRelativeToRoot(canonicalPath, policy.canonicalRoots);
+    }
+    throw new SourceUnreadable({
+      message: "Linked source containment is not available on this platform.",
+    });
   } catch (error) {
+    if (error instanceof SourceUnreadable) throw error;
     const parsed = Schema.decodeUnknownOption(systemErrorSchema)(error);
     const code = Option.isSome(parsed) ? parsed.value.code : undefined;
     if (isMissingCode(code)) {
@@ -353,10 +391,51 @@ async function openNoFollow(canonicalPath: string): Promise<FileHandle> {
   }
 }
 
+/** Walk each Linux component relative to an already opened directory handle. */
+async function openRelativeToRoot(
+  canonicalPath: string,
+  canonicalRoots: readonly string[],
+): Promise<FileHandle> {
+  const root = canonicalRoots.find((candidate) => isWithin(candidate, canonicalPath));
+  if (root === undefined) {
+    throw new LinkPathOutsideRoots({
+      message: "The link path resolves outside every configured link root.",
+    });
+  }
+  const parts = path.relative(root, canonicalPath).split(path.sep);
+  if (parts.some((part) => part === "" || part === "." || part === "..")) {
+    throw new SourceUnreadable({message: "The linked source path is not safe to open."});
+  }
+  let current = await open(root, linuxPathOnly | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  try {
+    if (await realpath(`/proc/self/fd/${current.fd}`) !== root) {
+      throw new SourceUnreadable({message: "The linked source root changed."});
+    }
+    for (const [index, part] of parts.entries()) {
+      const last = index === parts.length - 1;
+      // eslint-disable-next-line no-await-in-loop -- each descriptor anchors the next component
+      const next = await open(
+        `/proc/self/fd/${current.fd}/${part}`,
+        constants.O_NOFOLLOW | (last
+          ? constants.O_RDONLY | constants.O_NONBLOCK
+          : linuxPathOnly | constants.O_DIRECTORY),
+      );
+      const previous = current;
+      current = next;
+      // eslint-disable-next-line no-await-in-loop -- close each parent after opening its child
+      await previous.close();
+    }
+    return current;
+  } catch (error) {
+    await current.close();
+    throw error;
+  }
+}
+
 const systemErrorSchema = Schema.Struct({code: Schema.optional(Schema.String)});
 
 function isMissingCode(code: string | undefined): boolean {
-  return code === "ENOENT" || code === "ENOTDIR";
+  return code === "ENOENT";
 }
 
 async function writeAll(file: FileHandle, bytes: Uint8Array): Promise<void> {

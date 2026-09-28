@@ -1,6 +1,6 @@
 # Generic OIDC browser login
 
-**Status:** Accepted; implemented — AUTH-019, AUTH-020, and AUTH-021 behavior-verified on the local deployment, and the real-IdP round trip proven by the `test:oidc` Keycloak suite, now part of `verify:iteration` (August 18, 2026)
+**Status:** Accepted; implemented — AUTH-019, AUTH-020, and AUTH-021 behavior-verified on the local deployment, and the real-IdP round trip proven by the `test:oidc` Keycloak suite, now part of `verify:iteration` (August 18, 2026). The missing-`email_verified` admission rule was superseded on September 28, 2026.
 **Date:** August 18, 2026
 **Owner:** Artifact Server product engineering
 **Companion documents:** [Product specification](./artifact-server-product-spec.md), [Conformance ledger](./conformance.yml), Workspaces self-host auth (`apps/rooms/src/auth/providers/oidc.ts` in the canonical Workspaces checkout)
@@ -8,6 +8,8 @@
 The browser-login design below records its original scope. Decision
 [0028](./decisions/0028-oidc-mcp-oauth.md) supersedes its MCP exclusion for
 issuers that provide compatible client registration and resource-bound JWTs.
+Decision [0031](./decisions/0031-oidc-verified-email-binding.md) supersedes
+the rule that an absent `email_verified` claim is trusted for browser login.
 
 ## 1. What this adds and why
 
@@ -69,7 +71,7 @@ Flow, matching Workspaces' `providers/oidc.ts` decision for decision:
 - **Claim mapping** to the existing `ExternalIdentity`:
   - `subject` = `sub` (required, non-empty).
   - `email` = `email` claim (required, non-empty; login fails without it — scope must include `email`).
-  - `emailVerified` = the `email_verified` claim; **absent means `true`** (the operator configured this issuer as the trust anchor, and requiring the claim would break IdPs that omit it — Entra, some Keycloak realms — out of the box). An **explicit `email_verified: false`** maps to `false`, and the existing admission gate then refuses the login (`installation-access.ts:401-404`) — that is the IdP itself flagging the address, and honoring it costs nothing. This is the industry-standard posture (decided by the owner, August 18, 2026): trust the configured IdP, no extra configuration, refuse only what the IdP explicitly disavows. No `ASSUME_EMAIL_VERIFIED` variable exists.
+  - `emailVerified` and `emailVerificationAsserted` are `true` only for an explicit `email_verified: true` claim. False or absent claims are refused before an issuer subject can match a member or bootstrap administrator by email. IdPs that omit the claim must be configured to emit it. No `ASSUME_EMAIL_VERIFIED` variable exists. This supersedes the August 18 decision because an omitted claim did not prove ownership of an email used for durable member binding.
   - `displayName` = `name`, else `given_name` + `family_name`, else the email — the same cascade as the WorkOS plug (`workos-identity-provider.ts:80-88`).
   - `provider` = **`"oidc:" + normalized issuer`** (e.g. `oidc:https://idp.example.com`). This is the durable half of the `(provider, subject)` member binding (`bindExternalIdentity`, `installation-access.ts`), and `sub` values are only unique per issuer, so the issuer belongs in the binding. Note the split: the *port's* `name` stays the constant `"oidc"` (it discriminates login-attempt rows), while the *identity's* `provider` is issuer-qualified (it discriminates people). If a deployment later changes issuer, existing `(provider, subject)` bindings stop matching by design; login then falls through to the active-member **email match**, which re-binds the member to the new issuer identity (`resolveExternalMember` always writes the binding after resolution, `installation-access.ts:442-448`) — so an issuer migration self-heals through verified email, and no data migration is needed.
 
@@ -132,6 +134,6 @@ Resolved during implementation:
 
 ## 10. Decisions recorded (owner, August 18, 2026)
 
-1. **`email_verified`:** absent means verified; only an explicit `email_verified: false` refuses the login. No escape-hatch variable. Rationale: this is an open-source self-host path — it must work out of the box with every mainstream IdP, with no extra configuration and no invented guardrails. Section 4 carries the behavior.
+1. **`email_verified` (superseded September 28, 2026):** the August 18 decision treated an absent claim as verified to support IdPs that omit it. The current rule requires an explicit `true` assertion for browser login. An absent claim could otherwise attach a new issuer subject to an admitted member or bootstrap administrator by an unverified email. IdPs must emit the claim; there is no escape-hatch variable. Section 4 carries the current behavior.
 2. **No mode refusals:** nothing blocks a self-hoster from using WorkOS or a hosted deployment from using generic OIDC. The docs state the typical pairing (WorkOS for Plannotator-hosted, OIDC for self-host); the software refuses neither. Anyone who wants WorkOS can keep using it.
 3. **Logout stays local:** signing out revokes the Artifact Server session only — the normal behavior for SSO-connected applications. RP-initiated IdP logout (`end_session_endpoint`) is a small later addition if a customer's security team asks for it; discovery already fetches the document that advertises it.

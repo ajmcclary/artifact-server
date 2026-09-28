@@ -174,7 +174,7 @@ export class OidcIdentityProvider implements InteractiveIdentityProvider {
       const identity: ExternalIdentity = {
         displayName: displayName(claims.data),
         email: claims.data.email,
-        emailVerified: claims.data.email_verified !== false,
+        emailVerified: claims.data.email_verified === true,
         emailVerificationAsserted: claims.data.email_verified === true,
         provider: `oidc:${this.#issuer}`,
         subject: claims.data.sub,

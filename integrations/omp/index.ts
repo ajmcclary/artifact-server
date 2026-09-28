@@ -34,6 +34,7 @@ import {
   type FollowUpDelivery,
   type HostPort,
   resolveBridgeCredentials,
+  sanitizeBundleText,
   startBridge,
   ThreadLocationCache,
 } from "@plannotator/agent-bridge";
@@ -202,13 +203,13 @@ export default function artifactServerBridge(om: OmExtensionApi): void {
         compactionStartedAt !== null &&
         Date.now() - compactionStartedAt < compactionFlagLifetimeMilliseconds,
       notify: (message, kind) => {
-        ctx.ui.notify(message, kind);
+        ctx.ui.notify(sanitizeBundleText(message), kind);
       },
       sendUserMessage: (text, delivery) => {
         // Always named follow-up delivery: safe while idle (delivery mode is
         // ignored and a run starts) and queued to the work boundary while
         // streaming. Never "steer", and never omitted.
-        om.sendUserMessage(text, delivery);
+        om.sendUserMessage(sanitizeBundleText(text), delivery);
       },
     };
 

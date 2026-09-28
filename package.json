@@ -29,7 +29,8 @@
       "gaxios>uuid": "11.1.1"
     },
     "patchedDependencies": {
-      "undici@7.29.0": "patches/undici@7.29.0.patch"
+      "undici@7.29.0": "patches/undici@7.29.0.patch",
+      "@plannotator/agent-bridge@0.1.1": "patches/@plannotator__agent-bridge@0.1.1.patch"
     }
   },
   "scripts": {

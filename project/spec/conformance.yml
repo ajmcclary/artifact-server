@@ -804,7 +804,7 @@ requirements:
       failure: {id: PUB-016-F, description: "Reject malformed, duplicate, unknown, oversized, or truncated batch frames without verifying those parts or producing a version, and accept no base64 framing."}
     deployments: *all
     status: implementing
-    proof_gap: Local conformance tests claim and pass PUB-016-B/F over the real batch route and service — a bounded batch verifies every part and commits exact bytes, and malformed, duplicate, unknown, size-mismatched, and truncated frames verify nothing. The paired comparison harness (project/evidence/batch-staging-comparison.json) measured a repeatable end-to-end delta BELOW the 10% bar (about +7% at 48 x 4 KiB, about 0% at 1,000 files) even though the staging leg is about 75% cheaper, because the commit-time staged-to-blob copy dominates and is unchanged. The batch transport therefore stays opt-in and unadopted (default per-file); promotion is rejected on this evidence under NEXT-STEPS.md T13.
+    proof_gap: Local conformance tests claim and pass PUB-016-B/F over the real batch route and service — a bounded batch verifies every part and commits exact bytes, and malformed, duplicate, unknown, size-mismatched, truncated, and over-256-part frames verify nothing. The paired comparison harness (project/evidence/batch-staging-comparison.json) measured a repeatable end-to-end delta BELOW the 10% bar (about +7% at 48 x 4 KiB, about 0% at 1,000 files) even though the staging leg is about 75% cheaper, because the commit-time staged-to-blob copy dominates and is unchanged. The batch transport therefore stays opt-in and unadopted (default per-file); promotion is rejected on this evidence under NEXT-STEPS.md T13.
     depends_on: [PUB-001, PUB-003, PUB-015]
     evidence: []
 
@@ -1749,7 +1749,7 @@ requirements:
     source: {file: oidc-interactive-login-spec.md, anchor: conformance}
     acceptance:
       behavior: {id: AUTH-019-B, description: "Sign in against a real stub OIDC provider; an admitted member gets a session, the bootstrap administrator is admitted on first contact, display name and issuer-qualified binding are recorded, and a second login reuses the binding."}
-      failure: {id: AUTH-019-F, description: "An unadmitted verified identity, an unverified email, and a missing email are refused without creating members or sessions."}
+      failure: {id: AUTH-019-F, description: "An unadmitted verified identity, a false or absent email verification claim, and a missing email are refused without creating members or sessions."}
     deployments: *all
     status: behavior_verified
     depends_on: [AUTH-001, AUTH-010]
@@ -1759,6 +1759,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-18T15:31:35.706Z"
+      - deployment: local
+        tests: [AUTH-019-B, AUTH-019-F]
+        result: pass
+        run: project/evidence/security-remediation-2026-09-28.json
+        recorded_at: "2026-09-28T22:08:35Z"
 
   - id: AUTH-020
     kind: security
@@ -3464,6 +3469,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-27T01:30:08.040Z"
+      - deployment: local
+        tests: [BRP-002-B, BRP-002-F]
+        result: pass
+        run: project/evidence/security-remediation-2026-09-28.json
+        recorded_at: "2026-09-28T22:08:35Z"
 
   - id: NDG-001
     kind: behavior
@@ -4990,7 +5000,7 @@ requirements:
     source: {file: local-workspace-spec.md, anchor: conformance-requirements-to-add}
     acceptance:
       behavior: {id: LNK-006-B, description: "Link inside a configured root as an admitted member over loopback and read the binding path back only through authenticated application-origin metadata."}
-      failure: {id: LNK-006-F, description: "Paths outside every root, the data directory, database files, symlink escapes, anonymous or public-link callers, and non-loopback origins are all refused; no public, content-origin, or log surface reveals a source path, and no request path ever resolves against the linked filesystem."}
+      failure: {id: LNK-006-F, description: "Paths outside every root, the data directory, database files, and symlink escapes including an ancestor swapped before initial capture or after registration are refused; anonymous, public-link, and non-loopback callers gain no path access, no public/content/log surface reveals a source path, and no request path resolves against the linked filesystem."}
     deployments: [local]
     status: behavior_verified
     depends_on: [LNK-001, AUTH-008]
@@ -5000,6 +5010,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-09-22T17:59:28.000Z"
+      - deployment: local
+        tests: [LNK-006-B, LNK-006-F]
+        result: pass
+        run: project/evidence/security-remediation-2026-09-28.json
+        recorded_at: "2026-09-28T22:08:35Z"
 
   - id: KAN-001
     kind: behavior

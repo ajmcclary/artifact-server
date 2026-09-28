@@ -77,10 +77,11 @@ list of exact domains on Node, Compose, and Helm deployments. Cloudflare, AWS,
 and GCP accept `autoAdmitEmailDomains` as a list in their deployment settings.
 Sign in as the configured bootstrap administrator first. Subsequent people on
 an allowed domain are admitted as members only when the identity provider
-explicitly asserts email verification. An absent OIDC `email_verified` claim
-does not qualify for automatic admission, though established login behavior
-for pre-admitted people remains unchanged. Leave the setting absent for closed
-admission; removing a domain does not deactivate existing members.
+explicitly asserts email verification. Browser OIDC login also requires
+`email_verified: true` before matching a pre-admitted member or bootstrap
+administrator by email. An absent or false claim is refused; configure the
+issuer to include the claim. Leave the setting absent for closed admission;
+removing a domain does not deactivate existing members.
 
 ### Use a generic OIDC issuer for MCP
 
@@ -144,7 +145,10 @@ server process and the file must share a filesystem.
 
 `ARTIFACT_SERVER_LINK_ROOTS` bounds which directories can be linked. It takes a
 colon-separated list of absolute paths and defaults to the server user's home
-directory. A path outside every configured root is refused.
+directory. Every source open is confined to a canonical root and refuses
+symlinks in path components, so a directory swapped after registration cannot
+redirect a live read or capture. This enforcement is available on macOS and
+Linux; a Windows local runtime refuses to start with linked files enabled.
 
 Reach a linked-files installation on its loopback address. See
 [`artifactserver link`](./cli.md#link-a-working-file) and the linked-file MCP

@@ -21,8 +21,11 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 import {afterEach, describe, expect, test} from "vitest";
+import {Effect} from "effect";
 import {z} from "zod";
 
+import {revokeCliOAuthCredential} from "../../src/cli/cli-oauth-client.js";
+import {oauthCredential} from "../../src/cli/cli-profile-credential.js";
 import {fetchLoopbackContent} from "../support/fetch-loopback-content.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
@@ -505,6 +508,49 @@ describe("authenticated CLI profiles and remote publication", () => {
       await rm(temporaryDirectory, {force: true, recursive: true});
     }
   }, 30_000);
+
+  test("CLI OAuth revocation keeps the issuing server bound and refuses redirects", async () => {
+    const issuer = await startOAuthFixture();
+    const alternate = await startOAuthFixture();
+    const credential = oauthCredential({
+      clientInformation: {client_id: "synthetic-client", issuer: issuer.origin},
+      redirectUrl: `${issuer.origin}/callback`,
+      tokens: {
+        access_token: "synthetic-access",
+        issuer: issuer.origin,
+        refresh_token: "synthetic-refresh",
+        token_type: "Bearer",
+      },
+    });
+    try {
+      issuer.advertiseAuthorizationServer(alternate.origin);
+      expect(await Effect.runPromise(revokeCliOAuthCredential(issuer.origin, credential)))
+        .toBe(false);
+      expect(alternate.observations.revocationCount).toBe(0);
+
+      issuer.advertiseAuthorizationServer(issuer.origin);
+      issuer.redirectRevocationTo(alternate.origin);
+      expect(await Effect.runPromise(revokeCliOAuthCredential(issuer.origin, credential)))
+        .toBe(false);
+      expect(alternate.observations.revocationCount).toBe(0);
+
+      issuer.redirectRevocationTo(null);
+      expect(await Effect.runPromise(revokeCliOAuthCredential(issuer.origin, credential)))
+        .toBe(true);
+      expect(issuer.observations.revokedToken).toBe("synthetic-refresh");
+
+      const legacy = oauthCredential({
+        clientInformation: {client_id: "synthetic-client"},
+        redirectUrl: `${issuer.origin}/callback`,
+        tokens: {access_token: "synthetic-access", token_type: "Bearer"},
+      });
+      expect(await Effect.runPromise(revokeCliOAuthCredential(issuer.origin, legacy)))
+        .toBe(false);
+      expect(issuer.observations.revocationCount).toBe(1);
+    } finally {
+      await Promise.all([issuer.stop(), alternate.stop()]);
+    }
+  });
 });
 
 interface ProcessResult {
@@ -749,7 +795,9 @@ interface OAuthFixtureObservations {
 interface OAuthFixture {
   readonly observations: OAuthFixtureObservations;
   readonly origin: string;
+  advertiseAuthorizationServer(origin: string): void;
   advertiseWrongResource(): void;
+  redirectRevocationTo(origin: string | null): void;
   stop(): Promise<void>;
 }
 
@@ -766,6 +814,8 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
     sessionCount: 0,
   };
   let wrongResource = false;
+  let advertisedAuthorizationServer: string | null = null;
+  let revocationRedirect: string | null = null;
   let codeChallenge: string | null = null;
   let expectedRedirect: string | null = null;
   let origin = "";
@@ -773,7 +823,7 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
     const target = new URL(request.url ?? "/", origin);
     if (target.pathname === "/.well-known/oauth-protected-resource/api") {
       sendJson(response, 200, {
-        authorization_servers: [origin],
+        authorization_servers: [advertisedAuthorizationServer ?? origin],
         bearer_methods_supported: ["header"],
         resource: wrongResource ? `${origin}/wrong` : `${origin}/api`,
         scopes_supported: ["artifactserver"],
@@ -903,6 +953,10 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
       return;
     }
     if (target.pathname === "/revoke" && request.method === "POST") {
+      if (revocationRedirect !== null) {
+        response.writeHead(307, {Location: `${revocationRedirect}/revoke`}).end();
+        return;
+      }
       observations.revocationCount += 1;
       observations.revokedToken = new URLSearchParams(
         await readTextBody(request),
@@ -920,11 +974,17 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
   const address = assignedAddressSchema.parse(server.address());
   origin = `http://127.0.0.1:${address.port}`;
   return {
+    advertiseAuthorizationServer: (value) => {
+      advertisedAuthorizationServer = value;
+    },
     advertiseWrongResource: () => {
       wrongResource = true;
     },
     observations,
     origin,
+    redirectRevocationTo: (value) => {
+      revocationRedirect = value;
+    },
     stop: () => closeHttp(server),
   };
 }

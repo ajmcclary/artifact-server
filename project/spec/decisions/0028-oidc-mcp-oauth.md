@@ -80,10 +80,11 @@ every issuer, not only Keycloak.
 
 ### An access token's email must be verified before it links a member
 
-Browser login treats a missing `email_verified` claim as verified, and
-decision 0020 keeps that rule. The MCP path does not: an access token, or the
-userinfo profile it falls back to, must carry `email_verified: true` before its
-email can link the token to an admitted member or claim the bootstrap
+At the time of this decision, browser login treated a missing `email_verified`
+claim as verified. [ADR 0031](0031-oidc-verified-email-binding.md) supersedes
+that browser rule; both paths now require an explicit true assertion. The MCP
+path requires `email_verified: true` on an access token or its userinfo
+fallback before the email can link the token to an admitted member or claim the bootstrap
 administrator on a fresh installation. Otherwise the admission gate refuses it.
 
 The paths differ because their risks differ. Access-token profile claims are

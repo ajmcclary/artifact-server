@@ -41,6 +41,7 @@ import {
   checkSelfProtection,
   openVerifiedSource,
   refreshFreshness,
+  supportsConfinedLinkedSources,
   type CaptureHooks,
 } from "./linked-source-engine.js";
 import { mediaTypeForPath } from "../client/file-publication-client.js";
@@ -131,6 +132,13 @@ export async function createLocalRuntime(
   config: LocalRuntimeConfig,
 ): Promise<LocalRuntime> {
   await mkdir(config.dataDirectory, {recursive: true, mode: 0o700});
+  const linkedFilesEnabled = config.linkedFiles === "on";
+  if (linkedFilesEnabled && !supportsConfinedLinkedSources()) {
+    throw new Error("Linked files require a platform with confined source opens.");
+  }
+  const canonicalLinkRoots = linkedFilesEnabled
+    ? await canonicalizeLinkRoots(config.linkRoots ?? [])
+    : [];
   const staging = new LocalStagingStore(path.join(config.dataDirectory, "staging"));
   const blobs = new LocalPromotingBlobStore(
     new LocalBlobStore(path.join(config.dataDirectory, "blobs")),
@@ -179,31 +187,40 @@ export async function createLocalRuntime(
     repository.close();
     throw cause;
   }
-  const linkedFilesEnabled = config.linkedFiles === "on";
   const selfProtectedPaths = {
     databasePath,
     dataDirectory: config.dataDirectory,
+  };
+  const linkedSourcePolicy = {
+    canonicalRoots: canonicalLinkRoots,
+    protectedPaths: selfProtectedPaths,
   };
   const linkedAdapters: LinkedApplicationAdapters | undefined =
     linkedFilesEnabled
       ? {
         bindings: repository,
         configuration: {
-          linkRoots: config.linkRoots ?? [],
+          linkRoots: canonicalLinkRoots,
           spoolDirectory: path.join(config.dataDirectory, "capture-spool"),
         },
         engine: {
           canonicalizeLinkPath,
-          canonicalizeLinkRoots,
+          canonicalizeLinkRoots: async () => canonicalLinkRoots,
           captureSource: (canonicalPath, spoolDirectory) =>
-            captureSource(canonicalPath, spoolDirectory, config.linkedCaptureHooks),
+            captureSource(
+              canonicalPath,
+              spoolDirectory,
+              linkedSourcePolicy,
+              config.linkedCaptureHooks,
+            ),
           checkLinkRoots,
           checkSelfProtection: (canonicalPath) =>
             checkSelfProtection(canonicalPath, selfProtectedPaths),
           mediaTypeForPath,
           openVerifiedSource: (canonicalPath) =>
-            openVerifiedSource(canonicalPath),
-          refreshFreshness,
+            openVerifiedSource(canonicalPath, linkedSourcePolicy),
+          refreshFreshness: (canonicalPath, storedFingerprint) =>
+            refreshFreshness(canonicalPath, storedFingerprint, linkedSourcePolicy),
         },
       }
       : undefined;

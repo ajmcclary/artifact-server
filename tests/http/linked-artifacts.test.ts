@@ -1,4 +1,5 @@
-import {mkdtemp, realpath, rm, writeFile} from "node:fs/promises";
+import {execFileSync} from "node:child_process";
+import {mkdir, mkdtemp, realpath, rm, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -280,5 +281,110 @@ describe("linked artifacts over the local HTTP boundary", () => {
       Cookie: cookiePair,
     });
     expect(versionRead.status).toBe(401);
+  });
+
+  test("an ancestor swap between link validation and capture cannot publish outside bytes", async () => {
+    const parent = path.join(sourceRoot, "inside");
+    const outside = path.join(installation.dataDirectory, "outside");
+    await mkdir(parent);
+    await mkdir(outside);
+    await writeFile(path.join(parent, "notes.md"), "allowed\n");
+    await writeFile(path.join(outside, "notes.md"), "server-only\n");
+    let swapped = false;
+    server = await startTestServer(installation, {
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+      linkedCaptureHooks: {
+        beforeOpen: async () => {
+          if (swapped) return;
+          swapped = true;
+          await rm(parent, {recursive: true});
+          await symlink(outside, parent);
+        },
+      },
+    });
+
+    const response = await fetch(new URL("/api/v1/artifacts/link", server.baseUrl), {
+      body: JSON.stringify({path: path.join(parent, "notes.md")}),
+      headers: apiHeaders(installation, "link-ancestor-swap-0001"),
+      method: "POST",
+    });
+    expect(swapped).toBe(true);
+    expect(response.status).toBe(409);
+    expect(errorSchema.parse(await response.json()).error.code).toBe("SOURCE_UNREADABLE");
+    const artifacts = await fetch(new URL("/api/v1/artifacts?limit=100", server.baseUrl), {
+      headers: {Authorization: `Bearer ${installation.apiToken}`},
+    });
+    expect(z.object({artifacts: z.array(z.unknown())}).parse(await artifacts.json()).artifacts)
+      .toEqual([]);
+  });
+
+  test("a replaced ancestor falls back to captured live bytes and blocks recapture", async () => {
+    const parent = path.join(sourceRoot, "inside");
+    const outside = path.join(installation.dataDirectory, "outside");
+    await mkdir(parent);
+    await mkdir(outside);
+    await writeFile(path.join(parent, "notes.md"), "captured\n");
+    await writeFile(path.join(outside, "notes.md"), "server-only\n");
+    server = await startTestServer(installation, {
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+    });
+    const linkedResponse = await fetch(new URL("/api/v1/artifacts/link", server.baseUrl), {
+      body: JSON.stringify({path: path.join(parent, "notes.md")}),
+      headers: apiHeaders(installation, "link-ancestor-safe-0001"),
+      method: "POST",
+    });
+    expect(linkedResponse.status).toBe(201);
+    const linked = linkedPublicationSchema.parse(await linkedResponse.json());
+    const liveSessionResponse = await fetch(new URL(
+      `/api/v1/artifacts/${linked.artifact.id}/live-sessions`,
+      server.baseUrl,
+    ), {
+      headers: apiHeaders(installation, "live-ancestor-safe-0001"),
+      method: "POST",
+    });
+    const liveSession = liveSessionSchema.parse(await liveSessionResponse.json());
+    const exchanged = await fetchVersion(server, liveSession.bootstrapUrl);
+    const contentCookie = exchanged.headers.getSetCookie().find((value) =>
+      value.includes("artifact_content=")
+    );
+    expect(contentCookie).toBeDefined();
+    await rm(parent, {recursive: true});
+    await symlink(outside, parent);
+
+    const live = await fetchVersion(server, linked.links.live, "GET", {
+      Cookie: (contentCookie ?? "").split(";")[0] ?? "",
+    });
+    expect(live.status).toBe(200);
+    expect(live.headers.get("artifact-source-freshness")).toBe("unreadable");
+    expect(await live.text()).toBe("captured\n");
+
+    const capture = await fetch(new URL(
+      `/api/v1/artifacts/${linked.artifact.id}/capture`,
+      server.baseUrl,
+    ), {
+      body: JSON.stringify({expectedCurrentVersionId: linked.version.id}),
+      headers: apiHeaders(installation, "capture-ancestor-safe-0001"),
+      method: "POST",
+    });
+    expect(capture.status).toBe(409);
+    expect(errorSchema.parse(await capture.json()).error.code).toBe("SOURCE_UNREADABLE");
+    const versions = await fetch(new URL(
+      `/api/v1/artifacts/${linked.artifact.id}/versions`,
+      server.baseUrl,
+    ), {headers: {Authorization: `Bearer ${installation.apiToken}`}});
+    expect(z.object({versions: z.array(z.unknown())}).parse(await versions.json()).versions)
+      .toHaveLength(1);
+
+    await rm(parent);
+    await mkdir(parent);
+    execFileSync("mkfifo", [path.join(parent, "notes.md")]);
+    const fifoLive = await fetchVersion(server, linked.links.live, "GET", {
+      Cookie: (contentCookie ?? "").split(";")[0] ?? "",
+    });
+    expect(fifoLive.status).toBe(200);
+    expect(fifoLive.headers.get("artifact-source-freshness")).toBe("unreadable");
+    expect(await fifoLive.text()).toBe("captured\n");
   });
 });

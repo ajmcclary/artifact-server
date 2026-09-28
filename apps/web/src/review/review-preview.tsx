@@ -6,6 +6,7 @@ import {
   api,
   type ArtifactVersion,
 } from "@/api/client";
+import {maximumReviewHtmlBytes} from "@/api/bounded-text";
 import {formatBytes} from "@/lib/presentation";
 import {
   frameMessageSchema,
@@ -116,6 +117,18 @@ export function ReviewPreview({
   const mediaType = mediaTypeEssence(entry.mediaType);
   const identity = `${version.version.id}:${entry.path}`;
   if (mediaType === "text/html") {
+    if (entry.size > maximumReviewHtmlBytes) {
+      return (
+        <TerminalPreviewState
+          actions={commonActions}
+          description={`Review previews HTML files up to ${formatBytes(maximumReviewHtmlBytes)}. Open or download the raw artifact to view this file.`}
+          mediaType={entry.mediaType}
+          path={entry.path}
+          size={entry.size}
+          title="Preview too large"
+        />
+      );
+    }
     return (
       <HtmlPreview
         accessSetting={accessSetting}

@@ -34,6 +34,7 @@ import {
   createCommentOperations,
   type EnvironmentConfiguration,
   resolveBridgeCredentials,
+  sanitizeBundleText,
   startBridge,
   ThreadLocationCache,
 } from "@plannotator/agent-bridge";
@@ -183,7 +184,7 @@ async function main(): Promise<void> {
       notify: (message) => {
         // A channel has no user-facing notice surface; stderr reaches the
         // channel log without entering the protocol stream on stdout.
-        process.stderr.write(`${message}\n`);
+        process.stderr.write(`${sanitizeBundleText(message)}\n`);
       },
       sendUserMessage: async (text) => {
         // Resolution proves transport admission, not model processing, which
@@ -193,7 +194,7 @@ async function main(): Promise<void> {
           await mcp.notification({
             method: "notifications/claude/channel",
             params: {
-              content: text,
+              content: sanitizeBundleText(text),
               meta: {channel_kind: "artifact_server_dispatch"},
             },
           });

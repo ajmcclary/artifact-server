@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import {execFileSync} from "node:child_process";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,6 +15,8 @@ import {
   computeFingerprint,
   openVerifiedSource,
   refreshFreshness,
+  supportsConfinedLinkedSources,
+  type SourceAccessPolicy,
 } from "../../src/local/linked-source-engine.js";
 
 async function fingerprintOf(target: string): Promise<string> {
@@ -38,6 +41,7 @@ describe("linked source engine", () => {
   let root: string;
   let outside: string;
   let filePath: string;
+  let policy: SourceAccessPolicy;
 
   beforeEach(async () => {
     // tmpdir sits behind a symlink on macOS; the engine contract takes
@@ -51,6 +55,13 @@ describe("linked source engine", () => {
     await mkdir(outside, {recursive: true});
     filePath = path.join(root, "notes.md");
     await writeFile(filePath, "# notes\n");
+    policy = {
+      canonicalRoots: [root],
+      protectedPaths: {
+        databasePath: path.join(workspace, "data", "artifact-server.db"),
+        dataDirectory: path.join(workspace, "data"),
+      },
+    };
   });
 
   afterEach(async () => {
@@ -86,6 +97,15 @@ describe("linked source engine", () => {
       expect(() => checkLinkRoots(canonical, roots)).toThrowError(
         expect.objectContaining({_tag: "LinkPathOutsideRoots"}),
       );
+    });
+
+    test("an in-root symlink can still name a safely opened canonical file", async () => {
+      const alias = path.join(root, "alias.md");
+      await symlink(filePath, alias);
+      const canonical = await canonicalizeLinkPath(alias);
+      expect(canonical).toBe(filePath);
+      const source = await openVerifiedSource(canonical, policy);
+      expect((await readAll(source.stream())).toString()).toBe("# notes\n");
     });
 
     test("error messages never include the presented path", async () => {
@@ -170,12 +190,12 @@ describe("linked source engine", () => {
   describe("freshness", () => {
     test("an untouched file is in-sync and a rewritten file is modified", async () => {
       const stored = await fingerprintOf(filePath);
-      expect(await refreshFreshness(filePath, stored)).toEqual({
+      expect(await refreshFreshness(filePath, stored, policy)).toEqual({
         fingerprint: stored,
         freshness: "in-sync",
       });
       await writeFile(filePath, "# notes, edited\n");
-      const observed = await refreshFreshness(filePath, stored);
+      const observed = await refreshFreshness(filePath, stored, policy);
       expect(observed.freshness).toBe("modified");
       expect(observed.fingerprint).not.toBe(stored);
     });
@@ -183,7 +203,7 @@ describe("linked source engine", () => {
     test("a deleted file is missing and a permission-denied file is unreadable", async () => {
       const stored = await fingerprintOf(filePath);
       await unlink(filePath);
-      expect(await refreshFreshness(filePath, stored)).toEqual({
+      expect(await refreshFreshness(filePath, stored, policy)).toEqual({
         fingerprint: null,
         freshness: "missing",
       });
@@ -193,7 +213,7 @@ describe("linked source engine", () => {
       const lockedFingerprint = await fingerprintOf(locked);
       await chmod(path.dirname(locked), 0o000);
       try {
-        const observed = await refreshFreshness(locked, lockedFingerprint);
+        const observed = await refreshFreshness(locked, lockedFingerprint, policy);
         expect(observed.freshness).toBe("unreadable");
       } finally {
         await chmod(path.dirname(locked), 0o700);
@@ -206,7 +226,7 @@ describe("linked source engine", () => {
       await writeFile(victim, "victim\n");
       await unlink(filePath);
       await symlink(victim, filePath);
-      expect((await refreshFreshness(filePath, stored)).freshness).toBe(
+      expect((await refreshFreshness(filePath, stored, policy)).freshness).toBe(
         "unreadable",
       );
     });
@@ -215,7 +235,7 @@ describe("linked source engine", () => {
   describe("verified open", () => {
     test("stat and bytes come from the same descriptor even when the path is swapped", async () => {
       const stored = await fingerprintOf(filePath);
-      const source = await openVerifiedSource(filePath, stored);
+      const source = await openVerifiedSource(filePath, policy, stored);
       const victim = path.join(outside, "victim.md");
       await writeFile(victim, "victim bytes that must never be served\n");
       await unlink(filePath);
@@ -229,7 +249,7 @@ describe("linked source engine", () => {
       await writeFile(victim, "victim\n");
       await unlink(filePath);
       await symlink(victim, filePath);
-      await expect(openVerifiedSource(filePath)).rejects.toMatchObject({
+      await expect(openVerifiedSource(filePath, policy)).rejects.toMatchObject({
         _tag: "SourceUnreadable",
       });
     });
@@ -237,16 +257,46 @@ describe("linked source engine", () => {
     test("an expected-fingerprint mismatch aborts with the retryable drift error", async () => {
       const stored = await fingerprintOf(filePath);
       await writeFile(filePath, "# notes, edited\n");
-      await expect(openVerifiedSource(filePath, stored)).rejects.toMatchObject({
+      await expect(openVerifiedSource(filePath, policy, stored)).rejects.toMatchObject({
         _tag: "SourceDrifted",
       });
     });
 
     test("a missing file surfaces as missing", async () => {
       await unlink(filePath);
-      await expect(openVerifiedSource(filePath)).rejects.toMatchObject({
+      await expect(openVerifiedSource(filePath, policy)).rejects.toMatchObject({
         _tag: "SourceMissing",
       });
+    });
+
+    test("a FIFO is refused without waiting for a writer", async () => {
+      if (process.platform === "win32") return;
+      await unlink(filePath);
+      execFileSync("mkfifo", [filePath]);
+      expect((await refreshFreshness(filePath, "former-fingerprint", policy)).freshness)
+        .toBe("unreadable");
+      await expect(openVerifiedSource(filePath, policy)).rejects.toMatchObject({
+        _tag: "SourceUnreadable",
+      });
+      await expect(captureSource(filePath, path.join(workspace, "spool"), policy))
+        .rejects.toMatchObject({_tag: "SourceUnreadable"});
+    });
+
+    test("a readable file beneath search-only directories remains accessible", async () => {
+      if (process.platform === "win32") return;
+      const directory = path.join(root, "search-only");
+      const file = path.join(directory, "notes.md");
+      await mkdir(directory);
+      await writeFile(file, "searchable\n", {mode: 0o444});
+      await chmod(directory, 0o111);
+      await chmod(root, 0o111);
+      try {
+        const source = await openVerifiedSource(file, policy);
+        expect((await readAll(source.stream())).toString()).toBe("searchable\n");
+      } finally {
+        await chmod(root, 0o700);
+        await chmod(directory, 0o700);
+      }
     });
   });
 
@@ -255,7 +305,7 @@ describe("linked source engine", () => {
       const body = `# capture\n${"x".repeat(200_000)}\n`;
       await writeFile(filePath, body);
       const spoolDirectory = path.join(workspace, "spool");
-      const captured = await captureSource(filePath, spoolDirectory);
+      const captured = await captureSource(filePath, spoolDirectory, policy);
       expect(captured.size).toBe(Buffer.byteLength(body));
       expect(captured.sha256).toBe(
         createHash("sha256").update(body).digest("hex"),
@@ -270,7 +320,7 @@ describe("linked source engine", () => {
     test("a modification during the read aborts the capture and removes the spool", async () => {
       await writeFile(filePath, `start\n${"y".repeat(300_000)}\n`);
       const spoolDirectory = path.join(workspace, "spool");
-      await expect(captureSource(filePath, spoolDirectory, {
+      await expect(captureSource(filePath, spoolDirectory, policy, {
         afterFirstRead: async () => {
           await writeFile(filePath, "swapped mid-read\n");
         },
@@ -283,8 +333,34 @@ describe("linked source engine", () => {
       await writeFile(victim, "victim\n");
       await unlink(filePath);
       await symlink(victim, filePath);
-      await expect(captureSource(filePath, path.join(workspace, "spool")))
+      await expect(captureSource(filePath, path.join(workspace, "spool"), policy))
         .rejects.toMatchObject({_tag: "SourceUnreadable"});
     });
+  });
+
+  test("a replaced ancestor cannot redirect freshness, live reads, or captures", async () => {
+    const parent = path.join(root, "inside");
+    const outsideFile = path.join(outside, "notes.md");
+    await mkdir(parent);
+    await writeFile(path.join(parent, "notes.md"), "allowed\n");
+    await writeFile(outsideFile, "outside secret\n");
+    const storedPath = await canonicalizeLinkPath(path.join(parent, "notes.md"));
+    const fingerprint = await fingerprintOf(storedPath);
+    await rm(parent, {recursive: true});
+    await symlink(outside, parent);
+
+    expect((await refreshFreshness(storedPath, fingerprint, policy)).freshness)
+      .toBe("unreadable");
+    await expect(openVerifiedSource(storedPath, policy)).rejects.toMatchObject({
+      _tag: "SourceUnreadable",
+    });
+    await expect(captureSource(storedPath, path.join(workspace, "spool"), policy))
+      .rejects.toMatchObject({_tag: "SourceUnreadable"});
+  });
+
+  test("unsupported platforms refuse linked-file containment", () => {
+    expect(supportsConfinedLinkedSources("win32")).toBe(false);
+    expect(supportsConfinedLinkedSources("darwin")).toBe(true);
+    expect(supportsConfinedLinkedSources("linux")).toBe(true);
   });
 });

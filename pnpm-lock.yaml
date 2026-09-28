@@ -18,6 +18,9 @@ overrides:
   gaxios>uuid: 11.1.1
 
 patchedDependencies:
+  '@plannotator/agent-bridge@0.1.1':
+    hash: 179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4
+    path: patches/@plannotator__agent-bridge@0.1.1.patch
   undici@7.29.0:
     hash: c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e
     path: patches/undici@7.29.0.patch
@@ -104,7 +107,7 @@ importers:
         version: 1.78.0
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
@@ -355,7 +358,7 @@ importers:
         version: 1.30.0(zod@4.4.3)
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
       tsx:
         specifier: 4.23.12
         version: 4.23.12
@@ -371,7 +374,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
     devDependencies:
       typebox:
         specifier: 1.3.7
@@ -384,7 +387,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -397,7 +400,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
     devDependencies:
       typebox:
         specifier: 1.3.7
@@ -10662,7 +10665,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@plannotator/agent-bridge@0.1.1':
+  '@plannotator/agent-bridge@0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)':
     dependencies:
       zod: 4.4.3
 

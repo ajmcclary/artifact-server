@@ -132,7 +132,7 @@ export async function startStubOidcProvider(
   const claims: StubOidcClaims = {
     audience: null,
     email: "administrator@example.test",
-    emailVerified: null,
+    emailVerified: true,
     expiresInSeconds: 300,
     familyName: null,
     givenName: null,

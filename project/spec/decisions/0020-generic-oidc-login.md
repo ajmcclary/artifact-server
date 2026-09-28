@@ -72,6 +72,10 @@ a scoped follow-up, not part of this change.
 
 ### An absent `email_verified` claim means verified
 
+**Superseded September 28, 2026 by [ADR 0031](0031-oidc-verified-email-binding.md).**
+The following records the original compatibility decision, not current login
+behavior.
+
 Only an explicit `email_verified: false` refuses the login, and the existing
 admission gate does the refusing. There is no escape-hatch variable. This is an
 open-source self-host path, so it must work out of the box with every mainstream

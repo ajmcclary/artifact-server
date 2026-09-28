@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import {readBoundedReviewHtml} from "./bounded-text";
+
 const accessSettingSchema = z.enum(["account_required", "public_link"]);
 const membershipRoleSchema = z.enum(["administrator", "member"]);
 const principalKindSchema = z.enum(["human", "service"]);
@@ -813,7 +815,7 @@ async function requestText(path: string): Promise<string> {
   const response = await fetch(path, { credentials: "same-origin" });
   notifySessionExpiry(response);
   if (!response.ok) throw await parseFailure(response);
-  return await response.text();
+  return readBoundedReviewHtml(response);
 }
 
 async function requestHead(path: string): Promise<void> {

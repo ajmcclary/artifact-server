@@ -48,6 +48,37 @@ const hostileArtifact = `<!doctype html>
 </html>`;
 
 test.describe("Review sandbox isolation", () => {
+  test("a large HTML version stays downloadable without entering the Review parser", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><title>Large file</title>" +
+          "x".repeat(4 * 1024 * 1024 + 1),
+        idempotencyKey: "review-large-html-fallback",
+        mediaType: "text/html; charset=utf-8",
+        name: "Large HTML",
+        path: "index.html",
+      });
+      await localLogin(fixture);
+      let htmlFileRequests = 0;
+      fixture.page.on("request", (request) => {
+        if (request.url().includes(`/versions/${published.body.version.id}/file`)) {
+          htmlFileRequests += 1;
+        }
+      });
+      await fixture.page.goto(
+        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
+      );
+      await expect(fixture.page.getByText("Preview too large")).toBeVisible();
+      await expect(fixture.page.getByText(/Open or download the raw artifact/u))
+        .toBeVisible();
+      expect(htmlFileRequests).toBe(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("CMT-014-B CMT-014-F: hostile artifact HTML stays inside an opaque-origin sandbox", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {

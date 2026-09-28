@@ -80,8 +80,7 @@ describe("generic OIDC browser login", () => {
     server = await startOidcServer(installation, provider, clientSecret);
     provider.claims.email = administratorEmail;
     provider.claims.name = "Ada Lovelace";
-    // The stub omits email_verified entirely; an absent claim means verified.
-    expect(provider.claims.emailVerified).toBeNull();
+    provider.claims.emailVerified = true;
 
     const authorization = await startStubOidcLogin(server.baseUrl);
     expect(authorization.loginResponse.status).toBe(302);
@@ -181,6 +180,13 @@ describe("generic OIDC browser login", () => {
       .toBe("The login provider did not verify the email address.");
 
     provider.claims.emailVerified = null;
+    provider.claims.subject = "stub-oidc-subject-unasserted";
+    const unasserted = await completeStubLogin(server.baseUrl);
+    expect(unasserted.status).toBe(403);
+    expect(unasserted.headers.getSetCookie()).toEqual([]);
+    expect(failureSchema.parse(await unasserted.json()).error.message)
+      .toBe("The login provider did not verify the email address.");
+
     provider.claims.email = null;
     const withoutEmail = await completeStubLogin(server.baseUrl);
     expect(withoutEmail.status).toBe(502);

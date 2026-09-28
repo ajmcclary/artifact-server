@@ -6,7 +6,8 @@
  * the compiled server build is rooted at `src/`, and the package's own
  * conformance gate (BRP-001-F) forbids its module graph from reaching out
  * of the published `@plannotator/agent-bridge` package. So the mailbox tier carries this exact
- * mirror, and BRP-002-B pins the two renders byte-for-byte against the
+ * mirror. The pinned package is patched in this repository to sanitize all
+ * rendered header fields, and BRP-002-B pins the two renders byte-for-byte against the
  * same bundle — any drift between the copies fails that test.
  */
 
@@ -93,16 +94,16 @@ export function renderBundleMessage(
 ): string {
   const lines: string[] = [];
   lines.push(
-    `Artifact Server: ${bundle.senderDisplayName} sent ` +
+    `Artifact Server: ${sanitizeBundleText(bundle.senderDisplayName)} sent ` +
       `${bundle.items.length} annotation(s) to address.`,
   );
   const note = sanitizeBundleText(bundle.note ?? "").trim();
   if (note !== "") lines.push(note);
   lines.push("");
   bundle.items.forEach((item, index) => {
-    const place = item.path === null
+    const place = sanitizeBundleText(item.path === null
       ? `[${item.artifactName} · version ${item.versionNumber}]`
-      : `[${item.artifactName} · version ${item.versionNumber} · ${item.path}]`;
+      : `[${item.artifactName} · version ${item.versionNumber} · ${item.path}]`);
     const quoted = item.quotedSelection === null
       ? ""
       : ` ${quotedSelectionFragment(item.quotedSelection)}`;

@@ -11,11 +11,11 @@ administrator must complete the first external login before a domain can admit
 any other member; a domain match never grants administrator authority.
 
 Domain admission requires an explicit positive email-verification assertion
-from the configured identity provider. Generic OIDC login has an established
-rule that an absent `email_verified` claim is trusted for a pre-admitted person
-or the bootstrap administrator. That rule remains intact. An absent claim is
-insufficient to create a new member merely because their email matches a
-configured domain. An explicit `false` still refuses all login.
+from the configured identity provider. At the time of this decision, generic
+OIDC browser login still trusted an absent `email_verified` claim for a
+pre-admitted person or bootstrap administrator while refusing domain-based
+auto-admission. [ADR 0031](0031-oidc-verified-email-binding.md) supersedes that
+exception: absent and false claims now refuse all browser login.
 
 The configuration is a set of normalized DNS domains, matched against the
 entire domain after `@`, never a suffix. Cloudflare, Node compact and external

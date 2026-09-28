@@ -5,6 +5,7 @@ import path from "node:path";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
+import {maximumBatchParts} from "../../src/core/publishing-limits.js";
 import {
   commitStagedUpload,
   createStagedUpload,
@@ -119,6 +120,16 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
 
     const malformed = await postBatch(planned, []);
     expect(batchResponseSchema.parse(await malformed.json()).accepted).toEqual([]);
+
+    const tooMany = await postBatch(planned, Array.from(
+      {length: maximumBatchParts + 1},
+      () => ({bytes: new Uint8Array(0), orderIndex: 999}),
+    ));
+    expect(tooMany.status).toBe(422);
+    const tooManyBody = z.object({
+      error: z.object({code: z.string()}).loose(),
+    }).loose().parse(await tooMany.json());
+    expect(tooManyBody.error.code).toBe("INVALID_INPUT");
 
     // Nothing was verified, so a commit cannot produce a version.
     const incomplete = await fetch(planned.body.commitUrl, {

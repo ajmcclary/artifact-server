@@ -14,7 +14,10 @@ import {
   UploadedFileMismatch,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
-import {maximumBatchRequestBytes} from "../core/publishing-limits.js";
+import {
+  maximumBatchParts,
+  maximumBatchRequestBytes,
+} from "../core/publishing-limits.js";
 import {
   uploadStatuses,
   type AccessSetting,
@@ -843,6 +846,9 @@ async function readBatchFrame(
     if (headerBytes === null) {
       // Clean end of stream: no more complete parts.
       return {parts, truncated: false};
+    }
+    if (parts.length >= maximumBatchParts) {
+      throw new Error("The staged upload batch has too many parts.");
     }
     header.set(headerBytes, 0);
     const view = new DataView(header.buffer, header.byteOffset, header.byteLength);

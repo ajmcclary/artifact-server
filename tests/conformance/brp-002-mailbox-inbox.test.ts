@@ -17,7 +17,7 @@ import {
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
-import {renderBundleMessage} from "@plannotator/agent-bridge";
+import {renderBundleMessage, sanitizeBundleText} from "@plannotator/agent-bridge";
 import {principalCapabilities} from "../../src/core/identity.js";
 import {
   agentListSchema,
@@ -186,7 +186,9 @@ describe("mailbox-tier dispatch inbox over MCP", () => {
       {
         createdAt: olderDispatch.createdAt,
         id: olderDispatch.id,
-        note: olderDispatch.note,
+        note: olderDispatch.note === null
+          ? null
+          : sanitizeBundleText(olderDispatch.note),
         threadCount: 2,
       },
       {
@@ -214,6 +216,7 @@ describe("mailbox-tier dispatch inbox over MCP", () => {
       threads: [],
     };
     expect(claimed.dispatchId).toBe(olderDispatch.id);
+    expect(claimed.note).toBe(sanitizeBundleText(hostileNote));
     expect(claimed.projectId).toBe(projectId);
     expect(claimed.threadIds).toEqual([firstThread, secondThread]);
     expect(claimed.threads).toEqual([

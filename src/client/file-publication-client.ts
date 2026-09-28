@@ -14,6 +14,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import {
   EmptyManifest,
@@ -348,7 +349,8 @@ type FilePublicationOperation = FilePublicationProtocolError["operation"];
 /**
  * Publish one local file or finished directory through a server-issued upload
  * plan. The server receives bytes and portable manifest paths, never the local
- * filesystem path.
+ * filesystem path. Publication uses Fetch with redirects refused; a caller may
+ * provide FetchHttpClient.RequestInit for transport settings, except redirect mode.
  */
 export const publishPath = Effect.fn("FilePublicationClient.publishPath")(
   function*(
@@ -357,7 +359,7 @@ export const publishPath = Effect.fn("FilePublicationClient.publishPath")(
   ): Effect.fn.Return<
     FilePublicationResult,
     FilePublicationFailure,
-    FileSystem.FileSystem | HttpClient.HttpClient
+    FileSystem.FileSystem
   > {
     const prepared = yield* prepareFilePublication(command);
     return yield* publishPreparedPath(
@@ -406,9 +408,30 @@ export const prepareFilePublication = Effect.fn(
     };
 });
 
+/** Execute every publication request through the redirect-refusing Fetch boundary. */
+export const publishPreparedPath = Effect.fn("FilePublicationClient.publishPreparedPath")(
+  function*(
+    config: FilePublicationClientConfig,
+    idempotencyKey: string,
+    prepared: PreparedFilePublication,
+  ): Effect.fn.Return<FilePublicationResult, FilePublicationFailure, FileSystem.FileSystem> {
+    const suppliedInit = Option.getOrElse(
+      yield* Effect.serviceOption(FetchHttpClient.RequestInit),
+      (): RequestInit => ({}),
+    );
+    return yield* publishPreparedWithClient(config, idempotencyKey, prepared).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(FetchHttpClient.RequestInit, {
+        ...suppliedInit,
+        redirect: "error",
+      }),
+    );
+  },
+);
+
 /** Publish one previously validated local snapshot with a durable operation key. */
-export const publishPreparedPath = Effect.fn(
-  "FilePublicationClient.publishPreparedPath",
+const publishPreparedWithClient = Effect.fn(
+  "FilePublicationClient.publishPreparedWithClient",
 )(function*(
   config: FilePublicationClientConfig,
   idempotencyKey: string,

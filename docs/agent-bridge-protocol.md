@@ -183,14 +183,23 @@ Rules:
 
 ### Unicode sanitization
 
-Comment bodies, bundle notes, and quoted selections are untrusted human text that ends up inside an agent's context. Before composing the message, strip these code points from every one of those fields:
+Sender display names, artifact names, manifest paths, comment bodies, bundle
+notes, and quoted selections are untrusted text that can reach an agent's
+context. Before composing the message, strip these code points from every one
+of those fields:
 
 | Class | Code points |
 | --- | --- |
 | Bidirectional overrides and isolates | U+202A to U+202E, U+2066 to U+2069 |
 | Zero-width and invisible characters | U+200B to U+200F, U+2060, U+FEFF |
 
-These characters can reorder or conceal rendered text, so a comment can read one way to the human who wrote it and another way to the agent that receives it. Sanitizing is the bridge's job, not the server's: it happens inside the render path, so it applies identically no matter which server or which host is involved. It applies to every evidence tier, including bundles pushed through a channel.
+These characters can reorder or conceal rendered text, so a field can read one
+way to the human who wrote it and another way to the receiving agent. The
+bridge and the MCP mailbox each sanitize at their final render boundary. Each
+host adapter also sanitizes the final message and notice it hands to its host,
+so a separately installed adapter stays safe with an older bridge package.
+The mailbox sanitizes its separate note and path display fields. The rule
+applies to every evidence tier, including bundles pushed through a channel.
 
 ## Delivery evidence
 

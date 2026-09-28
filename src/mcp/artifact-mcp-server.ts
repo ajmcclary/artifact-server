@@ -101,6 +101,7 @@ import {
 import {artifactServerFailureResponse} from "../http/artifact-http-failure.js";
 import {
   renderBundleMessage,
+  sanitizeBundleText,
   type BundleItem,
   type RenderableBundle,
 } from "./dispatch-bundle-message.js";
@@ -2100,7 +2101,7 @@ export function createArtifactMcpServer(
       .map((dispatch) => ({
         createdAt: dispatch.createdAt,
         id: dispatch.id,
-        note: dispatch.note,
+        note: dispatch.note === null ? null : sanitizeBundleText(dispatch.note),
         threadCount: dispatch.threadIds.length,
       }));
   };
@@ -2216,7 +2217,7 @@ export function createArtifactMcpServer(
       });
       threads.push({
         artifactId: thread.artifactId,
-        path: thread.path,
+        path: thread.path === null ? null : sanitizeBundleText(thread.path),
         threadId,
       });
     }
@@ -2337,7 +2338,9 @@ export function createArtifactMcpServer(
             claimed: {
               dispatchId: dispatch.id,
               message: renderBundleMessage(assembled.bundle, "mailbox"),
-              note: dispatch.note,
+              note: dispatch.note === null
+                ? null
+                : sanitizeBundleText(dispatch.note),
               projectId: dispatch.projectId,
               threadIds: [...dispatch.threadIds],
               threads: assembled.threads,

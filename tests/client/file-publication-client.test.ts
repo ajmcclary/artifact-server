@@ -18,6 +18,7 @@ import {z} from "zod";
 import {fetchLoopbackContent} from "../support/fetch-loopback-content.js";
 
 import {
+  type FilePublicationClientConfig,
   type FilePublicationCommand,
   type FilePublicationFailure,
   type FilePublicationResult,
@@ -308,6 +309,32 @@ describe("file publication client", () => {
     ]);
   });
 
+  test("a server redirect cannot turn a batch publication into a cross-origin POST", async () => {
+    const redirecting = await startRedirectBatchServer();
+    try {
+      const inputDirectory = path.join(fixtureDirectory, "redirect-batch");
+      await mkdir(inputDirectory);
+      await Promise.all([
+        writeFile(path.join(inputDirectory, "a.txt"), "a"),
+        writeFile(path.join(inputDirectory, "b.txt"), "b"),
+      ]);
+      const result = await executeClient(
+        redirecting.origin,
+        installation.apiToken,
+        {...newArtifactCommand(inputDirectory), entryPath: "a.txt"},
+        "batch",
+      );
+      expect(result).toMatchObject({
+        error: {_tag: "FilePublicationProtocolError", operation: "upload_batch"},
+        success: false,
+      });
+      expect(redirecting.batchRequests).toBe(1);
+      expect(redirecting.redirectedRequests).toBe(0);
+    } finally {
+      await redirecting.close();
+    }
+  });
+
   test("skips already-verified files when resuming a crashed upload", async () => {
     const crashServer = await startResumeCrashServer();
     try {
@@ -386,15 +413,14 @@ function executeClient(
   serverOrigin: string,
   apiToken: string,
   command: FilePublicationCommand,
+  transport?: "batch",
 ): Promise<ClientOutcome> {
+  const token = Redacted.make(apiToken, {label: "test-api-token"});
+  const config: FilePublicationClientConfig = transport === undefined
+    ? {apiToken: token, serverOrigin}
+    : {apiToken: token, serverOrigin, transport};
   return Effect.runPromise(
-    publishPath(
-      {
-        apiToken: Redacted.make(apiToken, {label: "test-api-token"}),
-        serverOrigin,
-      },
-      command,
-    ).pipe(
+    publishPath(config, command).pipe(
       Effect.match({
         onFailure: (error): ClientFailure => ({error, success: false}),
         onSuccess: (result): ClientSuccess => ({result, success: true}),
@@ -403,6 +429,66 @@ function executeClient(
       Effect.provide(NodeFileSystem.layer),
     ),
   );
+}
+
+async function startRedirectBatchServer(): Promise<{
+  readonly origin: string;
+  readonly batchRequests: number;
+  readonly redirectedRequests: number;
+  close(): Promise<void>;
+}> {
+  let redirectedRequests = 0;
+  let batchRequests = 0;
+  const sink = createServer((_request, response) => {
+    redirectedRequests += 1;
+    response.writeHead(200).end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    sink.once("error", reject);
+    sink.listen(0, "127.0.0.1", resolve);
+  });
+  const sinkPort = assignedAddressSchema.parse(sink.address()).port;
+  let origin = "";
+  const source = createServer((request, response) => {
+    const route = new URL(request.url ?? "/", origin).pathname;
+    if (route === "/api/v1/uploads" && request.method === "POST") {
+      response.writeHead(201, {"Content-Type": "application/json"}).end(JSON.stringify({
+        commitUrl: `${origin}/api/v1/uploads/redirect/commit`,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        files: ["a.txt", "b.txt"].map((file) => ({
+          method: "PUT",
+          path: file,
+          size: 1,
+          uploadUrl: `${origin}/api/v1/uploads/redirect/files/${file}`,
+          verified: false,
+        })),
+        manifestDigest: "0".repeat(64),
+        projectId: "prj_default",
+        status: "created",
+        uploadId: "redirect",
+      }));
+      return;
+    }
+    if (route === "/api/v1/uploads/redirect/batch") {
+      batchRequests += 1;
+      response.writeHead(307, {Location: `http://127.0.0.1:${sinkPort}/capture`}).end();
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve, reject) => {
+    source.once("error", reject);
+    source.listen(0, "127.0.0.1", resolve);
+  });
+  origin = `http://127.0.0.1:${assignedAddressSchema.parse(source.address()).port}`;
+  return {
+    get batchRequests() { return batchRequests; },
+    close: async () => {
+      await Promise.all([closeServer(source), closeServer(sink)]);
+    },
+    origin,
+    get redirectedRequests() { return redirectedRequests; },
+  };
 }
 
 function failureReason(outcome: ClientOutcome): string | undefined {

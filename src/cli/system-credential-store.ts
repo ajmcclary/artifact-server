@@ -150,11 +150,8 @@ function macOsCredentialStore(
     ),
     read: readMacOsSecret(environment),
     write: (account, secret) => runCredentialProcess({
-      // security(1) has no standard-input mode for add-generic-password. A bare -w prompts on
-      // the terminal, so a piped secret answers "password data for new item:", end-of-file
-      // answers "retype password for new item:", the two disagree, and security exits 0 having
-      // stored nothing usable. The value has to be an argument, where it is visible in the
-      // process list for the lifetime of this call.
+      // A bare -w prompts twice. Answer both prompts through stdin so the
+      // credential never appears in the process arguments.
       arguments: [
         "add-generic-password",
         "-a",
@@ -163,11 +160,10 @@ function macOsCredentialStore(
         credentialService,
         "-U",
         "-w",
-        Redacted.value(secret),
       ],
       environment,
       executable: "/usr/bin/security",
-      input: "",
+      input: `${Redacted.value(secret)}\n${Redacted.value(secret)}\n`,
       operation: "write",
     }).pipe(
       // Read the item back rather than trusting the exit code. A write that stores nothing

@@ -26,6 +26,7 @@ import {
   type EnvironmentConfiguration,
   type HostPort,
   resolveBridgeCredentials,
+  sanitizeBundleText,
   startBridge,
   ThreadLocationCache,
 } from "@plannotator/agent-bridge";
@@ -288,7 +289,7 @@ export async function ArtifactServerBridge(
       (compaction !== null &&
         compaction.sessionId === targetSessionId &&
         Date.now() - compaction.startedAt < compactionFlagLifetimeMilliseconds),
-    notify,
+    notify: (message, kind) => notify(sanitizeBundleText(message), kind),
     sendUserMessage: async (text) => {
       const sessionId = targetSessionId;
       if (sessionId === null) {
@@ -296,7 +297,7 @@ export async function ArtifactServerBridge(
         // refuses this dispatch without invalidating the OpenCode plugin.
         throw new Error("No OpenCode session is available for delivery.");
       }
-      await injectFollowUp(sessionId, text);
+      await injectFollowUp(sessionId, sanitizeBundleText(text));
     },
   };
 

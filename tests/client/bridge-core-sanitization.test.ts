@@ -56,18 +56,18 @@ describe("bundle text sanitization", () => {
     expect(sanitizeBundleText(benign)).toBe(benign);
   });
 
-  test("the rendered bundle strips hostile controls from body, note, and quoted selection", () => {
+  test("the rendered bundle strips hostile controls from every human field", () => {
     const message = renderBundleMessage({
       items: [{
-        artifactName: "Report",
+        artifactName: "Re\u202Eport",
         body: "Line\u202E one.\n\u200BLine two.",
-        path: "index.html",
+        path: "in\u2066dex.html",
         quotedSelection: "quoted\u2066 text\uFEFF",
         threadId: "cmt_hostile_unicode",
         versionNumber: 2,
       }],
       note: "\u200Furgent\u2069 note",
-      senderDisplayName: "Ada",
+      senderDisplayName: "A\u200Bda",
     });
     for (
       const character of [...bidirectionalControls, ...invisibleCharacters]
@@ -75,6 +75,8 @@ describe("bundle text sanitization", () => {
       expect(message.includes(character)).toBe(false);
     }
     expect(message).toContain("urgent note");
+    expect(message).toContain("Artifact Server: Ada sent");
+    expect(message).toContain("[Report · version 2 · index.html]");
     expect(message).toContain("   Line one.");
     expect(message).toContain("   Line two.");
     expect(message).toContain("\"quoted text\"");
