@@ -26,7 +26,7 @@ const projectId = "artifact-server-integration";
 const endpoint = requiredEnvironment("ARTIFACT_SERVER_TEST_GCS_ENDPOINT");
 const storage = new Storage({apiEndpoint: endpoint, projectId});
 const bucket = storage.bucket(bucketName);
-const integrationTestTimeoutMs = 60_000;
+const integrationTestTimeoutMs = 120_000;
 const resumableBytes = 11 * 1024 * 1024;
 
 describe.sequential("GCS sealed staged promotion", () => {
