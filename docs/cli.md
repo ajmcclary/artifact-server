@@ -179,6 +179,79 @@ binary bytes at the application origin; they are not provider-native signed
 uploads (that remains [T11](../NEXT-STEPS.md)). Do not delete staged server
 data manually to recover a client operation.
 
+## Publish named groups
+
+A repository can define ordered publication groups in `artifactserver.publish.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "defaults": {"profile": "team", "project": "prj_example"},
+  "targets": {
+    "prototype": {"path": "prototype"},
+    "reports": {"path": "reports"}
+  },
+  "groups": {
+    "design": {"targets": ["prototype", "reports"]},
+    "prototype": {"targets": ["prototype"]}
+  }
+}
+```
+
+Targets contain only relative source paths. Group and target names use lowercase
+letters, digits, and hyphens (up to 64 characters). A group can override `profile`
+or `project`; explicit CLI settings override the group, then file defaults. If
+omitted, normal authentication and single-project selection apply once to the
+whole group. Targets inherit remembered entry/routing choices and cannot select
+their own destination. Credentials, artifact/version IDs, hooks, nested groups,
+and unknown configuration fields are refused. Globs are not expanded.
+
+Paths resolve relative to the configuration directory and must remain inside it.
+Sources cannot include the configuration file or private CLI state, or point
+inside that state. Duplicate canonical sources within a group are refused.
+Configuration discovery searches the current directory and its parents, stopping
+at the checkout root; an explicit `--config` works from anywhere.
+
+```sh
+artifactserver publications groups
+artifactserver publish --group design --dry-run
+artifactserver publish --group design
+artifactserver publish --group design --json
+artifactserver publish --group design --config /path/to/artifactserver.publish.json
+```
+
+Preflight inspects every member and reports `changed`, `unchanged`, `unregistered`,
+`conflicted`, `resumable`, or `blocked`. Any blocker stops the whole group before
+uploads. A dry run leaves publication records, journals, locks, and run reports
+untouched; normal authentication cache/token refresh may still occur. A preview
+is an observation, not a reservation: execution rechecks source location, saved
+binding, destination identity, and server version guards.
+
+Unregistered members block by default. Import their existing receipts, or use
+`--allow-create` to explicitly permit first publications with the ordinary private
+artifact defaults. A matching pending operation can resume its previously
+selected intent. Incompatible pending inputs or options require reconciliation
+through the original single-path command. Group mode refuses `--artifact`,
+`--expected-version`, `--new-artifact`, and other per-artifact choice flags.
+
+Members execute sequentially. Individual runtime failures are collected while
+independent members continue; `--fail-fast` stops subsequent members. Completed
+versions remain committed. Rerunning the group skips unchanged successes and
+recovers matching interrupted operations without duplicating versions.
+
+Human output shows each outcome and totals for published, unchanged, recovered,
+failed, and skipped members. `--json` emits one final result on stdout, with
+progress on stderr. Blocked preflight or any runtime failure returns a nonzero
+exit status. Existing single-path publication output stays JSON.
+
+Each executing run writes a private atomic report under
+`<profile-data>/publication-runs/<generated-run-id>.json`. A target's successful
+receipt is persisted there before its publisher acknowledges delivery. If report
+storage fails, the run stops and the publisher retains any undelivered receipt.
+Interrupted reports preserve completed outcomes; the per-target publication
+journal remains the authority for retries. Dry runs and blocked preflight create
+no run report.
+
 ## Link a working file
 
 `publish` uploads a snapshot. `link` registers a file that stays on this machine, so the server reads its current bytes when someone captures a new version:

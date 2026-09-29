@@ -223,3 +223,32 @@ Unrelated journals are preserved and do not block verified receipt imports. An
 imported binding takes precedence over old unbound create attempts. State must remain outside uploaded
 source trees, and no conformance status for a server deployment is implied by
 local CLI verification.
+
+
+## Publication groups
+
+CLI-005 adds ordered repository-defined groups over the remembered publisher.
+`artifactserver.publish.json` has versioned shared defaults, path-only named
+targets, and groups containing target names with optional profile/project
+overrides. CLI destination selections take precedence. Relative sources are
+confined to the configuration directory, and duplicate canonical sources,
+configuration inclusion, and private CLI state inclusion are refused.
+
+`publish --group <name>` is mutually exclusive with a positional path and
+per-artifact mutation flags. `--config` explicitly selects a file; discovery stops
+at the checkout boundary. `publications groups` lists definitions offline.
+Preflight resolves one shared destination and checks all sources, remembered
+bindings, identities, manifests, version guards, and recoverable pending intent.
+Any blocker prevents all uploads. Unregistered sources require `--allow-create`;
+matching pending operations preserve existing recovery semantics. `--dry-run`
+creates no publication records, journals, locks, or run reports; normal auth
+refresh/cache behavior is allowed.
+
+Execution is sequential and rechecks state under the existing publisher lock.
+Independent member failures continue by default; `--fail-fast` leaves remaining
+members skipped. Partial success is retained. Structured JSON and human summaries
+report published, unchanged, recovered, failed, and skipped outcomes, with nonzero
+exit status for blockers or failures. Private generated-ID run reports are atomic
+and durable before per-target receipt delivery is acknowledged. Report storage
+failure stops further members and preserves undelivered receipts. No second
+upload recovery protocol or server API is introduced.

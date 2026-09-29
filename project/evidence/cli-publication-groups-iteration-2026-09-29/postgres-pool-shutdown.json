@@ -1,0 +1,24 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-09-29T21:47:40.954Z",
+  "commit": "f73dd72b158eefec3a486e5b68c0c717c875f5ca",
+  "cpu": "Apple M1 Max",
+  "details": {
+    "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+    "postgresImageDigest": "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
+  },
+  "lockfileDigest": "a480e3bc57c927289d2706fc0abcc30db823cb89c664cd79fb0b27232d7e3808",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "connectionsAfterClose": 0,
+  "connectionsBeforeClose": 1,
+  "note": "T18 SQL-cancellation follow-up against the pinned Postgres container: one PostgresDatabase pool shows at least one server-side connection while open, pg_stat_activity drains to zero after close(), a second close() resolves without reconnecting, and post-close use rejects with 'ManagedRuntime disposed' rather than leaking a usable pool.",
+  "postCloseQueryOutcome": "rejected: ManagedRuntime disposed",
+  "repeatedCloseResolved": true,
+  "probe": "T18-postgres-pool-shutdown",
+  "target": "postgres-container"
+}

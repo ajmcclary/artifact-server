@@ -73,3 +73,11 @@ export async function publicationProjectSelectionError(connection: CliServerConn
 function projectSelectionError(projects: z.infer<typeof projectsSchema>["projects"]): Error {
   return new Error(`PROJECT_SELECTION_REQUIRED: Select a publication project with --project. Available projects: ${projects.map((project) => `${project.name} (${project.id})`).join(", ")}.`);
 }
+
+export async function requireActivePublicationProject(connection: CliServerConnection, projectId: string): Promise<void> {
+  const response = z.object({project: z.object({id: z.string(), archivedAt: z.string().nullable()})})
+    .parse(JSON.parse(await readPublicationResource(connection, `/api/v1/projects/${encodeURIComponent(projectId)}`)));
+  if (response.project.id !== projectId || response.project.archivedAt !== null) {
+    throw new Error("The selected publication project is missing or archived.");
+  }
+}

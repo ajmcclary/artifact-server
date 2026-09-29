@@ -1,6 +1,7 @@
 import {readFile} from "node:fs/promises";
 import type {Command} from "commander";
 
+import {configurePublicationGroupList} from "./publication-group-command.js";
 import {resolveCliServerConnection} from "./cli-server-connection.js";
 import {resolvePublicationContext} from "./publication-context.js";
 import {addPublicationDestinationOptions, type PublicationDestinationOptions} from "./publication-options.js";
@@ -14,6 +15,7 @@ interface ImportOptions extends PublicationDestinationOptions {
 
 export function configurePublicationCommands(program: Command, defaultProfileDirectory: string): void {
   const publications = program.command("publications").description("Inspect and register remembered publication destinations.");
+  configurePublicationGroupList(publications);
   addPublicationDestinationOptions(publications.command("list").description("List remembered sources and destinations."), defaultProfileDirectory)
     .action(async (options: PublicationDestinationOptions) => {
       let records = await listPublicationRecords(await publicationDirectory(options.profileData));

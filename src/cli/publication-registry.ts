@@ -24,7 +24,8 @@ export async function publicationSource(inputPath: string): Promise<string> {
   return realpath(source);
 }
 
-export async function publicationDirectory(profileData: string, sourcePath?: string): Promise<string> {
+/** Locate and validate publication state without creating directories or changing permissions. */
+export async function locatePublicationDirectory(profileData: string, sourcePath?: string): Promise<string> {
   const canonicalData = await prospectiveDirectory(path.resolve(profileData));
   if (sourcePath !== undefined) {
     const relative = path.relative(sourcePath, canonicalData);
@@ -32,10 +33,18 @@ export async function publicationDirectory(profileData: string, sourcePath?: str
       throw new Error("Publication state must be outside the published source. Choose --profile-data outside this folder.");
     }
   }
-  await mkdir(canonicalData, {recursive: true, mode: 0o700});
   const directory = path.join(canonicalData, "publications");
+  try {
+    if (!(await lstat(directory)).isDirectory()) throw new Error("The publication registry must be a directory, not a symbolic link.");
+  } catch (error) {
+    if (!(error instanceof Error) || !hasFileError(error, "ENOENT")) throw error;
+  }
+  return directory;
+}
+
+export async function publicationDirectory(profileData: string, sourcePath?: string): Promise<string> {
+  const directory = await locatePublicationDirectory(profileData, sourcePath);
   await mkdir(directory, {recursive: true, mode: 0o700});
-  if ((await lstat(directory)).isSymbolicLink()) throw new Error("The publication registry must not be a symbolic link.");
   await chmod(directory, 0o700);
   return directory;
 }
@@ -63,7 +72,12 @@ export async function readPublicationRecord(file: string): Promise<PublicationRe
 }
 
 export async function listPublicationRecords(directory: string): Promise<PublicationRecord[]> {
-  const files = (await readdir(directory)).filter((file) => file.endsWith(".json")).toSorted();
+  let names: string[];
+  try { names = await readdir(directory); } catch (error) {
+    if (error instanceof Error && hasFileError(error, "ENOENT")) return [];
+    throw error;
+  }
+  const files = names.filter((file) => file.endsWith(".json")).toSorted();
   const records = await Promise.all(files.map((file) => readPublicationRecord(path.join(directory, file))));
   return records.filter((record) => record !== null);
 }
@@ -152,5 +166,30 @@ async function prospectiveDirectory(directory: string): Promise<string> {
   try { return await realpath(directory); } catch (error) {
     if (!(error instanceof Error) || !hasFileError(error, "ENOENT")) throw error;
     return path.join(await prospectiveDirectory(path.dirname(directory)), path.basename(directory));
+  }
+}
+
+
+/** Preflight observes ownership without recovering or writing a lock. */
+export async function inspectPublicationLock(directory: string, scope: PublicationScope): Promise<void> {
+  const file = `${publicationRecordPath(directory, scope)}.lock`;
+  try {
+    await lstat(`${file}.recovery`);
+    throw new Error("Publication lock recovery is active or ambiguous.");
+  } catch (error) {
+    if (!(error instanceof Error) || !hasFileError(error, "ENOENT")) throw error;
+  }
+  try {
+    if (!(await lstat(file)).isFile()) throw new Error("Publication lock ownership is ambiguous.");
+    const owner = ownerSchema.parse(JSON.parse(await readFile(file, "utf8")));
+    if (owner.host !== hostname()) throw new Error("The publication lock belongs to another host.");
+    try { process.kill(owner.pid, 0); } catch (error) {
+      if (error instanceof Error && hasFileError(error, "ESRCH")) return;
+      throw new Error("Publication lock ownership cannot be determined.", {cause: error});
+    }
+    throw new Error("Another publication command owns this folder and destination.");
+  } catch (error) {
+    if (error instanceof Error && hasFileError(error, "ENOENT")) return;
+    throw error;
   }
 }

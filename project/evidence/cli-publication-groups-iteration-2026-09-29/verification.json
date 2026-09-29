@@ -1,0 +1,171 @@
+{
+  "canonicalCommand": "pnpm verify:iteration",
+  "allStagesPassed": true,
+  "completedAt": "2026-09-29T22:00:41.836544+00:00",
+  "nodeVersion": "v24.15.0",
+  "baseRevision": "f73dd72b158eefec3a486e5b68c0c717c875f5ca",
+  "segments": [
+    {
+      "command": "pnpm verify:iteration",
+      "status": "interrupted after compact Compose passed while preparing external storage Compose",
+      "exitCode": null,
+      "completedStages": [
+        "pnpm check",
+        "pnpm test:web",
+        "pnpm test:aws-pulumi",
+        "pnpm test:gcp-pulumi",
+        "pnpm verify:object-storage",
+        "pnpm test:external-storage-runtime",
+        "pnpm test:coverage",
+        "pnpm test:local-package",
+        "pnpm perf:baseline",
+        "pnpm perf:capacity",
+        "pnpm test:compact-compose"
+      ]
+    },
+    {
+      "command": "pnpm test:external-storage-compose && pnpm verify:helm && pnpm test:oidc",
+      "exitCode": 0,
+      "completedStages": [
+        "pnpm test:external-storage-compose",
+        "pnpm verify:helm",
+        "pnpm test:oidc"
+      ]
+    }
+  ],
+  "sourceChanges": {
+    "docs/cli.md": "c1267837baf3b024e5ab9fdb826fed89ffae05326623d6981aebcf3abaf48c5d",
+    "project/spec/conformance.yml": "3fc6469680188ccc23ce49be59dadee44ad4b70f55c49afc3c084d6a05b7fb5f",
+    "project/spec/phase-10-cli-auth-and-remote-publishing.md": "6113ef507eaaf79b0a764ab57e54f070c4bcd2ea62ea9883c1a6a55116ae8e04",
+    "src/cli/publication-commands.ts": "d0c96fd5b1c54de0a9793cdd88ee294caf4925b24654f700738ccf466af7a75d",
+    "src/cli/publication-context.ts": "46f9b04c346f24b0d5a49aa562a003ba6f590e87111c9e330f0241eda68fa80d",
+    "src/cli/publication-group-command.ts": "586b0fbe614ddc493dba872ab908f8e36a1111abc86d7abdcf0ed1e772e7064b",
+    "src/cli/publication-group-model.ts": "06886e5bae8b406b92284bd92d9054f62aaf3e326e21f45f34bb2cea9d7e1306",
+    "src/cli/publication-group-report.ts": "811e227b5540e228395587cd9a01458df86e15e2fe66d63eb307269169a5a37c",
+    "src/cli/publication-groups-config.ts": "ff0681f8deb0fb1f6d4504a5d1b79dfc768d213cf40ccebd39a20b80e3eb5453",
+    "src/cli/publication-groups.ts": "95ea5f050a4b2786be223b525fd4ad9b54cf49e3142a95c0e64bbddf5c4ed340",
+    "src/cli/publication-registry.ts": "8d091343f1959417ef733240e38340306c84c32945089a2378a72c31c3f574e5",
+    "src/cli/publication-remote.ts": "a0b54f7281d9a87ee837988f29686f60dbf83417b57061e5036137da798073df",
+    "src/cli/publish-command.ts": "fd14e50b941c98006e857ef054dceb373b5a8fbcf06298dae4eaf789f92e4240",
+    "src/cli/remembered-publication.ts": "abec29956387f36aa92d4b3b361d347dc5c02afe22751a48052130a2dc3b8544",
+    "tests/cli/publication-group-config.test.ts": "f32718ff56d19cb6cca035109ffbeddd9a20c4bd14abd29b2144ead0ffc00ac6",
+    "tests/cli/publication-groups.test.ts": "c994ed24c0107bdb2ce14b5817d18d904c8db2b7943c65590cb1cf9590232b83",
+    "tests/support/publication-group-crash.ts": "e0b9145064b2cc660678f804fe87ff51a78d82867a9829aea6918702ad6b694c"
+  },
+  "designChanges": {
+    "/Users/ajmcclary/Dev/Design/artifactserver.publish.json": "ba6e2251934b7c72752f353d00145bc1f5239559bcba433db1da1ba297082468",
+    "/Users/ajmcclary/Dev/Design/publish-all.sh": "0b9573f6a40d5c38b405afe03a871c96b9cdfbc7910fdaf756b65085ec82607a"
+  },
+  "reports": [
+    {
+      "file": "aws-pulumi.json",
+      "sha256": "a5ad84915b84363daf40ca5753b21ea83b744c372f59e9221295b3f95d392c9b",
+      "bytes": 1944
+    },
+    {
+      "file": "browser.json",
+      "sha256": "09f2dea47748eccf4664aa485ef25e0689debfd8c2306558cf74b1fcc4efe96a",
+      "bytes": 19164
+    },
+    {
+      "file": "browser.previous.json",
+      "sha256": "6ae7b4abf10e33cc715b4dfb625a11c8c03ec9f24024633c83e65b49b3597587",
+      "bytes": 18850
+    },
+    {
+      "file": "compact-compose-runtime-baseline.json",
+      "sha256": "b6936752de86fc23b4b8a99603c865cfbd85551aaceb88b10223ea67cb51642f",
+      "bytes": 191
+    },
+    {
+      "file": "compact-compose.json",
+      "sha256": "2188a55ca9f1526e3bd158ac472c4d85ca3281214e991d772cbfdcb57e090e38",
+      "bytes": 1863
+    },
+    {
+      "file": "external-storage-compose-runtime-baseline.json",
+      "sha256": "56b235b1ea2a3f123b0ac5f0d325cd694817d1c70dd63b07adf61850c21349ae",
+      "bytes": 495
+    },
+    {
+      "file": "external-storage-compose.json",
+      "sha256": "b5ccf928c7c10c74e8681087a5289f88a729f4f6db8af98cd7895e088ca5195b",
+      "bytes": 1445
+    },
+    {
+      "file": "external-storage-runtime.json",
+      "sha256": "a07de596a51b25a7e290ce39531943ed292e28c80787ed71c6433e9fe243daee",
+      "bytes": 422956
+    },
+    {
+      "file": "gcp-pulumi.json",
+      "sha256": "078eef6a8fa817bafc9ffe5a0381e42899e1deaf85445fdff7d369bfd6be636c",
+      "bytes": 1529
+    },
+    {
+      "file": "helm-kubernetes-runtime-baseline.json",
+      "sha256": "5ab371157b39c9a9955a8a4e6115eb02509076b60c49a7bd10dd04aa3b6be5e8",
+      "bytes": 1600
+    },
+    {
+      "file": "helm-kubernetes.json",
+      "sha256": "be25aac9cadfbd1db3476334088f8da609328f909912e50041e276098e8dadce",
+      "bytes": 1514
+    },
+    {
+      "file": "local-capacity-baseline.json",
+      "sha256": "43050b65aac613f2da0145d261428bb2963f92bb20e5b9886e65a5ef5e2a74f2",
+      "bytes": 17656
+    },
+    {
+      "file": "local-foundation.json",
+      "sha256": "e6f6176dbd5a8c5441892294a5f8dbbd08a5db74510f4cf456784ff715ef64eb",
+      "bytes": 201021
+    },
+    {
+      "file": "local-package-build.json",
+      "sha256": "6e172eb374d5c0fd716d8b70bbaed4941311c88de95f5e3aa088888d6e661ab9",
+      "bytes": 429
+    },
+    {
+      "file": "local-package.json",
+      "sha256": "01a943d89961fda388fa02681be79c12856ea2b6b615dcb2626c0223af938004",
+      "bytes": 1129
+    },
+    {
+      "file": "local-performance-baseline.json",
+      "sha256": "77d5c6f87e598f9959557881dc4ddc9e930b1d965f7f447136f22b6011b7644a",
+      "bytes": 5662
+    },
+    {
+      "file": "native-cloud-storage.json",
+      "sha256": "3f0d602299fde1fec219e072ca6659c82ccfdacdcf50ba04d5a8d0504dd76d5d",
+      "bytes": 120172
+    },
+    {
+      "file": "observability.json",
+      "sha256": "e03aaeb76a68ffa85b8b5bc8253dcc1405a1382c07f4a5c9bacabe75e95d78f4",
+      "bytes": 1334
+    },
+    {
+      "file": "oidc-keycloak.json",
+      "sha256": "939966f8e0b58f53b05509a4d3b60e7e7d0d7b6d4c9ddbd0ae89894a7b16b2a8",
+      "bytes": 2002
+    },
+    {
+      "file": "postgres-pool-shutdown.json",
+      "sha256": "bad6d7bf9436e49069291f000e25568cfd7516cbead993f1945b437b4068d564",
+      "bytes": 1220
+    },
+    {
+      "file": "s3-minio.json",
+      "sha256": "429196682a1fca29e43d1132762fe34ef15187d32ba5815148cb111feeffee05",
+      "bytes": 44128
+    },
+    {
+      "file": "storage-shutdown.json",
+      "sha256": "b378813a01d4deddd9fb518c9e6024a217ec6d554785668585e74a9b3c7c2f4d",
+      "bytes": 1435
+    }
+  ]
+}

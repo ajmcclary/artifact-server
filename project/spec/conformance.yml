@@ -959,6 +959,25 @@ requirements:
         run: project/evidence/cli-remembered-publications-2026-09-29.json
         recorded_at: "2026-09-29T20:15:13.264000Z"
 
+  - id: CLI-005
+    kind: behavior
+    behavior: Repository-defined publication groups preflight all members before uploads, reuse remembered bindings sequentially, and durably report independent publication outcomes without weakening recovery or version guards.
+    owner: cli
+    source: {file: phase-10-cli-auth-and-remote-publishing.md, anchor: publication-groups}
+    acceptance:
+      behavior: {id: CLI-005-B, description: "Preview a group without state writes, explicitly create its first private artifacts, skip unchanged members, update changed members in order, and share the same binding across groups with durable accurate run summaries."}
+      failure: {id: CLI-005-F, description: "Collect missing-source, unregistered-target, and stale-version blockers before any upload; blocked preflight creates no publication state or run report."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Real CLI processes and HTTP boundaries prove group preflight, unchanged detection, explicit creation, sequential failure handling, private durable reports, crash recovery, and configuration containment locally. Equivalent publication evidence has not been attached for every team deployment.
+    depends_on: [CLI-003, CLI-004, PUB-006, PUB-008]
+    evidence:
+      - deployment: local
+        tests: [CLI-005-B, CLI-005-F]
+        result: pass
+        run: project/evidence/cli-publication-groups-2026-09-29.json
+        recorded_at: "2026-09-29T21:32:43.499000Z"
+
   - id: DSN-001
     kind: behavior
     behavior: Directory publication recognizes Claude Design System and Project exports and adds a deterministic preview catalog when no existing or explicit entry takes precedence, preserving original bytes and paths through staged publication.

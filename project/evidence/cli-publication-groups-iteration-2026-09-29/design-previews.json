@@ -1,0 +1,130 @@
+{
+  "observedAt": "2026-09-29T22:00:54.487772+00:00",
+  "mode": "dry-run only; no uploads",
+  "publicationStateUnchanged": true,
+  "previews": [
+    {
+      "group": "design",
+      "exitCode": 1,
+      "status": "blocked",
+      "members": [
+        {
+          "target": "arkcase",
+          "status": "unregistered",
+          "allowed": false,
+          "message": "Import an existing receipt or explicitly use --allow-create."
+        },
+        {
+          "target": "arkcase-artifacts",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-branding",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-designer",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-icons",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-ideas",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "court-of-claims",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "extraction-kit",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "workers-compensation",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        }
+      ]
+    },
+    {
+      "group": "arkcase",
+      "exitCode": 1,
+      "status": "blocked",
+      "members": [
+        {
+          "target": "arkcase",
+          "status": "unregistered",
+          "allowed": false,
+          "message": "Import an existing receipt or explicitly use --allow-create."
+        },
+        {
+          "target": "arkcase-artifacts",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-branding",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-designer",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-icons",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "arkcase-ideas",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        }
+      ]
+    },
+    {
+      "group": "claims",
+      "exitCode": 0,
+      "status": "ready",
+      "members": [
+        {
+          "target": "court-of-claims",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        },
+        {
+          "target": "workers-compensation",
+          "status": "unchanged",
+          "allowed": true,
+          "message": null
+        }
+      ]
+    }
+  ]
+}
