@@ -35,12 +35,14 @@ import {
   claudeDesignCatalogPath,
   claudeDesignManifestPath,
   createClaudeDesignCatalog,
+  createDesignCardCatalog,
 } from "../manifest/claude-design.js";
+import {parseDesignCard, type DesignCard} from "../manifest/design-card.js";
 
 const maximumFileCount = 10_000;
 const maximumManifestPathLength = 1_024;
 const defaultDirectoryEntryPath = "index.html";
-const maximumDesignManifestBytes = 4 * 1024 * 1024;
+const maximumDesignMetadataBytes = 4 * 1024 * 1024;
 const uploadConcurrency = 4;
 
 const mediaTypesByExtension = new Map<string, string>([
@@ -594,12 +596,15 @@ async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Pr
   const manifest = files.find((file) => file.path === manifestPath);
   try {
     const manifestText = manifest?.kind === "disk"
-      ? await readDesignManifest(manifest)
+      ? await readDesignMetadata(manifest)
       : undefined;
-    const content = createClaudeDesignCatalog(paths, manifestPath, manifestText);
+    const cards = manifestPath === undefined ? await readDesignCards(files) : [];
+    const content = cards.length > 0
+      ? createDesignCardCatalog(paths, cards, path.basename(inputPath))
+      : createClaudeDesignCatalog(paths, manifestPath, manifestText);
     if (content === undefined) return defaultDirectoryEntryPath;
     if (paths.some((candidate) => candidate.toLowerCase() === claudeDesignCatalogPath)) {
-      throw new Error("The generated Claude Design catalog path already exists; choose --entry explicitly.");
+      throw new Error("The generated design catalog path already exists; choose --entry explicitly.");
     }
     if (files.length >= maximumFileCount) {
       throw new Error("The Claude Design catalog would exceed the publication file limit.");
@@ -615,14 +620,24 @@ async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Pr
     return claudeDesignCatalogPath;
   } catch (cause) {
     throw inputFailure(inputPath, "invalid_entry", cause instanceof Error
-      ? `Cannot prepare Claude Design export: ${cause.message}`
+      ? `Cannot prepare design export: ${cause.message}`
       : "Cannot prepare Claude Design export.");
   }
 }
 
-async function readDesignManifest(file: DiskPreparedFile): Promise<string> {
-  if (file.size > maximumDesignManifestBytes) {
-    throw new Error("Claude Design manifests must not exceed 4 MiB.");
+async function readDesignCards(files: readonly PreparedFile[]): Promise<DesignCard[]> {
+  return files.reduce<Promise<DesignCard[]>>(async (pending, file) => {
+    const cards = await pending;
+    if (file.kind === "disk" && file.path.endsWith(".card.html")) {
+      cards.push(parseDesignCard(file.path, await readDesignMetadata(file)));
+    }
+    return cards;
+  }, Promise.resolve([]));
+}
+
+async function readDesignMetadata(file: DiskPreparedFile): Promise<string> {
+  if (file.size > maximumDesignMetadataBytes) {
+    throw new Error("Design metadata files and card previews must not exceed 4 MiB.");
   }
   const handle = await open(file.absolutePath, fileSystemConstants.O_RDONLY | fileSystemConstants.O_NOFOLLOW);
   try {
@@ -635,7 +650,7 @@ async function readDesignManifest(file: DiskPreparedFile): Promise<string> {
     }
     const content = bytes.subarray(0, length);
     if (length !== file.size || createHash("sha256").update(content).digest("hex") !== file.sha256) {
-      throw new Error("Claude Design manifest changed during publication preparation.");
+      throw new Error("Design metadata changed during publication preparation.");
     }
     return content.toString("utf8");
   } finally {

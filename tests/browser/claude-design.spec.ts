@@ -9,14 +9,15 @@ import {Effect, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import {publishPath} from "../../src/client/file-publication-client.js";
-import {writeClaudeDesignFixture} from "../support/claude-design-fixture.js";
+import {writeClaudeDesignFixture, writeDesignCardFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
 
-test("DSN-001-B: browse a nested design system, run its scripts, search and switch templates in Review", async ({browser}) => {
+for (const annotated of [false, true]) {
+  test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search and switch templates in Review`, async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   const directory = await mkdtemp(path.join(tmpdir(), "claude-design-browser-"));
   try {
-    await writeClaudeDesignFixture(directory, true);
+    await (annotated ? writeDesignCardFixture : writeClaudeDesignFixture)(directory, true);
     const published = await Effect.runPromise(publishPath({
       serverOrigin: fixture.server.baseUrl,
       apiToken: Redacted.make(fixture.installation.apiToken),
@@ -28,7 +29,7 @@ test("DSN-001-B: browse a nested design system, run its scripts, search and swit
     await localLogin(fixture);
     await fixture.page.goto(published.links.review.toString());
     const catalog = fixture.page.locator(".as-html-preview").frameLocator("iframe");
-    await expect(catalog.getByRole("heading", {name: "Example_System"})).toBeVisible();
+    await expect(catalog.getByRole("heading", {name: annotated ? path.basename(directory) : "Example_System"})).toBeVisible();
     const card = catalog.frameLocator('iframe[name="design-preview"]');
     await expect(card.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
     await card.getByRole("button", {name: "Try button"}).click();
@@ -43,7 +44,7 @@ test("DSN-001-B: browse a nested design system, run its scripts, search and swit
     await catalog.getByRole("searchbox").fill("absent");
     await expect(catalog.getByText("No matching previews.")).toBeVisible();
     await catalog.getByRole("searchbox").fill("");
-    await fixture.page.screenshot({path: "test-results/browser/claude-design-catalog.png", fullPage: true});
+    await fixture.page.screenshot({path: `test-results/browser/claude-design-${annotated ? "annotated" : "manifest"}-catalog.png`, fullPage: true});
     await catalog.getByRole("link", {name: "Open full preview"}).click();
     await expect(catalog.getByRole("heading", {name: "Template screen"})).toBeVisible();
   } finally {
@@ -51,3 +52,4 @@ test("DSN-001-B: browse a nested design system, run its scripts, search and swit
     await rm(directory, {recursive: true, force: true});
   }
 });
+}

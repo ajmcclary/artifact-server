@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "group": "arkcase",
+  "config": "/Users/ajmcclary/Dev/Design/artifactserver.publish.json",
+  "mode": "dry-run",
+  "status": "ready",
+  "destination": {
+    "profile": "backend-app",
+    "origin": "https://artifacts.backend.app",
+    "installationId": "frontend-app",
+    "principalId": "member_5adf1ef5-1814-404a-aa46-ade7a67dfce8",
+    "projectId": "prj_default"
+  },
+  "preflight": [
+    {
+      "target": "arkcase",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_3dc66ebe-a0f2-4e8a-9d51-c89809fd183c",
+      "versionId": "ver_1c5614a6-c379-4981-ba6e-57d6dec37978"
+    },
+    {
+      "target": "arkcase-artifacts",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase-artifacts",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_452b182b-6481-4264-ac74-987ad3250287",
+      "versionId": "ver_dfc8f052-54a1-4cac-83b6-e1d7b8cde06e"
+    },
+    {
+      "target": "arkcase-branding",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase-branding",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_3f05c015-a117-4cc0-9931-edec9d23f43a",
+      "versionId": "ver_5a6428d9-8d03-4fed-9acc-3ddb04acfa8e"
+    },
+    {
+      "target": "arkcase-designer",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase-designer",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_d2fe45b2-875c-4311-ad54-5fc8470c4338",
+      "versionId": "ver_79f00248-cb03-45b9-9777-43461ef35eba"
+    },
+    {
+      "target": "arkcase-icons",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase-icons",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_3ccde5c8-d251-4bdd-b036-da635afb0006",
+      "versionId": "ver_3370d204-e23c-45d2-b576-bc7087c65040"
+    },
+    {
+      "target": "arkcase-ideas",
+      "source": "/Users/ajmcclary/Dev/Design/arkcase-ideas",
+      "status": "unchanged",
+      "allowed": true,
+      "message": "The remembered version matches the server.",
+      "artifactId": "art_2fe96c79-c5e4-4def-a593-dfddd6e6c413",
+      "versionId": "ver_6c7fdca6-bd9e-444e-931a-ad2dc7f11d5c"
+    }
+  ],
+  "results": [],
+  "summary": {
+    "published": 0,
+    "unchanged": 0,
+    "recovered": 0,
+    "failed": 0,
+    "skipped": 0
+  },
+  "runId": null,
+  "reportPath": null,
+  "error": null
+}

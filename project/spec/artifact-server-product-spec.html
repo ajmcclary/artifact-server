@@ -3978,7 +3978,7 @@ artifact_delete</code></pre>
             <span class="section-label">Export support</span>
             <h2 id="claude-design-title">Claude Design exports</h2>
           </div>
-          <p>Directory publication recognizes Claude Design Systems from a root or project/_ds_manifest.json and Claude Design Projects from .dc.html artboards. When no root index.html or explicit entry exists, the client adds a deterministic, searchable catalog of original previews and templates. Cards retain their manifest names, groups, and bounded viewport dimensions; only one preview loads at a time.</p>
+          <p>Directory publication recognizes Claude Design Systems from a root or project/_ds_manifest.json, portable design systems from .card.html previews with leading @dsCard metadata, and Claude Design Projects from .dc.html artboards. When no root index.html or explicit entry exists, the client adds a deterministic, searchable catalog of original previews and templates. A vendor manifest remains authoritative; otherwise card annotations supply names, groups, subtitles, and bounded viewport dimensions, with artboards listed as templates. Only one preview loads at a time.</p>
           <p>The catalog is published through the existing staged upload and immutable version contract without rewriting source files. Manifest references must name published HTML files. Malformed, oversized, escaping, missing, or empty catalogs and generated filename collisions fail before upload. Existing entries and explicit entry selections take precedence. Export runtimes and remote dependencies remain the export's responsibility; no editor or source compilation is implied.</p>
         </section>
 

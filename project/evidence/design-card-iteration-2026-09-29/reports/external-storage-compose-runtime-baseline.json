@@ -1,0 +1,16 @@
+{
+  "composeVersion": "5.5.1",
+  "imageRevision": "a01ab1dd20a8b26f57786daa54611647f0a4c585",
+  "measuredAt": "2026-09-29T23:31:23.626Z",
+  "platform": "darwin",
+  "providerReadyMilliseconds": 2325,
+  "readBaseline": {
+    "completedRequests": 40,
+    "elapsedMilliseconds": 58.62591699999939,
+    "p95Milliseconds": 54.46112499999981,
+    "requestsPerSecond": 682.2920995845645
+  },
+  "replacementMilliseconds": 5825.279125000001,
+  "replicas": 2,
+  "startupMilliseconds": 5394.6799169999995
+}

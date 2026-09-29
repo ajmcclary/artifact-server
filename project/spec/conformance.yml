@@ -1002,6 +1002,30 @@ requirements:
         run: project/evidence/claude-design-browser.json
         recorded_at: "2026-09-17T04:15:53.250Z"
 
+  - id: DSN-002
+    kind: behavior
+    behavior: Directory publication recognizes portable design systems from card HTML without requiring a vendor manifest, preserving annotated names, groups, subtitles and bounded viewport sizes alongside artboard templates without modifying original files.
+    owner: cli
+    source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
+    acceptance:
+      behavior: {id: DSN-002-B, description: "Publish flat and nested card systems through staged HTTP, replay identical inputs, preserve source bytes and relative assets, browse grouped cards and artboard templates, and honor vendor manifests, existing and explicit entries."}
+      failure: {id: DSN-002-F, description: "Reject malformed, duplicate, unterminated, oversized and colliding metadata before upload; escape names, groups and subtitles without executing them or letting annotations redirect preview paths."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local staged HTTP and Chromium card browsing pass, including the real ArkCase export. Equivalent evidence for team deployments remains unrecorded.
+    depends_on: [DSN-001, CLI-004, MAN-001]
+    evidence:
+      - deployment: local
+        tests: [DSN-002-B, DSN-002-F]
+        result: pass
+        run: project/evidence/design-card-support-2026-09-29.json
+        recorded_at: "2026-09-29T23:11:33.305039+00:00"
+      - deployment: local
+        tests: [DSN-002-B]
+        result: pass
+        run: project/evidence/design-card-browser-2026-09-29.json
+        recorded_at: "2026-09-29T23:11:33.305267+00:00"
+
   - id: AUD-001
     kind: security
     behavior: Every publish, restore, access change, connection change, and deletion records the responsible effective principal and human authorizer when present.

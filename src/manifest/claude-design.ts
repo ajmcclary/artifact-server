@@ -1,6 +1,7 @@
 import {Schema} from "effect";
 
 import {parseManifestPath} from "./create-manifest.js";
+import type {DesignCard} from "./design-card.js";
 
 /** The extra immutable entry page created for a recognized Claude export. */
 export const claudeDesignCatalogPath = "artifact-server-design.html";
@@ -84,6 +85,27 @@ function previewPath(prefix: string, candidate: string, paths: readonly string[]
     throw new Error("Claude Design preview must reference a published HTML file.");
   }
   return result;
+}
+
+/** Catalog annotated cards alongside artboards without requiring a vendor manifest. */
+export function createDesignCardCatalog(paths: readonly string[], cards: readonly DesignCard[], title: string): string {
+  const previews = cards.map((card): DesignPreview => ({
+    path: previewPath("", card.path, paths),
+    name: card.name,
+    group: card.group ?? "Components",
+    description: card.subtitle ?? "",
+    ...viewport(card.viewport),
+  }));
+  const templates = paths.filter((candidate) => candidate.endsWith(".dc.html"))
+    .map((candidate): DesignPreview => ({
+      path: previewPath("", candidate, paths),
+      name: candidate.split("/").at(-1)?.slice(0, -".dc.html".length) ?? candidate,
+      group: "Templates",
+      description: candidate,
+      width: 1280,
+      height: 900,
+    }));
+  return renderCatalog("Design System", title, [...previews, ...templates]);
 }
 
 function viewport(value: string | undefined) {

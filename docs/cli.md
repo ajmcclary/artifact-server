@@ -310,4 +310,4 @@ artifactserver maintenance cleanup-staging --once --limit 100
 
 ## Claude Design exports
 
-Publish complete Claude Design System and Project directories to generate a preview catalog automatically when no root `index.html` exists. An explicit `--entry` always wins. See [Claude Design exports](./claude-design.md) for supported layouts and boundaries.
+Publish complete Claude Design System and Project directories, or portable design systems with `*.card.html` previews and `@dsCard` metadata, to generate a preview catalog automatically when no root `index.html` exists. An explicit `--entry` always wins. See [Claude Design exports](./claude-design.md) for supported layouts and boundaries.
