@@ -30,6 +30,7 @@ import {configureLifecycleCommands} from "./lifecycle-commands.js";
 import {configureCliAuthCommands} from "./cli-auth-commands.js";
 import {configureLinkCommand} from "./link-command.js";
 import {configureMcpOnboardingCommands} from "./mcp-onboarding-commands.js";
+import {configurePublicationCommands} from "./publication-commands.js";
 import {configurePublishCommand} from "./publish-command.js";
 import {configureGitHistoryCommands} from "./git-history-commands.js";
 import {waitForProcessSignal} from "./wait-for-process-signal.js";
@@ -69,6 +70,7 @@ const defaultUserDataDirectory = path.join(homedir(), ".artifact-server");
 configureCliAuthCommands(program, {
   defaultProfileDirectory: defaultUserDataDirectory,
 });
+configurePublicationCommands(program, defaultUserDataDirectory);
 configurePublishCommand(program, {
   defaultProfileDirectory: defaultUserDataDirectory,
 });

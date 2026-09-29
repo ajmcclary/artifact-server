@@ -940,6 +940,25 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-08-25T18:29:58.000Z"
 
+  - id: CLI-004
+    kind: behavior
+    behavior: The CLI remembers source publication receipts outside uploaded content, reuses their artifact and guarded version, skips unchanged manifests, and provides verified import, status, list, and explicit refresh without publishing.
+    owner: cli
+    source: {file: phase-10-cli-auth-and-remote-publishing.md, anchor: remembered-publications}
+    acceptance:
+      behavior: {id: CLI-004-B, description: "Publish, repeat unchanged without an upload, change files to create the next version of the same artifact, preserve entry and routing choices, explicitly create another artifact, and import and inspect its receipt without publishing."}
+      failure: {id: CLI-004-F, description: "Stale server versions, forged or malformed receipts, corrupt records, deleted artifacts, and changed installation identity are refused without starting an upload or creating a replacement artifact."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Real CLI processes and HTTP boundaries prove remembering, unchanged detection, import, conflicts, identity isolation, locking, interrupted receipt persistence, and legacy recovery locally. Equivalent evidence has not been attached for every team deployment.
+    depends_on: [CLI-002, CLI-003, PUB-006, PUB-008]
+    evidence:
+      - deployment: local
+        tests: [CLI-004-B, CLI-004-F]
+        result: pass
+        run: project/evidence/cli-remembered-publications-2026-09-29.json
+        recorded_at: "2026-09-29T20:15:13.264000Z"
+
   - id: DSN-001
     kind: behavior
     behavior: Directory publication recognizes Claude Design System and Project exports and adds a deterministic preview catalog when no existing or explicit entry takes precedence, preserving original bytes and paths through staged publication.

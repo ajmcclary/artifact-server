@@ -473,6 +473,8 @@ function runPublishCliToExit(arguments_: readonly string[]): Promise<ProcessResu
   return runCommandToExit([
     "publish",
     ...arguments_,
+    "--profile-data",
+    path.join(dataDirectory, "cli-profiles"),
     "--token-file",
     path.join(dataDirectory, "local-api-token"),
   ]);

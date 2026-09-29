@@ -184,3 +184,42 @@ behavior and failure IDs. The ledger therefore remains `implementing`.
 - [WorkOS AuthKit CLI authorization](https://workos.com/docs/authkit/cli-auth)
   documents the hosted authorization-code and PKCE path that must pass staging
   before it is enabled for a hosted Artifact Server.
+
+
+## Remembered publications
+
+CLI-004 makes publication receipts durable client state under the user-local
+profile directory. Each validated source, origin, installation, principal, and
+project has a private record. A successful publish binds that source to the
+returned artifact and version; another ordinary publish creates the next version.
+An unchanged canonical manifest returns the current receipt with `unchanged: true`
+after checking the expected server version, without starting an upload. Entry,
+routing, content digests, paths, sizes, and media types participate in comparison.
+Explicit entry choices persist while automatic generated catalogs remain automatic.
+
+`--new-artifact` deliberately creates and remembers another artifact. Explicit
+`--artifact` and `--expected-version` remain authoritative. Creation metadata may
+be repeated only when it agrees with the existing artifact. Credentials resolve
+normally and are not part of receipts; changed installation or principal identity
+must not silently replace a remembered artifact.
+
+`publications list` inventories saved targets; `status <path>` checks their remote
+version; `import <path> --receipt <file>` validates and binds an existing receipt;
+`refresh <path>` explicitly accepts the current version of an existing binding.
+These management operations never upload. Imports refuse stale or mismatched
+receipts and different existing bindings. A moved source can import its receipt.
+
+Pending intent and idempotency identity are durable before network mutation. The
+receipt and settled state replace the pending record atomically before stdout.
+A durable undelivered-receipt marker is acknowledged only after stdout accepts the
+result; a lost process replays that receipt before another intent, including
+explicit new-artifact requests.
+An uncertain result remains pending and must reconcile the same command; changed
+input or target is refused. A definitive commit-time PUBLISH_CONFLICT is settled
+without adopting a newer version, permitting explicit refresh. An exclusive
+process-owned lock protects each scope; only a demonstrably dead local owner is
+reclaimed. Corrupt records or ambiguous locks fail closed. Matching legacy pending journals are reconciled with their original command.
+Unrelated journals are preserved and do not block verified receipt imports. An
+imported binding takes precedence over old unbound create attempts. State must remain outside uploaded
+source trees, and no conformance status for a server deployment is implied by
+local CLI verification.

@@ -98,7 +98,7 @@ describe("authenticated CLI profiles and remote publication", () => {
       expect(lost.exitCode).not.toBe(0);
       expect(lost.stderr).toContain("Artifact Server could not be reached");
       expect(proxy.droppedResponses()).toBe(1);
-      const operationDirectory = path.join(profileData, "publication-operations");
+      const operationDirectory = path.join(profileData, "publications");
       const pendingOperations = await readdir(operationDirectory);
       expect(pendingOperations).toHaveLength(1);
       const pendingOperation = pendingOperations[0];
@@ -126,7 +126,10 @@ describe("authenticated CLI profiles and remote publication", () => {
       expect(publicationSchema.extend({replayed: z.literal(true)}).parse(
         JSON.parse(recovered.stdout),
       ).version.number).toBe(1);
-      expect(await readdir(operationDirectory)).toHaveLength(0);
+      expect(await readdir(operationDirectory)).toHaveLength(1);
+      const settledRecord = z.object({pending: z.null(), receipt: z.object({version: z.object({number: z.number()})})})
+        .parse(JSON.parse(await readFile(path.join(operationDirectory, pendingOperation ?? "missing"), "utf8")));
+      expect(settledRecord.receipt.version.number).toBe(1);
 
       const listed = await fetch(`${serverOrigin}/api/v1/artifacts?limit=100`, {
         headers: {Authorization: `Bearer ${token}`},
@@ -284,7 +287,8 @@ describe("authenticated CLI profiles and remote publication", () => {
       );
       expect(afterRestart.exitCode).toBe(0);
       expect(publicationSchema.parse(JSON.parse(afterRestart.stdout)).artifact.id)
-        .not.toBe(firstResult.artifact.id);
+        .toBe(firstResult.artifact.id);
+      expect(z.object({unchanged: z.boolean()}).parse(JSON.parse(afterRestart.stdout)).unchanged).toBe(true);
 
       const mismatchedOrigin = await runCli(
         [
@@ -622,7 +626,7 @@ async function startLostCommitResponseProxy(
         }
       }
       response.writeHead(upstream.status, {"Content-Type": "application/json"});
-      response.end(responseBody);
+      response.end(responseBody.replaceAll(upstreamOrigin, origin));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Proxy failure");
       response.writeHead(502, {"Content-Type": "text/plain"});

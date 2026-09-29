@@ -5,6 +5,7 @@ import {
   mkdir,
   open,
   readFile,
+  readdir,
   rm,
 } from "node:fs/promises";
 import path from "node:path";
@@ -125,6 +126,53 @@ async function readOperation(
   } catch (error) {
     const parsed = systemErrorSchema.safeParse(error);
     if (parsed.success && parsed.data.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** Inspect legacy journals before selecting a fresh publication intent. */
+export async function findLegacyPublicationOperation(
+  dataDirectory: string,
+  origin: string,
+  operationScopeDigest: string,
+  operationDigest: string,
+): Promise<PublicationOperation | null> {
+  const digest = createHash("sha256").update(JSON.stringify({operationScopeDigest, origin})).digest("hex");
+  const file = path.join(dataDirectory, "publication-operations", `${digest}.json`);
+  const existing = await readOperation(file);
+  if (existing === null) return null;
+  if (existing.origin !== origin || existing.operationScopeDigest !== operationScopeDigest ||
+    existing.operationDigest !== operationDigest) {
+    throw new Error("The publication input changed while an earlier attempt is still pending. Restore the original input and retry.");
+  }
+  return operation(existing.idempotencyKey, file);
+}
+
+/** Finish an imported legacy journal only after its receipt is durable. */
+export async function completeLegacyPublicationOperation(
+  dataDirectory: string,
+  origin: string,
+  operationScopeDigest: string,
+  operationDigest: string,
+): Promise<void> {
+  const digest = createHash("sha256").update(JSON.stringify({operationScopeDigest, origin})).digest("hex");
+  const file = path.join(dataDirectory, "publication-operations", `${digest}.json`);
+  const existing = await readOperation(file);
+  if (existing === null) return;
+  if (existing.operationDigest !== operationDigest || existing.origin !== origin ||
+    existing.operationScopeDigest !== operationScopeDigest) {
+    throw new Error("The legacy publication journal changed before receipt settlement.");
+  }
+  await rm(file);
+}
+
+/** Avoid extra preparation when no legacy journals could require recovery. */
+export async function hasLegacyPublicationOperations(dataDirectory: string): Promise<boolean> {
+  try {
+    return (await readdir(path.join(dataDirectory, "publication-operations"))).some((file) => file.endsWith(".json"));
+  } catch (error) {
+    const parsed = systemErrorSchema.safeParse(error);
+    if (parsed.success && parsed.data.code === "ENOENT") return false;
     throw error;
   }
 }

@@ -60,17 +60,18 @@ Publication returns JSON with three browser links:
 | `--public` | Allow the link to open without sign-in. Off by default. |
 | `--tag <tag>` | Tag for a new artifact; repeat for more tags. |
 | `--project <id>` | Project ID. Optional when exactly one active project exists. |
-| `--artifact <id>` | Artifact ID when publishing a new version. |
+| `--artifact <id>` | Explicit artifact ID; requires `--expected-version`. Successful publication remembers this target. |
+| `--new-artifact` | Deliberately create another artifact and remember it after success. |
 | `--expected-version <id>` | Current version ID required when publishing a new version. |
 | `--entry <path>` | Directory file that opens first. |
-| `--routing <mode>` | `static` (default) or `spa`. |
+| `--routing <mode>` | `static` or `spa`; reuses a remembered choice, otherwise `static`. |
 | `--server <origin>` | Artifact Server origin. Also read from `ARTIFACT_SERVER_URL`. |
 | `--profile <name>` | Saved profile to authenticate with. |
 | `--profile-data <dir>` | User-local profile directory. Also read from `ARTIFACT_SERVER_HOME`. |
 | `--data <dir>` | Local data directory. Defaults to `.artifact-server`. |
 | `--token-file <path>` | File containing an Artifact Server API token. |
 
-`--name`, `--public`, and `--tag` apply only when creating a new artifact. Use `artifact_set_tags` and `artifact_set_visibility` to change them afterwards.
+`--name`, `--public`, and `--tag` configure a new artifact. Repeating them for a remembered artifact is allowed when they match its current metadata; conflicting values are refused. Use artifact management to change existing metadata.
 
 ### Choose a routing mode
 
@@ -97,15 +98,59 @@ artifactserver auth login https://artifacts.example.com --name team --api-key-st
 
 ## Publish another version
 
-Provide the artifact ID and expected current version:
+The CLI automatically remembers each successful publication outside your source folder.
+Repeat the same command to publish a new version of that artifact:
 
 ```sh
-artifactserver publish ./dist \
-  --artifact art_example \
-  --expected-version ver_example
+artifactserver publish ./dist --profile team --project prj_example
 ```
 
-The expected version prevents an old client from replacing a newer current pointer. Read the current value from `artifact_get` before publishing.
+If the canonical manifest is unchanged (including entry path and routing), the CLI
+checks the saved version against the server and returns `unchanged: true` without
+creating an upload or version. Changed publications return `unchanged: false`.
+The existing `artifact`, `version`, `links`, and `replayed` response fields remain.
+Automatic entry detection stays automatic; explicitly selected entry and routing
+options are remembered.
+
+Records live under `<profile-data>/publications/`, normally
+`~/.artifact-server/publications/`, scoped to the validated source path, origin,
+installation, principal, and project. They include the full successful receipt and
+pending recovery intent, never credentials. Do not put `--profile-data` inside the
+folder being published. Moving a folder requires importing its receipt at the new
+path; the CLI never guesses identity from an artifact name.
+
+Use `--new-artifact` when you deliberately want another artifact. To explicitly
+select an existing artifact, pass both `--artifact art_example` and
+`--expected-version ver_example`; a successful publication remembers that target.
+These options cannot be combined with `--new-artifact`.
+
+### Inspect and import remembered publications
+
+```sh
+artifactserver publications list --profile team
+artifactserver publications status ./dist --profile team
+artifactserver publications import ./dist --profile team --project prj_example --receipt publish-result.json
+```
+
+Import accepts the JSON response of an earlier successful publish. It verifies the
+receipt against the server and records the binding without uploading. Malformed,
+stale, mismatched receipts and replacements of a different binding are refused.
+Import restores routing from the receipt; automatic entry detection remains the
+default, so specify `--entry` on the next publish if the original entry was selected
+explicitly. `list` without destination options reads all local records offline.
+
+A newer server version is a conflict even if local bytes are unchanged. Inspect it
+and explicitly accept it before publishing again:
+
+```sh
+artifactserver publications refresh ./dist --profile team --project prj_example
+artifactserver publish ./dist --profile team --project prj_example
+```
+
+`refresh` updates the expected version only; it does not publish. Pending attempts
+must be reconciled with their original command before import or refresh. An
+unambiguous server rejection of a commit due to a version conflict settles that
+attempt, allowing an explicit refresh. Ambiguous network failures retain it.
 
 ### Recover an interrupted publication
 
@@ -116,6 +161,17 @@ already committed returns its original artifact and links without touching
 staging. Keep the input, selected entry, target and expected version unchanged
 while reconciling that attempt; the same operation identity with changed files
 is rejected as a conflict, and an expired staged upload is recreated fresh.
+
+The successful receipt and completion state are saved atomically before the CLI
+reports success. A durable delivery marker remains until stdout has accepted the
+receipt. If the process exits first, retrying the original command returns that
+receipt with `replayed: true`, including when `--new-artifact` was selected.
+A concurrent command for the same source and destination is
+refused; an unambiguously dead local process lock can be reclaimed. Corrupt or
+ambiguous ownership is refused. Matching old `publication-operations` journals are recovered with their original
+command. Unrelated journals remain untouched and do not block a verified receipt
+import. An imported binding controls subsequent automatic publishes; it does not
+replay an old, unbound create attempt.
 
 A conflict on commit means the current pointer moved; inspect the new current
 version before choosing a new publication intent. Scoped upload URLs accept

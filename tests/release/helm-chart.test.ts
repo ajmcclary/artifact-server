@@ -723,6 +723,7 @@ async function publishFile(
       "publish", fixture,
       "--server", forward.baseUrl,
       "--token-file", token,
+      "--profile-data", path.join(fixtureDirectory, "publication-profiles"),
       "--tag", "helm-proof",
     ];
     if (accessSetting === "public_link") publishArguments.push("--public");

@@ -1,0 +1,143 @@
+{
+  "command": "pnpm verify:iteration",
+  "exitCode": 0,
+  "nodeVersion": "v24.15.0",
+  "completedAt": "2026-09-29T20:41:06.267780+00:00",
+  "baseRevision": "a4f86c2c3249b2d00a813ff3e89ec9e15670e69f",
+  "sourceChanges": {
+    "docs/cli.md": "a45c2199ff21f9b8acef453214b2c35dbf44d0962c291ebdf44fc1824053300d",
+    "project/spec/conformance.yml": "d8a6c2504eea4063052224e12b8a6b5db9ed9c581dcea25d85d1b6370569bc96",
+    "project/spec/phase-10-cli-auth-and-remote-publishing.md": "da43958f75e262f7a655042160134735b216e006c28c563500208a74bb8a3ff6",
+    "src/cli/main.ts": "c51fbf73f63b25af1eb721dd06dfaeb214453e0228529a680fa4745a223db01a",
+    "src/cli/publication-commands.ts": "a3a5aa86e82ea0a9831f66c1aa7c289d137a95a50bba779bd089952fbaf21c08",
+    "src/cli/publication-context.ts": "dea6a323b3bc44071bb51f8037858ac75cd107cea3f89cce7f69989e382e4593",
+    "src/cli/publication-operation-store.ts": "686e60d4ada32bb1a678dbeb8bab896122005f056ebdbc4d9c8284da442c9b1b",
+    "src/cli/publication-options.ts": "7ed36e8910f80a88fd9cd144a662b21aea039583b62375ea3b52c41b8b175ee2",
+    "src/cli/publication-record.ts": "9dd843a65a3efc637601202fb6ab69938eab770dd10dbc2c8c4cc44ae5f22be9",
+    "src/cli/publication-registry.ts": "f527a84624b14844e748bff68f89163719011486df78211a2b77ecd52be8f827",
+    "src/cli/publication-remote.ts": "d7f9653cf823627703e4b7d993d969978c29d934fffbf27d22766e2b90f5179c",
+    "src/cli/publish-command.ts": "928f19f69e8c563af2d803fbe086647110ccd2c5787aa649f13fbe2cdc003946",
+    "src/cli/remembered-publication.ts": "0b9d81ef27f5585ac8c51adf2d8643107c90addfe9d57152baf7853fa82c53c4",
+    "tests/cli/auth-profile-remote-publish.test.ts": "5d6a6b2b207f9925d54d26d3451b9a8acaf17c29f38be49a8337f7eca762c841",
+    "tests/cli/lifecycle-cli.test.ts": "e091456744ce3ca6e0e1aa8bfb8bed1c4f73bb9bd25216bba1948e9924c28bab",
+    "tests/cli/local-cli.test.ts": "e21a97e9ed93595a9ac12966a5072c183e6040175c416990b4061f801cf37b5f",
+    "tests/cli/remembered-publications.test.ts": "6c456836b2b0b5ce34eb455e116f11a8f0c907ae2decab757dd2243f3b4e86be",
+    "tests/release/external-storage-compose.test.ts": "53c1cbd08987c30fcdc9cf05278ab7dcc7416d8321891ebe336a47444b2503a1",
+    "tests/release/helm-chart.test.ts": "b07d0b6f446eed6c2757f036eae950ead6ff1e27f6d91cf9f1eeb27c022c4b64",
+    "tests/release/local-package.test.ts": "8b23105078cf07d10cc05aac4921b1232861fa934a91b7f53b82ea4626e7959e",
+    "tests/support/publication-cli.ts": "b68b65687f528486af87d035e2afd646ee9f5e6df369f8e5e60f6c4bfa978d84",
+    "tests/support/publication-receipt-crash.ts": "ba44e8c4f20f51d24ff7e83fe5bba14ca394e2499118951515ffd7e3d9691354"
+  },
+  "reports": [
+    {
+      "file": "aws-pulumi.json",
+      "sha256": "4c4b764e70de7e458723682e14f270b0c6e154235630b519ee52bb812b288fa8",
+      "bytes": 1935
+    },
+    {
+      "file": "browser.json",
+      "sha256": "4cfb877abcbd1eed94c80ee78bf9edd54be22dc562ed8f94a5123b5fe52ca374",
+      "bytes": 19164
+    },
+    {
+      "file": "browser.previous.json",
+      "sha256": "6ae7b4abf10e33cc715b4dfb625a11c8c03ec9f24024633c83e65b49b3597587",
+      "bytes": 18850
+    },
+    {
+      "file": "compact-compose-runtime-baseline.json",
+      "sha256": "564ed2fec6203a716ff78c8832be446ccafccdcd0b38a9657c36afff2797c4eb",
+      "bytes": 191
+    },
+    {
+      "file": "compact-compose.json",
+      "sha256": "ab550e3c2339ef43135de2f05cc816afa6c6eeadf577ea26bac942e149852558",
+      "bytes": 1862
+    },
+    {
+      "file": "external-storage-compose-runtime-baseline.json",
+      "sha256": "fdab6089f6ade45d834dafca19bcbd087f2535778357e17593844adb1b371460",
+      "bytes": 494
+    },
+    {
+      "file": "external-storage-compose.json",
+      "sha256": "d3b36d371dcaeffa3082085a54a2ea3eb395ae9ae8c1dfb1a141c8e4680c1988",
+      "bytes": 1439
+    },
+    {
+      "file": "external-storage-runtime.json",
+      "sha256": "951ac196840f73cccee018bc28d371f7636d2b7eb6787773cc4fe4173ffb4836",
+      "bytes": 422928
+    },
+    {
+      "file": "gcp-pulumi.json",
+      "sha256": "58c674c24d0ef24742346622c4f3695e8043f11e5c707f32503b383236dab273",
+      "bytes": 1544
+    },
+    {
+      "file": "helm-kubernetes-runtime-baseline.json",
+      "sha256": "ee7295dfb6383915051c31c9cf1de657aa0a69bda347565bbaff5d9e0e976671",
+      "bytes": 1596
+    },
+    {
+      "file": "helm-kubernetes.json",
+      "sha256": "54ffb7bac8f76997cf855861a464cebc665a76bada32dfb7d5c72349dcf8c448",
+      "bytes": 1515
+    },
+    {
+      "file": "local-capacity-baseline.json",
+      "sha256": "6cfca07449ce93b99373b6e5856b4bfda1fabbeb113fa9ab65a4dc8dbdac238c",
+      "bytes": 17652
+    },
+    {
+      "file": "local-foundation.json",
+      "sha256": "5b38e95cc60c395a001dfece5f9a27a6e1ebcb162de5db071b3a52595d25f738",
+      "bytes": 196228
+    },
+    {
+      "file": "local-package-build.json",
+      "sha256": "2c17c482f9315e259996643b95995ac574311647a29a1a89b9b15c34affcf711",
+      "bytes": 429
+    },
+    {
+      "file": "local-package.json",
+      "sha256": "df6b7a4600e818fde966e639e8252288cd0451f6c20d697aa7c8e070d9ef1505",
+      "bytes": 1129
+    },
+    {
+      "file": "local-performance-baseline.json",
+      "sha256": "985a89ca16c05343a43851daf5629f9ad7de478c5127772e31adb1d9be8a6b2b",
+      "bytes": 5663
+    },
+    {
+      "file": "native-cloud-storage.json",
+      "sha256": "5308e02ea034b0aee1f6264f98ab1cb2ac425ed3a1932078f1059f5f88b53abd",
+      "bytes": 120167
+    },
+    {
+      "file": "observability.json",
+      "sha256": "9cbac18744f876e2ec9b5074a6fb6810ce961adc0cf8c8c0bca64768019b66ef",
+      "bytes": 1334
+    },
+    {
+      "file": "oidc-keycloak.json",
+      "sha256": "47fca18638be82b1fceacb511d904871bd56ccc9600b4bb17bf271d75c2fe2a2",
+      "bytes": 2011
+    },
+    {
+      "file": "postgres-pool-shutdown.json",
+      "sha256": "74fa46310ee57202ef523539a208b4cc26a508fafd74656dcc7fbdc78ab6b55a",
+      "bytes": 1220
+    },
+    {
+      "file": "s3-minio.json",
+      "sha256": "d67400f7b682eaa30acc3b8340ac9bf820703c17857eb52de9d72a1933b16bfc",
+      "bytes": 44129
+    },
+    {
+      "file": "storage-shutdown.json",
+      "sha256": "88f2a4c082f5d303085d92e2409fe5cdfa2a320c6ad59300b1b6ac0eb4dd316a",
+      "bytes": 1435
+    }
+  ]
+}

@@ -519,6 +519,8 @@ describe("Artifact Server lifecycle CLI", () => {
         `http://127.0.0.1:${port}`,
         "--token-file",
         path.join(dataDirectory, "secrets/api-token"),
+        "--profile-data",
+        path.join(dataDirectory, "cli-profiles"),
       ]);
       expect(publication.exitCode).toBe(0);
       publicationSchema.parse(JSON.parse(publication.output));

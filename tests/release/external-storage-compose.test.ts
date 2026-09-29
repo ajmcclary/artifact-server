@@ -593,6 +593,8 @@ async function publishFixtureResult(
     `http://127.0.0.1:${port}`,
     "--token-file",
     path.join(project.secretDirectory, "api-token"),
+    "--profile-data",
+    path.join(project.secretDirectory, "publication-profiles"),
   ];
   if (target === undefined) {
     publishArguments.push("--public", "--tag", "compose-proof");
