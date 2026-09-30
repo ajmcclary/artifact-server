@@ -1460,7 +1460,7 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
-  test("session expiry with a modal and the account menu open leaves no portal, scroll lock or inert sibling", async ({browser}) => {
+  test("local-owner session expiry with a modal open signs in again and leaves no portal, scroll lock or inert sibling", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await localLogin(fixture);
@@ -1475,6 +1475,64 @@ test.describe("Artifact Server frontend MVP", () => {
         overflow: document.body.style.overflow,
         portals: document.querySelectorAll("[data-ak-modal-portal]").length,
       }))).toEqual({inert: 0, overflow: "", portals: 0});
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("AUTH-026-B: team session expiry with the palette, account menu or a modal open shows the sign-in gate and leaves no portal, scroll lock or inert sibling", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const page = fixture.page;
+      // A team installation: an expired session ends at the sign-in gate instead of a local re-sign-in.
+      await page.route("**/auth/context", async (route) => {
+        await route.fulfill({
+          body: JSON.stringify({accessMode: "private_team", login: {kind: "oidc"}}),
+          contentType: "application/json",
+          status: 200,
+        });
+      });
+      const overlays = [
+        {
+          open: async (): Promise<void> => {
+            await page.keyboard.press("ControlOrMeta+k");
+            await expect(page.getByRole("dialog", {name: "Search"})).toBeVisible();
+          },
+          overlay: page.getByRole("dialog", {name: "Search"}),
+        },
+        {
+          open: async (): Promise<void> => {
+            await page.getByRole("button", {name: /^Account menu/u}).click();
+            await expect(page.getByRole("menu")).toBeVisible();
+          },
+          overlay: page.getByRole("menu"),
+        },
+        {
+          open: async (): Promise<void> => {
+            await page.getByRole("button", {name: "New project"}).click();
+            await expect(page.getByRole("dialog", {name: "New project"})).toBeVisible();
+          },
+          overlay: page.getByRole("dialog", {name: "New project"}),
+        },
+      ];
+      const expireWith = async (index: number): Promise<void> => {
+        const step = overlays[index];
+        if (step === undefined) return;
+        await page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
+        await expect(page.getByRole("button", {name: "Search everything"})).toBeVisible();
+        await step.open();
+        await page.evaluate(() => window.dispatchEvent(new Event("artifact-session-expired")));
+        await expect(page.getByRole("heading", {name: "Sign in required"})).toBeVisible();
+        await expect(step.overlay).toHaveCount(0);
+        expect(await page.evaluate(() => ({
+          inert: document.querySelectorAll("[inert]").length,
+          overflow: document.body.style.overflow + document.documentElement.style.overflow,
+          portals: document.querySelectorAll("[data-ak-modal-portal]").length,
+        }))).toEqual({inert: 0, overflow: "", portals: 0});
+        await expireWith(index + 1);
+      };
+      await expireWith(0);
     } finally {
       await stopBrowserFixture(fixture);
     }
