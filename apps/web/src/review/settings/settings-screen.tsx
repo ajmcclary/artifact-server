@@ -6,7 +6,7 @@ import {reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "../settings-api-keys.tsx";
 import {McpScreen} from "../settings-mcp.tsx";
 import {MembersScreen} from "../settings-members.tsx";
-import {SettingsProject} from "../settings-projects.tsx";
+import {ProjectSettings} from "./project-settings.tsx";
 import {PublicLinksScreen} from "../settings-public-links.tsx";
 import {WebmcpScreen} from "../settings-webmcp.tsx";
 import {resolveSettingsView, settingsAccess} from "./settings-view.ts";
@@ -50,15 +50,13 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
       );
     case "project":
       return (
-        <LegacySettingsFrame>
-          <SettingsProject
-            canManage
-            gitHistory={session.capabilities.gitHistory}
-            onProjectsChanged={onProjectsChanged}
-            projectId={view.projectId}
-            projects={projects}
-          />
-        </LegacySettingsFrame>
+        <ProjectSettings
+          canManage
+          gitHistory={session.capabilities.gitHistory}
+          onProjectsChanged={onProjectsChanged}
+          projectId={view.projectId}
+          projects={projects}
+        />
       );
     case "members":
       return <LegacySettingsFrame><MembersScreen /></LegacySettingsFrame>;

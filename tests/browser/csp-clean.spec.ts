@@ -42,7 +42,9 @@ const walkFixtureHtml = "<!doctype html><html lang=\"en\"><head><meta charset=\"
 
 async function visitSettings(page: Page, section: SettingsSection, heading: string): Promise<void> {
   await openSettings(page, section);
-  await expect(page.getByRole("heading", {exact: true, name: heading}).first()).toBeVisible();
+  // Old screens name their sections with headings; DS screens with labelled regions.
+  await expect(page.getByRole("heading", {exact: true, name: heading})
+    .or(page.getByRole("region", {exact: true, name: heading})).first()).toBeVisible();
 }
 
 test.describe("CSP-clean production build", () => {

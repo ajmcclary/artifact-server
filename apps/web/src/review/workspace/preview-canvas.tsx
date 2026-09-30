@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 import {api, type AccessSetting, type ArtifactVersion} from "@/api/client";
@@ -68,6 +69,8 @@ export interface PreviewCanvasProps {
   readonly commentsLoading: boolean;
   readonly detailError: Error | null;
   readonly detailLoading: boolean;
+  /** Shown instead of "Select an artifact" when the project has nothing published yet. */
+  readonly emptyProject: ReactNode;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;
   readonly onAnnotateModeChange: (active: boolean) => void;
@@ -148,6 +151,7 @@ export function PreviewCanvas({
   commentsLoading,
   detailError,
   detailLoading,
+  emptyProject,
   hasDetails,
   isCurrentVersion,
   onAnnotateModeChange,
@@ -187,7 +191,9 @@ export function PreviewCanvas({
         title={path ?? artifactName}
         width={focus ? null : preset?.px ?? null}
       >
-        {artifactId === null ? (
+        {artifactId === null && emptyProject !== null ? (
+          <div style={stateStyle}>{emptyProject}</div>
+        ) : artifactId === null ? (
           <div style={stateStyle}>
             <SurfaceState
               count={0}

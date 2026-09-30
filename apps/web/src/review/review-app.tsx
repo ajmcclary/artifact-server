@@ -67,6 +67,7 @@ import {
   workspaceHref,
   writeReviewHistory,
 } from "./review-routes.ts";
+import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
@@ -1117,6 +1118,13 @@ function ArtifactReview({
     {count: versions.length, countTone: "neutral", icon: "bi-layers", id: "versions", label: "Versions"},
   ];
 
+  const projectEmpty = selectedProject !== null
+    && !listLoading
+    && listError === null
+    && catalogItems.length === 0
+    && query === ""
+    && catalogCommentFilter === "all"
+    && catalogTagFilters.length === 0;
   const annotateToggle = {
     active: htmlAnnotateModeActive,
     available: previewKind === "html" && canComment && htmlViewerMode === "annotate",
@@ -1300,6 +1308,7 @@ function ArtifactReview({
                 commentsLoading={comments.loading}
                 detailError={detailError}
                 detailLoading={detailLoading}
+                emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
                 hasDetails={details !== null}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}

@@ -1366,8 +1366,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page).toHaveURL(/\/review(?:\?project=prj_default(?:&[^#]*)?)?$/u);
 
       await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/prj_default`);
-      await expect(fixture.page.getByRole("heading", {name: "Project identity"})).toBeVisible();
-      await expect(fixture.page.getByRole("heading", {name: "Git history"})).toHaveCount(0);
+      await expect(fixture.page.getByRole("region", {name: "Project identity"})).toBeVisible();
+      await expect(fixture.page.getByRole("region", {name: "Git history"})).toHaveCount(0);
       // Geometry at the DS display ladder: the 1680 px spec viewport is the desktop profile.
       await expect(fixture.page.locator("[data-ac-profile]").first())
         .toHaveAttribute("data-ac-profile", "desktop");
@@ -1377,6 +1377,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(administrationNavigation.getByRole("link", {exact: true, name: "Back to review"}))
         .toBeVisible();
       const compactSettingsActions = [
+        fixture.page.getByRole("link", {name: "Open artifacts"}),
         fixture.page.getByRole("button", {name: "Save name"}),
         fixture.page.getByRole("button", {name: "Archive project"}),
       ];
@@ -1399,18 +1400,59 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(
         fixture.page.getByLabel("Project lifecycle").getByRole("button", {name: "Unarchive project"}),
       ).toBeVisible();
-      await closeTopDialog(fixture.page);
+      await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
       await fixture.page.getByLabel("Project lifecycle").getByRole("button", {name: "Unarchive project"}).click();
       await fixture.page.getByRole("button", {name: "Unarchive project", exact: true}).last().click();
       await expect(
         fixture.page.getByLabel("Project lifecycle").getByRole("button", {name: "Archive project"}),
       ).toBeVisible();
-      await closeTopDialog(fixture.page);
       await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(accessibility.violations).toEqual([]);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ADM-002-B ADM-006-B: an empty project shows its publish guidance and project settings list its artifacts", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const project = await createProject(fixture, "Empty guidance project");
+      await localLogin(fixture);
+
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=${project.id}`);
+      await expect(fixture.page.getByRole("heading", {name: "Nothing is published here yet"}))
+        .toBeVisible();
+      await expect(fixture.page.getByText(
+        `artifactserver publish ./dist --project ${project.id}`,
+        {exact: true},
+      )).toBeVisible();
+
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/${project.id}`);
+      const artifactsPanel = fixture.page.getByRole("region", {name: "Artifacts in this project"});
+      await expect(artifactsPanel.getByRole("heading", {name: "Nothing is published here yet"}))
+        .toBeVisible();
+
+      const published = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><title>Listed artifact</title><p>listed</p>",
+        idempotencyKey: "frontend-project-settings-artifacts",
+        name: "Listed artifact",
+        projectId: project.id,
+      });
+      await fixture.page.reload();
+      const listedRow = artifactsPanel.getByRole("row").filter({hasText: "Listed artifact"});
+      await expect(listedRow.getByText("Account required", {exact: true})).toBeVisible();
+      const accessibility = await new AxeBuilder({page: fixture.page})
+        .withTags(["wcag2a", "wcag2aa"])
+        .analyze();
+      expect(accessibility.violations).toEqual([]);
+
+      await listedRow.getByRole("link", {name: "Listed artifact"}).click();
+      await expect(fixture.page)
+        .toHaveURL(new RegExp(`artifact=${published.body.artifact.id}`, "u"));
     } finally {
       await stopBrowserFixture(fixture);
     }
