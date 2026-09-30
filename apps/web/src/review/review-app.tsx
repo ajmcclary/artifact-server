@@ -25,6 +25,7 @@ import {
   type Session,
 } from "@/api/client";
 import type {ReviewAnchor} from "@/review-frame/protocol";
+import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
 import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
@@ -139,6 +140,7 @@ function reviewShortcutBlocked(event: KeyboardEvent): boolean {
 
 /** Start the artifact-first Artifact Server review application. */
 export function ReviewApp() {
+  const {openPalette} = usePalette();
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
     setDraftPrincipal(session?.principal.id ?? null);
@@ -264,6 +266,7 @@ export function ReviewApp() {
     <ReviewShell
       mainStyle={route.kind === "workspace" ? {overflow: "hidden"} : {overflowY: "auto"}}
       onCreateProject={createProject}
+      onOpenPalette={openPalette}
       projects={projects}
       route={route}
       session={session}

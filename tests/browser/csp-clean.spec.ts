@@ -351,3 +351,29 @@ for (const mode of queueThemeModes) {
     }
   });
 }
+
+for (const mode of queueThemeModes) {
+  test(`the command palette raises no CSP violation in ${mode} mode`, async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><title>CSP palette fixture</title><h1>CSP palette fixture</h1></html>",
+        idempotencyKey: `csp-palette-${mode}`,
+        mediaType: "text/html; charset=utf-8",
+        name: "CSP palette fixture",
+        path: "index.html",
+      });
+      await localLogin(fixture);
+      const violations = collectCspViolations(fixture.page);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default&theme=${mode}`);
+      await expect(fixture.page.getByRole("searchbox", {name: "Search artifacts"})).toBeVisible();
+      await fixture.page.keyboard.press("ControlOrMeta+k");
+      await fixture.page.getByRole("combobox", {name: "Search"}).fill("CSP palette");
+      await expect(fixture.page.getByRole("option", {name: /CSP palette fixture/u})).toBeVisible();
+      expect(await violations()).toEqual([]);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+}

@@ -5,6 +5,7 @@ import {createRoot} from "react-dom/client";
 
 import {installArkcaseRuntime} from "@/arkcase-runtime";
 import {installDraftGuard} from "@/components/comments/comment-drafts";
+import {PaletteProvider} from "@/shell/command-palette";
 import {AnnouncerProvider} from "@/ui/announcer";
 import {DensityProvider} from "@/ui/density";
 import {ToastProvider} from "@/ui/toasts";
@@ -36,7 +37,9 @@ createRoot(rootElement).render(
     <DensityProvider>
       <AnnouncerProvider>
         <ToastProvider>
-          <ReviewApp />
+          <PaletteProvider>
+            <ReviewApp />
+          </PaletteProvider>
         </ToastProvider>
       </AnnouncerProvider>
     </DensityProvider>

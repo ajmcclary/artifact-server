@@ -20,6 +20,7 @@ import {readStored} from "@/lib/safe-storage";
 import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 
 import {AccountMenu} from "./account-menu.tsx";
+import {ReviewPaletteHost} from "./command-palette.tsx";
 import {ArtifactServerBrand} from "./brand.tsx";
 import {CreateProjectModal} from "./create-project-modal.tsx";
 import {
@@ -160,29 +161,32 @@ function ReviewShellFrame({
   );
 
   return (
-    <AppShell
-      alert={announcements.assertive}
-      announce={announcements.polite}
-      aside={aside}
-      chrome="left"
-      drawer={drawer}
-      ladder={REVIEW_DISPLAY_LADDER}
-      mainStyle={{
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-        paddingTop: phone && !focus ? phoneLauncherClearance : 0,
-        ...mainStyle,
-      }}
-      nav={nav}
-    >
-      {children}
-      <CreateProjectModal
-        onClose={() => setCreateOpen(false)}
-        onCreate={onCreateProject}
-        onCreated={(project) => window.location.assign(projectWorkspaceHref(project.id))}
-        open={createOpen}
-      />
-    </AppShell>
+    <>
+      <AppShell
+        alert={announcements.assertive}
+        announce={announcements.polite}
+        aside={aside}
+        chrome="left"
+        drawer={drawer}
+        ladder={REVIEW_DISPLAY_LADDER}
+        mainStyle={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          paddingTop: phone && !focus ? phoneLauncherClearance : 0,
+          ...mainStyle,
+        }}
+        nav={nav}
+      >
+        {children}
+        <CreateProjectModal
+          onClose={() => setCreateOpen(false)}
+          onCreate={onCreateProject}
+          onCreated={(project) => window.location.assign(projectWorkspaceHref(project.id))}
+          open={createOpen}
+        />
+      </AppShell>
+      <ReviewPaletteHost projects={projects} />
+    </>
   );
 }
