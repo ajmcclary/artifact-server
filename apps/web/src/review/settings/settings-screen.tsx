@@ -3,7 +3,7 @@ import {useEffect, type ReactNode} from "react";
 import type {Project, Session} from "@/api/client";
 import {PageScaffold, SurfaceState} from "@/arkcase";
 import {reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
-import {ApiKeysScreen} from "../settings-api-keys.tsx";
+import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpScreen} from "../settings-mcp.tsx";
 import {MembersScreen} from "./members-screen.tsx";
 import {ProjectSettings} from "./project-settings.tsx";
@@ -61,7 +61,7 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
     case "members":
       return <MembersScreen />;
     case "apiKeys":
-      return <LegacySettingsFrame><ApiKeysScreen /></LegacySettingsFrame>;
+      return <ApiKeysScreen />;
     case "publicLinks":
       return <LegacySettingsFrame><PublicLinksScreen /></LegacySettingsFrame>;
     case "mcp":

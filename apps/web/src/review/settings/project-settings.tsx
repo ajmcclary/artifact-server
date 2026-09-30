@@ -117,7 +117,6 @@ export function ProjectSettings({
   projectId,
   projects,
 }: ProjectSettingsProps) {
-  // Moved verbatim from settings-projects.tsx:182-215.
   const project = projects.find((candidate) => candidate.id === projectId) ?? null;
   const [name, setName] = useState(project?.name ?? "");
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -174,7 +173,6 @@ export function ProjectSettings({
     );
   }
 
-  // Moved verbatim from settings-projects.tsx:231-283.
   const rename = async (): Promise<void> => {
     if (pending || name.trim() === "") return;
     setPending(true);

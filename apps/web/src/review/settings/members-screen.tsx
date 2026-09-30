@@ -20,7 +20,6 @@ const roleOptions = [
 
 /** Administrator-only installation member lifecycle surface. */
 export function MembersScreen() {
-  // Moved verbatim from settings-members.tsx:22-73; the two modal-state lines are new.
   const [members, setMembers] = useState<readonly InstallationMember[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);

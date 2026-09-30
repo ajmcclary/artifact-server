@@ -1175,8 +1175,8 @@ test.describe("Artifact Server frontend MVP", () => {
         .getByRole("checkbox", {name: /Manage comments/u})
         .click();
       await fixture.page.getByRole("button", {name: "Issue API key", exact: true}).last().click();
-      const secret = fixture.page.locator("code").filter({hasText: "as_key_"});
-      await expect(secret).toBeVisible();
+      const secret = fixture.page.getByRole("region", {name: "API key secret"});
+      await expect(secret).toHaveText(/^as_key_/u);
       const secretValue = await secret.textContent();
       expect(secretValue).toMatch(/^as_key_/u);
       await fixture.page.getByRole("button", {name: "I stored it"}).click();
@@ -1187,12 +1187,12 @@ test.describe("Artifact Server frontend MVP", () => {
         sessionStorageKeys: ["artifact-review-return-url"],
       });
 
-      const keyCard = fixture.page.getByRole("article").filter({hasText: "Browser workflow key"});
-      await expect(keyCard.getByText("comment:write", {exact: true})).toBeVisible();
-      await keyCard.getByRole("button", {name: "Rotate"}).click();
-      await expect(fixture.page.locator("code").filter({hasText: "as_key_"})).toBeVisible();
+      const keyRow = fixture.page.getByRole("row").filter({hasText: "Browser workflow key"});
+      await expect(keyRow.getByText("comment:write", {exact: true})).toBeVisible();
+      await keyRow.getByRole("button", {name: "Rotate"}).click();
+      await expect(fixture.page.getByRole("region", {name: "API key secret"})).toHaveText(/^as_key_/u);
       await fixture.page.getByRole("button", {name: "I stored it"}).click();
-      await expect(keyCard.getByText("Revoked", {exact: true})).toBeVisible();
+      await expect(keyRow.getByText("Revoked", {exact: true})).toBeVisible();
 
       await openReview(fixture, {artifactId: first.body.artifact.id});
       await fixture.page.getByRole("button", {name: "More artifact actions"}).click();
