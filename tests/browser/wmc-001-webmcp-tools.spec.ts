@@ -10,7 +10,13 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, openSettings, reviewHref} from "./review-helpers.js";
+import {
+  inspectorTabButton,
+  openInspectorTab,
+  openReview,
+  openSettings,
+  reviewHref,
+} from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
 import {
   callTool,
@@ -228,7 +234,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await installFakeModelContext(toggled);
         const page = await toggled.newPage();
         await page.goto(reviewUrl);
-        await expect(page.getByRole("tab", {name: "Comments"})).toBeVisible();
+        await expect(inspectorTabButton(page, "Comments")).toBeVisible();
         await expect.poll(() => registeredToolNames(page)).toEqual([...expectedToolNames]);
 
         await page.evaluate(() => {
@@ -238,7 +244,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect.poll(() => registeredToolNames(page)).toEqual([]);
 
         await page.goto(reviewUrl);
-        await expect(page.getByRole("tab", {name: "Comments"})).toBeVisible();
+        await expect(inspectorTabButton(page, "Comments")).toBeVisible();
         expect(await registeredToolNames(page)).toEqual([]);
 
         await openSettings(page, "mcp");
@@ -259,7 +265,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect(toggle).not.toBeChecked();
         await toggle.check();
         await page.goto(reviewUrl);
-        await expect(page.getByRole("tab", {name: "Comments"})).toBeVisible();
+        await expect(inspectorTabButton(page, "Comments")).toBeVisible();
         await expect.poll(() => registeredToolNames(page)).toEqual([...expectedToolNames]);
       } finally {
         await toggled.close();

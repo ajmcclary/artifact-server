@@ -26,6 +26,7 @@ import {
 } from "./browser-fixture.js";
 import {
   artifactFrameSelectors,
+  inspectorTabButton,
   isolatedReviewFrame,
   openInspectorTab,
   openReview,
@@ -121,11 +122,8 @@ test.describe("Artifact Server frontend MVP", () => {
       ]);
       await fixture.page.keyboard.press("Escape");
       await expect(shortcutMap).toBeHidden();
-      const accessRow = fixture.page.locator(".as-inspector-row").filter({
-        hasText: "access",
-      });
-      await expect(accessRow.getByText("private", {exact: true})).toBeVisible();
-      await expect(accessRow.getByText("Account required", {exact: true})).toHaveCount(0);
+      await expect(inspector.getByRole("combobox", {name: "Access"})).toHaveValue("account_required");
+      await expect(inspector.getByText("Account required", {exact: true})).toHaveCount(0);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
@@ -158,8 +156,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await composer.fill("Make the release status easier to scan.");
       await reviewFrame.getByRole("button", {name: "Save"}).click();
 
-      await expect(fixture.page.getByRole("tab", {name: /Comments.*1/u}))
-        .toHaveAttribute("aria-selected", "true");
+      await expect(inspectorTabButton(fixture.page, "Comments")).toHaveAttribute("aria-pressed", "true");
+      await expect(inspectorTabButton(fixture.page, "Comments")).toHaveAccessibleName("Comments — 1");
       const selectedComment = fixture.page.getByRole("article").filter({
         hasText: "Make the release status easier to scan.",
       });
@@ -577,6 +575,8 @@ test.describe("Artifact Server frontend MVP", () => {
     try {
       await localLogin(fixture);
       await fixture.page.setViewportSize({height: 844, width: 390});
+      // Load as a phone does: the inspector starts closed below the docking floor.
+      await fixture.page.reload();
       await expect(fixture.page.locator("[data-ac-left-nav]")).toHaveCount(0);
       const launcher = fixture.page.getByRole("button", {name: "Open menu"});
       await launcher.click();
@@ -648,6 +648,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await createProject(fixture, longName);
       await localLogin(fixture);
       await fixture.page.setViewportSize({height: 844, width: 390});
+      // Load as a phone does: the inspector starts closed below the docking floor.
+      await fixture.page.reload();
       await fixture.page.getByRole("button", {name: "Open menu"}).click();
       const row = fixture.page.getByRole("link", {name: longName});
       await expect(row).toBeVisible();
@@ -1045,8 +1047,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(share.getByText(
         /The latest raw artifact is public/u,
       )).toBeVisible();
-      const accessRow = fixture.page.locator(".as-inspector-row").filter({hasText: "access"});
-      await expect(accessRow.getByText("public", {exact: true})).toBeVisible();
+      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}).getByRole("combobox", {name: "Access"})).toHaveValue("public_link");
       await share.getByRole("button", {name: "Close Share"}).click();
 
       await fixture.page.getByRole("button", {name: "Full screen"}).click();
@@ -1267,7 +1268,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Compare"}).click();
       await expect(fixture.page.getByRole("heading", {name: "Changed files"})).toBeVisible();
       await expect(
-        fixture.page.getByRole("tabpanel", {name: "Compare"}).getByText("payload.txt", {exact: true}),
+        fixture.page.getByRole("complementary", {name: "Artifact inspector"}).getByText("payload.txt", {exact: true}),
       ).toBeVisible();
 
       await openInspectorTab(fixture.page, "Versions");
@@ -1275,7 +1276,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Make current", exact: true}).last().click();
       await expect(fixture.page.getByText("current", {exact: true})).toBeVisible();
 
-      await fixture.page.getByRole("tab", {name: "Activity"}).click();
+      await fixture.page.getByRole("group", {name: "Inspector"}).getByRole("button", {name: /^Activity/u}).click();
       await expect(fixture.page.getByText("Restored version")).toBeVisible();
       await expect(fixture.page.getByText("Replaced tags").first()).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: "Load more"})).toBeVisible();

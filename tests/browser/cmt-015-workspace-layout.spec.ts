@@ -14,7 +14,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openReview, previewFrame} from "./review-helpers.js";
+import {inspectorTabButton, openInspectorTab, openReview, previewFrame} from "./review-helpers.js";
 
 function catalogPanel(page: Page) {
   return page.locator('[data-panel="artifact-catalog"]');
@@ -108,9 +108,7 @@ test.describe("Artifact review workspace layout", () => {
       await page.setViewportSize({height: 800, width: 1023});
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
       await page.setViewportSize({height: 800, width: 1024});
-      // Until Task 13a docks the inspector as a DS Panel, the old inspector overlays the toolbar
-      // here, so the kept ] shortcut closes it.
-      await page.keyboard.press("]");
+      await page.getByRole("button", {name: "Close inspector"}).click();
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "pinned");
 
       // On a phone the catalog is a sheet that opens on request and closes on a choice.
@@ -248,6 +246,83 @@ test.describe("Artifact review workspace layout", () => {
         .getByRole("button", {name: "Collapse artifact catalog"}).click();
       await widths.getByRole("button", {name: "1440 pixels wide"}).click();
       await expect(region).toHaveAttribute("data-preview-frame", "1440");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+  test("CMT-015-B CMT-015-F: the inspector docks, resizes, floats, becomes a sheet and collapses to its tab rail", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><title>Inspector fixture</title><main><h1>Inspector fixture content</h1></main></html>",
+        idempotencyKey: "cmt-015-inspector-fixture",
+        name: "Inspector fixture",
+      });
+      await localLogin(fixture);
+      await openReview(fixture, {
+        artifactId: published.body.artifact.id,
+        versionId: published.body.version.id,
+      });
+      const page = fixture.page;
+      const inspector = page.getByRole("complementary", {name: "Artifact inspector"});
+      const inspectorPane = page.locator('[data-panel="artifact-inspector"]');
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "pinned");
+      await expect(inspectorTabButton(page, "Details")).toHaveAttribute("aria-pressed", "true");
+
+      const seam = page.getByRole("separator", {name: "Resize the artifact inspector"});
+      await expect(seam).toHaveAttribute("aria-valuenow", "392");
+      await expect(seam).toHaveAttribute("aria-valuemin", "300");
+      await expect(seam).toHaveAttribute("aria-valuemax", "560");
+      await seam.focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect(seam).toHaveAttribute("aria-valuenow", "408");
+      await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector.w\":408");
+      const seamBox = await seam.boundingBox();
+      if (seamBox === null) throw new Error("The inspector seam has no geometry.");
+      await page.mouse.move(seamBox.x + seamBox.width / 2, seamBox.y + 200);
+      await page.mouse.down();
+      await page.mouse.move(seamBox.x + seamBox.width / 2 - 40, seamBox.y + 200, {steps: 4});
+      await page.mouse.up();
+      await expect.poll(async () => Number(await seam.getAttribute("aria-valuenow")))
+        .toBeGreaterThanOrEqual(440);
+
+      // Pressing the open view again closes it; the rail stays.
+      await inspectorTabButton(page, "Details").click();
+      await expect(inspector).toHaveCount(0);
+      await expect(page.getByRole("group", {name: "Inspector"})).toBeVisible();
+      await expect(page.getByRole("button", {name: "Open inspector"})).toHaveAttribute("aria-keyshortcuts", "]");
+      await page.keyboard.press("]");
+      await expect(inspector).toBeVisible();
+      await page.keyboard.press("]");
+      await expect(inspector).toHaveCount(0);
+      await openInspectorTab(page, "Comments");
+      await expect(inspector.getByRole("complementary", {name: "Comments"})).toBeVisible();
+
+      // Unpinned, it floats over the canvas's end edge and the catalog keeps its room.
+      await inspector.getByRole("button", {name: "Unpin the inspector"}).click();
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "floating");
+      await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector\":false");
+      await inspector.getByRole("button", {name: "Pin the inspector"}).click();
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "pinned");
+
+      // Laptop: the docked inspector wins the width; the catalog stands down to its rail.
+      await page.setViewportSize({height: 900, width: 1280});
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "pinned");
+      await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
+
+      // Tablet: it cannot dock, so it floats; Escape closes a floating inspector.
+      await page.setViewportSize({height: 900, width: 900});
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "floating");
+      await page.keyboard.press("Escape");
+      await expect(inspector).toHaveCount(0);
+
+      // Phone: a sheet with its own close control.
+      await page.setViewportSize({height: 844, width: 390});
+      await page.getByRole("button", {name: "Open inspector"}).click();
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "sheet");
+      await page.getByRole("button", {name: "Close the inspector"}).click();
+      await expect(inspector).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);
     }

@@ -1,4 +1,4 @@
-import type {FrameLocator, Page} from "@playwright/test";
+import {expect, type FrameLocator, type Locator, type Page} from "@playwright/test";
 import {z} from "zod";
 
 import type {BrowserFixture} from "./browser-fixture.js";
@@ -63,8 +63,22 @@ export function interactiveFrame(page: Page): FrameLocator {
 }
 
 /** Shows one inspector tab. */
-export async function openInspectorTab(page: Page, tab: InspectorTab): Promise<void> {
-  await page.getByRole("tab", {name: tab}).click();
+/** One inspector view's toggle on the tab rail (RailTabs: aria-pressed buttons, not tabs). */
+export function inspectorTabButton(
+  page: Page,
+  tab: "Comments" | "Details" | "Files" | "Versions",
+): Locator {
+  return page.getByRole("group", {name: "Inspector"})
+    .getByRole("button", {name: new RegExp(`^${tab}(?: — \\d+)?$`, "u")});
+}
+
+export async function openInspectorTab(
+  page: Page,
+  tab: "Comments" | "Details" | "Files" | "Versions",
+): Promise<void> {
+  const toggle = inspectorTabButton(page, tab);
+  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 }
 
 /**

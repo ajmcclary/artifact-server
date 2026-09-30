@@ -1,6 +1,5 @@
 import {
   type MouseEvent as ReactMouseEvent,
-  type ReactNode,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -20,14 +19,14 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {Dialog} from "@base-ui/react/dialog";
-import {motion} from "motion/react";
 
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
 import {useCommentPoll} from "@/components/comments/comment-poll";
 import {
+  type AccessContext,
+  type AccessSetting,
   api,
   ApiError,
-  type AccessContext,
   type ArtifactAction,
   type ArtifactComparison,
   type ArtifactDetails,
@@ -41,21 +40,22 @@ import {
   actionLabel,
   formatBytes,
   formatTimestamp,
-  sourceDriftDescription,
-  sourceFreshnessLabel,
 } from "@/lib/presentation";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {ReviewShell} from "@/shell/review-shell";
-import {dismissInnermost} from "@/arkcase";
+import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
+import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {DetailsTab} from "./workspace/details-tab.tsx";
+import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
 import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {SharePopover} from "./workspace/share-popover.tsx";
-import {catalogPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
-import {useViewportWidth} from "./workspace/use-viewport-size.ts";
-import {catalogWidth, dockingFor, isPhoneWidth} from "./workspace/workspace-layout.ts";
+import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
+import {useViewportHeight, useViewportWidth} from "./workspace/use-viewport-size.ts";
+import {catalogWidth, dockingFor, inspectorDefaultWidth, isPhoneWidth, workspaceBudget} from "./workspace/workspace-layout.ts";
 import type {
   CatalogCommentFilter,
   CatalogRefreshState,
@@ -81,18 +81,30 @@ import {
   writeReviewHistory,
 } from "./review-routes.ts";
 import {ReviewSettings} from "./review-settings.tsx";
-import {ReviewPanelEdge} from "./review-panel-edge.tsx";
-import {useReviewPanelMotion} from "./use-review-panel-motion.ts";
-import {useReviewResizablePanel} from "./use-review-resizable-panel.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
 
 type InspectorTab = "activity" | "comments" | "compare" | "details" | "files" | "versions";
 type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
-const inspectorDefaultWidth = 352;
-const inspectorMinimumWidth = 240;
-const inspectorMaximumWidth = 480;
-const inspectorGapPixels = 12;
+
+/** Temporary rail views until Task 16 moves Activity and Compare into Comparison and history. */
+const inspectorRailTabs = [
+  "comments",
+  "details",
+  "files",
+  "versions",
+  "activity",
+  "compare",
+] as const satisfies readonly InspectorTab[];
+
+const inspectorTitles = {
+  activity: "Activity",
+  comments: "Comments",
+  compare: "Compare",
+  details: "Details",
+  files: "Files",
+  versions: "Versions",
+} satisfies Record<InspectorTab, string>;
 const catalogRefreshConfirmationMilliseconds = 1_600;
 
 function reviewShortcutBlocked(event: KeyboardEvent): boolean {
@@ -323,7 +335,9 @@ function ArtifactReview({
   const announce = useAnnounce();
   const viewportWidth = useViewportWidth();
   const phone = isPhoneWidth(viewportWidth);
-  const docking = dockingFor(viewportWidth, inspectorOpen);
+  const viewportHeight = useViewportHeight();
+  const inspectorPreference = usePanelPreference(inspectorPanelId);
+  const docking = dockingFor(viewportWidth, inspectorOpen && inspectorPreference.pinned);
   const catalogPreference = usePanelPreference(catalogPanelId);
   const [catalogPeeking, setCatalogPeeking] = useState(false);
   const [catalogSheetOpen, setCatalogSheetOpen] = useState(false);
@@ -360,26 +374,6 @@ function ArtifactReview({
   const commentsInspectorRef = useRef<ReviewCommentsInspectorHandle>(null);
   const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogRequestGenerationRef = useRef(0);
-  const inspectorWidthApplyRef = useRef<(width: number) => void>(() => undefined);
-  const inspectorResize = useReviewResizablePanel({
-    apply: (width) => inspectorWidthApplyRef.current(width),
-    defaultWidth: inspectorDefaultWidth,
-    maxWidth: inspectorMaximumWidth,
-    minWidth: inspectorMinimumWidth,
-    onClick: () => setInspectorOpen(false),
-    onSnapClose: () => setInspectorOpen(false),
-    onSnapOpen: () => setInspectorOpen(true),
-    side: "right",
-    storageKey: "artifact-review-inspector-width",
-  });
-  const inspectorMotion = useReviewPanelMotion(
-    inspectorOpen,
-    inspectorResize.width,
-    inspectorGapPixels,
-  );
-  useEffect(() => {
-    inspectorWidthApplyRef.current = (width) => inspectorMotion.width.set(width);
-  }, [inspectorMotion.width]);
   const followCommentVersion = useCallback((versionId: string): void => {
     setDetailError(null);
     setSelectedVersionId(versionId);
@@ -949,6 +943,10 @@ function ArtifactReview({
             },
             open: catalogPeeking || catalogSheetOpen,
           },
+          {
+            close: () => setInspectorOpen(false),
+            open: inspectorOpen && !docking.inspectorDocked && !focusMode,
+          },
           {close: () => setFocusCommentsOpen(false), open: focusCommentsOpen},
           {
             close: () => setHtmlAnnotateModeActive(false),
@@ -1000,6 +998,7 @@ function ArtifactReview({
   }, [
     catalogFiltersOpen,
     catalogItems,
+    docking.inspectorDocked,
     catalogPeeking,
     catalogSheetOpen,
     enterFocusMode,
@@ -1097,13 +1096,99 @@ function ArtifactReview({
     if (next !== undefined) selectArtifact(next.artifact.id, next.artifact.currentVersionId);
   };
 
+  const changeAccess = async (next: AccessSetting): Promise<void> => {
+    if (details === null) return;
+    const changed = await changeArtifactAccess(details, next);
+    updateArtifact(changed.artifact);
+    announce(changed.notice);
+  };
+  const selectInspectorTab = (id: string): void => {
+    const tab = inspectorRailTabs.find((candidate) => candidate === id);
+    if (tab === undefined) return;
+    if (inspectorOpen && inspectorTab === tab) {
+      setInspectorOpen(false);
+      return;
+    }
+    setInspectorTab(tab);
+    setInspectorOpen(true);
+  };
+  const inspectorItems: readonly InspectorRailItem[] = [
+    {count: openCommentCount, countTone: "primary", icon: "bi-chat-square-text", id: "comments", label: "Comments"},
+    {count: null, countTone: "neutral", icon: "bi-info-circle", id: "details", label: "Details"},
+    {count: selectedVersion?.manifest.entries.length ?? 0, countTone: "neutral", icon: "bi-folder2", id: "files", label: "Files"},
+    {count: versions.length, countTone: "neutral", icon: "bi-layers", id: "versions", label: "Versions"},
+    {count: null, countTone: "neutral", icon: "bi-clock-history", id: "activity", label: "Activity"},
+    ...(comparison === null ? [] : [
+      {count: null, countTone: "neutral", icon: "bi-arrow-left-right", id: "compare", label: "Compare"} satisfies InspectorRailItem,
+    ]),
+  ];
+  const inspectorWidthTab = inspectorTab === "activity" || inspectorTab === "compare" ? "versions" : inspectorTab;
+  const inspectorBody = details === null || selectedVersion === null ? (
+    <SurfaceState
+      count={0}
+      emptyBody="Select an artifact to inspect its immutable record."
+      emptyTitle="Nothing selected"
+      noun="artifacts"
+      phase="ready"
+    />
+  ) : inspectorTab === "details" ? (
+    <DetailsTab
+      canManage={canManageArtifacts}
+      details={details}
+      linkedArtifacts={session.capabilities.linkedArtifacts}
+      onAccessChange={changeAccess}
+      onCapture={captureLinkedArtifact}
+      onOpenLive={openLinkedArtifact}
+      onTagsChange={changeTags}
+      version={selectedVersion}
+    />
+  ) : inspectorTab === "comments" ? (
+    <ReviewCommentsInspector
+      canComment={canComment}
+      canDeleteAny={canDeleteAnyComment}
+      principalId={session.principal.id}
+      ref={commentsInspectorRef}
+      session={comments}
+      versionId={selectedVersionId}
+    />
+  ) : inspectorTab === "files" ? (
+    <FilesInspector
+      onSelect={selectManifestPath}
+      selectedPath={selectedPath ?? selectedVersion.manifest.entryPath}
+      version={selectedVersion}
+    />
+  ) : inspectorTab === "versions" ? (
+    <VersionsInspector
+      canManage={canManageArtifacts}
+      comparisonLoading={comparisonLoading}
+      currentVersionId={details.artifact.currentVersionId}
+      onCompare={compareVersions}
+      onMakeCurrent={makeVersionCurrent}
+      onSelect={(versionId) => {
+        setDetailError(null);
+        setSelectedVersionId(versionId);
+        setSelectedPath(null);
+      }}
+      selectedVersionId={selectedVersionId}
+      versions={versions}
+    />
+  ) : inspectorTab === "activity" ? (
+    <ActivityInspector
+      actions={actions}
+      error={activityError}
+      loading={activityLoading}
+      nextCursor={actionNextCursor}
+      onLoadMore={() => void loadActions(actionNextCursor)}
+    />
+  ) : (
+    <ComparisonInspector comparison={comparison} error={comparisonError} />
+  );
+
   return (
     <div
       className="as-app"
       data-focus-mode={focusMode}
       data-html-annotate-mode={htmlViewerMode === "annotate" && htmlAnnotateModeActive}
-      data-inspector-open={inspectorOpen}
-      data-panel-resizing={inspectorResize.isDragging}
     >
       <a className="as-skip-link" href="#review-preview">Skip to artifact preview</a>
 
@@ -1371,102 +1456,30 @@ function ArtifactReview({
           />
         </section>
 
-        {!focusMode && inspectorMotion.mounted ? (
-          <div className="as-panel-assembly" data-side="right">
-            {inspectorOpen ? (
-              <ReviewPanelEdge
-                label="Artifact inspector width"
-                onCollapse={() => setInspectorOpen(false)}
-                resize={inspectorResize}
-                side="right"
-              />
-            ) : null}
-            <motion.div
-              className="as-panel-clip as-inspector-clip"
-              data-side="right"
-              style={{width: inspectorMotion.outerWidth}}
-            >
-              <motion.aside
-                aria-label="Artifact inspector"
-                className="as-inspector"
-                style={{width: inspectorMotion.width}}
-              >
-          <header className="as-pane-header as-inspector__header">
-            <div aria-label="Artifact inspector" className="as-tabs" role="tablist">
-              <InspectorTabButton active={inspectorTab === "comments"} count={openCommentCount} label="Comments" onClick={() => setInspectorTab("comments")} tab="comments" />
-              <InspectorTabButton active={inspectorTab === "details"} label="Details" onClick={() => setInspectorTab("details")} tab="details" />
-              <InspectorTabButton active={inspectorTab === "files"} count={selectedVersion?.manifest.entries.length ?? 0} label="Files" onClick={() => setInspectorTab("files")} tab="files" />
-              <InspectorTabButton active={inspectorTab === "versions"} count={versions.length} label="Versions" onClick={() => setInspectorTab("versions")} tab="versions" />
-              <InspectorTabButton active={inspectorTab === "activity"} label="Activity" onClick={() => setInspectorTab("activity")} tab="activity" />
-              {comparison === null ? null : (
-                <InspectorTabButton active={inspectorTab === "compare"} label="Compare" onClick={() => setInspectorTab("compare")} tab="compare" />
-              )}
-            </div>
-          </header>
-          <div
-            aria-labelledby={`review-inspector-tab-${inspectorTab}`}
-            className="as-inspector__body"
-            id="review-inspector-panel"
-            role="tabpanel"
+        {focusMode ? null : (
+          <InspectorPanel
+            active={inspectorTab}
+            canPin={!phone && viewportWidth >= workspaceBudget.inspector}
+            items={inspectorItems}
+            onAnnounce={announce}
+            onClose={() => setInspectorOpen(false)}
+            onPinChange={inspectorPreference.setPinned}
+            onSelect={selectInspectorTab}
+            onWidthChange={inspectorPreference.setWidth}
+            open={inspectorOpen}
+            pinned={inspectorPreference.pinned}
+            railLabels={viewportHeight >= 680}
+            sheet={phone}
+            subtitle={details === null || selectedVersion === null
+              ? null
+              : `${details.artifact.name} · v${selectedVersion.version.number}`}
+            title={inspectorTitles[inspectorTab]}
+            titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
+            width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorWidthTab)}
           >
-            {details === null || selectedVersion === null ? (
-              <InlineState description="Select an artifact to inspect its immutable record." title="Nothing selected" />
-            ) : inspectorTab === "details" ? (
-              <DetailsInspector
-                canManage={canManageArtifacts}
-                details={details}
-                linkedArtifacts={session.capabilities.linkedArtifacts}
-                onCapture={captureLinkedArtifact}
-                onOpenLive={openLinkedArtifact}
-                onTagsChange={changeTags}
-                version={selectedVersion}
-              />
-            ) : inspectorTab === "comments" ? (
-              <ReviewCommentsInspector
-                canComment={canComment}
-                canDeleteAny={canDeleteAnyComment}
-                principalId={session.principal.id}
-                ref={commentsInspectorRef}
-                session={comments}
-                versionId={selectedVersionId}
-              />
-            ) : inspectorTab === "files" ? (
-              <FilesInspector
-                onSelect={selectManifestPath}
-                selectedPath={selectedPath ?? selectedVersion.manifest.entryPath}
-                version={selectedVersion}
-              />
-            ) : inspectorTab === "versions" ? (
-              <VersionsInspector
-                canManage={canManageArtifacts}
-                comparisonLoading={comparisonLoading}
-                currentVersionId={details.artifact.currentVersionId}
-                onCompare={compareVersions}
-                onMakeCurrent={makeVersionCurrent}
-                onSelect={(versionId) => {
-                  setDetailError(null);
-                  setSelectedVersionId(versionId);
-                  setSelectedPath(null);
-                }}
-                selectedVersionId={selectedVersionId}
-                versions={versions}
-              />
-            ) : inspectorTab === "activity" ? (
-              <ActivityInspector
-                actions={actions}
-                error={activityError}
-                loading={activityLoading}
-                nextCursor={actionNextCursor}
-                onLoadMore={() => void loadActions(actionNextCursor)}
-              />
-            ) : (
-              <ComparisonInspector comparison={comparison} error={comparisonError} />
-            )}
-          </div>
-              </motion.aside>
-            </motion.div>
-          </div>
-        ) : null}
+            {inspectorBody}
+          </InspectorPanel>
+        )}
       </main>
     </div>
   );
@@ -1523,166 +1536,6 @@ function ReviewDownloadControl({
       <HugeiconsIcon aria-hidden="true" icon={Download04Icon} strokeWidth={1.8} />
       <span className="as-button__label">Download</span>
     </a>
-  );
-}
-
-function DetailsInspector({
-  canManage,
-  details,
-  linkedArtifacts,
-  onCapture,
-  onOpenLive,
-  onTagsChange,
-  version,
-}: {
-  readonly canManage: boolean;
-  readonly details: ArtifactDetails;
-  readonly linkedArtifacts: boolean;
-  readonly onCapture: () => Promise<void>;
-  readonly onOpenLive: () => Promise<void>;
-  readonly onTagsChange: (tags: readonly string[]) => Promise<void>;
-  readonly version: ArtifactVersion;
-}) {
-  const linkedDriftDescription = details.sourceBinding === undefined
-    ? null
-    : sourceDriftDescription(details.sourceBinding.status, "captured");
-  return (
-    <div className="as-inspector-stack">
-      <InspectorSection count={5} title="Artifact">
-        <InspectorRow label="name" title={details.artifact.name} value={details.artifact.name} />
-        <InspectorRow
-          label="access"
-          value={<AccessPill access={details.artifact.accessSetting} />}
-        />
-        <InspectorRow label="created" title={formatTimestamp(details.artifact.createdAt)} value={formatTimestamp(details.artifact.createdAt)} />
-        <InspectorRow label="artifact id" mono title={details.artifact.id} value={details.artifact.id} />
-        <InspectorRow label="project id" mono title={details.artifact.projectId} value={details.artifact.projectId} />
-      </InspectorSection>
-      <InspectorSection count={5} title="Version">
-        <InspectorRow label="number" title={String(version.version.number)} value={String(version.version.number)} />
-        <InspectorRow label="saved" title={formatTimestamp(version.version.createdAt)} value={formatTimestamp(version.version.createdAt)} />
-        <InspectorRow label="entry" mono title={version.manifest.entryPath} value={version.manifest.entryPath} />
-        <InspectorRow label="routing" title={version.version.routingMode} value={version.version.routingMode} />
-        <InspectorRow label="version id" mono title={version.version.id} value={version.version.id} />
-      </InspectorSection>
-      <TagsInspector
-        artifact={details.artifact}
-        key={details.artifact.id}
-        onChange={onTagsChange}
-      />
-      {details.sourceBinding === undefined ? null : (
-        <InspectorSection count={2} title="Linked source">
-          <InspectorRow label="state" value={sourceFreshnessLabel(details.sourceBinding.status)} />
-          <InspectorRow label="path" mono value={details.sourceBinding.path} />
-          {linkedDriftDescription === null ? null : (
-            <p className="as-inspector-empty">{linkedDriftDescription}</p>
-          )}
-          <div className="as-inspector-actions">
-            {canManage && details.sourceBinding.status !== "in-sync" ? (
-              <button className="as-button as-button--primary" onClick={() => void onCapture()} type="button">
-                Capture current file
-              </button>
-            ) : null}
-            {linkedArtifacts && details.links.live !== undefined ? (
-              <button className="as-button" onClick={() => void onOpenLive()} type="button">
-                Open live file
-              </button>
-            ) : null}
-          </div>
-        </InspectorSection>
-      )}
-    </div>
-  );
-}
-
-function TagsInspector({
-  artifact,
-  onChange,
-}: {
-  readonly artifact: ArtifactDetails["artifact"];
-  readonly onChange: (tags: readonly string[]) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [pending, setPending] = useState(false);
-  const [value, setValue] = useState(artifact.tags.join(", "));
-
-  useEffect(() => {
-    if (!editing) setValue(artifact.tags.join(", "));
-  }, [artifact.tags, editing]);
-
-  const cancel = (): void => {
-    setEditing(false);
-    setError(null);
-    setValue(artifact.tags.join(", "));
-  };
-  const save = async (): Promise<void> => {
-    setPending(true);
-    setError(null);
-    try {
-      await onChange(
-        value.split(",").map((tag) => tag.trim()).filter((tag) => tag !== ""),
-      );
-      setEditing(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error("Tag update failed."));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <InspectorSection
-      action={editing ? null : (
-        <button
-          className="as-inspector-section__action"
-          onClick={() => setEditing(true)}
-          type="button"
-        >
-          Edit tags
-        </button>
-      )}
-      count={artifact.tags.length}
-      title="Tags"
-    >
-      {editing ? (
-        <form
-          className="as-tag-editor"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-        >
-          <label className="as-visually-hidden" htmlFor={`review-tags-${artifact.id}`}>
-            Tags
-          </label>
-          <input
-            autoFocus
-            disabled={pending}
-            id={`review-tags-${artifact.id}`}
-            onChange={(event) => setValue(event.currentTarget.value)}
-            placeholder="prototype, approved"
-            value={value}
-          />
-          <p>Separate tags with commas. Saving replaces the complete set.</p>
-          {error === null ? null : (
-            <p className="as-tag-editor__error" role="alert">{error.message}</p>
-          )}
-          <div className="as-tag-editor__actions">
-            <button className="as-button as-button--primary" disabled={pending} type="submit">
-              {pending ? "Saving…" : "Save tags"}
-            </button>
-            <button className="as-button" disabled={pending} onClick={cancel} type="button">
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : artifact.tags.length === 0 ? (
-        <p className="as-inspector-empty">No tags on this artifact.</p>
-      ) : artifact.tags.map((tag) => (
-        <span className="as-tag" key={tag}>{tag}</span>
-      ))}
-    </InspectorSection>
   );
 }
 
@@ -1962,60 +1815,6 @@ function InspectorSection({
   );
 }
 
-function InspectorRow({
-  label,
-  mono = false,
-  title,
-  value,
-}: {
-  readonly label: string;
-  readonly mono?: boolean;
-  readonly title?: string;
-  readonly value: ReactNode;
-}) {
-  return (
-    <dl className="as-inspector-row">
-      <dt>{label}</dt>
-      <dd
-        className={mono ? "as-mono" : undefined}
-        title={title}
-      >
-        {value}
-      </dd>
-    </dl>
-  );
-}
-
-function InspectorTabButton({
-  active,
-  count,
-  label,
-  onClick,
-  tab,
-}: {
-  readonly active: boolean;
-  readonly count?: number;
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly tab: InspectorTab;
-}) {
-  return (
-    <button
-      aria-controls="review-inspector-panel"
-      aria-selected={active}
-      className="as-tab"
-      data-active={active}
-      id={`review-inspector-tab-${tab}`}
-      onClick={onClick}
-      role="tab"
-      type="button"
-    >
-      {label}
-      {count === undefined ? null : <span>{count}</span>}
-    </button>
-  );
-}
-
 function IconButton({
   active,
   children,
@@ -2047,14 +1846,6 @@ function IconButton({
     >
       {children}
     </button>
-  );
-}
-
-function AccessPill({access}: {readonly access: ArtifactDetails["artifact"]["accessSetting"]}) {
-  return (
-    <span className="as-pill" data-access={access}>
-      {access === "public_link" ? "public" : "private"}
-    </span>
   );
 }
 

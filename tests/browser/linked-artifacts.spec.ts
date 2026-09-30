@@ -23,7 +23,7 @@ import {
   localLogin,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openReview} from "./review-helpers.js";
+import {inspectorTabButton, openReview} from "./review-helpers.js";
 
 /** The link answer these tests read, mirroring the HTTP response shaping. */
 const linkedPublicationSchema = z.object({
@@ -200,14 +200,14 @@ test.describe("Linked artifacts", () => {
       await expect(
         fixture.page.getByText("In sync", {exact: true}),
       ).toBeVisible({timeout: 30_000});
-      await expect(fixture.page.getByRole("tab", {name: "Versions 2"})).toBeVisible();
+      await expect(inspectorTabButton(fixture.page, "Versions")).toHaveAccessibleName("Versions — 2");
 
       await expect(async () => {
         expect(await versionCount(fixture, linked.artifact.id)).toBe(2);
       }).toPass();
 
       // The capture is in the artifact's own attributed history.
-      await fixture.page.getByRole("tab", {name: "Activity"}).click();
+      await fixture.page.getByRole("group", {name: "Inspector"}).getByRole("button", {name: /^Activity/u}).click();
       await expect(
         fixture.page.getByText("Captured linked file", {exact: true}),
       ).toBeVisible();

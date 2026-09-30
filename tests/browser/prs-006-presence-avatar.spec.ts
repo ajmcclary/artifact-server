@@ -265,9 +265,15 @@ test.describe("PRS-006 presence avatar", () => {
       // presence and the send control remain fully contained instead of
       // turning the inspector body into a horizontal scroller.
       await page.setViewportSize({height: 800, width: 320});
-      await expect.poll(() => page.locator(".as-inspector__body").evaluate((element) =>
-        element.scrollWidth - element.clientWidth
-      )).toBe(0);
+      const inspectorPane = page.locator('[data-panel="artifact-inspector"]');
+      await expect(inspectorPane).toHaveAttribute("data-panel-state", "sheet");
+      await expect.poll(() => inspectorPane.evaluate((panel) => {
+        const scrollers = [panel, ...panel.querySelectorAll("*")].filter((element) => {
+          const overflowX = getComputedStyle(element).overflowX;
+          return overflowX === "auto" || overflowX === "scroll";
+        });
+        return Math.max(0, ...scrollers.map((element) => element.scrollWidth - element.clientWidth));
+      })).toBe(0);
 
       expect(await browserStorage(page)).toEqual({
         indexedDatabaseNames: [],
