@@ -612,29 +612,41 @@ test.describe("Artifact Server frontend MVP", () => {
       await preview.locator("#review-theme-target").click();
       const themedCommentPopover = reviewFrame.locator('[data-comment-popover="true"]');
       await expect(themedCommentPopover).toBeVisible();
-      const themedCommentSurface = reviewFrame.locator([
-        '[data-comment-popover="true"] [role="dialog"]',
-        '[data-comment-popover="true"].bg-popover',
-      ].join(", "));
-      await expect(themedCommentSurface).toBeVisible();
-      const darkPopoverBackground = await themedCommentSurface.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      );
-      await fixture.page.getByRole("button", {name: "Use light theme"}).click();
-      await expect(fixture.page.locator("html")).toHaveAttribute("data-review-theme", "dawn");
-      await expect(reviewFrame.locator("html")).toHaveClass(/\blight\b/u);
-      await expect(themedCommentPopover).toBeVisible();
-      await expect.poll(() => themedCommentSurface.evaluate(
-        (node) => getComputedStyle(node).backgroundColor,
-      )).not.toBe(darkPopoverBackground);
-      const shellPopoverColor = await fixture.page.locator("html").evaluate(
-        (node) => getComputedStyle(node).getPropertyValue("--as-surface-raised").trim(),
-      );
-      await expect.poll(() => reviewFrame.locator("html").evaluate(
-        (node) => getComputedStyle(node).getPropertyValue("--popover").trim(),
-      )).toBe(shellPopoverColor);
       await reviewFrame.getByPlaceholder("Add a comment...").press("Escape");
       await expect(themedCommentPopover).toBeHidden();
+      const documentRoot = fixture.page.locator("html");
+      const accountButton = fixture.page.getByRole("button", {name: /^Account menu: /u});
+      const accountMenu = fixture.page.getByRole("menu", {name: "Account menu"});
+      await expect(fixture.page.getByRole("button", {name: /^Use (light|dark) theme$/u}))
+        .toHaveCount(0);
+      await accountButton.click();
+      await expect(accountMenu.getByRole("menuitemradio", {name: "System"}))
+        .toHaveAttribute("aria-checked", "true");
+      await accountMenu.getByRole("menuitemradio", {name: "Dark"}).click();
+      await expect(documentRoot).toHaveAttribute("data-theme", "dark");
+      await expect(documentRoot).toHaveAttribute("data-theme-mode", "dark");
+      await expect(documentRoot).not.toHaveAttribute("data-review-theme", /./u);
+      await expect(accountMenu.getByRole("menuitemradio", {name: "Dark"}))
+        .toHaveAttribute("aria-checked", "true");
+      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
+        .toBe(JSON.stringify("dark"));
+      await fixture.page.keyboard.press("Escape");
+      await expect(accountMenu).toHaveCount(0);
+      await expect(accountButton).toBeFocused();
+      const darkAccessibility = await new AxeBuilder({page: fixture.page})
+        .exclude(".as-artifact-frame")
+        .withTags(["wcag2a", "wcag2aa"])
+        .analyze();
+      expect(darkAccessibility.violations).toEqual([]);
+      await fixture.page.reload();
+      await expect(documentRoot).toHaveAttribute("data-theme", "dark");
+      await accountButton.click();
+      await accountMenu.getByRole("menuitemradio", {name: "Light"}).click();
+      await expect(documentRoot).toHaveAttribute("data-theme-mode", "default");
+      await expect(documentRoot).not.toHaveAttribute("data-theme", /./u);
+      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
+        .toBe(JSON.stringify("default"));
+      await fixture.page.keyboard.press("Escape");
       const lightAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(".as-artifact-frame")
         .withTags(["wcag2a", "wcag2aa"])
@@ -642,7 +654,6 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(lightAccessibility.violations).toEqual([]);
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
-
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toHaveAttribute("href", "/review");
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
@@ -758,6 +769,54 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("Escape");
       await expect(drawer).toHaveCount(0);
       await expect(launcher).toBeFocused();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("the account menu switches administration, appearance, and density and links the source", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await fixture.context.route("https://github.com/**", (route) => route.fulfill({
+        body: "<!doctype html><title>Source</title>",
+        contentType: "text/html",
+        status: 200,
+      }));
+      await localLogin(fixture);
+      const page = fixture.page;
+      const accountButton = page.getByRole("button", {name: /^Account menu: /u});
+      const accountMenu = page.getByRole("menu", {name: "Account menu"});
+      await accountButton.click();
+      await expect(accountMenu.getByRole("menuitem", {name: "Administration"})).toBeVisible();
+      await expect(accountMenu.getByRole("menuitem", {name: "Sign out"})).toBeVisible();
+      await Promise.all(["System", "Light", "Dark", "High contrast"].map((name) =>
+        expect(accountMenu.getByRole("menuitemradio", {exact: true, name})).toBeVisible()));
+      await expect(accountMenu.getByRole("menuitemradio", {name: "Comfortable"}))
+        .toHaveAttribute("aria-checked", "true");
+      await accountMenu.getByRole("menuitemradio", {name: "Compact"}).click();
+      await expect(accountMenu.getByRole("menuitemradio", {name: "Compact"}))
+        .toHaveAttribute("aria-checked", "true");
+      expect(await page.evaluate(() => Object.keys(localStorage)))
+        .toContain("artifact-review-density");
+      await page.keyboard.press("Escape");
+      await expect(accountMenu).toHaveCount(0);
+      await expect(accountButton).toBeFocused();
+
+      const sourcePage = fixture.context.waitForEvent("page");
+      await accountButton.click();
+      await accountMenu.getByRole("menuitem", {name: "Source on GitHub"}).click();
+      const opened = await sourcePage;
+      await opened.waitForLoadState();
+      expect(opened.url()).toBe("https://github.com/ajmcclary/artifact-server");
+      await opened.close();
+
+      await accountButton.click();
+      await accountMenu.getByRole("menuitem", {name: "Administration"}).click();
+      await expect(page).toHaveURL(`${fixture.server.baseUrl}/review/settings/members`);
+      await expect(page.getByRole("navigation", {name: "Administration"})).toBeVisible();
+      await page.getByRole("button", {name: /^Account menu: /u}).click();
+      await accountMenu.getByRole("menuitem", {name: "Back to review"}).click();
+      await expect(page).toHaveURL(/\/review\?project=prj_default/u);
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -1443,7 +1502,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByText(secretValue ?? "missing-secret")).toHaveCount(0);
       expect(await browserStorage(fixture.page)).toEqual({
         indexedDatabaseNames: [],
-        localStorageKeys: ["artifact-review-theme"],
+        localStorageKeys: [],
         sessionStorageKeys: ["artifact-review-return-url"],
       });
 
@@ -1627,7 +1686,6 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(settingsRailBox).toMatchObject({width: 53, x: 0});
       expect(projectIdentityBox?.x).toBeGreaterThan(53);
       const compactSettingsActions = [
-        fixture.page.getByRole("button", {name: "Sign out"}),
         fixture.page.getByRole("button", {name: "Save name"}),
         fixture.page.getByRole("button", {name: "Archive project"}),
       ];

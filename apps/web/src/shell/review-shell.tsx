@@ -19,6 +19,7 @@ import {
 import {readStored} from "@/lib/safe-storage";
 import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 
+import {AccountMenu} from "./account-menu.tsx";
 import {ArtifactServerBrand} from "./brand.tsx";
 import {CreateProjectModal} from "./create-project-modal.tsx";
 import {
@@ -118,6 +119,7 @@ function ReviewShellFrame({
   const nav = focus ? null : (
     <div inert={layout.chromeHidden} style={{display: "contents"}}>
     <LeftNav
+      account={<AccountMenu mode={mode} rail={false} session={session} />}
       activeLink={activeLink}
       brand={(
         <>
@@ -128,6 +130,7 @@ function ReviewShellFrame({
       )}
       brandRail={<ArtifactServerBrand compact />}
       currentLabel="Current"
+      footerRail={<AccountMenu mode={mode} rail session={session} />}
       items={items}
       mode={expanded ? "expanded" : "rail"}
       onAnnounce={announce}
@@ -143,6 +146,7 @@ function ReviewShellFrame({
     <MobileNavDrawer
       activeLink={activeLink}
       brand={<ArtifactServerBrand />}
+      footer={<AccountMenu mode={mode} rail={false} session={session} />}
       items={items}
       label={navTitle}
       launcher={{label: "Open menu"}}

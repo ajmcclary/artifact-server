@@ -31,11 +31,11 @@
   -webkit-font-smoothing: antialiased;
 }
 
-:root[data-review-theme="dawn"] {
+:root:not([data-theme="dark"]) {
   color-scheme: light;
 }
 
-.dark {
+:root[data-theme="dark"] {
   --as-iris: color-mix(in oklab, var(--sidebar-primary) 70%, var(--foreground));
   --as-iris-soft: color-mix(in oklab, var(--sidebar-primary) 14%, transparent);
 }
@@ -616,7 +616,7 @@ select:focus-visible {
   padding-top: 0.55rem;
 }
 
-:root[data-review-theme="dawn"] .as-project-popover {
+:root:not([data-theme="dark"]) .as-project-popover {
   box-shadow:
     0 1.75rem 5rem rgb(0 0 0 / 20%),
     0 0.35rem 1.2rem rgb(0 0 0 / 10%);
@@ -1404,6 +1404,8 @@ select:focus-visible {
 .as-focus-controls__button[data-active="true"] {
   background: color-mix(in oklab, var(--as-iris) 18%, var(--as-surface));
   border-color: color-mix(in oklab, var(--as-iris) 48%, var(--as-border));
+  /* .as-button (later, same specificity) mutes the ink; an active control reads at full contrast. */
+  color: var(--as-text);
 }
 
 .as-focus-controls__count {
@@ -1870,11 +1872,11 @@ select:focus-visible {
   display: none;
 }
 
-:root[data-review-theme="dawn"] .as-agent-logo img[data-agent-theme="dark"] {
+:root:not([data-theme="dark"]) .as-agent-logo img[data-agent-theme="dark"] {
   display: none;
 }
 
-:root[data-review-theme="dawn"] .as-agent-logo img[data-agent-theme="light"] {
+:root:not([data-theme="dark"]) .as-agent-logo img[data-agent-theme="light"] {
   display: block;
 }
 
@@ -1894,23 +1896,23 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-:root[data-review-theme="dawn"] .as-share-backdrop {
+:root:not([data-theme="dark"]) .as-share-backdrop {
   background: rgb(0 0 0 / 7%);
 }
 
-:root[data-review-theme="dawn"] .as-share-popover {
+:root:not([data-theme="dark"]) .as-share-popover {
   box-shadow:
     0 1.75rem 5rem rgb(0 0 0 / 20%),
     0 0.35rem 1.2rem rgb(0 0 0 / 10%);
 }
 
-:root[data-review-theme="dawn"] .as-catalog-filter-popover {
+:root:not([data-theme="dark"]) .as-catalog-filter-popover {
   box-shadow:
     0 1rem 3rem rgb(0 0 0 / 16%),
     0 0.2rem 0.8rem rgb(0 0 0 / 8%);
 }
 
-:root[data-review-theme="dawn"] .as-keyboard-shortcuts {
+:root:not([data-theme="dark"]) .as-keyboard-shortcuts {
   box-shadow:
     0 1rem 3rem rgb(0 0 0 / 16%),
     0 0.2rem 0.8rem rgb(0 0 0 / 8%);
@@ -3526,12 +3528,6 @@ select:focus-visible {
   background: var(--as-canvas);
   color: var(--as-text);
   flex: 1 0 auto;
-}
-
-.as-settings__session {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1rem;
 }
 
 .as-settings .text-primary {

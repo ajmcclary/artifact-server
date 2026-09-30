@@ -5,7 +5,6 @@ import {createRoot} from "react-dom/client";
 
 import {installArkcaseRuntime} from "@/arkcase-runtime";
 import {installDraftGuard} from "@/components/comments/comment-drafts";
-import {readStored} from "@/lib/safe-storage";
 import {AnnouncerProvider} from "@/ui/announcer";
 import {DensityProvider} from "@/ui/density";
 import {ToastProvider} from "@/ui/toasts";
@@ -25,12 +24,6 @@ installArkcaseRuntime();
 // Lives for the whole session, above every route: the leave prompt and the
 // logout purge must not depend on which screen is mounted.
 installDraftGuard();
-
-const initialTheme = readStored("local", "artifact-review-theme") === "dawn"
-  ? "dawn"
-  : "moon";
-document.documentElement.dataset["reviewTheme"] = initialTheme;
-document.documentElement.classList.toggle("dark", initialTheme === "moon");
 
 const rootElement = document.querySelector("#review-root");
 

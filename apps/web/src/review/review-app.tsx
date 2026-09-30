@@ -23,12 +23,10 @@ import {
   KeyboardIcon,
   LayoutLeftIcon,
   Link01Icon,
-  Moon02Icon,
   PanelRightIcon,
   RefreshIcon,
   Search01Icon,
   Settings02Icon,
-  Sun03Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -36,7 +34,6 @@ import {Dialog} from "@base-ui/react/dialog";
 import {Popover} from "@base-ui/react/popover";
 import {motion} from "motion/react";
 
-import {bootTheme} from "@/arkcase";
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
 import {useCommentPoll} from "@/components/comments/comment-poll";
 import {
@@ -60,6 +57,7 @@ import {
   sourceFreshnessLabel,
 } from "@/lib/presentation";
 import {ReviewShell} from "@/shell/review-shell";
+import {useThemeMode} from "@/theme/use-theme-mode";
 import {
   useReviewComments,
   ReviewCommentsInspector,
@@ -82,9 +80,8 @@ import {ReviewShareControl} from "./review-share.tsx";
 import {useReviewPanelMotion} from "./use-review-panel-motion.ts";
 import {useReviewResizablePanel} from "./use-review-resizable-panel.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
-import {readStored, writeStored} from "@/lib/safe-storage";
+import {writeStored} from "@/lib/safe-storage";
 
-type ReviewTheme = "dawn" | "moon";
 type InspectorTab = "activity" | "comments" | "compare" | "details" | "files" | "versions";
 type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
 type CatalogCommentFilter = "all" | "with" | "without";
@@ -367,7 +364,6 @@ export function ReviewApp() {
     "loading" | "ready" | "unauthenticated"
   >("loading");
   const [error, setError] = useState<Error | null>(null);
-  const [theme, setTheme] = useState<ReviewTheme>(readInitialTheme);
   const [locationHref, setLocationHref] = useState(readDocumentHref);
   const route = useMemo(
     () => parseReviewRoute(new URL(locationHref, window.location.origin)),
@@ -448,17 +444,6 @@ export function ReviewApp() {
     };
   }, []);
 
-  useEffect(() => {
-    document.documentElement.dataset["reviewTheme"] = theme;
-    document.documentElement.classList.toggle("dark", theme === "moon");
-    writeStored("local", "artifact-review-theme", theme);
-    // Interim until the account menu replaces the toggle: DS tokens follow the old appearance
-    // unless a DS mode was chosen, without persisting anything.
-    if (readStored("local", "arkcase.theme.v1") === null) {
-      bootTheme()?.setMode(theme === "moon" ? "dark" : "default", {persist: false});
-    }
-  }, [theme]);
-
   const createProject = useCallback(async (name: string): Promise<Project> => {
     const created = await api.createProject(name);
     setProjects((current) => [
@@ -519,28 +504,20 @@ export function ReviewApp() {
           session={session}
         />
       ) : (
-        <ArtifactReview
-          onThemeChange={() => setTheme((current) => current === "moon" ? "dawn" : "moon")}
-          projects={projects}
-          session={session}
-          theme={theme}
-        />
+        <ArtifactReview projects={projects} session={session} />
       )}
     </ReviewShell>
   );
 }
 
 function ArtifactReview({
-  onThemeChange,
   projects,
   session,
-  theme,
 }: {
-  readonly onThemeChange: () => void;
   readonly projects: readonly Project[];
   readonly session: Session;
-  readonly theme: ReviewTheme;
 }) {
+  const {theme: appearance} = useThemeMode();
   const initialLocation = useMemo(currentReviewLocation, []);
   const initialProjectId = initialLocation.projectId
     ?? projects.find((project) => project.archivedAt === null)?.id
@@ -1321,12 +1298,6 @@ function ArtifactReview({
             </strong>
           </div>
           <div className="as-catalog__header-actions">
-            <IconButton
-              label={theme === "moon" ? "Use light theme" : "Use dark theme"}
-              onClick={onThemeChange}
-            >
-              <HugeiconsIcon icon={theme === "moon" ? Sun03Icon : Moon02Icon} strokeWidth={1.8} />
-            </IconButton>
             <a
               aria-label="Project settings"
               className="as-icon-button"
@@ -1733,7 +1704,7 @@ function ArtifactReview({
                 annotations={comments.annotations}
                 artifactId={selectedArtifactId}
                 artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
-                isLight={theme === "dawn"}
+                isLight={appearance !== "dark"}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 onOpenRawArtifact={() => void openRawArtifact()}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}
@@ -2638,12 +2609,6 @@ function ReviewGate({
       </section>
     </main>
   );
-}
-
-function readInitialTheme(): ReviewTheme {
-  return readStored("local", "artifact-review-theme") === "dawn"
-    ? "dawn"
-    : "moon";
 }
 
 function readInitialInspectorOpen(): boolean {

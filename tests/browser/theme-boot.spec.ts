@@ -33,16 +33,18 @@ test.describe("ArkCase theme boot", () => {
     }
   });
 
-  test("the legacy theme key stays with the legacy toggle until the new shell owns appearance", async ({browser}) => {
+  test("a legacy moon choice migrates to the Dark mode before first paint", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
+      // Re-seeds on every document; each later load then takes the "already chosen wins" path.
       await fixture.context.addInitScript(() => {
-        localStorage.setItem("artifact-review-theme", "dawn");
+        localStorage.setItem("artifact-review-theme", "moon");
       });
       await localLogin(fixture);
-      await expect(fixture.page.locator("html")).toHaveAttribute("data-review-theme", "dawn");
-      expect(await fixture.page.evaluate(() => localStorage.getItem("artifact-review-theme"))).toBe("dawn");
-      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1"))).toBeNull();
+      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
+        .toBe(JSON.stringify("dark"));
+      expect(await fixture.page.evaluate(() => localStorage.getItem("artifact-review-theme"))).toBeNull();
+      await expect(fixture.page.locator("html")).toHaveAttribute("data-theme", "dark");
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -86,8 +88,7 @@ test("theme boot and the review app survive a localStorage that throws", async (
     const errors: string[] = [];
     fixture.page.on("pageerror", (error) => errors.push(error.message));
     await localLogin(fixture);
-    // "dark" until Task 7: the interim sync maps the old default (moon) onto the DS mode.
-    await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", /^(?:system|dark)$/u);
+    await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", "system");
     expect(errors).toEqual([]);
   } finally {
     await stopBrowserFixture(fixture);

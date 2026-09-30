@@ -9,14 +9,8 @@ import {bootTheme} from "../arkcase/components/utilities/theme-preference.jsx";
 
 import {migrateLegacyTheme} from "./theme-migration.ts";
 
-// While review.html carries data-review-theme, the legacy appearance toggle
-// still owns `artifact-review-theme` and rewrites it on every load; migrating
-// then would reset that toggle. Task 7 removes the attribute with the toggle,
-// which turns the migration on.
-const legacyToggleOwnsTheme = document.documentElement.hasAttribute("data-review-theme");
-
 try {
-  if (!legacyToggleOwnsTheme) migrateLegacyTheme(window.localStorage);
+  migrateLegacyTheme(window.localStorage);
 } catch {
   // Storage is blocked; there is nothing to migrate.
 }

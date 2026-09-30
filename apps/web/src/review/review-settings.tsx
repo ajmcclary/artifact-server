@@ -1,9 +1,9 @@
-import {api, type Project, type Session} from "@/api/client";
+import {type Project, type Session} from "@/api/client";
 import {StatePanel} from "@/components/product";
-import {Button, ButtonLink} from "@/components/ui/button";
+import {ButtonLink} from "@/components/ui/button";
 import {canManageProjects, isInstallationAdministrator} from "@/shell/nav-model";
 
-import {reviewQueueHref, type SettingsRoute} from "./review-routes.ts";
+import {type SettingsRoute} from "./review-routes.ts";
 import {ApiKeysScreen} from "./settings-api-keys.tsx";
 import {McpScreen} from "./settings-mcp.tsx";
 import {MembersScreen} from "./settings-members.tsx";
@@ -32,15 +32,6 @@ export function ReviewSettings({
     <div className="as-settings">
       <div className="as-settings__layout">
         <div className="as-settings__content">
-          <div className="as-settings__session">
-            <Button
-              onClick={() => void api.logout().finally(() => window.location.assign(reviewQueueHref()))}
-              size="sm"
-              variant="ghost"
-            >
-              Sign out
-            </Button>
-          </div>
           <SettingsContent
             administrator={administrator}
             canManageProjects={canManage}
