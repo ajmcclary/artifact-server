@@ -77,6 +77,7 @@ import {AgentLogos, ReviewShareControl} from "./review-share.tsx";
 import {useReviewPanelMotion} from "./use-review-panel-motion.ts";
 import {useReviewResizablePanel} from "./use-review-resizable-panel.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
+import {readStored, writeStored} from "@/lib/safe-storage";
 
 type ReviewTheme = "dawn" | "moon";
 type InspectorTab = "activity" | "comments" | "compare" | "details" | "files" | "versions";
@@ -435,7 +436,7 @@ export function ReviewApp() {
   useEffect(() => {
     document.documentElement.dataset["reviewTheme"] = theme;
     document.documentElement.classList.toggle("dark", theme === "moon");
-    window.localStorage.setItem("artifact-review-theme", theme);
+    writeStored("local", "artifact-review-theme", theme);
   }, [theme]);
 
   const createProject = useCallback(async (name: string): Promise<Project> => {
@@ -895,7 +896,7 @@ function ArtifactReview({
       view: focusMode ? "focus" : null,
     });
     window.history.replaceState(null, "", href);
-    window.sessionStorage.setItem("artifact-review-return-url", href);
+    writeStored("session", "artifact-review-return-url", href);
   }, [focusMode, projectId, selectedArtifactId, selectedPath, selectedVersionId]);
 
   useEffect(() => {
@@ -2747,7 +2748,7 @@ function ReviewGate({
 }
 
 function readInitialTheme(): ReviewTheme {
-  return window.localStorage.getItem("artifact-review-theme") === "dawn"
+  return readStored("local", "artifact-review-theme") === "dawn"
     ? "dawn"
     : "moon";
 }

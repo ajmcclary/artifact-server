@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { installDraftGuard } from "@/components/comments/comment-drafts";
 import { installArkcaseRuntime } from "@/arkcase-runtime";
+import { readStored } from "@/lib/safe-storage";
 
 import { ReviewApp } from "./review-app.tsx";
 import "../index.css";
@@ -13,7 +14,7 @@ import "./review.css";
 installDraftGuard();
 installArkcaseRuntime();
 
-const initialTheme = window.localStorage.getItem("artifact-review-theme") === "dawn"
+const initialTheme = readStored("local", "artifact-review-theme") === "dawn"
   ? "dawn"
   : "moon";
 document.documentElement.dataset["reviewTheme"] = initialTheme;

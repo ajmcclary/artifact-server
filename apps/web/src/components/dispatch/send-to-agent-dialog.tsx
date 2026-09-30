@@ -26,6 +26,7 @@ import {Label} from "@/components/ui/label";
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {Textarea} from "@/components/ui/textarea";
 import {errorMessage, formatRelativeTime} from "@/lib/presentation";
+import {readStored, removeStored, writeStored} from "@/lib/safe-storage";
 
 function annotationCount(count: number): string {
   return count === 1 ? "1 annotation" : `${count} annotations`;
@@ -51,7 +52,7 @@ const rememberedAgentSchema = z.object({
 });
 
 function readRememberedAgent(storageKey: string): RememberedAgent | null {
-  const stored = window.localStorage.getItem(storageKey);
+  const stored = readStored("local", storageKey);
   if (stored === null) return null;
   try {
     const parsed = rememberedAgentSchema.safeParse(JSON.parse(stored));
@@ -59,7 +60,7 @@ function readRememberedAgent(storageKey: string): RememberedAgent | null {
   } catch {
     // Invalid local convenience state is disposable; it is never authority.
   }
-  window.localStorage.removeItem(storageKey);
+  removeStored("local", storageKey);
   return null;
 }
 
@@ -190,7 +191,7 @@ export function SendToAgentControl({
 
   useEffect(() => {
     if (!rememberedDefaultMissing) return;
-    window.localStorage.removeItem(storageKey);
+    removeStored("local", storageKey);
     setRememberedPreference({agent: null, storageKey});
   }, [rememberedDefaultMissing, storageKey]);
 
@@ -226,7 +227,7 @@ export function SendToAgentControl({
 
   const rememberAgent = (agent: AgentPresence): void => {
     const next = {displayName: agent.displayName, id: agent.id};
-    window.localStorage.setItem(storageKey, JSON.stringify(next));
+    writeStored("local", storageKey, JSON.stringify(next));
     setRememberedPreference({agent: next, storageKey});
   };
 

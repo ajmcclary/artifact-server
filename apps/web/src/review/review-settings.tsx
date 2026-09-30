@@ -12,6 +12,7 @@ import {MembersScreen} from "./settings-members.tsx";
 import {SettingsProject, SettingsProjects} from "./settings-projects.tsx";
 import {PublicLinksScreen} from "./settings-public-links.tsx";
 import {WebmcpScreen} from "./settings-webmcp.tsx";
+import {readStored} from "@/lib/safe-storage";
 
 interface ReviewSettingsProps {
   readonly onProjectsChanged: () => Promise<readonly Project[]>;
@@ -209,7 +210,7 @@ function AdministratorPermissionRequired() {
 }
 
 function readReturnToReview(): string {
-  const stored = window.sessionStorage.getItem("artifact-review-return-url");
+  const stored = readStored("session", "artifact-review-return-url");
   return stored?.startsWith("/review") && !stored.startsWith("/review/settings")
     ? stored
     : "/review";

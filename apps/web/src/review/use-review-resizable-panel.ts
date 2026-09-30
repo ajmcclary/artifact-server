@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import {readStored, writeStored} from "@/lib/safe-storage";
 
 interface ReviewResizablePanelOptions {
   readonly apply: (width: number) => void;
@@ -47,7 +48,7 @@ function readStoredWidth(
   minWidth: number,
   maxWidth: number,
 ): number {
-  const storedValue = window.localStorage.getItem(storageKey);
+  const storedValue = readStored("local", storageKey);
   if (storedValue === null) return clamp(defaultWidth, minWidth, maxWidth);
   const stored = Number(storedValue);
   return Number.isFinite(stored)
@@ -173,7 +174,7 @@ export function useReviewResizablePanel({
           onClickRef.current();
         } else {
           setWidth(widthRef.current);
-          window.localStorage.setItem(storageKey, String(widthRef.current));
+          writeStored("local", storageKey, String(widthRef.current));
         }
       }
       cleanup();
@@ -198,7 +199,7 @@ export function useReviewResizablePanel({
     widthRef.current = nextWidth;
     applyRef.current(nextWidth);
     setWidth(nextWidth);
-    window.localStorage.setItem(storageKey, String(nextWidth));
+    writeStored("local", storageKey, String(nextWidth));
   }, [maxWidth, minWidth, storageKey]);
 
   return {
