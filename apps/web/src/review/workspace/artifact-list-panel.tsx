@@ -15,6 +15,7 @@ import {
   SurfaceState,
 } from "@/arkcase";
 import {formatTimestamp} from "@/lib/presentation";
+import {useShellNavigation} from "@/shell/shell-layout-context";
 
 import {catalogWidth} from "./workspace-layout.ts";
 import type {
@@ -37,7 +38,6 @@ export interface ArtifactListPanelProps {
   readonly listLoading: boolean;
   readonly nextCursor: string | null;
   readonly onAnnounce: (message: string) => void;
-  readonly onCollapse: () => void;
   readonly onCommentFilterChange: (filter: CatalogCommentFilter) => void;
   readonly onFiltersOpenChange: (open: boolean) => void;
   readonly onLoadMore: () => void;
@@ -114,7 +114,6 @@ const rowMetaStyle = {
 } satisfies CSSProperties;
 const rowButtonStyle = {display: "block", textAlign: "left", width: "100%"} satisfies CSSProperties;
 const loadMoreStyle = {display: "flex", justifyContent: "center", padding: "10px 14px 14px"} satisfies CSSProperties;
-const projectSettingsStyle = {display: "flex", flex: "none", justifyContent: "flex-end", padding: "4px 8px 0"} satisfies CSSProperties;
 const sheetBackStyle = {background: "var(--surface-secondary)", flex: "none", padding: "4px 8px 0"} satisfies CSSProperties;
 const shortcutListStyle = {display: "grid", gap: 6, margin: 0} satisfies CSSProperties;
 const shortcutRowStyle = {alignItems: "center", display: "flex", gap: 12, justifyContent: "space-between"} satisfies CSSProperties;
@@ -153,7 +152,6 @@ export function ArtifactListPanel({
   listLoading,
   nextCursor,
   onAnnounce,
-  onCollapse,
   onCommentFilterChange,
   onFiltersOpenChange,
   onLoadMore,
@@ -179,6 +177,7 @@ export function ArtifactListPanel({
   tagFilters,
   width,
 }: ArtifactListPanelProps) {
+  const navigation = useShellNavigation();
   const activeFilterCount = Number(commentFilter !== "all") + tagFilters.length;
   const filtered = query !== "" || activeFilterCount > 0;
   const tags = [...new Set([...knownTags, ...tagFilters])].toSorted();
@@ -219,16 +218,19 @@ export function ArtifactListPanel({
         {activeFilterCount === 0 ? null : <CountBadge count={activeFilterCount} tone="primary" />}
       </Button>
       <KeyboardShortcuts />
-      {pinned && canPin && !sheet ? (
+      {navigation.collapsed && !sheet ? (
         <IconButton
-          ariaLabel="Collapse artifact catalog"
-          icon="bi-layout-sidebar-inset"
-          keyshortcuts="["
-          onClick={onCollapse}
+          ariaLabel="Open navigation menu"
+          icon="bi-list"
+          onClick={navigation.openMenu}
           size="sm"
-          title="Collapse artifact catalog ([)"
+          title="Open navigation menu"
+          variant="light"
         />
       ) : null}
+      {settingsHref === null ? null : (
+        <Button aria-label="Project settings" href={settingsHref} icon="bi-sliders" size="sm" title="Project settings" variant="light" />
+      )}
     </>
   );
 
@@ -305,13 +307,6 @@ export function ArtifactListPanel({
           <Button icon="bi-chevron-left" onClick={onSheetClose} size="sm" variant="link">Back</Button>
         </div>
       ) : null}
-      {settingsHref === null ? null : (
-        <div style={projectSettingsStyle}>
-          <Button href={settingsHref} icon="bi-sliders" size="sm" variant="ghost">
-            Project settings
-          </Button>
-        </div>
-      )}
       <RailHeader
         actions={actions}
         filters={filters}

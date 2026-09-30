@@ -376,6 +376,7 @@ function ArtifactReview({
   const restoreControlsRef = useRef<HTMLSpanElement | null>(null);
   useFocusContainment(workspaceRef, focusMode);
   const commentsInspectorRef = useRef<CommentsTabHandle | null>(null);
+  const [previewModeTarget, setPreviewModeTarget] = useState<HTMLDivElement | null>(null);
   const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogRequestGenerationRef = useRef(0);
   const followCommentVersion = useCallback((versionId: string): void => {
@@ -1145,14 +1146,17 @@ function ArtifactReview({
     />
   );
   const commentsTab = (
-    <CommentsTab
-      canComment={canComment}
-      canDeleteAny={canDeleteAnyComment}
-      handleRef={commentsInspectorRef}
-      principalId={session.principal.id}
-      session={comments}
-      versionId={selectedVersionId}
-    />
+    <>
+      <div ref={setPreviewModeTarget} />
+      <CommentsTab
+        canComment={canComment}
+        canDeleteAny={canDeleteAnyComment}
+        handleRef={commentsInspectorRef}
+        principalId={session.principal.id}
+        session={comments}
+        versionId={selectedVersionId}
+      />
+    </>
   );
   const inspectorBody = details === null || selectedVersion === null ? (
     <SurfaceState
@@ -1211,7 +1215,6 @@ function ArtifactReview({
             listLoading={listLoading}
             nextCursor={nextCursor}
             onAnnounce={announce}
-            onCollapse={toggleCatalog}
             onCommentFilterChange={setCatalogCommentFilter}
             onFiltersOpenChange={setCatalogFiltersOpen}
             onLoadMore={() => void loadArtifacts(nextCursor, false)}
@@ -1254,12 +1257,15 @@ function ArtifactReview({
             catalogDocked={catalogDocked}
             details={details}
             download={download}
-            inspectorOpen={inspectorOpen}
             linkedArtifacts={session.capabilities.linkedArtifacts}
             onCapture={captureLinkedArtifact}
             onDelete={tombstoneArtifact}
             onEnterFocus={enterFocusMode}
             onOpenCatalog={toggleCatalog}
+            onOpenComments={() => {
+              setInspectorTab("comments");
+              setInspectorOpen(true);
+            }}
             onOpenComparison={() => setComparisonView("compare")}
             onOpenLive={openLinkedArtifact}
             onOpenRawArtifact={() => void openRawArtifact()}
@@ -1269,7 +1275,6 @@ function ArtifactReview({
               setSelectedVersionId(versionId);
               setSelectedPath(null);
             }}
-            onToggleInspector={() => setInspectorOpen((open) => !open)}
             opening={opening}
             phone={phone}
             projectName={selectedProject?.name ?? "project"}
@@ -1315,6 +1320,7 @@ function ArtifactReview({
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
                 hasDetails={details !== null}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
+                modeControlsTarget={previewModeTarget}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}
                 onNextArtifact={nextArtifact}
                 onOpenRawArtifact={() => void openRawArtifact()}
@@ -1435,4 +1441,3 @@ function reviewPreviewKind(
   }
   return "other";
 }
-

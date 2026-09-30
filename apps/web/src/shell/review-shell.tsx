@@ -31,8 +31,8 @@ import {
   shellNavItems,
   type ShellNavInput,
 } from "./nav-model.ts";
-import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, reviewPanelStore} from "./shell-layout.ts";
-import {ShellLayoutProvider, useShellLayoutState} from "./shell-layout-context.tsx";
+import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, navigationWidth, reviewPanelStore} from "./shell-layout.ts";
+import {ShellLayoutProvider, ShellNavigationProvider, useShellLayoutState} from "./shell-layout-context.tsx";
 
 /** Room kept clear on phones for the drawer's fixed 40 px launcher. */
 const phoneLauncherClearance = 56;
@@ -72,6 +72,7 @@ function ReviewShellFrame({
   const display = useDisplayProfile({ladder: REVIEW_DISPLAY_LADDER});
   const layout = useShellLayoutState();
   const [navPinned, setNavPinned] = useState(() => reviewPanelStore.pinned(NAV_PANEL_ID, false));
+  const [navWidth, setNavWidth] = useState<number | null>(() => reviewPanelStore.width(NAV_PANEL_ID) ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -92,6 +93,7 @@ function ReviewShellFrame({
   const phone = display.profile === "mobile";
   const expanded = layout.navExpandable && navPinned && (display.profile === "laptop" || display.profile === "desktop");
   const navTitle = mode === "admin" ? "Administration" : "Review and projects";
+  const expandedWidth = Math.min(navigationWidth.maximum, Math.max(navigationWidth.minimum, navWidth ?? navigationWidth.defaultWidth));
 
   const selectItem = (item: NavItem): void => {
     if (item.id === NEW_PROJECT_NAV_ID) {
@@ -124,7 +126,7 @@ function ReviewShellFrame({
       activeLink={activeLink}
       brand={(
         <>
-          <ArtifactServerBrand />
+          <ArtifactServerBrand showProduct={false} />
           <span style={{flex: "1 1 auto"}} />
           {paletteButton("navy")}
         </>
@@ -134,34 +136,46 @@ function ReviewShellFrame({
       footerRail={<AccountMenu mode={mode} rail session={session} />}
       items={items}
       mode={expanded ? "expanded" : "rail"}
+      maxWidth={navigationWidth.maximum}
+      minWidth={navigationWidth.minimum}
       onAnnounce={announce}
       onPinChange={changePin}
       onSelect={selectItem}
+      onWidthChange={(width) => {
+        setNavWidth(width);
+        reviewPanelStore.setWidth(NAV_PANEL_ID, width);
+      }}
       pinned={expanded}
       searchRail={paletteButton("ghost")}
+      resizable={expanded}
+      style={{width: expanded ? expandedWidth : "var(--navigator-rail-width, 52px)"}}
       title={navTitle}
+      width={expandedWidth}
     />
     </div>
   );
   const drawer = focus ? null : (
     <MobileNavDrawer
       activeLink={activeLink}
-      brand={<ArtifactServerBrand />}
+      brand={<ArtifactServerBrand showProduct={false} />}
       footer={<AccountMenu mode={mode} rail={false} session={session} />}
       items={items}
       label={navTitle}
-      launcher={{label: "Open menu"}}
+      launcher={phone ? {label: "Open menu"} : false}
       onAnnounce={announce}
       onClose={() => setDrawerOpen(false)}
       onOpen={() => setDrawerOpen(true)}
       onSelect={selectItem}
       open={drawerOpen}
+      returnFocusSelector={phone
+        ? "[data-ac-mnav-launcher]"
+        : '[aria-label="Open navigation menu"], [aria-label="Show the artifact catalog"]'}
       title={mode === "admin" ? "Administration" : "Review"}
     />
   );
 
   return (
-    <>
+    <ShellNavigationProvider value={{collapsed: !expanded, openMenu: () => setDrawerOpen(true)}}>
       <AppShell
         alert={announcements.assertive}
         announce={announcements.polite}
@@ -186,7 +200,8 @@ function ReviewShellFrame({
           open={createOpen}
         />
       </AppShell>
+      {phone ? null : drawer}
       <ReviewPaletteHost projects={projects} />
-    </>
+    </ShellNavigationProvider>
   );
 }

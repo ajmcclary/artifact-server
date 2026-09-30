@@ -14,5 +14,8 @@ export const REVIEW_PANEL_STORAGE_KEY = "artifact-review-panels";
 /** The navigation column's pin, stored under `REVIEW_PANEL_STORAGE_KEY`. */
 export const NAV_PANEL_ID = "navMenu";
 
+/** Matches the prototype's menu seam; both the header and rows share this width. */
+export const navigationWidth = {defaultWidth: 232, minimum: 200, maximum: 380} as const;
+
 /** Pins and widths of the navigation and review panes; it writes only when the reader changes one. */
 export const reviewPanelStore = PanelStore({key: REVIEW_PANEL_STORAGE_KEY});

@@ -108,8 +108,7 @@ test.describe("Artifact review workspace layout", () => {
       // `[` pins and unpins it from the keyboard.
       await page.keyboard.press("[");
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "pinned");
-      await expect(catalog.getByRole("button", {name: "Collapse artifact catalog"}))
-        .toHaveAttribute("aria-keyshortcuts", "[");
+      await expect(catalog.getByRole("button", {name: "Collapse artifact catalog"})).toHaveCount(0);
       await page.keyboard.press("[");
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
       await page.keyboard.press("[");
@@ -119,7 +118,7 @@ test.describe("Artifact review workspace layout", () => {
       await page.setViewportSize({height: 800, width: 1023});
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
       await page.setViewportSize({height: 800, width: 1024});
-      await page.getByRole("button", {name: "Close inspector"}).click();
+      await page.getByRole("group", {name: "Inspector"}).locator('button[aria-pressed="true"]').click();
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "pinned");
 
       // On a phone the catalog is a sheet that opens on request and closes on a choice.
@@ -142,7 +141,7 @@ test.describe("Artifact review workspace layout", () => {
       await stopBrowserFixture(fixture);
     }
   });
-  test("CMT-015-F: a pinned navigation rails itself when the catalog and a docked inspector need the width", async ({browser}) => {
+  test("CMT-015-B CMT-015-F: navigation resizes within bounds, remembers its width and rails when the workspace needs room", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const published = await publishNew(fixture.server, fixture.installation, {
@@ -153,19 +152,52 @@ test.describe("Artifact review workspace layout", () => {
       });
       // The reader pinned the navigation open on an earlier visit.
       await fixture.context.addInitScript(() => {
-        window.localStorage.setItem("artifact-review-panels", JSON.stringify({navMenu: true}));
+        if (window.localStorage.getItem("artifact-review-panels") === null) {
+          window.localStorage.setItem("artifact-review-panels", JSON.stringify({navMenu: true}));
+        }
       });
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
       const page = fixture.page;
       const navigation = page.locator("[data-ac-left-nav]");
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "expanded");
+      const navSeam = page.getByRole("separator", {name: "Resize the review and projects"});
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "232");
+      await expect(navSeam).toHaveAttribute("aria-valuemin", "200");
+      await expect(navSeam).toHaveAttribute("aria-valuemax", "380");
+      await navSeam.focus();
+      await page.keyboard.press("End");
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "380");
+      await page.keyboard.press("Home");
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "200");
+      await page.keyboard.press("Delete");
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "232");
+      await page.keyboard.press("ArrowRight");
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "248");
+      await expect.poll(() => navigation.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(248);
+      await page.reload();
+      await expect(navSeam).toHaveAttribute("aria-valuenow", "248");
+      await page.getByRole("button", {name: "Unpin the menu", exact: true}).click();
+      const menuOpener = page.getByRole("button", {name: "Open navigation menu", exact: true});
+      await menuOpener.click();
+      await expect(page.getByRole("dialog", {name: "Review and projects"})).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog", {name: "Review and projects"})).toHaveCount(0);
+      await expect(menuOpener).toBeFocused();
+      await page.getByRole("button", {name: "Pin the menu", exact: true}).click();
+      await expect(menuOpener).toHaveCount(0);
       // At 1680 px the inspector opens docked; 1280 px cannot fit an expanded nav beside both panes.
       await page.setViewportSize({height: 900, width: 1280});
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "rail");
-      await page.getByRole("button", {name: "Close inspector"}).click();
+      const catalogRail = page.getByRole("button", {name: "Show the artifact catalog", exact: true});
+      await catalogRail.click();
+      await menuOpener.click();
+      await expect(page.getByRole("dialog", {name: "Review and projects"})).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(catalogRail).toBeFocused();
+      await page.getByRole("group", {name: "Inspector"}).locator('button[aria-pressed="true"]').click();
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "expanded");
-      await page.getByRole("button", {name: "Open inspector"}).click();
+      await inspectorTabButton(page, "Comments").click();
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "rail");
     } finally {
       await stopBrowserFixture(fixture);
@@ -214,7 +246,7 @@ test.describe("Artifact review workspace layout", () => {
       await expect(toolbar.getByRole("link", {exact: true, name: "Download"}))
         .toHaveAttribute("title", "Download 2 files as a ZIP");
       await expect(toolbar.getByRole("button", {name: "Full screen"})).toHaveAttribute("aria-keyshortcuts", "F");
-      await expect(toolbar.getByRole("button", {name: "Close inspector"})).toHaveAttribute("aria-keyshortcuts", "]");
+      await expect(toolbar.getByRole("button", {name: /^(Open|Close) inspector$/u})).toHaveCount(0);
       await toolbar.getByRole("button", {name: "More artifact actions"}).click();
       await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: "Delete artifact"})).toBeVisible();
       await page.keyboard.press("Escape");
@@ -252,9 +284,9 @@ test.describe("Artifact review workspace layout", () => {
 
       // A wide screen with both panes put away has room for the desktop preset.
       await page.setViewportSize({height: 1000, width: 1920});
-      await page.getByRole("button", {name: "Close inspector"}).click();
+      await inspectorTabButton(page, "Comments").click();
       await page.getByRole("complementary", {name: "Artifact catalog"})
-        .getByRole("button", {name: "Collapse artifact catalog"}).click();
+        .getByRole("button", {name: "Unpin the artifact catalog"}).click();
       await widths.getByRole("button", {name: "1440 pixels wide"}).click();
       await expect(region).toHaveAttribute("data-preview-frame", "1440");
     } finally {
@@ -307,7 +339,7 @@ test.describe("Artifact review workspace layout", () => {
       await inspectorTabButton(page, "Details").click();
       await expect(inspector).toHaveCount(0);
       await expect(page.getByRole("group", {name: "Inspector"})).toBeVisible();
-      await expect(page.getByRole("button", {name: "Open inspector"})).toHaveAttribute("aria-keyshortcuts", "]");
+      await expect(page.getByRole("button", {name: "Open inspector"})).toHaveCount(0);
       await page.keyboard.press("]");
       await expect(inspector).toBeVisible();
       await page.keyboard.press("]");
@@ -335,7 +367,7 @@ test.describe("Artifact review workspace layout", () => {
 
       // Phone: a sheet with its own close control.
       await page.setViewportSize({height: 844, width: 390});
-      await page.getByRole("button", {name: "Open inspector"}).click();
+      await page.getByRole("button", {name: "Open comments"}).click();
       await expect(inspectorPane).toHaveAttribute("data-panel-state", "sheet");
       await page.getByRole("button", {name: "Close the inspector"}).click();
       await expect(inspector).toHaveCount(0);

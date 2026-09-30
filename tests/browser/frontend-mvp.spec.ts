@@ -274,9 +274,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(filterPopover).toBeHidden();
 
       const collapseCatalog = fixture.page.getByRole("button", {
-        name: "Collapse artifact catalog",
+        name: "Unpin the artifact catalog",
       });
-      await expect(collapseCatalog).toHaveAttribute("aria-keyshortcuts", "[");
+      await expect(collapseCatalog).toBeVisible();
       await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("[");
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
@@ -286,12 +286,12 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("[");
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");
 
-      const closeInspector = fixture.page.getByRole("button", {name: "Close inspector"});
-      await expect(closeInspector).toHaveAttribute("aria-keyshortcuts", "]");
+      const closeInspector = inspectorTabButton(fixture.page, "Comments");
+      await expect(closeInspector).toHaveAttribute("aria-pressed", "true");
       await fixture.page.keyboard.press("]");
-      const openInspector = fixture.page.getByRole("button", {name: "Open inspector"});
+      const openInspector = inspectorTabButton(fixture.page, "Comments");
       await expect(openInspector).toBeVisible();
-      await expect(openInspector).toHaveAttribute("aria-keyshortcuts", "]");
+      await expect(openInspector).toHaveAttribute("aria-pressed", "false");
       await fixture.page.keyboard.press("]");
       await expect(inspector).toBeVisible();
 
@@ -354,10 +354,10 @@ test.describe("Artifact Server frontend MVP", () => {
       const catalogBox = await fixture.page.getByRole("complementary", {
         name: "Artifact catalog",
       }).boundingBox();
-      // The 52 px rail plus its 1 px seam hairline.
-      expect(navigationBox).toMatchObject({width: 53, x: 0});
-      expect(catalogBox?.x).toBe(53);
-      await catalog.getByRole("button", {name: "Collapse artifact catalog"}).click();
+      // The 52 px rail includes its seam hairline.
+      expect(navigationBox).toMatchObject({width: 52, x: 0});
+      expect(catalogBox?.x).toBe(52);
+      await catalog.getByRole("button", {name: "Unpin the artifact catalog"}).click();
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
       await fixture.page.getByRole("button", {name: "Open artifact catalog"}).click();
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");

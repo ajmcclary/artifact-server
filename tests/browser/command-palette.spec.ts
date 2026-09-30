@@ -55,7 +55,7 @@ test.describe("Command palette", () => {
       await expect(catalogSearch).toHaveValue("/");
       await catalogSearch.fill("");
 
-      const collapseCatalog = page.getByRole("button", {name: "Collapse artifact catalog"});
+      const collapseCatalog = page.getByRole("button", {name: "Unpin the artifact catalog"});
       await collapseCatalog.focus();
       await page.keyboard.press("/");
       await expect(palette).toBeVisible();

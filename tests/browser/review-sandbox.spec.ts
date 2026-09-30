@@ -9,6 +9,7 @@ import {
 import {
   annotationFrame,
   interactiveFrame,
+  openInspectorTab,
   isolatedReviewFrame,
   openReview,
 } from "./review-helpers.js";
@@ -141,7 +142,10 @@ test.describe("Review sandbox isolation", () => {
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
       const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
-      const modes = preview.getByRole("group", {name: "HTML preview mode"});
+      await openInspectorTab(fixture.page, "Comments");
+      const commentsView = fixture.page.getByRole("complementary", {name: "Comments", exact: true});
+      const modes = commentsView.getByRole("group", {name: "HTML preview mode"});
+      await expect(preview.getByRole("group", {name: "HTML preview mode"})).toHaveCount(0);
       await expect(modes.getByRole("button", {exact: true, name: "Interactive preview"}))
         .toHaveAttribute("aria-pressed", "true");
       await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
@@ -196,10 +200,12 @@ test.describe("Review sandbox isolation", () => {
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
       const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
-      await expect(preview.getByRole("group", {name: "HTML preview mode"})
+      await openInspectorTab(fixture.page, "Comments");
+      const commentsView = fixture.page.getByRole("complementary", {name: "Comments", exact: true});
+      await expect(commentsView.getByRole("group", {name: "HTML preview mode"})
         .getByRole("button", {exact: true, name: "Interactive preview"}))
         .toHaveAttribute("aria-pressed", "true");
-      await expect(preview).toContainText("Preview changes may be lost");
+      await expect(commentsView).toContainText("Preview changes may be lost");
       await expect(preview.locator('iframe[title^="Interactive preview: "]')).toHaveAttribute(
         "src",
         /^http:\/\/review-[a-z0-9_-]+\.localhost:\d+\/nested\/index\.html$/u,

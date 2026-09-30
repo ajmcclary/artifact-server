@@ -32,19 +32,19 @@ export interface ReviewToolbarProps {
   readonly catalogDocked: boolean;
   readonly details: ArtifactDetails | null;
   readonly download: ReviewDownload | null;
-  readonly inspectorOpen: boolean;
   readonly linkedArtifacts: boolean;
   readonly onCapture: () => Promise<void>;
   readonly onDelete: () => Promise<boolean>;
   readonly onEnterFocus: () => void;
   readonly onOpenCatalog: () => void;
+  /** Phones have a comments sheet instead of the inspector rail. */
+  readonly onOpenComments: () => void;
   /** Opens Comparison and history; null until that view exists (Task 16). */
   readonly onOpenComparison: (() => void) | null;
   readonly onOpenLive: () => Promise<void>;
   readonly onOpenRawArtifact: () => void;
   readonly onSelectPath: (path: string) => void;
   readonly onSelectVersion: (versionId: string) => void;
-  readonly onToggleInspector: () => void;
   readonly opening: boolean;
   readonly phone: boolean;
   readonly projectName: string;
@@ -93,18 +93,17 @@ export function ReviewToolbar({
   catalogDocked,
   details,
   download,
-  inspectorOpen,
   linkedArtifacts,
   onCapture,
   onDelete,
   onEnterFocus,
   onOpenCatalog,
+  onOpenComments,
   onOpenComparison,
   onOpenLive,
   onOpenRawArtifact,
   onSelectPath,
   onSelectVersion,
-  onToggleInspector,
   opening,
   phone,
   projectName,
@@ -308,14 +307,16 @@ export function ReviewToolbar({
         >
           {phone ? null : "Full screen"}
         </Button>
-        <IconButton
-          ariaLabel={inspectorOpen ? "Close inspector" : "Open inspector"}
-          icon="bi-layout-sidebar-inset-reverse"
-          keyshortcuts="]"
-          onClick={onToggleInspector}
-          size="sm"
-          title={inspectorOpen ? "Close inspector (])" : "Open inspector (])"}
-        />
+        {phone ? (
+          <IconButton
+            ariaLabel="Open comments"
+            disabled={selectedVersion === null}
+            icon="bi-chat-square-text"
+            onClick={onOpenComments}
+            size="sm"
+            title="Open comments"
+          />
+        ) : null}
         {canManage && details !== null ? (
           <span style={anchorStyle}>
             <IconButton

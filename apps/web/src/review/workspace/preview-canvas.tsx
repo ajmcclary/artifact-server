@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import {createPortal} from "react-dom";
+
 import {api, type AccessSetting, type ArtifactVersion} from "@/api/client";
 import {maximumReviewHtmlBytes} from "@/api/bounded-text";
 import {
@@ -73,6 +75,8 @@ export interface PreviewCanvasProps {
   readonly emptyProject: ReactNode;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;
+  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  readonly modeControlsTarget: HTMLElement | null;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onNextArtifact: (() => void) | null;
   readonly onOpenRawArtifact: () => void;
@@ -154,6 +158,7 @@ export function PreviewCanvas({
   emptyProject,
   hasDetails,
   isCurrentVersion,
+  modeControlsTarget,
   onAnnotateModeChange,
   onNextArtifact,
   onOpenRawArtifact,
@@ -235,6 +240,7 @@ export function PreviewCanvas({
             artifactId={artifactId}
             artifactName={artifactName}
             isCurrentVersion={isCurrentVersion}
+        modeControlsTarget={modeControlsTarget}
             onAnnotateModeChange={onAnnotateModeChange}
             onOpenRawArtifact={onOpenRawArtifact}
             onSelectAnnotation={onSelectAnnotation}
@@ -313,6 +319,7 @@ function ReviewPreview({
   artifactId,
   artifactName,
   isCurrentVersion,
+  modeControlsTarget,
   onOpenRawArtifact,
   onAnnotateModeChange,
   onSelectAnnotation,
@@ -332,6 +339,8 @@ function ReviewPreview({
   readonly artifactId: string;
   readonly artifactName: string;
   readonly isCurrentVersion: boolean;
+  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  readonly modeControlsTarget: HTMLElement | null;
   readonly onOpenRawArtifact: () => void;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
@@ -404,6 +413,7 @@ function ReviewPreview({
         artifactId={artifactId}
         entry={entry}
         isCurrentVersion={isCurrentVersion}
+        modeControlsTarget={modeControlsTarget}
         key={identity}
         onAnnotateModeChange={onAnnotateModeChange}
         onSelectAnnotation={onSelectAnnotation}
@@ -484,6 +494,7 @@ function HtmlPreview({
   artifactId,
   entry,
   isCurrentVersion,
+  modeControlsTarget,
   onAnnotateModeChange,
   onSelectAnnotation,
   onSubmitAnnotation,
@@ -501,6 +512,8 @@ function HtmlPreview({
   readonly artifactId: string;
   readonly entry: PreviewEntry;
   readonly isCurrentVersion: boolean;
+  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  readonly modeControlsTarget: HTMLElement | null;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
   readonly onSubmitAnnotation: (
@@ -723,40 +736,44 @@ function HtmlPreview({
       ? "This page's external scripts are blocked here. Switch to Interactive preview if blank."
       : null;
   return (
-    <div style={htmlPreviewStyle}>
-      <div style={modeBarStyle}>
-        <SegmentedControl
-          label="HTML preview mode"
-          mode="toggle"
-          onChange={(id) => {
-            if (id === "annotate" || id === "interactive") setChosenMode(id);
-          }}
-          options={[
-            {id: "interactive", label: "Interactive preview"},
-            {id: "annotate", label: "Annotate"},
-          ]}
-          size="sm"
-          value={mode}
-        />
-        {modeNote === null ? null : <span style={modeNoteStyle}>{modeNote}</span>}
-      </div>
-      {mode === "interactive" && previewDocument !== null ? (
-        <iframe
-          referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin"
-          src={previewDocument.interactiveUrl}
-          style={frameElementStyle}
-          title={`Interactive preview: ${entry.path}`}
-        />
-      ) : (
-        <iframe
-          ref={frameRef}
-          src="/review-frame"
-          style={frameElementStyle}
-          title={`${version.version.artifactId} version ${version.version.number}`}
-        />
+    <>
+      {modeControlsTarget === null ? null : createPortal(
+        <div style={modeBarStyle}>
+          <SegmentedControl
+            label="HTML preview mode"
+            mode="toggle"
+            onChange={(id) => {
+              if (id === "annotate" || id === "interactive") setChosenMode(id);
+            }}
+            options={[
+              {id: "interactive", label: "Interactive preview"},
+              {id: "annotate", label: "Annotate"},
+            ]}
+            size="sm"
+            value={mode}
+          />
+          {modeNote === null ? null : <span style={modeNoteStyle}>{modeNote}</span>}
+        </div>, modeControlsTarget,
       )}
-    </div>
+      <div style={htmlPreviewStyle}>
+        {mode === "interactive" && previewDocument !== null ? (
+          <iframe
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin"
+            src={previewDocument.interactiveUrl}
+            style={frameElementStyle}
+            title={`Interactive preview: ${entry.path}`}
+          />
+        ) : (
+          <iframe
+            ref={frameRef}
+            src="/review-frame"
+            style={frameElementStyle}
+            title={`${version.version.artifactId} version ${version.version.number}`}
+          />
+        )}
+      </div>
+    </>
   );
 }
 
