@@ -7,7 +7,7 @@ import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpScreen} from "../settings-mcp.tsx";
 import {MembersScreen} from "./members-screen.tsx";
 import {ProjectSettings} from "./project-settings.tsx";
-import {PublicLinksScreen} from "../settings-public-links.tsx";
+import {PublicLinksScreen} from "./public-links-screen.tsx";
 import {WebmcpScreen} from "../settings-webmcp.tsx";
 import {resolveSettingsView, settingsAccess} from "./settings-view.ts";
 
@@ -63,7 +63,7 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
     case "apiKeys":
       return <ApiKeysScreen />;
     case "publicLinks":
-      return <LegacySettingsFrame><PublicLinksScreen /></LegacySettingsFrame>;
+      return <PublicLinksScreen />;
     case "mcp":
       break;
   }

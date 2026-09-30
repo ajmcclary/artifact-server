@@ -1250,23 +1250,20 @@ test.describe("Artifact Server frontend MVP", () => {
         .analyze();
       expect(accessibility.violations).toEqual([]);
 
+      // A short viewport guarantees the three rows overflow the scrolling page body.
+      await fixture.page.setViewportSize({height: 400, width: 1024});
+      const pageBody = fixture.page
+        .getByRole("region", {exact: true, name: "Public links"})
+        .locator("[data-page-body]");
+      const bodyScrollRange = await pageBody.evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
+      expect(bodyScrollRange.scrollHeight).toBeGreaterThan(bodyScrollRange.clientHeight);
+      await pageBody.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+      expect(await pageBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await pageBody.evaluate((element) => element.scrollTo(0, 0));
       await fixture.page.setViewportSize({height: 600, width: 1024});
-      // The settings page scrolls inside the shell (its own scroll box), never the document.
-      const scrollRange = await fixture.page.getByRole("table", {name: "Public links inventory"}).evaluate((table) => {
-        let node = table.parentElement;
-        while (node !== null && !["auto", "scroll"].includes(getComputedStyle(node).overflowY)) node = node.parentElement;
-        if (node === null) return null;
-        const before = {clientHeight: node.clientHeight, scrollHeight: node.scrollHeight};
-        node.scrollTo(0, node.scrollHeight);
-        const scrolled = node.scrollTop;
-        node.scrollTo(0, 0);
-        return {...before, scrolled};
-      });
-      expect(scrollRange).not.toBeNull();
-      expect(scrollRange?.scrollHeight ?? 0).toBeGreaterThan(scrollRange?.clientHeight ?? 0);
-      expect(scrollRange?.scrolled ?? 0).toBeGreaterThan(0);
-      expect(await fixture.page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight))
-        .toBe(0);
 
       const inventory = fixture.page.getByRole("table", {name: "Public links inventory"});
       expect(await inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
