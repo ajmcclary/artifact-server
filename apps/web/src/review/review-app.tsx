@@ -1254,7 +1254,6 @@ function ArtifactReview({
             annotate={annotateToggle}
             artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
             canManage={canManageArtifacts}
-            catalogDocked={catalogDocked}
             details={details}
             download={download}
             linkedArtifacts={session.capabilities.linkedArtifacts}

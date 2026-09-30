@@ -280,9 +280,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("[");
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
-      const openCatalog = fixture.page.getByRole("button", {name: "Open artifact catalog"});
+      const openCatalog = fixture.page.getByRole("button", {name: "Show the artifact catalog"});
       await expect(openCatalog).toBeVisible();
-      await expect(openCatalog).toHaveAttribute("aria-keyshortcuts", "[");
+      await expect(openCatalog).toHaveAttribute("aria-expanded", "false");
       await fixture.page.keyboard.press("[");
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");
 
@@ -359,7 +359,7 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(catalogBox?.x).toBe(52);
       await catalog.getByRole("button", {name: "Unpin the artifact catalog"}).click();
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
-      await fixture.page.getByRole("button", {name: "Open artifact catalog"}).click();
+      await fixture.page.getByRole("button", {name: "Pin the artifact catalog"}).click();
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");
       await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
       await fixture.page.getByRole("button", {name: /Review fixture/u}).click();

@@ -29,7 +29,6 @@ export interface ReviewToolbarProps {
   readonly annotate: AnnotateToggle;
   readonly artifactName: string;
   readonly canManage: boolean;
-  readonly catalogDocked: boolean;
   readonly details: ArtifactDetails | null;
   readonly download: ReviewDownload | null;
   readonly linkedArtifacts: boolean;
@@ -90,7 +89,6 @@ export function ReviewToolbar({
   annotate,
   artifactName,
   canManage,
-  catalogDocked,
   details,
   download,
   linkedArtifacts,
@@ -137,16 +135,7 @@ export function ReviewToolbar({
             onClick={onOpenCatalog}
             size="sm"
           />
-        ) : catalogDocked ? null : (
-          <IconButton
-            ariaLabel="Open artifact catalog"
-            icon="bi-layout-sidebar-inset"
-            keyshortcuts="["
-            onClick={onOpenCatalog}
-            size="sm"
-            title="Open artifact catalog ([)"
-          />
-        )}
+        ) : null}
         <h1 style={titleStyle}>{artifactName}</h1>
         {shown === null ? null : (
           <span style={anchorStyle}>

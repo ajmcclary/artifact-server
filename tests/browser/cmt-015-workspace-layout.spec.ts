@@ -96,8 +96,8 @@ test.describe("Artifact review workspace layout", () => {
           await page.mouse.up();
         }
       }).toPass({timeout: 15_000});
-      await expect(page.getByRole("button", {name: "Open artifact catalog"}))
-        .toHaveAttribute("aria-keyshortcuts", "[");
+      await expect(page.getByRole("button", {name: "Show the artifact catalog"})).toBeVisible();
+      await expect(page.getByRole("toolbar", {name: "Artifact", exact: true}).getByRole("button", {name: "Open artifact catalog"})).toHaveCount(0);
 
       // The rail peeks over the canvas; Escape puts the peek away.
       await page.getByRole("button", {name: "Show the artifact catalog"}).click();

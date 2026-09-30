@@ -67,7 +67,7 @@ test.describe("Command palette", () => {
       await expect(palette).toHaveCount(0);
       await expect(collapseCatalog).toBeFocused();
       await page.keyboard.press("[");
-      await expect(page.getByRole("button", {name: "Open artifact catalog"})).toBeVisible();
+      await expect(page.getByRole("button", {name: "Show the artifact catalog"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }

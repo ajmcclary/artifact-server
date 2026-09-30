@@ -747,7 +747,7 @@
       "source": "arkcase/project/tokens/fonts/sourceserif4-OFL.txt"
     },
     "tokens/icons.css": {
-      "sha256": "6545334b9e403f3ca8ecbb24f2f9280e3428ed8cae3f3885165796a88eed55bf",
+      "sha256": "db184e3227a1e7852b3d0ece9741cee29b72b43e12013b86d3caa2f04ec30478",
       "source": "arkcase/project/tokens/icons.css"
     },
     "tokens/spacing.css": {
@@ -822,7 +822,6 @@
       "bi-keyboard",
       "bi-layers",
       "bi-layers-half",
-      "bi-layout-sidebar-inset",
       "bi-link-45deg",
       "bi-list",
       "bi-lock",
