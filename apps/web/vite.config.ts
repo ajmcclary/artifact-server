@@ -1,4 +1,3 @@
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin, type ProxyOptions } from "vite";
 
@@ -20,7 +19,7 @@ export default defineConfig({
       },
     },
   },
-  plugins: [react(), tailwindcss(), documentRoutes(), themeBootPlugin()],
+  plugins: [react(), documentRoutes(), themeBootPlugin()],
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,

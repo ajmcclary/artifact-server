@@ -1,7 +1,7 @@
 /*
  * The review frame styles itself from @plannotator/ui's precompiled stylesheet
  * (its documented consumption path) rather than the application shell's
- * Tailwind build: the viewer's chrome is authored against the package's own
+ * ArkCase stylesheets: the viewer's chrome is authored against the package's own
  * token set, and this document renders nothing else. The host's palette
  * arrives over postMessage and is written onto :root at runtime, so both this
  * document and the sandbox below it follow the shell's theme.

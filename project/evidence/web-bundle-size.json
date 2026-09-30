@@ -85,6 +85,47 @@
       "measuredAt": "2026-09-30T02:40:15.993Z",
       "node": "v24.15.0",
       "totalBytes": 3147790
+    },
+    {
+      "bytesByExtension": {
+        "css": 509321,
+        "html": 1327,
+        "js": 1324841,
+        "svg": 18058,
+        "woff": 71632,
+        "woff2": 1169188
+      },
+      "commit": "7edb8dd85c15db333aa3546bc2d6c1451c5140e8",
+      "dirty": false,
+      "gzipBytes": {
+        "css": 81565,
+        "html": 749,
+        "js": 398766
+      },
+      "label": "after-task-17",
+      "measuredAt": "2026-09-30T05:13:46.595Z",
+      "node": "v24.15.0",
+      "totalBytes": 3094367
+    },
+    {
+      "bytesByExtension": {
+        "css": 491987,
+        "html": 1327,
+        "js": 1247574,
+        "svg": 18058,
+        "woff2": 594468
+      },
+      "commit": "c6ab4f5896b62afad9747b5959dbda19eb6089f2",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 80234,
+        "html": 751,
+        "js": 373191
+      },
+      "label": "after-task-26",
+      "measuredAt": "2026-09-30T06:37:50.025Z",
+      "node": "v24.15.0",
+      "totalBytes": 2353414
     }
   ]
 }

@@ -17,8 +17,8 @@ import "@/arkcase/tokens/colors.css";
 import "@/arkcase/tokens/typography.css";
 import "@/arkcase/tokens/spacing.css";
 import "@/arkcase/tokens/elevation.css";
-import "../index.css";
-import "./review.css";
+// The DS element reset and its reduced-motion rule.
+import "@/arkcase/tokens/base.css";
 
 // Modal portals through the ReactDOM global; install it before the first render.
 installArkcaseRuntime();
