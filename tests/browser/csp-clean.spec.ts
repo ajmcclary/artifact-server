@@ -1,5 +1,6 @@
 import {expect, test, type Browser, type Page} from "@playwright/test";
 import {Redacted} from "effect";
+import {z} from "zod";
 
 import {
   browserLoginKinds,
@@ -8,6 +9,7 @@ import {
 import {createOidcIdentityProvider} from "../../src/identity/oidc-identity-provider.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
+  apiHeaders,
   createTestInstallation,
   removeTestInstallation,
   reserveLoopbackPort,
@@ -78,9 +80,9 @@ test.describe("CSP-clean production build", () => {
         await visitSettings(fixture.page, "members", "Members");
         await visitSettings(fixture.page, "api-keys", "API keys");
         await visitSettings(fixture.page, "public-links", "Public links");
-        await visitSettings(fixture.page, "mcp", "Connect agents with MCP");
+        await visitSettings(fixture.page, "mcp", "MCP & WebMCP");
         await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/webmcp`);
-        await expect(fixture.page.getByRole("heading", {exact: true, name: "WebMCP"}).first()).toBeVisible();
+        await expect(fixture.page.getByRole("heading", {exact: true, name: "MCP & WebMCP"}).first()).toBeVisible();
 
         expect(await readViolations()).toEqual([]);
       } finally {
@@ -228,5 +230,91 @@ test("CSP-clean: the artifact review workspace raises no policy violation in any
     expect(await violations()).toEqual([]);
   } finally {
     await stopBrowserFixture(fixture);
+  }
+});
+
+const administrationThemeModes = ["system", "default", "dark", "high-contrast"] as const;
+
+test.describe("CSP-clean administration", () => {
+  for (const mode of administrationThemeModes) {
+    test(`administration screens and their dialogs raise no CSP violation in ${mode}`, async ({browser}) => {
+      const fixture = await startBrowserFixture(browser);
+      try {
+        await publishNew(fixture.server, fixture.installation, {
+          accessSetting: "public_link",
+          content: "<!doctype html><title>CSP public link</title><p>public</p>",
+          idempotencyKey: `csp-administration-link-${mode}`,
+          name: "CSP public link",
+        });
+        const created = await fetch(`${fixture.server.baseUrl}/api/v1/projects`, {
+          body: JSON.stringify({name: "CSP empty project"}),
+          headers: apiHeaders(fixture.installation, `csp-administration-project-${mode}`),
+          method: "POST",
+        });
+        expect(created.status).toBe(201);
+        const emptyProject = z.object({project: z.object({id: z.string()})})
+          .parse(await created.json()).project;
+
+        const violations = collectCspViolations(fixture.page);
+        await localLogin(fixture);
+        const page = fixture.page;
+        const visit = async (path: string): Promise<void> => {
+          const target = new URL(path, fixture.server.baseUrl);
+          target.searchParams.set("theme", mode);
+          await page.goto(target.toString());
+        };
+        const cancelDialog = async (name: string): Promise<void> => {
+          const dialog = page.getByRole("dialog", {name});
+          await expect(dialog).toBeVisible();
+          await dialog.getByRole("button", {name: "Cancel"}).click();
+          await expect(dialog).toHaveCount(0);
+        };
+
+        await visit("/review/settings/projects/prj_default");
+        await expect(page.getByRole("region", {name: "Project identity"})).toBeVisible();
+        await page.getByRole("button", {name: "Archive project"}).click();
+        await cancelDialog("Archive project?");
+
+        await visit(`/review?project=${emptyProject.id}`);
+        await expect(page.getByRole("heading", {name: "Nothing is published here yet"})).toBeVisible();
+
+        await visit("/review/settings/members");
+        await expect(page.getByRole("heading", {level: 2, name: "Members"})).toBeVisible();
+        await page.getByRole("button", {name: "Admit member"}).click();
+        await cancelDialog("Admit member");
+        await page.getByRole("row").nth(1).getByRole("button", {name: "Deactivate"}).click();
+        await cancelDialog("Deactivate member");
+
+        await visit("/review/settings/api-keys");
+        await page.getByRole("button", {name: "Issue API key"}).click();
+        const issue = page.getByRole("dialog", {name: "Issue API key"});
+        await issue.getByRole("textbox", {name: "Name", exact: true}).fill("CSP key");
+        await issue.getByLabel("Expires at", {exact: true}).fill("2099-01-01T00:00");
+        await issue.getByRole("checkbox", {name: /Read artifacts/u}).click();
+        await issue.getByRole("button", {name: "Issue API key", exact: true}).click();
+        await expect(page.getByRole("region", {name: "API key secret"})).toBeVisible();
+        await page.getByRole("button", {name: "I stored it"}).click();
+        await page.getByRole("row").filter({hasText: "CSP key"}).getByRole("button", {name: "Revoke"}).click();
+        await cancelDialog("Revoke API key");
+
+        await visit("/review/settings/public-links");
+        await page.getByRole("row").filter({hasText: "CSP public link"})
+          .getByRole("button", {name: "Make private"}).click();
+        await cancelDialog("Make 1 public link private?");
+
+        await visit("/review/settings/mcp");
+        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+        await page.getByRole("checkbox", {name: /Browser agent tools/u}).click();
+        await visit("/review/settings/webmcp");
+        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+
+        await visit("/review/settings/not-a-screen");
+        await expect(page.getByRole("heading", {name: "Page not found"})).toBeVisible();
+
+        expect(await violations()).toEqual([]);
+      } finally {
+        await stopBrowserFixture(fixture);
+      }
+    });
   }
 });

@@ -1,14 +1,13 @@
-import {useEffect, type ReactNode} from "react";
+import {useEffect} from "react";
 
 import type {Project, Session} from "@/api/client";
 import {PageScaffold, SurfaceState} from "@/arkcase";
 import {reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
-import {McpScreen} from "../settings-mcp.tsx";
+import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
 import {MembersScreen} from "./members-screen.tsx";
 import {ProjectSettings} from "./project-settings.tsx";
 import {PublicLinksScreen} from "./public-links-screen.tsx";
-import {WebmcpScreen} from "../settings-webmcp.tsx";
 import {resolveSettingsView, settingsAccess} from "./settings-view.ts";
 
 export interface SettingsScreenProps {
@@ -67,12 +66,7 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
     case "mcp":
       break;
   }
-  return (
-    <LegacySettingsFrame>
-      <McpScreen administrator={view.administrator} />
-      <WebmcpScreen />
-    </LegacySettingsFrame>
-  );
+  return <McpWebmcpScreen administrator={view.administrator} />;
 }
 
 /**
@@ -118,15 +112,5 @@ function SettingsState({
         variant="dashed"
       />
     </PageScaffold>
-  );
-}
-
-/** Holds a settings screen that has not moved to the DS yet; removed in Task 23. */
-function LegacySettingsFrame({children}: {readonly children: ReactNode}) {
-  return (
-    // The old screens keep their own wrapper class (compact buttons) until each one moves.
-    <div className="as-settings" style={{flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 24}}>
-      {children}
-    </div>
   );
 }

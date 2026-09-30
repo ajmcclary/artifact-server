@@ -95,7 +95,8 @@ export function webmcpEnabled(): boolean {
   }
 }
 
-function setWebmcpEnabled(enabled: boolean): void {
+/** Store the browser-agent preference and tell every open review surface to follow it. */
+export function setWebmcpEnabled(enabled: boolean): void {
   try {
     window.localStorage.setItem(storageKey, enabled ? "on" : "off");
   } catch {
@@ -606,28 +607,4 @@ export function useWebmcp(ref: BindingsRef): void {
     }
     return () => registration.abort();
   }, [enabled, ref]);
-}
-
-/** The per-user browser-agent preference shown on the WebMCP settings page. */
-export function WebmcpSettingsCard() {
-  const [enabled, setEnabled] = useState(webmcpEnabled);
-  return (
-    <label className="as-settings__webmcp">
-      <input
-        checked={enabled}
-        onChange={(event) => {
-          setEnabled(event.currentTarget.checked);
-          setWebmcpEnabled(event.currentTarget.checked);
-        }}
-        type="checkbox"
-      />
-      <span>
-        <strong>Browser agent tools</strong>
-        <small>
-          Let a browser-resident AI agent operate Review through WebMCP tools in this session.
-          Dispatching to coding agents stays a human action.
-        </small>
-      </span>
-    </label>
-  );
 }
