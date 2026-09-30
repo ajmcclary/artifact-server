@@ -1016,7 +1016,7 @@ test.describe("Artifact Server frontend MVP", () => {
       }, {message: "Share is laid out left of Full screen"}).toBe(true);
 
       await headerShare.click();
-      const share = fixture.page.locator(".as-share-popover[data-open]");
+      const share = fixture.page.getByRole("dialog", {name: "Share artifact"});
       await expect(share.getByRole("heading", {name: "Share fixture"})).toBeVisible();
       await expect(share.getByText("Exact version · Version 1", {exact: true})).toBeVisible();
       await expect(share.getByText(exactReviewLink.toString(), {exact: true})).toBeVisible();
@@ -1028,11 +1028,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(share.getByText(published.body.links.version, {exact: true})).toBeVisible();
       await expect(share.getByText("Moves when a new version is published", {exact: true}))
         .toBeVisible();
+      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
       const shareAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(".as-artifact-frame")
-        // Base UI gives its invisible Safari focus guards a button role only
-        // in WebKit. They are focus-management sentinels, not user commands.
-        .exclude("[data-base-ui-focus-guard]")
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(shareAccessibility.violations).toEqual([]);

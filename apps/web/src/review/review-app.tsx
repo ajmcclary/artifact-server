@@ -51,6 +51,7 @@ import {dismissInnermost} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
+import {SharePopover} from "./workspace/share-popover.tsx";
 import {catalogPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useViewportWidth} from "./workspace/use-viewport-size.ts";
 import {catalogWidth, dockingFor, isPhoneWidth} from "./workspace/workspace-layout.ts";
@@ -82,7 +83,6 @@ import {
 } from "./review-routes.ts";
 import {ReviewSettings} from "./review-settings.tsx";
 import {ReviewPanelEdge} from "./review-panel-edge.tsx";
-import {ReviewShareControl} from "./review-share.tsx";
 import {useReviewPanelMotion} from "./use-review-panel-motion.ts";
 import {useReviewResizablePanel} from "./use-review-resizable-panel.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
@@ -1174,13 +1174,12 @@ function ArtifactReview({
                     Comments
                     <span className="as-focus-controls__count">{openCommentCount}</span>
                   </button>
-                  <ReviewShareControl
+                  <SharePopover
                     details={details}
                     key={`focus-share-${details?.artifact.id ?? "empty"}`}
                     onArtifactChanged={updateArtifact}
                     selectedPath={selectedPath}
                     selectedVersion={selectedVersion}
-                    triggerClassName="as-button as-focus-controls__button"
                   />
                   <ReviewDownloadControl
                     className="as-button as-focus-controls__button"
@@ -1290,13 +1289,12 @@ function ArtifactReview({
               selectedPath={selectedPath}
               selectedVersion={selectedVersion}
               share={(
-                <ReviewShareControl
+                <SharePopover
                   details={details}
                   key={`header-share-${details?.artifact.id ?? "empty"}`}
                   onArtifactChanged={updateArtifact}
                   selectedPath={selectedPath}
                   selectedVersion={selectedVersion}
-                  triggerClassName="as-button as-button--secondary"
                 />
               )}
               versions={versions}
