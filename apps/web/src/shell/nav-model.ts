@@ -67,7 +67,7 @@ export function shellActiveLink(input: ShellNavInput): string {
       case "publicLinks":
         return administrationHrefs.publicLinks;
       case "webmcp":
-        return administrationHrefs.webmcp;
+        return administrationHrefs.mcp;
       default:
         return "";
     }
@@ -125,11 +125,8 @@ function administrationItems(isAdministrator: boolean, returnHref: string): NavI
       },
     );
   }
-  // WebMCP keeps its own route and row until the MCP & WebMCP screens merge.
-  items.push(
-    {icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: administrationHrefs.mcp},
-    {icon: "bi-window", id: "webmcp", label: "WebMCP", link: administrationHrefs.webmcp},
-  );
+  // Both MCP routes render one MCP & WebMCP screen.
+  items.push({icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: administrationHrefs.mcp});
   const [first] = items;
   if (first !== undefined) first.group = "Administration";
   items.push({

@@ -1249,16 +1249,22 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(accessibility.violations).toEqual([]);
 
       await fixture.page.setViewportSize({height: 600, width: 1024});
-      // Settings scroll inside the shell's main landmark, not the document.
-      const settingsMain = fixture.page.getByRole("main");
-      const settingsScrollRange = await settingsMain.evaluate((node) => ({
-        clientHeight: node.clientHeight,
-        scrollHeight: node.scrollHeight,
-      }));
-      expect(settingsScrollRange.scrollHeight).toBeGreaterThan(settingsScrollRange.clientHeight);
-      await settingsMain.evaluate((node) => node.scrollTo(0, node.scrollHeight));
-      expect(await settingsMain.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-      await settingsMain.evaluate((node) => node.scrollTo(0, 0));
+      // The settings page scrolls inside the shell (its own scroll box), never the document.
+      const scrollRange = await fixture.page.getByRole("table", {name: "Public links inventory"}).evaluate((table) => {
+        let node = table.parentElement;
+        while (node !== null && !["auto", "scroll"].includes(getComputedStyle(node).overflowY)) node = node.parentElement;
+        if (node === null) return null;
+        const before = {clientHeight: node.clientHeight, scrollHeight: node.scrollHeight};
+        node.scrollTo(0, node.scrollHeight);
+        const scrolled = node.scrollTop;
+        node.scrollTo(0, 0);
+        return {...before, scrolled};
+      });
+      expect(scrollRange).not.toBeNull();
+      expect(scrollRange?.scrollHeight ?? 0).toBeGreaterThan(scrollRange?.clientHeight ?? 0);
+      expect(scrollRange?.scrolled ?? 0).toBeGreaterThan(0);
+      expect(await fixture.page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight))
+        .toBe(0);
 
       const inventory = fixture.page.getByRole("table", {name: "Public links inventory"});
       expect(await inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
@@ -1350,24 +1356,26 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(isolated.status()).toBe(404);
       expect(isolated.headers()["content-type"]).toContain("application/json");
 
+      // The projects list is gone: its routes replace themselves with the review queue (which,
+      // until the queue screen lands, still opens the Default project's first artifact).
+      const historyLength = await fixture.page.evaluate(() => window.history.length);
       await fixture.page.goto(`${fixture.server.baseUrl}/projects`);
-      await expect(fixture.page).toHaveURL(/\/review\/settings\/projects$/u);
-      await expect(fixture.page.getByRole("heading", {name: "Projects"})).toBeVisible();
-      const defaultProjectRow = fixture.page.getByRole("row").filter({hasText: "Default"});
-      await defaultProjectRow.getByRole("link", {name: "Settings"}).click();
+      await expect(fixture.page).toHaveURL(/\/review(?:\?project=prj_default(?:&[^#]*)?)?$/u);
+      expect(await fixture.page.evaluate(() => window.history.length)).toBe(historyLength + 1);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings`);
+      await expect(fixture.page).toHaveURL(/\/review(?:\?project=prj_default(?:&[^#]*)?)?$/u);
+
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/prj_default`);
       await expect(fixture.page.getByRole("heading", {name: "Project identity"})).toBeVisible();
       await expect(fixture.page.getByRole("heading", {name: "Git history"})).toHaveCount(0);
+      // Geometry at the DS display ladder: the 1680 px spec viewport is the desktop profile.
+      await expect(fixture.page.locator("[data-ac-profile]").first())
+        .toHaveAttribute("data-ac-profile", "desktop");
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toHaveAttribute("href", "/review");
       const administrationNavigation = fixture.page.getByRole("navigation", {name: "Administration"});
       await expect(administrationNavigation.getByRole("link", {exact: true, name: "Back to review"}))
         .toBeVisible();
-      const settingsRailBox = await fixture.page.locator("[data-ac-left-nav]").boundingBox();
-      const projectIdentityBox = await fixture.page.getByRole("heading", {name: "Project identity"})
-        .boundingBox();
-      // The 52 px rail plus its 1 px seam hairline.
-      expect(settingsRailBox).toMatchObject({width: 53, x: 0});
-      expect(projectIdentityBox?.x).toBeGreaterThan(53);
       const compactSettingsActions = [
         fixture.page.getByRole("button", {name: "Save name"}),
         fixture.page.getByRole("button", {name: "Archive project"}),

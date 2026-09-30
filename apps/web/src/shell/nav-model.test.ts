@@ -91,7 +91,6 @@ describe("shellNavItems in administration mode", () => {
       {icon: "bi-key", id: "api-keys", label: "API keys", link: "/review/settings/api-keys"},
       {icon: "bi-link-45deg", id: "public-links", label: "Public links", link: "/review/settings/public-links"},
       {icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"},
-      {icon: "bi-window", id: "webmcp", label: "WebMCP", link: "/review/settings/webmcp"},
       {
         group: "Review",
         icon: "bi-arrow-left",
@@ -104,7 +103,7 @@ describe("shellNavItems in administration mode", () => {
 
   it("keeps Members, API keys, and Public links administrator-only", () => {
     const items = shellNavItems({...reviewInput, isAdministrator: false, mode: "admin"});
-    expect(items.map((item) => item.label)).toEqual(["MCP & WebMCP", "WebMCP", "Back to review"]);
+    expect(items.map((item) => item.label)).toEqual(["MCP & WebMCP", "Back to review"]);
     expect(items[0]?.group).toBe("Administration");
   });
 });
@@ -117,8 +116,9 @@ describe("shellActiveLink", () => {
     expect(shellActiveLink(reviewInput)).toBe("");
     expect(shellActiveLink({...reviewInput, activeSettings: "apiKeys", mode: "admin"}))
       .toBe("/review/settings/api-keys");
+    // Both MCP routes render the one MCP & WebMCP screen, so both mark its row.
     expect(shellActiveLink({...reviewInput, activeSettings: "webmcp", mode: "admin"}))
-      .toBe("/review/settings/webmcp");
+      .toBe("/review/settings/mcp");
     expect(shellActiveLink({...reviewInput, activeSettings: "project", mode: "admin"})).toBe("");
   });
 });

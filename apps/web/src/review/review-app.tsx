@@ -3,6 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -66,7 +67,8 @@ import {
   workspaceHref,
   writeReviewHistory,
 } from "./review-routes.ts";
-import {ReviewSettings} from "./review-settings.tsx";
+import {SettingsScreen} from "./settings/settings-screen.tsx";
+import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
 
@@ -147,10 +149,14 @@ export function ReviewApp() {
   >("loading");
   const [error, setError] = useState<Error | null>(null);
   const [locationHref, setLocationHref] = useState(readDocumentHref);
-  const route = useMemo(
-    () => parseReviewRoute(new URL(locationHref, window.location.origin)),
+  // The retired projects list routes (and bare settings) replace themselves with the review queue.
+  const {replaceWith, route} = useMemo(
+    () => canonicalReviewRoute(parseReviewRoute(new URL(locationHref, window.location.origin))),
     [locationHref],
   );
+  useLayoutEffect(() => {
+    if (replaceWith !== null) window.history.replaceState(null, "", replaceWith);
+  }, [replaceWith]);
 
   const bootstrap = useCallback(async (): Promise<void> => {
     if (bootstrapInFlightRef.current) return;
@@ -263,7 +269,7 @@ export function ReviewApp() {
       session={session}
     >
       {route.kind === "settings" ? (
-        <ReviewSettings
+        <SettingsScreen
           onProjectsChanged={loadProjects}
           projects={projects}
           route={route.settings}

@@ -25,8 +25,8 @@ try {
   await page.goto(server.baseUrl);
   await page.getByRole("link", {name: "Artifact Server"}).waitFor();
 
-  await page.goto(`${server.baseUrl}/review/settings/projects`);
-  await page.getByRole("heading", {name: "Projects"}).waitFor();
+  await page.goto(`${server.baseUrl}/review/settings/projects/prj_default`);
+  await page.getByRole("heading", {exact: true, name: "Default"}).waitFor();
   await capture(page, "light-projects.png");
 
   await page.goto(`${server.baseUrl}/review?project=prj_default`);

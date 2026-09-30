@@ -10,13 +10,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {
-  inspectorTabButton,
-  openInspectorTab,
-  openReview,
-  openSettings,
-  reviewHref,
-} from "./review-helpers.js";
+import {inspectorTabButton, openInspectorTab, openReview, reviewHref} from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
 import {
   callTool,
@@ -247,16 +241,16 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect(inspectorTabButton(page, "Comments")).toBeVisible();
         expect(await registeredToolNames(page)).toEqual([]);
 
-        await openSettings(page, "mcp");
-        await expect(page.getByRole("heading", {name: "Connect agents with MCP"})).toBeVisible();
+        await page.goto(`${fixture.server.baseUrl}/review/settings/mcp`);
         await expect(page.getByText(`${fixture.server.baseUrl}/mcp`, {exact: true})).toBeVisible();
         await expect(page.getByText("artifactserver connect", {exact: true})).toBeVisible();
-        await expect(page.getByRole("checkbox", {name: /Browser agent tools/})).toHaveCount(0);
-        await page.getByRole("link", {name: "WebMCP", exact: true}).click();
+        await expect(page.getByRole("checkbox", {name: /Browser agent tools/})).toHaveCount(1);
+        const mcpNavLink = page.getByRole("link", {name: "MCP & WebMCP", exact: true});
+        await expect(mcpNavLink).toHaveAttribute("aria-current", "page");
+        await page.goto(`${fixture.server.baseUrl}/review/settings/webmcp`);
         await expect(page).toHaveURL(`${fixture.server.baseUrl}/review/settings/webmcp`);
-        await expect(page.getByRole("heading", {name: "WebMCP", exact: true})).toBeVisible();
-        await expect(page.getByRole("link", {name: "WebMCP", exact: true}))
-          .toHaveAttribute("aria-current", "page");
+        await expect(page.getByText(`${fixture.server.baseUrl}/mcp`, {exact: true})).toBeVisible();
+        await expect(mcpNavLink).toHaveAttribute("aria-current", "page");
         const accessibility = await new AxeBuilder({page})
           .withTags(["wcag2a", "wcag2aa"])
           .analyze();
