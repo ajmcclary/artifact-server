@@ -10,10 +10,11 @@ const TONES = {
  * ArkCase Divider — a 1px hairline separating groups, optionally labelled
  * ("or" between two sign-in routes). The label is the uppercase 11px
  * micro-label in `text-secondary`, centred between two rules, and names the
- * separator for assistive technology. `tone` picks the default hairline, the
- * stronger input rule or the lighter list-row rule.
+ * separator for assistive technology. `labelAlign="start"` puts the label
+ * first with the rule filling the rest (a palette section rule). `tone` picks
+ * the default hairline, the stronger input rule or the lighter list-row rule.
  */
-export function Divider({ label, orientation = 'horizontal', tone = 'default', style, ...rest }) {
+export function Divider({ label, labelAlign = 'center', orientation = 'horizontal', tone = 'default', style, ...rest }) {
   const color = TONES[tone] || TONES.default;
   const vertical = orientation === 'vertical';
   const a11y = {
@@ -40,13 +41,14 @@ export function Divider({ label, orientation = 'horizontal', tone = 'default', s
     );
   }
   const rule = { flex: '1 1 0', height: 1, background: color };
+  const start = labelAlign === 'start';
   return (
     <div
       {...a11y}
-      style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2, 10px)', width: '100%', ...style }}
+      style={{ display: 'flex', alignItems: 'center', gap: start ? 8 : 'var(--space-2, 10px)', width: '100%', ...style }}
       {...rest}
     >
-      <span aria-hidden="true" style={rule} />
+      {!start && <span aria-hidden="true" style={rule} />}
       <span
         aria-hidden="true"
         style={{

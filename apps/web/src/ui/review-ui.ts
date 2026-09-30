@@ -1,6 +1,6 @@
 import React from "react";
 
-import {Button, Disclosure, FileList, GroupBand, Input, Modal, Popover, SelectableRow, SurfaceState} from "@/arkcase";
+import {Button, Disclosure, FileList, GroupBand, Input, Modal, Popover, SegmentedControl, SelectableRow, SurfaceState} from "@/arkcase";
 import {createReviewUI} from "@/arkcase/review-ui/review-ui.jsx";
 
 /**
@@ -15,9 +15,10 @@ const reviewUi = createReviewUI(React, {
   Input,
   Modal,
   Popover,
+  SegmentedControl,
   SelectableRow,
   SurfaceState,
 });
 
-export const {ArtifactLinks, FileGroups, PagePicker} = reviewUi;
-export type {ArtifactFile, ArtifactLinkRow, ArtifactPage as ReviewPage, PagePickerProps} from "@/arkcase/review-ui/review-ui.jsx";
+export const {ArtifactLinks, DesignGallery, FileGroups, PagePicker} = reviewUi;
+export type {ArtifactFile, ArtifactLinkRow, ArtifactPage as ReviewPage, GalleryItem, PagePickerProps} from "@/arkcase/review-ui/review-ui.jsx";

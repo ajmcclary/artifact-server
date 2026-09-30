@@ -33,6 +33,7 @@ import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
 import {CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
+import {useDesignGalleryCanvas} from "./workspace/design-gallery-canvas.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
 import {FocusComments, FocusViewerControls, useFocusContainment} from "./workspace/focus-mode.tsx";
 import {FilesTab} from "./workspace/files-tab.tsx";
@@ -737,6 +738,16 @@ function ArtifactReview({
     && session.principal.membershipRole === "administrator"
   ) || session.principal.capabilities.includes("artifact:manage:any");
   const previewKind = reviewPreviewKind(selectedVersion, selectedPath);
+  const galleryCanvas = useDesignGalleryCanvas({
+    announce,
+    artifactId: selectedArtifactId,
+    focusMode,
+    onNavigate: (path) => selectManifestPath(path),
+    phone,
+    projectId,
+    selectedPath,
+    version: selectedVersion,
+  });
   const download = reviewDownload(
     projectId,
     selectedArtifactId,
@@ -748,7 +759,8 @@ function ArtifactReview({
     setSelectedVersionId(versionId ?? null);
     setSelectedPath(null);
   }, []);
-  const selectManifestPath = (path: string): void => {
+  /** Exact-page navigation; null returns to the version's entry (its gallery, when it has one). */
+  const selectManifestPath = (path: string | null): void => {
     writeReviewHistory(workspaceHref({
       artifactId: selectedArtifactId,
       path,
@@ -1132,7 +1144,7 @@ function ArtifactReview({
     && catalogTagFilters.length === 0;
   const annotateToggle = {
     active: htmlAnnotateModeActive,
-    available: previewKind === "html" && canComment && htmlViewerMode === "annotate",
+    available: previewKind === "html" && galleryCanvas.gallery === null && canComment && htmlViewerMode === "annotate",
     onToggle: () => setHtmlAnnotateModeActive((active) => !active),
   };
   const comparisonOpen = comparisonView !== null && details !== null;
@@ -1317,6 +1329,9 @@ function ArtifactReview({
                 detailError={detailError}
                 detailLoading={detailLoading}
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
+                gallery={galleryCanvas.gallery}
+                galleryNotice={galleryCanvas.galleryNotice}
+                galleryReturn={galleryCanvas.galleryReturn}
                 hasDetails={details !== null}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 modeControlsTarget={previewModeTarget}

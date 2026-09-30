@@ -35,6 +35,8 @@ export interface TextareaProps {
   inputStyle?: React.CSSProperties;
   /** Set the value in the data font (`--font-data`) at 12px in `--text-data` ink, for tokens, keys and code. @default false */
   mono?: boolean;
+  /** Formatting strip drawn inside the field border above the text — e.g. a labelled Toolbar of `xs` IconButtons (bold, lists, link). The strip is `surface-secondary` with a bottom `border-color` hairline, 4px 8px padding, 10px gap and centred items. With it the bordered box carries the field's one border, focus ring (while focus is anywhere inside, toolbar included), error border and disabled ground; `disabled` also dims the strip and makes it inert. The root becomes a `role="group"` named by the visible label. */
+  toolbar?: React.ReactNode;
   /** Native keyboard events for host commands such as Command+Enter. */
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }

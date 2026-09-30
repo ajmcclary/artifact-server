@@ -1004,7 +1004,7 @@ requirements:
 
   - id: DSN-002
     kind: behavior
-    behavior: Directory publication recognizes portable design systems from card HTML without requiring a vendor manifest, preserving annotated names, groups, subtitles and bounded viewport sizes alongside artboard templates without modifying original files.
+    behavior: Directory publication recognizes portable design systems from card HTML without requiring a vendor manifest, preserving annotated names, groups, subtitles and bounded viewport sizes alongside unclassified artboards without modifying original files.
     owner: cli
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
@@ -1025,6 +1025,49 @@ requirements:
         result: pass
         run: project/evidence/design-card-browser-2026-09-29.json
         recorded_at: "2026-09-29T23:11:33.305267+00:00"
+
+  - id: DSN-003
+    kind: behavior
+    behavior: A generated design catalog is published with a versioned preview index of each preview's kind, section, title, description, exact path, declared viewport and optional thumbnail, derived from a producer preview source or existing design metadata, with typed copies of supplied images and without modifying source files.
+    owner: cli
+    source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
+    acceptance:
+      behavior: {id: DSN-003-B, description: "Publish a producer source and derived card, manifest and artboard exports; replay identical inputs; serve the index, typed cover copy and original bytes from the exact version; keep declared kinds without inferring templates from .dc.html; honor root and explicit entries; keep private and historical versions on their own assets."}
+      failure: {id: DSN-003-F, description: "Reject malformed JSON, unknown versions and fields, empty item lists, escaping, missing and non-HTML preview paths, duplicate previews, control characters, oversized viewports, non-image, misnamed and oversized thumbnails, and reserved-path collisions before upload."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local staged HTTP publication, replay, private-read and hostile-input checks pass. Equivalent evidence for team deployments remains unrecorded; automatic screenshot generation is not implemented.
+    depends_on: [DSN-001, DSN-002, MAN-001]
+    evidence:
+      - deployment: local
+        tests: [DSN-003-B, DSN-003-F]
+        result: pass
+        run: project/evidence/design-preview-index-2026-09-30.json
+        recorded_at: "2026-09-30T18:24:26Z"
+
+  - id: DSN-004
+    kind: behavior
+    behavior: Review shows a version's valid preview index as a native gallery and opens each preview as the exact selected artifact, version and path, preserving history, sharing, annotation ownership and gallery return state, while versions without an index keep their original catalog.
+    owner: web-application
+    source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
+    acceptance:
+      behavior: {id: DSN-004-B, description: "Browse grouped thumbnails and placeholders, search, filter by kind and switch to a compact list; open a tile by pointer and keyboard as an exact page; annotate that document; return by Back to gallery and browser history with search, kind, layout, focus and scroll restored; fit phone widths; keep pre-index versions on their catalog."}
+      failure: {id: DSN-004-F, description: "Fail closed on malformed, unsupported, duplicate or escaping indexes by showing the original catalog with a notice; draw placeholders for missing or mistyped thumbnails; never load another version's assets."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local Chromium journeys and the Chromium, Firefox and WebKit critical gallery path pass. Equivalent evidence for team deployments remains unrecorded.
+    depends_on: [DSN-003, CMT-014, CMT-016, CMT-017, CMT-018, CMT-022]
+    evidence:
+      - deployment: local
+        tests: [DSN-004-F]
+        result: pass
+        run: project/evidence/design-gallery-model-2026-09-30.json
+        recorded_at: "2026-09-30T18:24:26Z"
+      - deployment: local
+        tests: [DSN-004-B]
+        result: pass
+        run: project/evidence/design-gallery-browser-2026-09-30.json
+        recorded_at: "2026-09-30T18:24:26Z"
 
   - id: AUD-001
     kind: security

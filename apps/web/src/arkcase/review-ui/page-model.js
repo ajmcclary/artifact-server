@@ -120,3 +120,32 @@ export function snapshotFor(session, artifact, number, fixture = 'Standard') {
 }
 
 export const draftScope = (artifactId, versionId, path) => JSON.stringify([artifactId, versionId, path]);
+
+/* Design gallery. Kinds come from a publication's preview index; `.dc.html` alone does
+   not make an item a template, so unclassified artboards keep their own kind. */
+export const galleryKinds = [
+  { id: 'prototype', label: 'Prototypes', singular: 'Prototype', icon: 'bi-window' },
+  { id: 'template', label: 'Templates', singular: 'Template', icon: 'bi-columns-gap' },
+  { id: 'component', label: 'Components', singular: 'Component', icon: 'bi-grid-1x2' },
+  { id: 'guideline', label: 'Guidelines', singular: 'Guideline', icon: 'bi-palette' },
+  { id: 'documentation', label: 'Documentation', singular: 'Document', icon: 'bi-journal-text' },
+  { id: 'artboard', label: 'Artboards', singular: 'Artboard', icon: 'bi-bounding-box' },
+];
+export const galleryKind = (id) => galleryKinds.find((kind) => kind.id === id) || galleryKinds.at(-1);
+
+export function filterGallery(items, query = '', kind = 'all') {
+  const q = query.trim().toLocaleLowerCase();
+  return items.filter((item) => (kind === 'all' || item.kind === kind)
+    && `${item.title} ${item.section} ${item.description || ''} ${item.path} ${galleryKind(item.kind).label}`
+      .toLocaleLowerCase().includes(q));
+}
+
+/** Kind order is fixed; sections keep the publication's first-seen order within a kind. */
+export function groupGallery(items) {
+  return galleryKinds.map((kind) => {
+    const inKind = items.filter((item) => item.kind === kind.id);
+    const sections = [...new Set(inKind.map((item) => item.section))]
+      .map((section) => ({ section, items: inKind.filter((item) => item.section === section) }));
+    return { ...kind, count: inKind.length, sections };
+  }).filter((group) => group.count > 0);
+}

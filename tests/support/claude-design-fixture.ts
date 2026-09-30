@@ -32,3 +32,41 @@ export async function writeDesignCardFixture(directory: string, nested = false):
   await writeFile(path.join(root, "components/plain.card.html"), "<!doctype html><h1>Plain component</h1>");
   return root;
 }
+
+/** A decodable 16 × 10 JPEG cover and PNG thumbnail, small enough to inline. */
+export const fixtureCoverJpeg = Buffer.from("/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAACgAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgACgAQAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwDAQACEQMRAD8A/Syiiiv5XP4rP//Z", "base64");
+export const fixtureThumbnailPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAYAAAC9vt6cAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAACgAAAAAeBf7RAAAAHklEQVQoFWNk+M9Qz0ABYKJAL1jrqAEMDKNhwMAAAOINAZLMvqZfAAAAAElFTkSuQmCC", "base64");
+
+/**
+ * A producer-declared gallery like the ArkCase Design repository generates: project
+ * prototypes, a reusable template, a component card, an extensionless Claude cover
+ * and one directly referenced PNG thumbnail.
+ */
+export async function writePreviewSourceFixture(directory: string): Promise<string> {
+  const root = await writeDesignCardFixture(directory, true);
+  await mkdir(path.join(directory, "project/thumbnails"), {recursive: true});
+  await Promise.all([
+    writeFile(path.join(directory, "project/App.dc.html"), '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body><h1>Examiner app</h1><button>Try button</button><output>Ready</output><script src="support.js"></script></body></html>'),
+    writeFile(path.join(directory, "project/Portal.dc.html"), "<!doctype html><h1>Claimant portal</h1>"),
+    writeFile(path.join(directory, "project/.thumbnail"), fixtureCoverJpeg),
+    writeFile(path.join(directory, "project/thumbnails/app.png"), fixtureThumbnailPng),
+    writeFile(path.join(directory, "artifactserver.previews.json"), JSON.stringify(previewSourceFixture(), null, 2)),
+  ]);
+  return root;
+}
+
+export function previewSourceFixture() {
+  return {
+    format: "artifact-server.preview-source",
+    version: 1,
+    title: "Claims Workspace",
+    description: "Examiner app, portal and starter screens.",
+    cover: "project/.thumbnail",
+    items: [
+      {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: "project/thumbnails/app.png"},
+      {kind: "prototype", section: "Portal", title: "Claimant Portal", path: "project/Portal.dc.html"},
+      {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}},
+      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}},
+    ],
+  };
+}

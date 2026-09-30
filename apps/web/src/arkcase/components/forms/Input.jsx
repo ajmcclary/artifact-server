@@ -132,7 +132,7 @@ export function Input({
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 'var(--space-2, 0.5rem)',
-            paddingLeft: pads[size].split(' ')[1], paddingRight: 'var(--space-1, 0.25rem)',
+            paddingInlineStart: pads[size].split(' ')[1], paddingInlineEnd: 'var(--space-1, 0.25rem)',
             ...fieldSurface,
             ...touchHeight,
             border: `1px solid ${wrapperBorder}`,
@@ -194,7 +194,7 @@ export function Input({
       ) : (
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           {icon && (
-            <i className={`bi ${icon}`} aria-hidden="true" data-icon-tone={navy ? 'current' : undefined} style={{ position: 'absolute', left: '0.6rem', color: iconColor, fontSize: fonts[size], pointerEvents: 'none' }} />
+            <i className={`bi ${icon}`} aria-hidden="true" data-icon-tone={navy ? 'current' : undefined} style={{ position: 'absolute', insetInlineStart: '0.6rem', color: iconColor, fontSize: fonts[size], pointerEvents: 'none' }} />
           )}
           <input
             id={inputId}
@@ -213,7 +213,7 @@ export function Input({
             style={{
               width: '100%',
               padding: pads[size],
-              paddingLeft: icon ? '2rem' : pads[size].split(' ')[1],
+              paddingInlineStart: icon ? '2rem' : pads[size].split(' ')[1],
               fontSize: fonts[size],
               fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
               lineHeight: 1.5,

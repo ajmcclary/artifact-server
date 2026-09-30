@@ -1,4 +1,15 @@
+import {randomUUID} from "node:crypto";
+import {mkdtemp, rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import path from "node:path";
+
+import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
 import {expect, test} from "@playwright/test";
+import {Effect, Redacted} from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+import {publishPath} from "../../src/client/file-publication-client.js";
+import {writePreviewSourceFixture} from "../support/claude-design-fixture.js";
 
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
@@ -157,6 +168,52 @@ test.describe("critical engine review paths @critical", () => {
     } finally {
       await secondContext.close();
       await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("DSN-004 gallery: a private design gallery opens exact sandboxed pages and returns through history @critical", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    const directory = await mkdtemp(path.join(tmpdir(), "critical-design-gallery-"));
+    try {
+      await writePreviewSourceFixture(directory);
+      const published = await Effect.runPromise(publishPath({
+        serverOrigin: fixture.server.baseUrl,
+        apiToken: Redacted.make(fixture.installation.apiToken),
+      }, {
+        inputPath: directory,
+        idempotencyKey: randomUUID(),
+        target: {kind: "new_artifact", accessSetting: "account_required", tags: []},
+      }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
+      await localLogin(fixture);
+      await fixture.page.goto(published.links.review.toString());
+      const gallery = fixture.page.getByRole("region", {name: "Claims Workspace gallery"});
+      const app = gallery.getByRole("link", {name: "Open Examiner App · Prototype · Prototypes"});
+      const card = gallery.getByRole("link", {name: "Open Primary button · Component · Actions"});
+      await expect.poll(() => app.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(16);
+      await expect(fixture.page.locator("iframe")).toHaveCount(0);
+
+      await card.click();
+      const reviewFrame = isolatedReviewFrame(fixture.page);
+      await expect(reviewFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
+      await expect(reviewFrame.frameLocator("iframe").getByRole("button", {name: "Try button"})).toBeVisible();
+      const exact = new URL(fixture.page.url());
+      expect(exact.searchParams.get("version")).toBe(published.version.id);
+      expect(exact.searchParams.get("path")).toBe("project/components/buttons.card.html");
+
+      await fixture.page.goBack();
+      await expect(card).toBeFocused();
+      await app.click();
+      const interactive = fixture.page.locator('iframe[title^="Interactive preview: "]');
+      await expect(interactive).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
+      await expect(fixture.page.frameLocator('iframe[title^="Interactive preview: "]').getByRole("heading", {name: "Examiner app"})).toBeVisible();
+      await fixture.page.goBack();
+      await fixture.page.goForward();
+      await expect(fixture.page.frameLocator('iframe[title^="Interactive preview: "]').getByRole("heading", {name: "Examiner app"})).toBeVisible();
+      await fixture.page.getByRole("button", {name: "Back to gallery"}).click();
+      await expect(app).toBeFocused();
+    } finally {
+      await stopBrowserFixture(fixture);
+      await rm(directory, {recursive: true, force: true});
     }
   });
 });

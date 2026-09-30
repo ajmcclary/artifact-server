@@ -1,8 +1,8 @@
-import { filterPages } from './page-model.js';
+import { filterGallery, filterPages, galleryKind, groupGallery } from './page-model.js';
 
 // The host supplies its existing React runtime and ArkCase exports; no duplicated primitives.
 export function createReviewUI(React, DS) {
-  const { Button, Popover, Input, GroupBand, SelectableRow, Modal, SurfaceState, Disclosure, FileList } = DS;
+  const { Button, Popover, Input, GroupBand, SelectableRow, Modal, SurfaceState, Disclosure, FileList, SegmentedControl } = DS;
   const secondary = { fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5A6268)', overflowWrap: 'anywhere' };
   const code = { ...secondary, fontFamily: 'var(--font-data, monospace)', userSelect: 'text' };
 
@@ -108,5 +108,115 @@ export function createReviewUI(React, DS) {
       })}
     </section>;
   }
-  return { PagePicker, ArtifactLinks, FileGroups };
+  /* The design gallery replaces a generated catalog's nested preview stage. Tiles are
+     native links (or buttons without `hrefFor`) that ask the host to open the original
+     file as the exact selected page; the gallery never renders a live preview itself.
+     A missing or broken thumbnail becomes a placeholder drawn at the declared viewport's
+     proportions, so a tile never depends on image bytes to be useful. */
+  const plainClick = (event) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+  function GalleryThumbnail({ item, compact }) {
+    const [failed, setFailed] = React.useState(false);
+    const kind = galleryKind(item.kind);
+    const { width, height } = item.viewport;
+    if (item.thumbnailUrl && !failed) return <img src={item.thumbnailUrl} alt="" loading="lazy" decoding="async"
+      data-gallery-thumbnail="image" onError={() => setFailed(true)}
+      style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top left' }} />;
+    const wide = width / height >= 1.6;
+    return <div aria-hidden="true" data-gallery-thumbnail="placeholder" style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+      <div style={{ aspectRatio: `${width} / ${height}`, width: wide ? '80%' : 'auto', height: wide ? 'auto' : '76%', maxWidth: '80%', maxHeight: '76%',
+        boxSizing: 'border-box', border: '1px dashed var(--border-color-strong, #ADB5BD)', borderRadius: 'var(--radius-sm, 4px)',
+        background: 'var(--surface-card, #fff)', color: 'var(--text-secondary, #5A6268)', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: compact ? 0 : 6, overflow: 'hidden' }}>
+        <i className={`bi ${kind.icon}`} style={{ fontSize: compact ? 'var(--icon-xs, 14px)' : 'var(--icon-lg, 24px)' }} />
+        {!compact && <span style={{ ...code, fontSize: 'var(--font-size-label, 11px)' }}>{width} × {height}</span>}
+      </div>
+    </div>;
+  }
+  function GalleryTile({ item, href, onOpen, list }) {
+    const kind = galleryKind(item.kind);
+    const [hover, setHover] = React.useState(false);
+    const Element = href ? 'a' : 'button';
+    const activate = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(item.path); };
+    const frame = { flex: 'none', overflow: 'hidden', background: 'var(--surface-tertiary, #E9ECEF)',
+      borderRadius: list ? 'var(--radius-sm, 4px)' : 0, ...(list ? { width: 96, height: 60 } : { aspectRatio: '16 / 10' }) };
+    const meta = <div style={{ ...secondary, display: 'flex', flexWrap: 'wrap', gap: '2px 8px', alignItems: 'center' }}>
+      <span><i className={`bi ${kind.icon}`} aria-hidden="true" style={{ marginRight: 4 }} />{kind.singular}</span>
+      <span style={{ fontFamily: 'var(--font-data, monospace)' }}>{item.viewport.width} × {item.viewport.height}</span>
+      {!item.thumbnailUrl && <span>No thumbnail</span>}
+    </div>;
+    return <Element {...(href ? { href } : { type: 'button' })} onClick={activate} data-gallery-path={item.path}
+      aria-label={`Open ${item.title} · ${kind.singular} · ${item.section}`}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', flexDirection: list ? 'row' : 'column', alignItems: list ? 'center' : 'stretch', gap: list ? 12 : 0,
+        minWidth: 0, width: '100%', boxSizing: 'border-box', padding: list ? 8 : 0, textAlign: 'left', font: 'inherit', color: 'inherit',
+        textDecoration: 'none', cursor: 'pointer', overflow: 'hidden', background: 'var(--surface-card, #fff)',
+        border: `1px solid ${hover ? 'var(--border-color-strong, #ADB5BD)' : 'var(--border-color, #DEE2E6)'}`,
+        borderRadius: 'var(--radius-md, 6px)', boxShadow: hover ? 'var(--shadow-sm, 0 1px 2px rgba(0,0,0,.08))' : 'none' }}>
+      <div style={frame}><GalleryThumbnail item={item} compact={list} /></div>
+      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4, padding: list ? 0 : '10px 12px 12px' }}>
+        <div style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{item.title}</div>
+        {item.description && <div style={{ ...secondary, display: '-webkit-box', WebkitLineClamp: list ? 1 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.description}</div>}
+        {meta}
+        {list && <div style={{ ...code, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.path}</div>}
+      </div>
+    </Element>;
+  }
+  function DesignGallery({ title, description, coverUrl, items, query, onQueryChange, kind = 'all', onKindChange,
+    view = 'grid', onViewChange, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, notice, phone = false }) {
+    const rootRef = React.useRef(null);
+    const matches = filterGallery(items, query, kind);
+    const groups = groupGallery(matches);
+    const kinds = groupGallery(items);
+    const list = view === 'list';
+    React.useLayoutEffect(() => {
+      const root = rootRef.current;
+      if (!root) return;
+      root.scrollTop = scrollTop;
+      if (focusPath) Array.from(root.querySelectorAll('[data-gallery-path]'))
+        .find((tile) => tile.getAttribute('data-gallery-path') === focusPath)?.focus({ preventScroll: scrollTop > 0 });
+      // Restore once per mount; later prop changes come from this gallery's own scrolling.
+    }, []);
+    const announce = (nextQuery, nextKind) => onAnnounce?.(`${filterGallery(items, nextQuery, nextKind).length} matching previews.`);
+    return <section ref={rootRef} aria-label={`${title} gallery`} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
+      style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: phone ? '16px 16px 32px' : '24px 28px 40px',
+        background: 'var(--surface-body, #F8F9FA)', color: 'var(--text-body, #212529)' }}>
+      <header style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
+        {coverUrl && !phone && <img src={coverUrl} alt="" style={{ flex: 'none', width: 120, aspectRatio: '16 / 10', objectFit: 'cover',
+          borderRadius: 'var(--radius-md, 6px)', border: '1px solid var(--border-color, #DEE2E6)' }} />}
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontFamily: 'var(--font-heading, serif)', fontSize: 'var(--font-size-xl, 20px)', overflowWrap: 'anywhere' }}>{title}</h2>
+          {description && <p style={{ ...secondary, fontSize: 'var(--font-size-sm, 14px)', margin: '4px 0 0' }}>{description}</p>}
+          <p style={{ ...secondary, margin: '4px 0 0' }}>{items.length} {items.length === 1 ? 'preview' : 'previews'} · each opens as its own exact page</p>
+        </div>
+      </header>
+      {notice}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
+        <div style={{ flex: '1 1 240px', maxWidth: 420 }}>
+          <Input label="Find a preview" icon="bi-search" type="search" touch={phone} value={query}
+            onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, kind); }} />
+        </div>
+        <SegmentedControl label="Gallery layout" size="sm" mode="radio" value={view} onChange={onViewChange}
+          options={[{ id: 'grid', icon: 'bi-grid-3x3-gap', label: 'Grid' }, { id: 'list', icon: 'bi-list-ul', label: 'List' }]} />
+      </div>
+      {kinds.length > 1 && <SegmentedControl label="Preview kind" variant="chip" wrap value={kind}
+        onChange={(next) => { onKindChange(next); announce(query, next); }} style={{ marginBottom: 16 }}
+        options={[{ id: 'all', label: 'All', count: items.length }, ...kinds.map((group) => ({ id: group.id, label: group.label, count: group.count }))]} />}
+      {groups.map((group) => <section key={group.id} aria-labelledby={`gallery-kind-${group.id}`} style={{ marginBottom: 24 }}>
+        <h3 id={`gallery-kind-${group.id}`} style={{ margin: '0 0 8px', fontSize: 'var(--font-size-lg, 18px)', fontFamily: 'var(--font-heading, serif)' }}>
+          {group.label} <span style={{ ...code, fontSize: 'var(--font-size-sm, 14px)' }}>{group.count}</span></h3>
+        {group.sections.map(({ section, items: inSection }) => <section key={section} aria-label={`${group.label} · ${section}`} style={{ marginBottom: 12 }}>
+          {(group.sections.length > 1 || section !== group.label) && <GroupBand label={section} count={inSection.length} />}
+          <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: list ? 8 : 14,
+            gridTemplateColumns: list ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(min(100%, 232px), 1fr))' }}>
+            {inSection.map((item) => <li key={item.path} style={{ display: 'flex', minWidth: 0 }}>
+              <GalleryTile item={item} list={list} href={hrefFor?.(item.path)} onOpen={onOpen} /></li>)}
+          </ul>
+        </section>)}
+      </section>)}
+      {!matches.length && <SurfaceState phase="ready" count={0} noun="previews" filtered density="inline"
+        emptyTitle="No matching previews" filterBody="Search by title, section, description or path."
+        onClear={() => { onQueryChange(''); onKindChange('all'); announce('', 'all'); }} />}
+    </section>;
+  }
+  return { PagePicker, ArtifactLinks, FileGroups, DesignGallery };
 }

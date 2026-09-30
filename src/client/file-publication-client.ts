@@ -34,10 +34,26 @@ import {
 import {
   claudeDesignCatalogPath,
   claudeDesignManifestPath,
-  createClaudeDesignCatalog,
-  createDesignCardCatalog,
+  claudeDesignPublication,
+  createPreviewIndexCatalog,
+  designCardPublication,
+  type DesignCatalog,
 } from "../manifest/claude-design.js";
 import {parseDesignCard, type DesignCard} from "../manifest/design-card.js";
+import {
+  createPreviewIndex,
+  isReservedPreviewPath,
+  maximumThumbnailBytes,
+  parsePreviewSource,
+  previewIndexPath,
+  previewSourcePath,
+  previewThumbnailCopyPath,
+  serializePreviewIndex,
+  sniffPreviewImage,
+  type PreviewDraft,
+  type PreviewImage,
+  type PreviewIndex,
+} from "../manifest/preview-index.js";
 
 const maximumFileCount = 10_000;
 const maximumManifestPathLength = 1_024;
@@ -285,7 +301,8 @@ interface DiskPreparedFile {
 
 interface GeneratedPreparedFile {
   readonly kind: "generated";
-  readonly content: string;
+  /** Held in memory so a retry within this process sends exactly the hashed bytes. */
+  readonly content: Uint8Array;
   readonly mediaType: string;
   readonly path: string;
   readonly sha256: string;
@@ -592,37 +609,142 @@ async function inspectPublicationPath(
 async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Promise<string> {
   const paths = files.map((file) => file.path);
   if (paths.includes(defaultDirectoryEntryPath)) return defaultDirectoryEntryPath;
-  const manifestPath = claudeDesignManifestPath(paths);
-  const manifest = files.find((file) => file.path === manifestPath);
   try {
-    const manifestText = manifest?.kind === "disk"
-      ? await readDesignMetadata(manifest)
-      : undefined;
-    const cards = manifestPath === undefined ? await readDesignCards(files) : [];
-    const content = cards.length > 0
-      ? createDesignCardCatalog(paths, cards, path.basename(inputPath))
-      : createClaudeDesignCatalog(paths, manifestPath, manifestText);
-    if (content === undefined) return defaultDirectoryEntryPath;
+    const design = await prepareDesignCatalog(files, paths, path.basename(inputPath));
+    if (design === undefined) return defaultDirectoryEntryPath;
     if (paths.some((candidate) => candidate.toLowerCase() === claudeDesignCatalogPath)) {
       throw new Error("The generated design catalog path already exists; choose --entry explicitly.");
     }
-    if (files.length >= maximumFileCount) {
+    if (paths.some(isReservedPreviewPath)) {
+      throw new Error("The generated preview asset directory already exists; choose --entry explicitly.");
+    }
+    if (files.length + 1 + design.generated.length > maximumFileCount) {
       throw new Error("The Claude Design catalog would exceed the publication file limit.");
     }
-    files.push({
-      kind: "generated",
-      content,
-      mediaType: "text/html; charset=utf-8",
-      path: claudeDesignCatalogPath,
-      sha256: createHash("sha256").update(content).digest("hex"),
-      size: Buffer.byteLength(content),
-    });
+    files.push(generatedFile(claudeDesignCatalogPath, design.catalog, "text/html; charset=utf-8"), ...design.generated);
     return claudeDesignCatalogPath;
   } catch (cause) {
     throw inputFailure(inputPath, "invalid_entry", cause instanceof Error
       ? `Cannot prepare design export: ${cause.message}`
       : "Cannot prepare Claude Design export.");
   }
+}
+
+interface PreparedDesignCatalog {
+  readonly catalog: string;
+  /** The preview index and typed thumbnail copies, in deterministic order. */
+  readonly generated: readonly GeneratedPreparedFile[];
+}
+
+/**
+ * A producer preview source outranks automatic detection; otherwise the existing
+ * vendor-manifest, card and artboard precedence applies unchanged.
+ */
+async function prepareDesignCatalog(
+  files: readonly PreparedFile[],
+  paths: readonly string[],
+  title: string,
+): Promise<PreparedDesignCatalog | undefined> {
+  const source = files.find((file) => file.path === previewSourcePath);
+  if (source?.kind === "disk") {
+    const draft = parsePreviewSource(await readDesignMetadata(source), paths);
+    return indexedCatalog(files, draft, createPreviewIndexCatalog, true);
+  }
+  const manifestPath = claudeDesignManifestPath(paths);
+  const manifest = files.find((file) => file.path === manifestPath);
+  const manifestText = manifest?.kind === "disk"
+    ? await readDesignMetadata(manifest)
+    : undefined;
+  const cards = manifestPath === undefined ? await readDesignCards(files) : [];
+  const design: DesignCatalog | undefined = cards.length > 0
+    ? designCardPublication(paths, cards, title)
+    : claudeDesignPublication(paths, manifestPath, manifestText, title);
+  if (design === undefined) return undefined;
+  const cover = conventionalCover(files);
+  const draft = cover === undefined ? design.draft : {...design.draft, cover};
+  return indexedCatalog(files, draft, () => design.catalog, false);
+}
+
+/** Claude exports place an optional project cover at `.thumbnail`; it is used only when valid. */
+function conventionalCover(files: readonly PreparedFile[]): string | undefined {
+  return files.find((file) => file.kind === "disk"
+    && (file.path === ".thumbnail" || file.path === "project/.thumbnail")
+    && file.size <= maximumThumbnailBytes)?.path;
+}
+
+async function indexedCatalog(
+  files: readonly PreparedFile[],
+  draft: PreviewDraft,
+  renderCatalog: (index: PreviewIndex) => string,
+  declared: boolean,
+): Promise<PreparedDesignCatalog> {
+  const references = [...new Set([draft.cover, ...draft.items.map((item) => item.thumbnail)]
+    .filter((reference): reference is string => reference !== undefined))];
+  const lookups = await Promise.all(references.map(async (reference) => {
+    const image = await resolvePreviewImage(files, reference);
+    if (image === undefined && declared) {
+      throw new Error(`Preview thumbnail ${JSON.stringify(reference)} must be a PNG, JPEG or WebP image of at most 2 MiB.`);
+    }
+    return [reference, image] as const;
+  }));
+  const images = new Map(lookups.flatMap(([reference, image]) => image === undefined ? [] : [[reference, image] as const]));
+  // An undeclared conventional cover that is not a supported image is simply omitted.
+  const {cover, ...uncovered} = draft;
+  const usable: PreviewDraft = cover !== undefined && images.has(cover) ? draft : uncovered;
+  const index = createPreviewIndex(usable, (reference) => {
+    const resolved = images.get(reference);
+    if (resolved === undefined) throw new Error("A preview thumbnail was not resolved.");
+    return resolved.image;
+  });
+  const copies = new Map<string, GeneratedPreparedFile>();
+  for (const {copy} of images.values()) if (copy !== undefined) copies.set(copy.path, copy);
+  return {
+    catalog: renderCatalog(index),
+    generated: [
+      generatedFile(previewIndexPath, serializePreviewIndex(index), "application/json; charset=utf-8"),
+      ...[...copies.values()].toSorted((left, right) => left.path < right.path ? -1 : Number(left.path > right.path)),
+    ],
+  };
+}
+
+/**
+ * Identify a thumbnail by its bytes. A file whose name already gives the same image
+ * type is referenced in place; an extensionless supplied image gets a typed,
+ * content-addressed copy. A name that claims another type is refused.
+ */
+async function resolvePreviewImage(
+  files: readonly PreparedFile[],
+  reference: string,
+): Promise<{readonly image: PreviewImage; readonly copy?: GeneratedPreparedFile} | undefined> {
+  const file = files.find((candidate) => candidate.path === reference);
+  if (file?.kind !== "disk" || file.size > maximumThumbnailBytes) return undefined;
+  const bytes = await readVerifiedBytes(file);
+  const mediaType = sniffPreviewImage(bytes);
+  if (mediaType === undefined) return undefined;
+  const declaredType = file.mediaType.split(";", 1)[0]?.trim().toLowerCase();
+  if (declaredType === mediaType) return {image: {path: file.path, mediaType}};
+  if (declaredType !== "application/octet-stream") return undefined;
+  const copy: GeneratedPreparedFile = {
+    kind: "generated",
+    content: bytes,
+    mediaType,
+    path: previewThumbnailCopyPath(file.sha256, mediaType),
+    sha256: file.sha256,
+    size: bytes.byteLength,
+  };
+  return {image: {path: copy.path, mediaType}, copy};
+}
+
+function generatedFile(filePath: string, text: string, mediaType: string): GeneratedPreparedFile {
+  const content = new TextEncoder().encode(text);
+  return {
+    kind: "generated",
+    content,
+    mediaType,
+    path: filePath,
+    sha256: createHash("sha256").update(content).digest("hex"),
+    size: content.byteLength,
+  };
 }
 
 async function readDesignCards(files: readonly PreparedFile[]): Promise<DesignCard[]> {
@@ -639,6 +761,11 @@ async function readDesignMetadata(file: DiskPreparedFile): Promise<string> {
   if (file.size > maximumDesignMetadataBytes) {
     throw new Error("Design metadata files and card previews must not exceed 4 MiB.");
   }
+  return Buffer.from(await readVerifiedBytes(file)).toString("utf8");
+}
+
+/** Read a small prepared file and prove it still has the fingerprinted bytes. */
+async function readVerifiedBytes(file: DiskPreparedFile): Promise<Uint8Array> {
   const handle = await open(file.absolutePath, fileSystemConstants.O_RDONLY | fileSystemConstants.O_NOFOLLOW);
   try {
     const bytes = Buffer.alloc(file.size + 1);
@@ -652,7 +779,7 @@ async function readDesignMetadata(file: DiskPreparedFile): Promise<string> {
     if (length !== file.size || createHash("sha256").update(content).digest("hex") !== file.sha256) {
       throw new Error("Design metadata changed during publication preparation.");
     }
-    return content.toString("utf8");
+    return new Uint8Array(content);
   } finally {
     await handle.close();
   }
@@ -945,7 +1072,7 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
     FileSystem.FileSystem | HttpClient.HttpClient
   > {
     const body = preparedFile.kind === "generated"
-      ? HttpBody.text(preparedFile.content, preparedFile.mediaType)
+      ? HttpBody.uint8Array(preparedFile.content, preparedFile.mediaType)
       : yield* preparedDiskBody(preparedFile);
     const request = HttpClientRequest.put(plannedFile.uploadUrl).pipe(
       HttpClientRequest.setBody(body),
@@ -1092,7 +1219,7 @@ const preparedFileBytes = Effect.fn("FilePublicationClient.preparedFileBytes")(
     preparedFile: PreparedFile,
   ): Effect.fn.Return<Uint8Array, FilePublicationInputError> {
     if (preparedFile.kind === "generated") {
-      return new TextEncoder().encode(preparedFile.content);
+      return preparedFile.content;
     }
     yield* assertPreparedFileStable(preparedFile);
     return yield* Effect.tryPromise({

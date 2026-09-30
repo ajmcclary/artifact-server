@@ -2,6 +2,7 @@ import {Schema} from "effect";
 
 import {parseManifestPath} from "./create-manifest.js";
 import type {DesignCard} from "./design-card.js";
+import type {PreviewDraft, PreviewIndex, PreviewKind} from "./preview-index.js";
 
 /** The extra immutable entry page created for a recognized Claude export. */
 export const claudeDesignCatalogPath = "artifact-server-design.html";
@@ -25,6 +26,7 @@ const designSystemSchema = Schema.Struct({
 });
 
 interface DesignPreview {
+  readonly kind: PreviewKind;
   readonly path: string;
   readonly name: string;
   readonly group: string;
@@ -39,23 +41,42 @@ export function claudeDesignManifestPath(paths: readonly string[]): string | und
     .find((candidate) => paths.includes(candidate));
 }
 
+/** A generated catalog page and the gallery draft describing the same previews. */
+export interface DesignCatalog {
+  readonly catalog: string;
+  readonly draft: PreviewDraft;
+}
+
 /** Build a deterministic catalog using only paths present in the publication. */
 export function createClaudeDesignCatalog(
   paths: readonly string[],
   manifestPath?: string,
   manifestText?: string,
 ): string | undefined {
+  return claudeDesignPublication(paths, manifestPath, manifestText, "Artboards")?.catalog;
+}
+
+/** Catalog and gallery draft for a Claude Design System manifest or bare artboards. */
+export function claudeDesignPublication(
+  paths: readonly string[],
+  manifestPath: string | undefined,
+  manifestText: string | undefined,
+  title: string,
+): DesignCatalog | undefined {
   if (manifestPath !== undefined && manifestText !== undefined) {
     const manifest = Schema.decodeUnknownSync(designSystemSchema)(JSON.parse(manifestText));
     const prefix = manifestPath.slice(0, -"_ds_manifest.json".length);
     const cards = manifest.cards.map((card): DesignPreview => ({
+      kind: "component",
       path: previewPath(prefix, card.path, paths),
       name: card.name,
       group: card.group ?? "Components",
       description: card.subtitle ?? "",
       ...viewport(card.viewport),
     }));
+    // The vendor manifest declares these as templates, so the kind is authoritative.
     const templates = (manifest.templates ?? []).map((template): DesignPreview => ({
+      kind: "template",
       path: previewPath(prefix, template.entryPath, paths),
       name: template.name,
       group: "Templates",
@@ -63,18 +84,21 @@ export function createClaudeDesignCatalog(
       width: 1280,
       height: 900,
     }));
-    return renderCatalog("Claude Design System", manifest.namespace, [...cards, ...templates]);
+    const previews = [...cards, ...templates];
+    return {
+      catalog: renderCatalog("Claude Design System", manifest.namespace, previews),
+      draft: previewDraft("claude-design-manifest", manifest.namespace, previews),
+    };
   }
-  const artboards = paths.filter((candidate) => candidate.endsWith(".dc.html"));
+  const artboards = artboardPreviews(paths, "Artboards");
   if (artboards.length === 0) return undefined;
-  return renderCatalog("Claude Design Project", "Artboards", artboards.map((candidate) => ({
-    path: candidate,
-    name: candidate.split("/").at(-1)?.slice(0, -".dc.html".length) ?? candidate,
-    group: "Artboards",
-    description: candidate,
-    width: 1280,
-    height: 900,
-  })));
+  return {
+    catalog: renderCatalog("Claude Design Project", "Artboards", artboards.map((artboard) => ({
+      ...artboard,
+      description: artboard.path,
+    }))),
+    draft: previewDraft("artboards", title, artboards),
+  };
 }
 
 function previewPath(prefix: string, candidate: string, paths: readonly string[]): string {
@@ -89,23 +113,83 @@ function previewPath(prefix: string, candidate: string, paths: readonly string[]
 
 /** Catalog annotated cards alongside artboards without requiring a vendor manifest. */
 export function createDesignCardCatalog(paths: readonly string[], cards: readonly DesignCard[], title: string): string {
+  return designCardPublication(paths, cards, title).catalog;
+}
+
+/** Catalog and gallery draft for annotated cards; unclassified artboards stay artboards. */
+export function designCardPublication(
+  paths: readonly string[],
+  cards: readonly DesignCard[],
+  title: string,
+): DesignCatalog {
   const previews = cards.map((card): DesignPreview => ({
+    kind: "component",
     path: previewPath("", card.path, paths),
     name: card.name,
     group: card.group ?? "Components",
     description: card.subtitle ?? "",
     ...viewport(card.viewport),
   }));
-  const templates = paths.filter((candidate) => candidate.endsWith(".dc.html"))
+  // A .dc.html name does not establish whether a page is a reusable template.
+  const artboards = artboardPreviews(paths, "Artboards");
+  return {
+    catalog: renderCatalog("Design System", title, [...previews, ...artboards.map((artboard) => ({
+      ...artboard,
+      description: artboard.path,
+    }))]),
+    draft: previewDraft("design-cards", title, [...previews, ...artboards]),
+  };
+}
+
+const kindHeadings = {
+  artboard: "Artboards",
+  component: "Components",
+  documentation: "Documentation",
+  guideline: "Guidelines",
+  prototype: "Prototypes",
+  template: "Templates",
+} as const satisfies Record<PreviewKind, string>;
+
+/** Render the standalone catalog page from a producer's validated preview index. */
+export function createPreviewIndexCatalog(index: PreviewIndex): string {
+  return renderCatalog("Design Publication", index.title, index.items.map((item) => ({
+    kind: item.kind,
+    path: item.path,
+    name: item.title,
+    group: item.section === kindHeadings[item.kind] ? item.section : `${kindHeadings[item.kind]} · ${item.section}`,
+    description: item.description,
+    width: item.viewport.width,
+    height: item.viewport.height,
+  })));
+}
+
+function artboardPreviews(paths: readonly string[], group: string): DesignPreview[] {
+  return paths.filter((candidate) => candidate.endsWith(".dc.html"))
     .map((candidate): DesignPreview => ({
+      kind: "artboard",
       path: previewPath("", candidate, paths),
       name: candidate.split("/").at(-1)?.slice(0, -".dc.html".length) ?? candidate,
-      group: "Templates",
-      description: candidate,
+      group,
+      description: "",
       width: 1280,
       height: 900,
     }));
-  return renderCatalog("Design System", title, [...previews, ...templates]);
+}
+
+function previewDraft(origin: PreviewDraft["origin"], title: string, previews: readonly DesignPreview[]): PreviewDraft {
+  return {
+    origin,
+    title,
+    description: "",
+    items: previews.map((preview) => ({
+      kind: preview.kind,
+      section: preview.group,
+      title: preview.name,
+      description: preview.description,
+      path: preview.path,
+      viewport: {width: preview.width, height: preview.height},
+    })),
+  };
 }
 
 function viewport(value: string | undefined) {

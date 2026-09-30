@@ -51,7 +51,7 @@ test("DSN-002-B: flat and nested annotated systems publish grouped cards and tem
     const catalog = await (await fetchLoopbackContent(result.links.version)).text();
     expect(catalog).toContain("3 previews");
     expect(catalog).toContain("<h2>Actions</h2>");
-    expect(catalog).toContain("<h2>Templates</h2>");
+    expect(catalog).toContain("<h2>Artboards</h2>");
     expect(catalog).toContain('data-width="640" data-height="110"');
     expect(catalog).toContain("An interactive component");
     expect(catalog).toContain(">plain</a>");
@@ -72,8 +72,8 @@ test("DSN-002: existing entries and vendor manifests override automatic card dis
   await writeFile(path.join(inputPath, "_ds_manifest.json"), JSON.stringify({namespace: "Vendor", cards: [{path: "components/buttons.card.html", name: "Chosen card"}]}));
   const vendor = await Effect.runPromise(prepareFilePublication(intent(inputPath)));
   const generated = vendor.publication.files.find((file) => file.kind === "generated");
-  expect(generated?.kind === "generated" && generated.content).toContain("Chosen card");
-  expect(generated?.kind === "generated" && generated.content).not.toContain("Primary button");
+  expect(generated?.kind === "generated" && new TextDecoder().decode(generated.content)).toContain("Chosen card");
+  expect(generated?.kind === "generated" && new TextDecoder().decode(generated.content)).not.toContain("Primary button");
   await writeFile(path.join(inputPath, "index.html"), "Existing entry");
   expect((await Effect.runPromise(prepareFilePublication(intent(inputPath)))).publication.entryPath).toBe("index.html");
 });

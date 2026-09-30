@@ -65,7 +65,7 @@ test("DSN-001-B: flat and nested systems publish immutable catalogs and original
   const inferred = await Effect.runPromise(prepareFilePublication(intent(inputPath)));
   expect(inferred.publication.entryPath).toBe("artifact-server-design.html");
   const generated = inferred.publication.files.find((file) => file.kind === "generated");
-  expect(generated?.kind === "generated" && generated.content).toContain("Claude Design Project");
+  expect(generated?.kind === "generated" && new TextDecoder().decode(generated.content)).toContain("Claude Design Project");
   await writeFile(path.join(inputPath, "index.html"), "Existing entry");
   const existing = await Effect.runPromise(prepareFilePublication(intent(inputPath)));
   expect(existing.publication.entryPath).toBe("index.html");

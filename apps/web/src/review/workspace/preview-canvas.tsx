@@ -73,6 +73,12 @@ export interface PreviewCanvasProps {
   readonly detailLoading: boolean;
   /** Shown instead of "Select an artifact" when the project has nothing published yet. */
   readonly emptyProject: ReactNode;
+  /** A native design gallery that replaces the generated catalog entry, or null. */
+  readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
+  /** Explains why a version's gallery fell back to its original catalog. */
+  readonly galleryNotice: string | null;
+  /** Offered while an exact page of a gallery version is open. */
+  readonly galleryReturn: {readonly label: string; readonly onReturn: () => void} | null;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;
   /** The Comments view owns the preview mode controls, outside the artifact canvas. */
@@ -110,6 +116,22 @@ const frameStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", 
 const focusFrameStyle = {...frameStyle, border: 0, borderRadius: 0, boxShadow: "none"} satisfies CSSProperties;
 const frameBodyStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
 const controlsStyle = {flex: "none"} satisfies CSSProperties;
+const galleryStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
+const returnBarStyle = {alignItems: "center", display: "flex", flex: "none", gap: 10, minWidth: 0} satisfies CSSProperties;
+const focusReturnBarStyle = {
+  ...returnBarStyle,
+  background: "var(--surface-secondary)",
+  borderBottom: "1px solid var(--border-color)",
+  padding: "6px 10px",
+} satisfies CSSProperties;
+const returnLabelStyle = {
+  color: "var(--text-secondary)",
+  fontSize: 12,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} satisfies CSSProperties;
 const positionStyle = {color: "var(--text-data)", fontFamily: "var(--font-data)", fontSize: 12} satisfies CSSProperties;
 const metaStyle = {color: "var(--text-secondary)", fontSize: 12, whiteSpace: "nowrap"} satisfies CSSProperties;
 const htmlPreviewStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
@@ -156,6 +178,9 @@ export function PreviewCanvas({
   detailError,
   detailLoading,
   emptyProject,
+  gallery,
+  galleryNotice,
+  galleryReturn,
   hasDetails,
   isCurrentVersion,
   modeControlsTarget,
@@ -187,13 +212,22 @@ export function PreviewCanvas({
   return (
     <div ref={columnRef} style={focus ? focusColumnStyle : columnStyle}>
       {detailError === null || focus ? null : <Alert variant="danger">{detailError.message}</Alert>}
+      {galleryNotice === null ? null : <Alert variant="warning">{galleryNotice}</Alert>}
+      {galleryReturn === null ? null : (
+        <div style={focus ? focusReturnBarStyle : returnBarStyle}>
+          <Button icon="bi-arrow-left" onClick={galleryReturn.onReturn} outline size="sm" variant="secondary">
+            Back to gallery
+          </Button>
+          <span style={returnLabelStyle}>{galleryReturn.label}</span>
+        </div>
+      )}
       <PreviewFrame
         bodyStyle={frameBodyStyle}
         label="Artifact preview"
         meta={version === null ? null : `v${version.version.number}`}
         style={focus ? focusFrameStyle : frameStyle}
         tabIndex={-1}
-        title={path ?? artifactName}
+        title={gallery?.title ?? path ?? artifactName}
         width={focus ? null : preset?.px ?? null}
       >
         {artifactId === null && emptyProject !== null ? (
@@ -232,7 +266,7 @@ export function PreviewCanvas({
               titleLevel={2}
             />
           </div>
-        ) : (
+        ) : gallery === null ? (
           <ReviewPreview
             accessSetting={accessSetting}
             annotateModeActive={annotateModeActive}
@@ -254,6 +288,8 @@ export function PreviewCanvas({
             selectedThreadId={selectedThreadId}
             version={version}
           />
+        ) : (
+          <div style={galleryStyle}>{gallery.content}</div>
         )}
       </PreviewFrame>
       {focus ? null : (
@@ -572,7 +608,7 @@ function HtmlPreview({
             entryPath: entry.path,
             html,
             interactiveUrl,
-            prefersInteractive: prefersInteractivePreview(html, interactiveUrl),
+            prefersInteractive: prefersInteractivePreview(html, interactiveUrl, entry.path),
             temporarySession: !useStableOrigin,
           });
         }
@@ -788,7 +824,10 @@ function documentEntryUrl(versionBaseUrl: string, entryPath: string): string {
   ).toString();
 }
 
-function prefersInteractivePreview(html: string, entryUrl: string): boolean {
+function prefersInteractivePreview(html: string, entryUrl: string, path: string): boolean {
+  // Claude Design artboards boot a runtime that loads React from a CDN at run time,
+  // which only the version's own content origin permits. Annotate stays one click away.
+  if (path.endsWith(".dc.html")) return true;
   const parsed = new DOMParser().parseFromString(html, "text/html");
   if (parsed.querySelector('meta[name="artifact-server-preview"][content="claude-design-catalog"]') !== null) {
     return true;

@@ -28,7 +28,11 @@ for (const annotated of [false, true]) {
       target: {kind: "new_artifact", accessSetting: "account_required", tags: []},
     }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
     await localLogin(fixture);
-    await fixture.page.goto(published.links.review.toString());
+    // The pathless Review URL lands on the native gallery; the generated catalog stays
+    // an exact file of the version and opens by its path.
+    const catalogUrl = new URL(published.links.review);
+    catalogUrl.searchParams.set("path", "artifact-server-design.html");
+    await fixture.page.goto(catalogUrl.toString());
     const catalog = interactiveFrame(fixture.page);
     await expect(catalog.getByRole("heading", {name: annotated ? path.basename(directory) : "Example_System"})).toBeVisible();
     const card = catalog.frameLocator('iframe[name="design-preview"]');

@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface DisclosureProps {
-  /** Header title (14px/600 sans, 13px when compact). Also accepted as a child with `slot="title"`; the prop wins. */
+  /** Header title (14px/600 sans, 13px when compact, 12px `text-emphasis` when dense). Also accepted as a child with `slot="title"`; the prop wins. */
   title?: React.ReactNode;
   /** Secondary line under the title (12px, text-secondary). Also accepted as a child with `slot="meta"`; the prop wins. */
   meta?: React.ReactNode;
@@ -23,8 +23,10 @@ export interface DisclosureProps {
   region?: boolean;
   /** Draws the `list-divider` hairline under the row. @default true */
   divider?: boolean;
-  /** Row height and title size: comfortable is a 48px header at 14px, compact a 40px header at 13px. @default "comfortable" */
-  density?: 'compact' | 'comfortable';
+  /** Row height and title size: comfortable is a 48px header at 14px, compact a 40px header at 13px. `dense` is the builder palette's group band: a 30px header with 10px inline padding and 6px gaps, a 12px/600 `text-emphasis` label (truncated to one line), `surface-secondary` ground between top and bottom `border-color` hairlines, a 12px chevron, no row divider and an unpadded detail whose rows draw their own insets. @default "comfortable" */
+  density?: 'compact' | 'comfortable' | 'dense';
+  /** Pins the header to the top of its nearest scrolling container while the row is in view (`position: sticky; top: 0; z-index: 2`), at any density. Where the header would otherwise be transparent it takes an opaque `surface-card` ground so scrolled rows do not show through. @default false */
+  sticky?: boolean;
   /** Trailing action words that swap with the state, e.g. `{ closed: 'Inspect checks', open: 'Close details' }`: 12px/600 link ink before the chevron. Visual only (aria-hidden) — `aria-expanded` carries the state, so the header keeps one accessible name. */
   actionLabel?: { open: string; closed: string };
   /** Draws the row as its own bordered, rounded card (`surface-card`, `border-color`) whose header takes `surface-secondary` and a hairline while open; the detail gets 12px padding. Replaces the `divider`. @default false */

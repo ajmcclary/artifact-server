@@ -1873,6 +1873,20 @@ gate.
   **Gates:** V/B/H if preview routes change. **Contracts:** DSN-001,
   CMT-001/002/014/016–018/022, PRJ-002; new navigation/derived-asset IDs as needed.
   **Dependencies:** T07; safe defaults need no new provider. **Cost:** local fixtures.
+- **Progress, September 30 (first slice):** generated catalogs now publish a
+  versioned preview index (`artifact-server-previews/index.json`) derived from a
+  producer `artifactserver.previews.json` or existing manifest/card/artboard
+  metadata, with typed content-addressed copies of supplied extensionless covers
+  (DSN-003). Review opens indexed versions on a native gallery built from the
+  Design repository's `DesignGallery`; tiles navigate to the exact
+  artifact/version/path, and Back to gallery or browser history restores search,
+  kind, layout, scroll and focus (DSN-004). Pre-index versions and explicit entries
+  keep their catalog; unusable indexes fall back with a notice. Remaining: no
+  per-artboard thumbnails exist yet — Design's canonical screenshots are
+  visual-test baselines without per-artboard freshness fingerprints, so they are
+  not reused. Producer-side capture with renderer/viewport/source provenance,
+  documentation links from gallery items, and the cross-project Design Library
+  (moving view first, frozen collections under T24) are next.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

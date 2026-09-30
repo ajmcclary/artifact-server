@@ -16,6 +16,9 @@ const RAIL_TONES = {
 const DENSITY = {
   comfortable: { minHeight: 'var(--space-8, 48px)', padY: 'var(--space-2, 8px)', title: 'var(--font-size-sm, 14px)' },
   compact: { minHeight: 'var(--space-7, 40px)', padY: 'var(--space-1, 4px)', title: 'var(--font-size-dense, 13px)' },
+  /* The builder palette's group band: a 30px header on the secondary surface between
+     border-color hairlines, 12px/600 emphasis label, 10px inline padding and 6px gaps. */
+  dense: { minHeight: '30px', padY: '0px', title: 'var(--font-size-xs, 12px)' },
 };
 
 /**
@@ -29,6 +32,8 @@ const DENSITY = {
  * "Close details"); `framed` draws the row as its own bordered card whose header takes the
  * secondary surface while open. `disabled` makes the header a native disabled button: the
  * row keeps whatever open state it has, stops toggling, and dims its title and chevron.
+ * `density="dense"` draws the compact band header a builder palette groups its entries
+ * under; `sticky` pins the header to the top of its scrolling container at any density.
  *
  * Portable pages that can pass only children may send `leading`, `trailing`, `meta` and
  * `title` as children marked slot="leading" / "trailing" / "meta" / "title"; an explicit
@@ -51,6 +56,7 @@ export function Disclosure({
   framed = false,
   disabled = false,
   actions,
+  sticky = false,
   children: childrenProp,
   style,
   ...rest
@@ -73,11 +79,17 @@ export function Disclosure({
   const [hover, setHover] = React.useState(false);
 
   const d = DENSITY[density] || DENSITY.comfortable;
+  const dense = density === 'dense';
   const rail = tone ? RAIL_TONES[tone] || RAIL_TONES.neutral : null;
-  /* With a rail the 3px border sits inside the 20px start padding, so titles align either way. */
-  const padStart = rail ? 'calc(var(--space-5, 24px) - 3px)' : 'var(--space-5, 24px)';
+  /* With a rail the 3px border sits inside the 20px start padding, so titles align either way.
+     The dense band keeps the builder's 10px inset (less the rail when one is drawn). */
+  const padStart = dense
+    ? (rail ? '7px' : '10px')
+    : (rail ? 'calc(var(--space-5, 24px) - 3px)' : 'var(--space-5, 24px)');
+  const padEnd = dense ? '10px' : 'var(--space-3, 12px)';
+  const gap = dense ? '6px' : 'var(--space-3, 12px)';
   const action = actionLabel ? (open ? actionLabel.open : actionLabel.closed) : null;
-  const columns = [leading != null ? 'auto' : null, 'minmax(0, 1fr)', trailing != null ? 'auto' : null, action != null ? 'auto' : null, 'var(--space-4, 16px)']
+  const columns = [leading != null ? 'auto' : null, 'minmax(0, 1fr)', trailing != null ? 'auto' : null, action != null ? 'auto' : null, dense ? '12px' : 'var(--space-4, 16px)']
     .filter(Boolean).join(' ');
 
   /* `actions` sit beside the header button, never inside it (a button may not nest a button).
@@ -86,6 +98,25 @@ export function Disclosure({
   const hasActions = actions != null && actions !== false;
   const framedOpenRow = framed && open;
   const headRadius = framed ? (open ? 'var(--radius-md, 5px) var(--radius-md, 5px) 0 0' : 'var(--radius-md, 5px)') : undefined;
+  /* The dense band is always drawn: secondary ground between top and bottom hairlines. With
+     actions the band moves to the wrapper so it runs under them too. */
+  const band = dense ? {
+    borderTop: '1px solid var(--border-color, #dee2e6)',
+    borderBottom: '1px solid var(--border-color, #dee2e6)',
+    background: 'var(--surface-secondary, #f8f9fa)',
+  } : null;
+  const stick = sticky ? { position: 'sticky', top: 0, zIndex: 2 } : null;
+  /* A sticky header needs an opaque ground so the rows scrolling beneath it do not show
+     through; the translucent hover tint is then layered over that ground. */
+  const hoverTint = 'var(--tint-primary-hover, rgba(0,121,168,.05))';
+  const restGround = (framedOpenRow || dense) && !hasActions
+    ? 'var(--surface-secondary, #f8f9fa)'
+    : sticky && !hasActions ? 'var(--surface-card, #fff)' : null;
+  const hovering = hover && !disabled;
+  const layered = dense || sticky; /* earlier densities keep their plain tint on hover */
+  const headerGround = hovering
+    ? (restGround && layered ? 'linear-gradient(' + hoverTint + ', ' + hoverTint + '), ' + restGround : hoverTint)
+    : restGround || 'transparent';
 
   const toggle = () => {
     if (disabled) return;
@@ -110,16 +141,18 @@ export function Disclosure({
         minWidth: hasActions ? 0 : undefined,
         display: 'grid',
         gridTemplateColumns: columns,
-        gap: 'var(--space-3, 12px)',
+        gap,
         alignItems: 'center',
         minHeight: d.minHeight,
         boxSizing: 'border-box',
         margin: 0,
-        padding: d.padY + ' var(--space-3, 12px) ' + d.padY + ' ' + padStart,
+        padding: d.padY + ' ' + padEnd + ' ' + d.padY + ' ' + padStart,
         border: 0,
         borderBottom: framedOpenRow && !hasActions ? '1px solid var(--border-color, #dee2e6)' : 0,
         borderRadius: hasActions ? (framed ? (open ? 'var(--radius-md, 5px) 0 0 0' : 'var(--radius-md, 5px) 0 0 var(--radius-md, 5px)') : undefined) : headRadius,
-        background: hover && !disabled ? 'var(--tint-primary-hover, rgba(0,121,168,.05))' : framedOpenRow && !hasActions ? 'var(--surface-secondary, #f8f9fa)' : 'transparent',
+        background: headerGround,
+        ...(band && !hasActions ? { borderTop: band.borderTop, borderBottom: band.borderBottom } : null),
+        ...(stick && !hasActions ? stick : null),
         color: 'inherit',
         font: 'inherit',
         textAlign: 'left',
@@ -136,8 +169,9 @@ export function Disclosure({
             fontSize: d.title,
             fontWeight: 600,
             lineHeight: 'var(--line-height-snug, 1.375)',
-            color: disabled ? 'var(--text-secondary, #5a6268)' : 'var(--text-strong, #111827)',
+            color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #343a40)' : 'var(--text-strong, #111827)',
             textWrap: 'pretty',
+            ...(dense ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : null),
           }}
         >
           {title}
@@ -185,7 +219,7 @@ export function Disclosure({
       <i
         className={'bi ' + (open ? 'bi-chevron-down' : 'bi-chevron-right')}
         aria-hidden="true"
-        style={{ justifySelf: 'center', fontSize: 'var(--font-size-xs, 12px)', color: disabled ? 'var(--text-secondary, #5a6268)' : undefined }}
+        style={{ justifySelf: 'center', fontSize: 'var(--font-size-xs, 12px)', color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #343a40)' : undefined }}
       />
     </button>
   );
@@ -198,13 +232,15 @@ export function Disclosure({
         alignItems: 'stretch',
         borderBottom: framedOpenRow ? '1px solid var(--border-color, #dee2e6)' : undefined,
         borderRadius: headRadius,
-        background: framedOpenRow ? 'var(--surface-secondary, #f8f9fa)' : undefined,
+        background: framedOpenRow ? 'var(--surface-secondary, #f8f9fa)' : sticky ? 'var(--surface-card, #fff)' : undefined,
+        ...band,
+        ...stick,
       }}
     >
       {header}
       <div
         data-disclosure-actions=""
-        style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', padding: '0 var(--space-3, 12px) 0 var(--space-4, 16px)' }}
+        style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2, 8px)', padding: dense ? '0 10px 0 6px' : '0 var(--space-3, 12px) 0 var(--space-4, 16px)' }}
       >
         {actions}
       </div>
@@ -218,12 +254,14 @@ export function Disclosure({
       data-tone={tone || undefined}
       data-framed={framed ? '' : undefined}
       data-disabled={disabled ? '' : undefined}
+      data-density={dense ? 'dense' : undefined}
+      data-sticky={sticky ? '' : undefined}
       style={{
         ...(framed ? {
           border: '1px solid var(--border-color, #dee2e6)',
           borderRadius: 'var(--radius-md, 5px)',
           background: 'var(--surface-card, #fff)',
-        } : { borderBottom: divider ? '1px solid var(--list-divider, #e9ecef)' : undefined }),
+        } : { borderBottom: divider && !dense ? '1px solid var(--list-divider, #e9ecef)' : undefined }),
         ...(rail ? { borderLeft: '3px solid ' + rail } : {}),
         ...style,
       }}
@@ -236,7 +274,7 @@ export function Disclosure({
         aria-labelledby={region ? headerId : undefined}
         hidden={!open}
         data-disclosure-region=""
-        style={{ padding: framed ? 'var(--space-3, 12px)' : '0 var(--space-4, 16px) var(--space-4, 16px) ' + padStart }}
+        style={{ padding: framed ? 'var(--space-3, 12px)' : dense ? 0 : '0 var(--space-4, 16px) var(--space-4, 16px) ' + padStart }}
       >
         {open ? detail : null}
       </div>

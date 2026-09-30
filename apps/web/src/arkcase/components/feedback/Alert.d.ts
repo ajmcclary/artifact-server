@@ -43,8 +43,17 @@ export interface AlertProps {
    * the text in a narrow column. With a `title`, the row sits under the title.
    */
   action?: AlertAction | AlertAction[] | React.ReactNode;
-  /** Cross-axis alignment of the icon and content. `center` centres the icon on a single-line, titleless alert whose height comes from its button. @default "start" */
+  /** Cross-axis alignment of the icon and content. `center` centres the icon on a single-line, titleless alert whose height comes from its button. @default "start" (`"center"` with `layout="banner"`) */
   align?: 'start' | 'center';
+  /**
+   * `inline` is the rounded message inside content. `banner` is the full-bleed strip directly
+   * under a page or pane header: no radius, no top or side borders and no accent rule, a 1px
+   * bottom hairline in the tone's accent colour (`border-color` for `neutral`), 8px 16px padding
+   * at either density, the `title` run in bold before the body, and the icon, text and `action`
+   * on one row with the actions pushed to the end — still wrapping under the text in a narrow
+   * container. Tone, density and live-region behaviour are unchanged. @default "inline"
+   */
+  layout?: 'inline' | 'banner';
   /** Style overrides for the Alert root. */
   style?: React.CSSProperties;
 }

@@ -1,5 +1,5 @@
 {
-  "commit": "6d355f4904fe8e2a8b10438092afc1bc67fc4af7",
+  "commit": "72a51b8bea8384ee20b55d2b5117574a8e9ebef0",
   "entriesSha256": "56738e0f04056211f94dced26f2f1942731b8caa1bfd06e641dcf44dc09c8df5",
   "files": {
     "README.md": {
@@ -127,27 +127,27 @@
       "source": "arkcase/project/components/data-display/CountBadge.jsx"
     },
     "components/data-display/DiffLines.d.ts": {
-      "sha256": "8e913aa52b8022bd1b8652283bfa51e46d1eb4a1086693827e00b149db6c3987",
+      "sha256": "1bf3557884916623809deba4f51affb5996123b27eb9b3e6afba178461d9bcff",
       "source": "arkcase/project/components/data-display/DiffLines.d.ts"
     },
     "components/data-display/DiffLines.jsx": {
-      "sha256": "ad813a05f54eb66eb03abd10547b411dd30003256b1af528553e47ad13fee698",
+      "sha256": "4ead20143e68009bec3ea01283ed417b22afa89c3b10c95573cd56cae864bb38",
       "source": "arkcase/project/components/data-display/DiffLines.jsx"
     },
     "components/data-display/Disclosure.d.ts": {
-      "sha256": "cd32c40efb99cc5e9f5f1757ae8c35722daa4fbfc30a9e2f2a81ae3870bffaa3",
+      "sha256": "3bf57d6f268e4e3def884779fdb3e961f63d046f8a292deb71f07833c8597790",
       "source": "arkcase/project/components/data-display/Disclosure.d.ts"
     },
     "components/data-display/Disclosure.jsx": {
-      "sha256": "2dd6b5be8e43b9e3d6762aa431163c7234a2c12c4930cf9a3e867b66bd9a73b6",
+      "sha256": "31e0f838c175094372aa981213cff0a7100804e2c0f665fa49a4f0002c0f3fec",
       "source": "arkcase/project/components/data-display/Disclosure.jsx"
     },
     "components/data-display/Divider.d.ts": {
-      "sha256": "8b58cb09d0db57caafda7560274eb3c75f82645fe7af2d9232daaa5c3fbe751b",
+      "sha256": "0b0c625d9b00d1644bf5d291117ce531fe511944593fee81a157eae5d2eda91e",
       "source": "arkcase/project/components/data-display/Divider.d.ts"
     },
     "components/data-display/Divider.jsx": {
-      "sha256": "db65153e279be26a8bd735abde58b81ffed02cd755a41bb90452a6befe8df000",
+      "sha256": "96af123e9a9cdc3ee9af86686db5c30e0f851d9a25060653da45a3d7e93f4085",
       "source": "arkcase/project/components/data-display/Divider.jsx"
     },
     "components/data-display/Eyebrow.d.ts": {
@@ -207,11 +207,11 @@
       "source": "arkcase/project/components/data-display/Tag.jsx"
     },
     "components/feedback/Alert.d.ts": {
-      "sha256": "64666dbd0b0587a7bbba5efadd85e572a8ba05ff1731cd7a6742086df4ed8b46",
+      "sha256": "d74956571cee0714b7a2d0bae911af50cc2af25506f99634956cd2ec3aa0a9a7",
       "source": "arkcase/project/components/feedback/Alert.d.ts"
     },
     "components/feedback/Alert.jsx": {
-      "sha256": "56ff281d59a56b1ecf1d35ebf828c3a5ec2817a47ed0cd6799f7d33bc505a15e",
+      "sha256": "00734c080607d67d44af616db66162266f7d77a8649f36f098a702e27e8dea97",
       "source": "arkcase/project/components/feedback/Alert.jsx"
     },
     "components/feedback/ModeBanner.d.ts": {
@@ -291,7 +291,7 @@
       "source": "arkcase/project/components/forms/Input.d.ts"
     },
     "components/forms/Input.jsx": {
-      "sha256": "0e6dd94741ccc3ed4ee56ba63ca1fb6310ade79ec04f8fd2e0a42c9965a38062",
+      "sha256": "c976e445736e7f893f557de929e3117d6ea98097304b300e0a4a98bb28d8995d",
       "source": "arkcase/project/components/forms/Input.jsx"
     },
     "components/forms/Select.d.ts": {
@@ -311,11 +311,11 @@
       "source": "arkcase/project/components/forms/Switch.jsx"
     },
     "components/forms/Textarea.d.ts": {
-      "sha256": "166e1950906e7f8cd4c6a47ede9f9c9d2d178c4263f94d1277ec7579b3ef809a",
+      "sha256": "225485bc6fa44a79886da897ba17d5a445ff25452445a4d21e7ce8cb5e8e7654",
       "source": "arkcase/project/components/forms/Textarea.d.ts"
     },
     "components/forms/Textarea.jsx": {
-      "sha256": "8fbff360536a09c7633e417e25584fa2d3babae4e0de6b659f4ff625a14e9855",
+      "sha256": "1a18986833ee8d8babd479e20ec324e2b266746abf00d74ab37cbc68be9592fd",
       "source": "arkcase/project/components/forms/Textarea.jsx"
     },
     "components/navigation/LeftNav.d.ts": {
@@ -639,19 +639,19 @@
       "source": "arkcase/project/components/utilities/tones.jsx"
     },
     "index.ts": {
-      "sha256": "a9669e9479110b1f8a272ccf53cbcac9d90a98dffcd9fe3aedf502aac27f78f0",
+      "sha256": "7e7769220828622e6531e33ce6fb617bce9b4938dbb7e5ec9933b863f173752a",
       "source": null
     },
     "review-ui/page-model.js": {
-      "sha256": "f32001d0cb3f9d0c3f5c3d88188fc5f1607bc367313fa7babb219fc0c9ed7169",
+      "sha256": "4fd74b7b03e8dc24fede6b4f2cd466127c647f0634b135e8eec57a9d847e2da0",
       "source": "workspace/projects/arkcase-artifacts/page-model.js"
     },
     "review-ui/review-ui.d.ts": {
-      "sha256": "26a39c7a808094fbdf25a69056ffe9ea948c49d0ae4118836d2b237274612f3c",
+      "sha256": "49e9c901b47442a01dec8a800c2c487b7164da3834150779ed54b6058b6f56c9",
       "source": "workspace/projects/arkcase-artifacts/review-ui.d.ts"
     },
     "review-ui/review-ui.jsx": {
-      "sha256": "23a1999603586053178c00f41dd92d5e71adf24b0e5d38b6a162ab34776ac905",
+      "sha256": "b4464f295816fd30a97805ba3d01d1298976f005a7d29c4f2bab94b4776f920e",
       "source": "workspace/projects/arkcase-artifacts/review-ui.jsx"
     },
     "tokens/base.css": {
@@ -747,7 +747,7 @@
       "source": "arkcase/project/tokens/fonts/sourceserif4-OFL.txt"
     },
     "tokens/icons.css": {
-      "sha256": "db184e3227a1e7852b3d0ece9741cee29b72b43e12013b86d3caa2f04ec30478",
+      "sha256": "6d7709a287ec984d577285e69cc03e48c37c29fd55bc4c0a297ddcea8547069f",
       "source": "arkcase/project/tokens/icons.css"
     },
     "tokens/spacing.css": {
@@ -772,6 +772,7 @@
       "bi-arrow-repeat",
       "bi-arrow-up",
       "bi-arrows-fullscreen",
+      "bi-bounding-box",
       "bi-box-arrow-right",
       "bi-box-arrow-up-right",
       "bi-camera",
@@ -790,6 +791,7 @@
       "bi-clipboard",
       "bi-clock-history",
       "bi-collection",
+      "bi-columns-gap",
       "bi-dash-circle",
       "bi-download",
       "bi-envelope",
@@ -814,17 +816,22 @@
       "bi-funnel",
       "bi-git",
       "bi-github",
+      "bi-grid-1x2",
+      "bi-grid-3x3-gap",
       "bi-image",
       "bi-inbox",
       "bi-info-circle",
       "bi-info-circle-fill",
+      "bi-journal-text",
       "bi-key",
       "bi-keyboard",
       "bi-layers",
       "bi-layers-half",
       "bi-link-45deg",
       "bi-list",
+      "bi-list-ul",
       "bi-lock",
+      "bi-palette",
       "bi-pencil-square",
       "bi-people",
       "bi-person-dash",
@@ -846,6 +853,7 @@
       "bi-three-dots-vertical",
       "bi-trash",
       "bi-unlock",
+      "bi-window",
       "bi-x",
       "bi-x-circle",
       "bi-x-circle-fill",
