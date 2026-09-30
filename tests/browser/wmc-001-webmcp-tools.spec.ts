@@ -10,7 +10,13 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {inspectorTabButton, openInspectorTab, openReview, reviewHref} from "./review-helpers.js";
+import {
+  inspectorTabButton,
+  openInspectorTab,
+  openReview,
+  reviewHref,
+  waitForSettledPaint,
+} from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
 import {
   callTool,
@@ -251,6 +257,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect(page).toHaveURL(`${fixture.server.baseUrl}/review/settings/webmcp`);
         await expect(page.getByText(`${fixture.server.baseUrl}/mcp`, {exact: true})).toBeVisible();
         await expect(mcpNavLink).toHaveAttribute("aria-current", "page");
+        await waitForSettledPaint(page);
         const accessibility = await new AxeBuilder({page})
           .withTags(["wcag2a", "wcag2aa"])
           .analyze();

@@ -152,3 +152,11 @@ export async function openComparison(page: Page, tab: "Compare" | "Activity"): P
 export function toast(page: Page, text: string | RegExp): Locator {
   return page.locator("[data-ak-toast-region] [data-ak-toast-motion]").filter({hasText: text});
 }
+
+/**
+ * Wait until no CSS transition or animation is running. DS controls animate their ink
+ * and fills across state and theme changes; accessibility scans read the settled page.
+ */
+export async function waitForSettledPaint(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+}

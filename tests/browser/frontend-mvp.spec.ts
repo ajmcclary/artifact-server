@@ -31,6 +31,7 @@ import {
   openInspectorTab,
   openReview,
   openSettings,
+  waitForSettledPaint,
 } from "./review-helpers.js";
 import {listThreadsOverApi} from "./comment-api.js";
 
@@ -366,6 +367,7 @@ test.describe("Artifact Server frontend MVP", () => {
         fixture.page.getByRole("heading", {exact: true, name: "Review fixture"}),
       ).toBeVisible();
 
+      await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
         .withTags(["wcag2a", "wcag2aa"])
@@ -849,7 +851,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(share.getByText(published.body.links.version, {exact: true})).toBeVisible();
       await expect(share.getByText("Moves when a new version is published", {exact: true}))
         .toBeVisible();
-      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
+      await waitForSettledPaint(fixture.page);
       const shareAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
         .withTags(["wcag2a", "wcag2aa"])
@@ -1242,6 +1244,7 @@ test.describe("Artifact Server frontend MVP", () => {
       ).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: "Select all (3)"})).toBeVisible();
       await expect(fixture.page.getByText("Version 1", {exact: true})).toHaveCount(3);
+      await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
@@ -1406,6 +1409,7 @@ test.describe("Artifact Server frontend MVP", () => {
         fixture.page.getByLabel("Project lifecycle").getByRole("button", {name: "Archive project"}),
       ).toBeVisible();
       await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
+      await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
@@ -1444,6 +1448,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.reload();
       const listedRow = artifactsPanel.getByRole("row").filter({hasText: "Listed artifact"});
       await expect(listedRow.getByText("Account required", {exact: true})).toBeVisible();
+      await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();

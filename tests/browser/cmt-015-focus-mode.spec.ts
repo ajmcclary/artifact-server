@@ -9,6 +9,7 @@ import {
   artifactFrameSelectors,
   openReview,
   previewFrame,
+  waitForSettledPaint,
 } from "./review-helpers.js";
 
 async function publishFocusFixture(fixture: BrowserFixture) {
@@ -90,7 +91,7 @@ test.describe("Artifact review full screen", () => {
       await page.keyboard.press("]");
       await expect(focusComments.getByRole("article", {name: /^Comment by /u})
         .filter({hasText: "Keep the full-screen canvas uninterrupted."})).toBeVisible();
-      await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+      await waitForSettledPaint(page);
       const accessibility = await new AxeBuilder({page})
         .exclude(artifactFrameSelectors[0])
         .exclude(artifactFrameSelectors[1])
