@@ -17,8 +17,6 @@ import {
   Download04Icon,
   Edit02Icon,
   File01Icon,
-  Link01Icon,
-  RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {Dialog} from "@base-ui/react/dialog";
@@ -46,10 +44,13 @@ import {
   sourceDriftDescription,
   sourceFreshnessLabel,
 } from "@/lib/presentation";
+import type {ReviewAnchor} from "@/review-frame/protocol";
 import {ReviewShell} from "@/shell/review-shell";
 import {dismissInnermost} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {mediaTypeEssence} from "./workspace/page-inventory.ts";
+import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {SharePopover} from "./workspace/share-popover.tsx";
 import {catalogPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
@@ -69,7 +70,6 @@ import {
   ReviewCommentsInspector,
   type ReviewCommentsInspectorHandle,
 } from "./review-comments.tsx";
-import { ReviewPreview } from "./review-preview.tsx";
 import {
   parseReviewRoute,
   projectSettingsHref,
@@ -1056,6 +1056,47 @@ function ArtifactReview({
     return () => window.removeEventListener("keydown", revealFocusControls);
   }, [focusMode]);
 
+  const selectAnnotation = (threadId: string | null): void => {
+    comments.selectThread(threadId);
+    if (threadId === null) return;
+    setInspectorTab("comments");
+    if (focusMode) {
+      setFocusCommentsOpen(true);
+    } else {
+      setInspectorOpen(true);
+    }
+  };
+  const submitAnnotation = async (
+    body: string,
+    anchor: ReviewAnchor | null,
+    path: string,
+  ): Promise<boolean> => {
+    const saved = await comments.submit(body, anchor, path);
+    if (!saved && selectedArtifactId !== null && selectedVersionId !== null) {
+      // The in-frame composer discards its text on failure; keep
+      // it as this version's new-thread draft instead.
+      writeDraft({
+        artifactId: selectedArtifactId,
+        principalId: session.principal.id,
+        threadId: null,
+        versionId: selectedVersionId,
+      }, body);
+    }
+    if (saved) {
+      setInspectorTab("comments");
+      if (!focusMode) setInspectorOpen(true);
+    }
+    return saved;
+  };
+  const previousArtifact = selectedIndex <= 0 ? null : (): void => {
+    const previous = catalogItems[selectedIndex - 1];
+    if (previous !== undefined) selectArtifact(previous.artifact.id, previous.artifact.currentVersionId);
+  };
+  const nextArtifact = selectedIndex < 0 || selectedIndex >= catalogItems.length - 1 ? null : (): void => {
+    const next = catalogItems[selectedIndex + 1];
+    if (next !== undefined) selectArtifact(next.artifact.id, next.artifact.currentVersionId);
+  };
+
   return (
     <div
       className="as-app"
@@ -1299,125 +1340,35 @@ function ArtifactReview({
             />
           )}
 
-          <div className="as-preview-panel__body" data-preview-kind={previewKind}>
-            {detailError === null ? null : (
-              <div className="as-preview-error" role="alert">{detailError.message}</div>
-            )}
-            {selectedArtifactId === null ? (
-              <PreviewWelcome />
-            ) : detailLoading && details === null ? (
-              <PreviewWelcome description="Loading artifact metadata and immutable history." title="Reading artifact" />
-            ) : detailError !== null && selectedVersion === null ? (
-              <PreviewWelcome
-                description="The project, artifact, or version named by this Review URL is unavailable."
-                title="Review target unavailable"
-              />
-            ) : (
-              <ReviewPreview
-                accessSetting={details?.artifact.accessSetting ?? "account_required"}
-                annotateModeActive={htmlAnnotateModeActive}
-                annotations={comments.annotations}
-                artifactId={selectedArtifactId}
-                artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
-                isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
-                onOpenRawArtifact={() => void openRawArtifact()}
-                onAnnotateModeChange={setHtmlAnnotateModeActive}
-                onSelectAnnotation={(threadId) => {
-                  comments.selectThread(threadId);
-                  if (threadId !== null) {
-                    setInspectorTab("comments");
-                    if (focusMode) {
-                      setFocusCommentsOpen(true);
-                    } else {
-                      setInspectorOpen(true);
-                    }
-                  }
-                }}
-                onSubmitAnnotation={async (body, anchor, path) => {
-                  const saved = await comments.submit(body, anchor, path);
-                  if (!saved && selectedArtifactId !== null && selectedVersionId !== null) {
-                    // The in-frame composer discards its text on failure; keep
-                    // it as this version's new-thread draft instead.
-                    writeDraft({
-                      artifactId: selectedArtifactId,
-                      principalId: session.principal.id,
-                      threadId: null,
-                      versionId: selectedVersionId,
-                    }, body);
-                  }
-                  if (saved) {
-                    setInspectorTab("comments");
-                    if (!focusMode) {
-                      setInspectorOpen(true);
-                    }
-                  }
-                  return saved;
-                }}
-                onViewModeChange={setHtmlViewerMode}
-                onUnanchoredChange={comments.updateUnanchored}
-                opening={opening}
-                projectId={projectId}
-                readOnly={!canComment}
-                selectedThreadId={comments.selectedThreadId}
-                selectedPath={selectedPath}
-                version={selectedVersion}
-              />
-            )}
-          </div>
-
-          <footer className="as-app-footer as-preview-footer">
-            <div className="as-preview-footer__nav">
-              <IconButton
-                disabled={selectedIndex <= 0}
-                keyShortcuts="K ArrowUp"
-                label="Previous artifact"
-                onClick={() => {
-                  const previous = catalogItems[selectedIndex - 1];
-                  if (previous !== undefined) {
-                    selectArtifact(previous.artifact.id, previous.artifact.currentVersionId);
-                  }
-                }}
-                title="Previous artifact (K or ↑)"
-              >
-                <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.8} />
-              </IconButton>
-              <span className="as-tabular">
-                {selectedIndex < 0 ? "0" : selectedIndex + 1} / {catalogItems.length}
-              </span>
-              <IconButton
-                disabled={selectedIndex < 0 || selectedIndex >= catalogItems.length - 1}
-                keyShortcuts="J ArrowDown"
-                label="Next artifact"
-                onClick={() => {
-                  const next = catalogItems[selectedIndex + 1];
-                  if (next !== undefined) {
-                    selectArtifact(next.artifact.id, next.artifact.currentVersionId);
-                  }
-                }}
-                title="Next artifact (J or ↓)"
-              >
-                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.8} />
-              </IconButton>
-            </div>
-            <div className="as-preview-footer__status">
-              <span className="as-preview-footer__metadata">
-                {selectedVersion === null
-                  ? "No version selected"
-                  : `${selectedVersion.manifest.entries.length} file${selectedVersion.manifest.entries.length === 1 ? "" : "s"} · ${selectedVersion.version.routingMode.toUpperCase()}`}
-              </span>
-              <button
-                className="as-button as-preview-footer__reload"
-                disabled={comments.loading || selectedVersion === null}
-                onClick={() => void (
-                  commentsInspectorRef.current?.reload() ?? comments.reload()
-                )}
-                type="button"
-              >
-                <HugeiconsIcon aria-hidden="true" icon={RefreshIcon} strokeWidth={1.8} />
-                {comments.loading ? "Loading…" : "Reload"}
-              </button>
-            </div>
-          </footer>
+          <PreviewCanvas
+            accessSetting={details?.artifact.accessSetting ?? "account_required"}
+            annotateModeActive={htmlAnnotateModeActive}
+            annotations={comments.annotations}
+            artifactId={selectedArtifactId}
+            artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
+            chrome={focusMode ? "focus" : "workspace"}
+            commentsLoading={comments.loading}
+            detailError={detailError}
+            detailLoading={detailLoading}
+            hasDetails={details !== null}
+            isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
+            onAnnotateModeChange={setHtmlAnnotateModeActive}
+            onNextArtifact={nextArtifact}
+            onOpenRawArtifact={() => void openRawArtifact()}
+            onPreviousArtifact={previousArtifact}
+            onReload={() => void (commentsInspectorRef.current?.reload() ?? comments.reload())}
+            onSelectAnnotation={selectAnnotation}
+            onSubmitAnnotation={submitAnnotation}
+            onUnanchoredChange={comments.updateUnanchored}
+            onViewModeChange={setHtmlViewerMode}
+            opening={opening}
+            position={{index: selectedIndex, total: catalogItems.length}}
+            projectId={projectId}
+            readOnly={!canComment}
+            selectedPath={selectedPath}
+            selectedThreadId={comments.selectedThreadId}
+            version={selectedVersion}
+          />
         </section>
 
         {!focusMode && inspectorMotion.mounted ? (
@@ -2107,23 +2058,6 @@ function AccessPill({access}: {readonly access: ArtifactDetails["artifact"]["acc
   );
 }
 
-function PreviewWelcome({
-  description = "Choose an artifact from the catalog to inspect its current immutable version.",
-  title = "Select an artifact",
-}: {
-  readonly description?: string;
-  readonly title?: string;
-}) {
-  return (
-    <div className="as-preview-welcome">
-      <span aria-hidden="true"><HugeiconsIcon icon={Link01Icon} strokeWidth={1.4} /></span>
-      <p>Immutable artifact workspace</p>
-      <h2>{title}</h2>
-      <small>{description}</small>
-    </div>
-  );
-}
-
 function InlineState({
   description,
   title,
@@ -2159,13 +2093,9 @@ function reviewPreviewKind(
 ): "html" | "media" | "other" {
   if (version === null) return "other";
   const path = selectedPath ?? version.manifest.entryPath;
-  const mediaType = version.manifest.entries
-    .find((entry) => entry.path === path)
-    ?.mediaType.split(";", 1)[0]
-    ?.trim()
-    .toLowerCase();
+  const mediaType = mediaTypeEssence(version.manifest.entries.find((entry) => entry.path === path)?.mediaType ?? "");
   if (mediaType === "text/html") return "html";
-  if (mediaType?.startsWith("image/") || mediaType?.startsWith("video/")) {
+  if (mediaType.startsWith("image/") || mediaType.startsWith("video/")) {
     return "media";
   }
   return "other";

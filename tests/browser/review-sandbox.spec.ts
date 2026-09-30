@@ -6,7 +6,12 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
-import {isolatedReviewFrame, openReview} from "./review-helpers.js";
+import {
+  annotationFrame,
+  interactiveFrame,
+  isolatedReviewFrame,
+  openReview,
+} from "./review-helpers.js";
 
 const hostileArtifact = `<!doctype html>
 <html lang="en">
@@ -135,29 +140,31 @@ test.describe("Review sandbox isolation", () => {
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
-      const preview = fixture.page.locator(".as-html-preview");
-      await expect(preview).toHaveAttribute("data-mode", "interactive");
+      const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
+      const modes = preview.getByRole("group", {name: "HTML preview mode"});
+      await expect(modes.getByRole("button", {exact: true, name: "Interactive preview"}))
+        .toHaveAttribute("aria-pressed", "true");
       await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
         .getByRole("button", {name: /Annotate mode:|Interact mode:/u}))
         .toHaveCount(0);
-      const interactiveFrame = preview.locator("iframe");
-      await expect(interactiveFrame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
-      await expect(interactiveFrame).toHaveAttribute(
+      const interactiveElement = preview.locator('iframe[title^="Interactive preview: "]');
+      await expect(interactiveElement).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
+      await expect(interactiveElement).toHaveAttribute(
         "src",
         new URL("index.html", published.body.links.version).toString(),
       );
-      await expect(preview.frameLocator("iframe").locator("#interactive-result"))
+      await expect(interactiveFrame(fixture.page).locator("#interactive-result"))
         .toHaveText("true:7:blocked");
 
-      await preview.getByRole("button", {name: "Annotate"}).click();
-      await expect(preview).toHaveAttribute("data-mode", "annotate");
+      await modes.getByRole("button", {exact: true, name: "Annotate"}).click();
+      await expect(modes.getByRole("button", {exact: true, name: "Annotate"}))
+        .toHaveAttribute("aria-pressed", "true");
       await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
         .getByRole("button", {name: /Annotate mode:/u}))
         .toBeVisible();
-      const annotationFrame = preview.frameLocator("iframe");
-      await expect(annotationFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
-      await preview.getByRole("button", {name: "Interactive preview"}).click();
-      await expect(preview.frameLocator("iframe").locator("#interactive-result"))
+      await expect(annotationFrame(fixture.page).locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
+      await modes.getByRole("button", {exact: true, name: "Interactive preview"}).click();
+      await expect(interactiveFrame(fixture.page).locator("#interactive-result"))
         .toHaveText("true:7:blocked");
     } finally {
       await stopBrowserFixture(fixture);
@@ -188,16 +195,18 @@ test.describe("Review sandbox isolation", () => {
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
-      const preview = fixture.page.locator(".as-html-preview");
-      await expect(preview).toHaveAttribute("data-mode", "interactive");
+      const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
+      await expect(preview.getByRole("group", {name: "HTML preview mode"})
+        .getByRole("button", {exact: true, name: "Interactive preview"}))
+        .toHaveAttribute("aria-pressed", "true");
       await expect(preview).toContainText("Preview changes may be lost");
-      await expect(preview.locator("iframe")).toHaveAttribute(
+      await expect(preview.locator('iframe[title^="Interactive preview: "]')).toHaveAttribute(
         "src",
         /^http:\/\/review-[a-z0-9_-]+\.localhost:\d+\/nested\/index\.html$/u,
       );
-      await expect(preview.frameLocator("iframe").locator("#private-result"))
+      await expect(interactiveFrame(fixture.page).locator("#private-result"))
         .toHaveText("true:9:blocked");
-      await expect(preview.frameLocator("iframe").locator("#app-result"))
+      await expect(interactiveFrame(fixture.page).locator("#app-result"))
         .toHaveText("blocked");
       expect(await fixture.page.request.get(published.body.links.version).then((response) => response.status()))
         .not.toBe(200);

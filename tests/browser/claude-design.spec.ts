@@ -11,6 +11,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {publishPath} from "../../src/client/file-publication-client.js";
 import {writeClaudeDesignFixture, writeDesignCardFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
+import {interactiveFrame} from "./review-helpers.js";
 
 for (const annotated of [false, true]) {
   test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search and switch templates in Review`, async ({browser}) => {
@@ -28,7 +29,7 @@ for (const annotated of [false, true]) {
     }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
     await localLogin(fixture);
     await fixture.page.goto(published.links.review.toString());
-    const catalog = fixture.page.locator(".as-html-preview").frameLocator("iframe");
+    const catalog = interactiveFrame(fixture.page);
     await expect(catalog.getByRole("heading", {name: annotated ? path.basename(directory) : "Example_System"})).toBeVisible();
     const card = catalog.frameLocator('iframe[name="design-preview"]');
     await expect(card.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");

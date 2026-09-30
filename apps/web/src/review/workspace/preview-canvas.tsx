@@ -1,15 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLinkIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-
 import {
-  api,
-  type ArtifactVersion,
-} from "@/api/client";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+
+import {api, type AccessSetting, type ArtifactVersion} from "@/api/client";
 import {maximumReviewHtmlBytes} from "@/api/bounded-text";
-import {onThemeChange} from "@/arkcase";
+import {
+  Alert,
+  Button,
+  FieldGrid,
+  IconButton,
+  onThemeChange,
+  PreviewFrame,
+  previewPresets,
+  SegmentedControl,
+  SurfaceState,
+  Toolbar,
+  ToolbarSpacer,
+  useElementSize,
+} from "@/arkcase";
 import {formatBytes} from "@/lib/presentation";
-import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 import {
   frameMessageSchema,
   reviewProtocolVersion,
@@ -17,6 +30,10 @@ import {
   type ReviewAnchor,
   type ReviewAnnotation,
 } from "@/review-frame/protocol";
+import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
+
+import {mediaTypeEssence} from "./page-inventory.ts";
+import type {HtmlViewerMode} from "./workspace-types.ts";
 
 interface PreviewDocument {
   readonly baseHref: string;
@@ -39,8 +56,251 @@ interface PreviewActions {
   readonly opening: boolean;
 }
 
-/** Render one exact immutable manifest entry in the Artifact Server preview surface. */
-export function ReviewPreview({
+/** Everything the canvas draws; the review owns every value. */
+export interface PreviewCanvasProps {
+  readonly accessSetting: AccessSetting;
+  readonly annotateModeActive: boolean;
+  readonly annotations: readonly ReviewAnnotation[];
+  readonly artifactId: string | null;
+  readonly artifactName: string;
+  /** `focus` fills the full-screen layer: no width presets, no controls, no frame border. */
+  readonly chrome: "focus" | "workspace";
+  readonly commentsLoading: boolean;
+  readonly detailError: Error | null;
+  readonly detailLoading: boolean;
+  readonly hasDetails: boolean;
+  readonly isCurrentVersion: boolean;
+  readonly onAnnotateModeChange: (active: boolean) => void;
+  readonly onNextArtifact: (() => void) | null;
+  readonly onOpenRawArtifact: () => void;
+  readonly onPreviousArtifact: (() => void) | null;
+  readonly onReload: () => void;
+  readonly onSelectAnnotation: (threadId: string | null) => void;
+  readonly onSubmitAnnotation: (body: string, anchor: ReviewAnchor | null, path: string) => Promise<boolean>;
+  readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onViewModeChange: (mode: HtmlViewerMode) => void;
+  readonly opening: boolean;
+  /** The selected artifact's place in the loaded catalog (index -1 when absent). */
+  readonly position: {readonly index: number; readonly total: number};
+  readonly projectId: string;
+  readonly readOnly: boolean;
+  readonly selectedPath: string | null;
+  readonly selectedThreadId: string | null;
+  readonly version: ArtifactVersion | null;
+}
+
+const columnStyle = {
+  display: "flex",
+  flex: "1 1 0",
+  flexDirection: "column",
+  gap: 8,
+  minHeight: 0,
+  minWidth: 0,
+  padding: 12,
+} satisfies CSSProperties;
+const focusColumnStyle = {display: "flex", flex: "1 1 0", flexDirection: "column", minHeight: 0, minWidth: 0} satisfies CSSProperties;
+const frameStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
+const focusFrameStyle = {...frameStyle, border: 0, borderRadius: 0, boxShadow: "none"} satisfies CSSProperties;
+const frameBodyStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
+const controlsStyle = {flex: "none"} satisfies CSSProperties;
+const positionStyle = {color: "var(--text-data)", fontFamily: "var(--font-data)", fontSize: 12} satisfies CSSProperties;
+const metaStyle = {color: "var(--text-secondary)", fontSize: 12, whiteSpace: "nowrap"} satisfies CSSProperties;
+const htmlPreviewStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
+const modeBarStyle = {
+  alignItems: "center",
+  background: "var(--surface-secondary)",
+  borderBottom: "1px solid var(--border-color)",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+  padding: "6px 10px",
+} satisfies CSSProperties;
+const modeNoteStyle = {color: "var(--text-secondary)", fontSize: 12} satisfies CSSProperties;
+const frameElementStyle = {
+  background: "var(--surface-card)",
+  border: 0,
+  flex: "1 1 auto",
+  minHeight: 0,
+  width: "100%",
+} satisfies CSSProperties;
+const stateStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"} satisfies CSSProperties;
+const stateActionsStyle = {display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 12} satisfies CSSProperties;
+const mediaStageStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "1 1 auto",
+  justifyContent: "center",
+  minHeight: 0,
+  padding: 16,
+  position: "relative",
+} satisfies CSSProperties;
+const mediaStyle = {maxHeight: "100%", maxWidth: "100%", objectFit: "contain"} satisfies CSSProperties;
+const mediaLoadingStyle = {inset: 0, margin: "auto", position: "absolute"} satisfies CSSProperties;
+
+/** The canvas: one PreviewFrame at the chosen width around the exact manifest entry. */
+export function PreviewCanvas({
+  accessSetting,
+  annotateModeActive,
+  annotations,
+  artifactId,
+  artifactName,
+  chrome,
+  commentsLoading,
+  detailError,
+  detailLoading,
+  hasDetails,
+  isCurrentVersion,
+  onAnnotateModeChange,
+  onNextArtifact,
+  onOpenRawArtifact,
+  onPreviousArtifact,
+  onReload,
+  onSelectAnnotation,
+  onSubmitAnnotation,
+  onUnanchoredChange,
+  onViewModeChange,
+  opening,
+  position,
+  projectId,
+  readOnly,
+  selectedPath,
+  selectedThreadId,
+  version,
+}: PreviewCanvasProps) {
+  const columnRef = useRef<HTMLDivElement | null>(null);
+  const {width: columnWidth} = useElementSize(columnRef);
+  const presets = previewPresets(Math.max(0, columnWidth - 24));
+  const [presetKey, setPresetKey] = useState("Fit");
+  const preset = presets.find((candidate) => candidate.key === presetKey) ?? presets[0];
+  const focus = chrome === "focus";
+  const path = version === null ? null : selectedPath ?? version.manifest.entryPath;
+  const entries = version?.manifest.entries.length ?? 0;
+  return (
+    <div ref={columnRef} style={focus ? focusColumnStyle : columnStyle}>
+      {detailError === null || focus ? null : <Alert variant="danger">{detailError.message}</Alert>}
+      <PreviewFrame
+        bodyStyle={frameBodyStyle}
+        label="Artifact preview"
+        meta={version === null ? null : `v${version.version.number}`}
+        style={focus ? focusFrameStyle : frameStyle}
+        tabIndex={-1}
+        title={path ?? artifactName}
+        width={focus ? null : preset?.px ?? null}
+      >
+        {artifactId === null ? (
+          <div style={stateStyle}>
+            <SurfaceState
+              count={0}
+              emptyBody="Choose an artifact from the catalog to inspect its current immutable version."
+              emptyIcon="bi-collection"
+              emptyTitle="Select an artifact"
+              noun="artifacts"
+              phase="ready"
+              titleLevel={2}
+            />
+          </div>
+        ) : detailLoading && !hasDetails ? (
+          <div style={stateStyle}>
+            <SurfaceState
+              loadingBody="Loading artifact metadata and immutable history."
+              loadingStyle="spinner"
+              loadingTitle="Reading artifact"
+              noun="artifacts"
+              phase="loading"
+            />
+          </div>
+        ) : detailError !== null && version === null ? (
+          <div style={stateStyle}>
+            <SurfaceState
+              count={0}
+              emptyBody="The project, artifact, or version named by this Review URL is unavailable."
+              emptyIcon="bi-question-octagon"
+              emptyTitle="Review target unavailable"
+              noun="artifacts"
+              phase="ready"
+              titleLevel={2}
+            />
+          </div>
+        ) : (
+          <ReviewPreview
+            accessSetting={accessSetting}
+            annotateModeActive={annotateModeActive}
+            annotations={annotations}
+            artifactId={artifactId}
+            artifactName={artifactName}
+            isCurrentVersion={isCurrentVersion}
+            onAnnotateModeChange={onAnnotateModeChange}
+            onOpenRawArtifact={onOpenRawArtifact}
+            onSelectAnnotation={onSelectAnnotation}
+            onSubmitAnnotation={onSubmitAnnotation}
+            onUnanchoredChange={onUnanchoredChange}
+            onViewModeChange={onViewModeChange}
+            opening={opening}
+            projectId={projectId}
+            readOnly={readOnly}
+            selectedPath={selectedPath}
+            selectedThreadId={selectedThreadId}
+            version={version}
+          />
+        )}
+      </PreviewFrame>
+      {focus ? null : (
+        <Toolbar gap={6} label="Preview controls" style={controlsStyle}>
+          <SegmentedControl
+            label="Preview width"
+            mode="toggle"
+            onChange={setPresetKey}
+            options={presets.map((candidate) => ({
+              ariaLabel: candidate.px === null ? "Fit the column" : `${candidate.px} pixels wide`,
+              id: candidate.key,
+              label: candidate.key,
+            }))}
+            size="sm"
+            value={preset?.key ?? "Fit"}
+            variant="pill"
+          />
+          <ToolbarSpacer />
+          <IconButton
+            ariaLabel="Previous artifact"
+            disabled={onPreviousArtifact === null}
+            icon="bi-chevron-left"
+            keyshortcuts="K ArrowUp"
+            onClick={() => onPreviousArtifact?.()}
+            size="sm"
+            title="Previous artifact (K or ↑)"
+          />
+          <span style={positionStyle}>{position.index < 0 ? 0 : position.index + 1} / {position.total}</span>
+          <IconButton
+            ariaLabel="Next artifact"
+            disabled={onNextArtifact === null}
+            icon="bi-chevron-right"
+            keyshortcuts="J ArrowDown"
+            onClick={() => onNextArtifact?.()}
+            size="sm"
+            title="Next artifact (J or ↓)"
+          />
+          <span style={metaStyle}>
+            {version === null
+              ? "No version selected"
+              : `${entries} file${entries === 1 ? "" : "s"} · ${version.version.routingMode.toUpperCase()}`}
+          </span>
+          <Button
+            disabled={commentsLoading || version === null}
+            icon="bi-arrow-clockwise"
+            onClick={onReload}
+            outline
+            size="sm"
+            variant="secondary"
+          >
+            {commentsLoading ? "Loading…" : "Reload"}
+          </Button>
+        </Toolbar>
+      )}
+    </div>
+  );
+}
+
+function ReviewPreview({
   accessSetting,
   annotateModeActive,
   annotations,
@@ -208,6 +468,7 @@ export function ReviewPreview({
     />
   );
 }
+
 
 function HtmlPreview({
   accessSetting,
@@ -446,38 +707,46 @@ function HtmlPreview({
       />
     );
   }
+  const modeNote = mode === "interactive"
+    ? previewDocument?.temporarySession === true
+      ? "Preview changes may be lost. Open raw artifact to keep work."
+      : previewDocument?.prefersInteractive === true
+        ? "Annotate may not render this page's external scripts."
+        : "Use Annotate to place comments on the page."
+    : previewDocument?.prefersInteractive === true
+      ? "This page's external scripts are blocked here. Switch to Interactive preview if blank."
+      : null;
   return (
-    <div className="as-html-preview" data-mode={mode}>
-      <div aria-label="HTML preview mode" className="as-html-preview__toolbar" role="group">
-        <button aria-pressed={mode === "interactive"} onClick={() => setChosenMode("interactive")} type="button">
-          Interactive preview
-        </button>
-        <button aria-pressed={mode === "annotate"} onClick={() => setChosenMode("annotate")} type="button">
-          Annotate
-        </button>
-        {mode === "interactive" ? (
-          <span>{previewDocument?.temporarySession === true
-            ? "Preview changes may be lost. Open raw artifact to keep work."
-            : previewDocument?.prefersInteractive === true
-              ? "Annotate may not render this page's external scripts."
-              : "Use Annotate to place comments on the page."}</span>
-        ) : previewDocument?.prefersInteractive === true ? (
-          <span>This page's external scripts are blocked here. Switch to Interactive preview if blank.</span>
-        ) : null}
+    <div style={htmlPreviewStyle}>
+      <div style={modeBarStyle}>
+        <SegmentedControl
+          label="HTML preview mode"
+          mode="toggle"
+          onChange={(id) => {
+            if (id === "annotate" || id === "interactive") setChosenMode(id);
+          }}
+          options={[
+            {id: "interactive", label: "Interactive preview"},
+            {id: "annotate", label: "Annotate"},
+          ]}
+          size="sm"
+          value={mode}
+        />
+        {modeNote === null ? null : <span style={modeNoteStyle}>{modeNote}</span>}
       </div>
       {mode === "interactive" && previewDocument !== null ? (
         <iframe
-          className="as-artifact-frame"
           referrerPolicy="no-referrer"
           sandbox="allow-scripts allow-same-origin"
           src={previewDocument.interactiveUrl}
+          style={frameElementStyle}
           title={`Interactive preview: ${entry.path}`}
         />
       ) : (
         <iframe
-          className="as-artifact-frame"
           ref={frameRef}
           src="/review-frame"
+          style={frameElementStyle}
           title={`${version.version.artifactId} version ${version.version.number}`}
         />
       )}
@@ -593,7 +862,7 @@ function NativeMediaPreview({
   }
   const mediaSource = `${source}#preview-${retry}`;
   return (
-    <div className="as-media-preview" data-kind={kind} data-status={status}>
+    <div style={mediaStageStyle}>
       {kind === "image" ? (
         <img
           alt={accessibleName}
@@ -601,6 +870,7 @@ function NativeMediaPreview({
           onError={handleMediaError}
           onLoad={() => setStatus("ready")}
           src={mediaSource}
+          style={mediaStyle}
         />
       ) : (
         <video
@@ -613,32 +883,26 @@ function NativeMediaPreview({
           preload="metadata"
           ref={videoRef}
           src={mediaSource}
+          style={mediaStyle}
         />
       )}
       {status === "loading" ? (
-        <div className="as-media-preview__loading" role="status">
-          <span aria-hidden="true" className="as-preview-state__mark" />
-          <strong>Loading preview</strong>
-          <small>{entry.path}</small>
+        <div style={mediaLoadingStyle}>
+          <SurfaceState
+            density="inline"
+            loadingBody={entry.path}
+            loadingStyle="spinner"
+            loadingTitle="Loading preview"
+            noun="previews"
+            phase="loading"
+          />
         </div>
       ) : null}
     </div>
   );
 }
 
-function mediaTypeEssence(mediaType: string): string {
-  return mediaType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-}
-
-function TerminalPreviewState({
-  actions,
-  description,
-  mediaType,
-  onRetry,
-  path,
-  size,
-  title,
-}: {
+interface TerminalPreviewStateProps {
   readonly actions: PreviewActions;
   readonly description: string;
   readonly mediaType: string;
@@ -646,52 +910,53 @@ function TerminalPreviewState({
   readonly path: string;
   readonly size: number | null;
   readonly title: string;
-}) {
+}
+
+/** A preview that cannot render: what it is, and the ways out that still work. */
+function TerminalPreviewState({actions, description, mediaType, onRetry, path, size, title}: TerminalPreviewStateProps) {
+  const fields = [
+    {label: "Path", mono: true, value: path},
+    {label: "Type", mono: true, value: mediaType},
+    ...(size === null ? [] : [{label: "Size", value: formatBytes(size)}]),
+  ];
   return (
-    <div className="as-preview-state as-preview-state--terminal" data-tone="error" role="alert">
-      <span aria-hidden="true" className="as-preview-state__mark" />
-      <h3>{title}</h3>
-      <p>{description}</p>
-      <dl className="as-preview-state__details">
-        <div><dt>Path</dt><dd><code>{path}</code></dd></div>
-        <div><dt>Type</dt><dd><code>{mediaType}</code></dd></div>
-        {size === null ? null : (
-          <div><dt>Size</dt><dd>{formatBytes(size)}</dd></div>
-        )}
-      </dl>
-      <div className="as-preview-state__actions">
+    <div role="alert" style={stateStyle}>
+      <SurfaceState
+        count={0}
+        emptyBody={description}
+        emptyIcon="bi-exclamation-octagon"
+        emptyTitle={title}
+        noun="previews"
+        phase="ready"
+        titleLevel={3}
+      />
+      <FieldGrid columns={1} fields={fields} layout="inline" />
+      <div style={stateActionsStyle}>
         {onRetry === undefined ? null : (
-          <button className="as-button" onClick={onRetry} type="button">Retry preview</button>
+          <Button onClick={onRetry} outline size="sm" variant="secondary">Retry preview</Button>
         )}
-        <button
-          className="as-button as-button--primary"
-          disabled={actions.opening}
-          onClick={actions.onOpenRawArtifact}
-          type="button"
-        >
-          <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
+        <Button disabled={actions.opening} icon="bi-box-arrow-up-right" onClick={actions.onOpenRawArtifact} size="sm">
           {actions.opening ? "Opening…" : "Open raw artifact"}
-        </button>
+        </Button>
         {actions.downloadUrl === null ? null : (
-          <a className="as-button" download href={actions.downloadUrl}>Download file</a>
+          <Button download href={actions.downloadUrl} icon="bi-download" outline size="sm" variant="secondary">
+            Download file
+          </Button>
         )}
       </div>
     </div>
   );
 }
 
-function PreviewState({
-  description,
-  title,
-}: {
+interface PreviewStateProps {
   readonly description: string;
   readonly title: string;
-}) {
+}
+
+function PreviewState({description, title}: PreviewStateProps) {
   return (
-    <div className="as-preview-state" role="status">
-      <span aria-hidden="true" className="as-preview-state__mark" />
-      <h3>{title}</h3>
-      <p>{description}</p>
+    <div style={stateStyle}>
+      <SurfaceState loadingBody={description} loadingStyle="spinner" loadingTitle={title} noun="previews" phase="loading" />
     </div>
   );
 }

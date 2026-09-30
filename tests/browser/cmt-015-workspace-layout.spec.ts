@@ -214,4 +214,42 @@ test.describe("Artifact review workspace layout", () => {
       await stopBrowserFixture(fixture);
     }
   });
+  test("CMT-015-B CMT-015-F: the canvas offers only the preview widths that fit its column", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><title>Preset fixture</title><main><h1>Preset fixture content</h1></main></html>",
+        idempotencyKey: "cmt-015-preset-fixture",
+        name: "Preset fixture",
+      });
+      await localLogin(fixture);
+      await openReview(fixture, {
+        artifactId: published.body.artifact.id,
+        versionId: published.body.version.id,
+      });
+      const page = fixture.page;
+      const widths = page.getByRole("toolbar", {name: "Preview controls"})
+        .getByRole("group", {name: "Preview width"});
+      const region = page.getByRole("region", {name: "Artifact preview"});
+      await expect(widths.getByRole("button", {name: "Fit the column"})).toHaveAttribute("aria-pressed", "true");
+      await expect(region).toHaveAttribute("data-preview-frame", "fit");
+      await expect(widths.getByRole("button", {name: "1440 pixels wide"})).toHaveCount(0);
+
+      await widths.getByRole("button", {name: "390 pixels wide"}).click();
+      await expect(region).toHaveAttribute("data-preview-frame", "390");
+      await expect.poll(async () => Math.round((await region.boundingBox())?.width ?? 0)).toBe(390);
+      await expect(previewFrame(page).getByRole("heading", {name: "Preset fixture content"})).toBeVisible();
+
+      // A wide screen with both panes put away has room for the desktop preset.
+      await page.setViewportSize({height: 1000, width: 1920});
+      await page.getByRole("button", {name: "Close inspector"}).click();
+      await page.getByRole("complementary", {name: "Artifact catalog"})
+        .getByRole("button", {name: "Collapse artifact catalog"}).click();
+      await widths.getByRole("button", {name: "1440 pixels wide"}).click();
+      await expect(region).toHaveAttribute("data-preview-frame", "1440");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
 });

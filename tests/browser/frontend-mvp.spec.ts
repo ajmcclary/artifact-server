@@ -24,7 +24,13 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
-import {isolatedReviewFrame, openInspectorTab, openReview, openSettings} from "./review-helpers.js";
+import {
+  artifactFrameSelectors,
+  isolatedReviewFrame,
+  openInspectorTab,
+  openReview,
+  openSettings,
+} from "./review-helpers.js";
 import {listThreadsOverApi} from "./comment-api.js";
 
 const reviewImagePaths = [
@@ -164,7 +170,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByText(
         "Click any element in the HTML preview to place a comment.",
       )).toHaveCount(0);
-      await expect(fixture.page.locator(".as-preview-footer").getByRole("button", {
+      await expect(fixture.page.getByRole("toolbar", {name: "Preview controls"}).getByRole("button", {
         name: "Reload",
       })).toBeVisible();
       await expect(fixture.page.getByRole("button", {
@@ -246,7 +252,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await searchArtifacts.fill("");
       await expect(fixture.page.getByRole("button", {name: /Quiet fixture/u})).toBeVisible();
 
-      await fixture.page.locator(".as-preview-panel").focus();
+      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("k");
       await expect(fixture.page.getByRole("heading", {exact: true, name: "Quiet fixture"}))
         .toBeVisible();
@@ -272,7 +278,7 @@ test.describe("Artifact Server frontend MVP", () => {
         name: "Collapse artifact catalog",
       });
       await expect(collapseCatalog).toHaveAttribute("aria-keyshortcuts", "[");
-      await fixture.page.locator(".as-preview-panel").focus();
+      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("[");
       await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
       const openCatalog = fixture.page.getByRole("button", {name: "Open artifact catalog"});
@@ -319,7 +325,7 @@ test.describe("Artifact Server frontend MVP", () => {
 
       const fullScreen = fixture.page.getByRole("button", {name: "Full screen"});
       await expect(fullScreen).toHaveAttribute("aria-keyshortcuts", "F");
-      await fixture.page.locator(".as-preview-panel").focus();
+      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("f");
       await expect(fixture.page.getByRole("button", {name: "Exit full screen"})).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: "Annotate mode", exact: true}))
@@ -339,7 +345,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await focusComposer.fill("Keep the full-screen canvas uninterrupted.");
       await reviewFrame.getByRole("button", {name: "Save"}).click();
       await expect(focusComments).toBeHidden();
-      await fixture.page.locator(".as-preview-panel").focus();
+      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
       await fixture.page.keyboard.press("]");
       await expect(focusComments).toBeVisible();
       await expect(focusComments.getByRole("article").filter({
@@ -349,7 +355,7 @@ test.describe("Artifact Server frontend MVP", () => {
         hasText: "Keep the full-screen canvas uninterrupted.",
       })).toBeVisible();
       const focusAccessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(".as-artifact-frame")
+        .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(focusAccessibility.violations).toEqual([]);
@@ -377,7 +383,7 @@ test.describe("Artifact Server frontend MVP", () => {
         .toHaveAttribute("data-html-annotate-mode", "false");
       expect(await fixture.page.evaluate(() => ({x: window.scrollX, y: window.scrollY})))
         .toEqual({x: 0, y: 0});
-      const collapsedCanvas = await fixture.page.locator(".as-preview-panel__body")
+      const collapsedCanvas = await fixture.page.getByRole("region", {name: "Artifact preview"})
         .boundingBox();
       expect(collapsedCanvas).not.toBeNull();
       expect(collapsedCanvas?.x).toBe(0);
@@ -397,11 +403,11 @@ test.describe("Artifact Server frontend MVP", () => {
         .toBeHidden();
       await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}))
         .toBeHidden();
-      const focusedCanvas = await fixture.page.locator(".as-preview-panel__body")
+      const focusedCanvas = await fixture.page.getByRole("region", {name: "Artifact preview"})
         .boundingBox();
       expect(focusedCanvas).not.toBeNull();
       expect(focusedCanvas?.height).toBe(fixture.page.viewportSize()?.height);
-      expect(await fixture.page.locator(".as-preview-panel__body")
+      expect(await fixture.page.getByRole("region", {name: "Artifact preview"})
         .evaluate((node) => getComputedStyle(node).backgroundImage)).toBe("none");
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
@@ -415,7 +421,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: "Full screen"})).toBeVisible();
 
       await openInspectorTab(fixture.page, "Files");
-      await expect(fixture.page.getByText("index.html", {exact: true})).toBeVisible();
+      // The canvas title bar names the path too; the file list lives in the inspector.
+      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"})
+        .getByText("index.html", {exact: true})).toBeVisible();
       await openInspectorTab(fixture.page, "Versions");
       await expect(fixture.page.getByRole("button", {name: /Version 2/u}))
         .toHaveAttribute("aria-current", "true");
@@ -460,7 +468,7 @@ test.describe("Artifact Server frontend MVP", () => {
       ).toBeVisible();
 
       const accessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(".as-artifact-frame")
+        .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(accessibility.violations).toEqual([]);
@@ -683,7 +691,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Hide viewer controls"}).click();
       await expect(focusViewerDock).toHaveAttribute("data-hover-armed", "false");
       await expect(restoreFocusViewer).toHaveCSS("opacity", "0");
-      await expect.poll(() => fixture.page.locator(".as-preview-panel")
+      await expect.poll(() => fixture.page.getByRole("region", {name: "Artifact preview"})
         .evaluate((node) => node.scrollLeft)).toBe(0);
       await fixture.page.mouse.move(100, 160);
       await expect(focusViewerDock).toHaveAttribute("data-hover-armed", "true");
@@ -978,7 +986,7 @@ test.describe("Artifact Server frontend MVP", () => {
         .toBeVisible();
       await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
       const shareAccessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(".as-artifact-frame")
+        .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(shareAccessibility.violations).toEqual([]);
@@ -1131,7 +1139,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("heading", {
         name: "Image preview unavailable",
       })).toBeVisible();
-      const brokenFallback = fixture.page.locator(".as-preview-state--terminal");
+      const brokenFallback = fixture.page.getByRole("region", {name: "Artifact preview"}).getByRole("alert");
       await expect(brokenFallback.getByText("media/broken.png", {exact: true}))
         .toBeVisible();
       await expect(brokenFallback.getByText("image/png", {exact: true})).toBeVisible();
@@ -1143,13 +1151,13 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("heading", {
         name: "Preview not supported",
       })).toBeVisible();
-      await expect(fixture.page.locator(".as-preview-state--terminal")
+      await expect(fixture.page.getByRole("region", {name: "Artifact preview"}).getByRole("alert")
         .getByText("application/zip", {exact: true})).toBeVisible();
 
       await openReview(fixture, {artifactId: media.artifactId, path: "missing/not-in-manifest.png", projectId: media.projectId, versionId: media.versionId});
       await expect(fixture.page.getByRole("heading", {name: "File not found"}))
         .toBeVisible();
-      await expect(fixture.page.getByText("missing/not-in-manifest.png", {exact: true}))
+      await expect(fixture.page.getByRole("region", {name: "Artifact preview"}).getByRole("alert").getByText("missing/not-in-manifest.png", {exact: true}))
         .toBeVisible();
       await expect(fixture.page.getByText("Loading preview", {exact: true}))
         .toHaveCount(0);

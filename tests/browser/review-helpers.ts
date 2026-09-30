@@ -38,17 +38,28 @@ export async function openReview(fixture: BrowserFixture, target: ReviewTarget):
 
 /** The isolated review-frame document that hosts the artifact and its annotation layer. */
 export function isolatedReviewFrame(page: Page): FrameLocator {
-  return page.frameLocator(".as-artifact-frame");
+  return annotationFrame(page);
 }
 
-/** The `/review-frame` document itself: the annotation viewer around the artifact. */
+/** Selectors axe must skip: artifact documents are not application UI. */
+export const artifactFrameSelectors = [
+  'iframe[src="/review-frame"]',
+  'iframe[title^="Interactive preview: "]',
+] as const;
+
+/** The isolated `/review-frame` document that hosts Plannotator's annotation surface. */
 export function annotationFrame(page: Page): FrameLocator {
-  return isolatedReviewFrame(page);
+  return page.frameLocator(artifactFrameSelectors[0]);
 }
 
-/** The artifact's own document, inside the isolated review frame. */
+/** The artifact document itself, inside the review frame's opaque-origin sandbox. */
 export function previewFrame(page: Page): FrameLocator {
-  return isolatedReviewFrame(page).frameLocator("iframe");
+  return annotationFrame(page).frameLocator("iframe");
+}
+
+/** The interactive preview: the version's own content origin, outside the review frame. */
+export function interactiveFrame(page: Page): FrameLocator {
+  return page.frameLocator(artifactFrameSelectors[1]);
 }
 
 /** Shows one inspector tab. */
