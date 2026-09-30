@@ -1,8 +1,24 @@
-import { useRef, useState } from "react";
+import {useRef, useState, type ComponentProps, type CSSProperties} from "react";
 
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {Button, CommentComposer as ComposerField} from "@/arkcase";
+
+export interface CommentComposerProps {
+  readonly autoFocus?: boolean;
+  readonly cancelLabel: string | null;
+  /** True when `initialBody` came out of the draft store, not the caller. */
+  readonly draftRestored?: boolean;
+  readonly initialBody: string;
+  readonly label: string;
+  readonly maximumCharacters: number;
+  /** Draft wiring: hears every edit, including the clearing submit/discard. */
+  readonly onBodyChange?: (body: string) => void;
+  readonly onCancel: (() => void) | null;
+  readonly onDiscardDraft?: () => void;
+  readonly onSubmit: (body: string, idempotencyKey: string) => Promise<boolean>;
+  readonly submitLabel: string;
+}
+
+const draftMetaStyle = {alignItems: "center", display: "inline-flex", gap: 6} satisfies CSSProperties;
 
 /**
  * Bounded comment body editor.
@@ -12,10 +28,10 @@ import { Textarea } from "@/components/ui/textarea";
  * the text, so a retried create can never duplicate a comment.
  */
 export function CommentComposer({
+  autoFocus = false,
   cancelLabel,
   draftRestored = false,
   initialBody,
-  inputId,
   label,
   maximumCharacters,
   onBodyChange,
@@ -23,32 +39,17 @@ export function CommentComposer({
   onDiscardDraft,
   onSubmit,
   submitLabel,
-}: {
-  readonly cancelLabel: string | null;
-  /** True when `initialBody` came out of the draft store, not the caller. */
-  readonly draftRestored?: boolean;
-  readonly initialBody: string;
-  readonly inputId: string;
-  readonly label: string;
-  readonly maximumCharacters: number;
-  /** Draft wiring: hears every edit, including the clearing submit/discard. */
-  readonly onBodyChange?: (body: string) => void;
-  readonly onCancel: (() => void) | null;
-  readonly onDiscardDraft?: () => void;
-  readonly onSubmit: (body: string, idempotencyKey: string) => Promise<boolean>;
-  readonly submitLabel: string;
-}) {
+}: CommentComposerProps) {
   const [body, setBody] = useState(initialBody);
   const [pending, setPending] = useState(false);
   const attemptKey = useRef<string | null>(null);
   const trimmed = body.trim();
-  const tooLong = trimmed.length > maximumCharacters;
 
-  const submit = async () => {
-    if (trimmed === "" || tooLong) return;
+  const submit = async (value: string): Promise<void> => {
+    if (value === "" || value.length > maximumCharacters) return;
     attemptKey.current ??= crypto.randomUUID();
     setPending(true);
-    const accepted = await onSubmit(trimmed, attemptKey.current);
+    const accepted = await onSubmit(value, attemptKey.current);
     setPending(false);
     if (!accepted) return;
     attemptKey.current = null;
@@ -56,79 +57,42 @@ export function CommentComposer({
     onBodyChange?.("");
   };
 
-  const discardDraft = () => {
+  const discardDraft = (): void => {
     setBody("");
     onDiscardDraft?.();
   };
 
-  return (
-    <div className="as-comment-composer grid gap-2">
-      <div className="as-comment-composer__header flex items-baseline justify-between gap-2">
-        <Label className="as-comment-composer__label" htmlFor={inputId}>
-          {label}
-        </Label>
-        {draftRestored && trimmed !== "" ? (
-          <span className="flex items-baseline gap-2">
-            <span className="text-xs text-muted-foreground" data-draft-marker>
-              Draft
-            </span>
-            {onDiscardDraft === undefined ? null : (
-              <button
-                className="text-xs text-muted-foreground underline"
-                onClick={discardDraft}
-                type="button"
-              >
-                Discard
-              </button>
-            )}
-          </span>
-        ) : null}
-      </div>
-      <Textarea
-        aria-describedby={tooLong ? `${inputId}-limit` : undefined}
-        aria-invalid={tooLong}
-        className="as-comment-composer__input"
-        disabled={pending}
-        id={inputId}
-        onChange={(event) => {
-          setBody(event.currentTarget.value);
-          onBodyChange?.(event.currentTarget.value);
-        }}
-        placeholder="Describe what should change and why."
-        value={body}
-      />
-      {tooLong
-        ? (
-          <p className="text-xs text-destructive" id={`${inputId}-limit`}>
-            {`A comment holds at most ${maximumCharacters} characters. Remove ${
-              trimmed.length - maximumCharacters
-            }.`}
-          </p>
-        )
-        : null}
-      <div className="as-comment-composer__actions flex flex-wrap gap-2">
-        <Button
-          disabled={pending || trimmed === "" || tooLong}
-          onClick={() => void submit()}
-          size="xs"
-          type="button"
-        >
-          {pending ? "Saving…" : submitLabel}
-        </Button>
-        {onCancel === null || cancelLabel === null
-          ? null
-          : (
-            <Button
-              disabled={pending}
-              onClick={onCancel}
-              size="xs"
-              type="button"
-              variant="ghost"
-            >
-              {cancelLabel}
-            </Button>
-          )}
-      </div>
-    </div>
-  );
+  const field: ComponentProps<typeof ComposerField> = {
+    autoFocus,
+    disabled: pending,
+    label,
+    maxLength: maximumCharacters,
+    onChange: (value) => {
+      setBody(value);
+      onBodyChange?.(value);
+    },
+    onSubmit: (value) => void submit(value),
+    overLimitMessage: (over, limit) => `A comment holds at most ${limit} characters. Remove ${over}.`,
+    placeholder: "Describe what should change and why.",
+    rows: 3,
+    submitLabel: pending ? "Saving…" : submitLabel,
+    value: body,
+    variant: "block",
+  };
+  if (onCancel !== null && cancelLabel !== null) {
+    field.cancelLabel = cancelLabel;
+    field.onCancel = onCancel;
+  }
+  if (draftRestored && trimmed !== "") {
+    field.meta = (
+      <span style={draftMetaStyle}>
+        <span data-draft-marker="">Draft</span>
+        {onDiscardDraft === undefined ? null : (
+          <Button flush onClick={discardDraft} size="xs" variant="link">Discard</Button>
+        )}
+      </span>
+    );
+  }
+  // The DS marks only its prompt variant; the block root forwards the hook for tests and styling.
+  return <ComposerField {...field} data-comment-composer="block" />;
 }

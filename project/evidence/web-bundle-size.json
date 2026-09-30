@@ -43,6 +43,48 @@
       "measuredAt": "2026-09-30T01:39:32.699Z",
       "node": "v24.15.0",
       "totalBytes": 2273012
+    },
+    {
+      "bytesByExtension": {
+        "css": 492208,
+        "html": 1352,
+        "js": 1369874,
+        "svg": 18058,
+        "woff": 71632,
+        "woff2": 1169188
+      },
+      "commit": "f54b8d4ebf5326fb2a903699fc2714457cc0e873",
+      "dirty": false,
+      "gzipBytes": {
+        "css": 80396,
+        "html": 761,
+        "js": 421275
+      },
+      "label": "after-task-6",
+      "measuredAt": "2026-09-30T02:17:53.814Z",
+      "node": "v24.15.0",
+      "totalBytes": 3122312
+    },
+    {
+      "bytesByExtension": {
+        "css": 492608,
+        "html": 1327,
+        "js": 1394977,
+        "svg": 18058,
+        "woff": 71632,
+        "woff2": 1169188
+      },
+      "commit": "cf6ae2684b142b970ed3a6d75d9e671c92f6c02d",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 80388,
+        "html": 744,
+        "js": 427064
+      },
+      "label": "after-task-8",
+      "measuredAt": "2026-09-30T02:40:15.993Z",
+      "node": "v24.15.0",
+      "totalBytes": 3147790
     }
   ]
 }

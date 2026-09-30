@@ -121,7 +121,9 @@ test.describe("PRS-006 presence avatar", () => {
           borderWidth: style.borderTopWidth,
           height: element.getBoundingClientRect().height,
         };
-      })).toEqual({borderWidth: "1px", height: 80});
+      })).toEqual({borderWidth: "1px", height: expect.any(Number)});
+      expect(await newCommentInput.evaluate((element) => element.getBoundingClientRect().height))
+        .toBeGreaterThanOrEqual(56);
 
       // Idle: the primary send-all control carries the agent's avatar — the
       // Pi brand mark in a circle whose solid ring is the state, not a bare

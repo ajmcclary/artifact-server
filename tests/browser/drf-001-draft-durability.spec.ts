@@ -70,6 +70,7 @@ test.describe("comment draft durability", () => {
       await page.getByRole("button", {exact: true, name: "Reply"}).click();
       await expect(page.getByRole("textbox", {exact: true, name: "Reply"}))
         .toHaveValue(replyText);
+      await expect(page.locator("[data-comment-composer]")).toHaveCount(2);
       // The mirror write is debounced: poll until both the new-thread draft
       // and the reply draft have settled into localStorage.
       await expect.poll(() => page.evaluate(

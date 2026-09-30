@@ -2,7 +2,6 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -438,7 +437,6 @@ function NewThreadComposer({
         cancelLabel={null}
         draftRestored={draft.restored}
         initialBody={draft.initialBody}
-        inputId={`review-new-thread-${versionId}`}
         key={`new-thread-${versionId}-${draft.restored ? "draft" : "empty"}`}
         label="Add a comment"
         maximumCharacters={maximumCommentBodyCharacters}
@@ -497,7 +495,7 @@ function ReplyComposer({
         cancelLabel="Cancel"
         draftRestored={draft.restored}
         initialBody={replyBody}
-        inputId={`review-reply-${thread.id}`}
+        autoFocus
         label="Reply"
         maximumCharacters={maximumCommentBodyCharacters}
         onBodyChange={(body) => {
@@ -873,7 +871,6 @@ function ReviewReply({
 }) {
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const editorId = useId();
   const ownReply = reply.author.principalId === principalId;
   const remove = async (): Promise<void> => {
     setDeleting(true);
@@ -890,7 +887,7 @@ function ReviewReply({
         <CommentComposer
           cancelLabel="Cancel"
           initialBody={reply.body}
-          inputId={editorId}
+          autoFocus
           label="Edit reply"
           maximumCharacters={maximumCommentBodyCharacters}
           onCancel={() => setEditing(false)}
