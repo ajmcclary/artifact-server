@@ -20,6 +20,7 @@ import {
   type TestInstallation,
 } from "../support/runtime-harness.js";
 import {localLogin} from "./browser-fixture.js";
+import {openReview} from "./review-helpers.js";
 
 /** The link answer these tests read, mirroring the HTTP response shaping. */
 const linkedPublicationSchema = z.object({
@@ -165,9 +166,7 @@ test.describe("Linked artifacts", () => {
       expect(linked.version.number).toBe(1);
 
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${linked.artifact.id}`,
-      );
+      await openReview(fixture, {artifactId: linked.artifact.id});
 
       // The binding is ordinary artifact metadata: a row, a path, a badge.
       await expect(
@@ -216,9 +215,7 @@ test.describe("Linked artifacts", () => {
       // Reviewing the current version offers the live file beside the captured
       // bytes, and a later edit stays ambient: the review never blocks on it.
       const read = await readArtifactOverApi(fixture, linked.artifact.id);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${linked.artifact.id}&version=${read.artifact.currentVersionId}`,
-      );
+      await openReview(fixture, {artifactId: linked.artifact.id, versionId: read.artifact.currentVersionId});
       await expect(
         fixture.page.getByRole("heading", {name: "Quarterly report"}),
       ).toBeVisible();

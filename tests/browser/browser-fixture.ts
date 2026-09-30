@@ -33,15 +33,22 @@ export async function stopBrowserFixture(fixture: BrowserFixture): Promise<void>
   await removeTestInstallation(fixture.installation);
 }
 
+/**
+ * Signs in as the local owner, then opens the Default project's review.
+ * Bare `/review` becomes the review queue in the redesign, so the project is
+ * opened explicitly rather than by the application's landing choice.
+ */
 export async function localLogin(
   fixture: BrowserFixture,
   waitForApplication = true,
 ): Promise<void> {
   await fixture.page.goto(fixture.server.baseUrl);
-  if (waitForApplication) {
-    await expect(fixture.page.getByRole("link", {name: "Artifact Server"})).toBeVisible();
-    await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
-  }
+  if (!waitForApplication) return;
+  const brand = fixture.page.getByRole("link", {name: "Artifact Server"});
+  await expect(brand).toBeVisible();
+  await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
+  await expect(brand).toBeVisible();
+  await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
 }
 
 export async function closeTopDialog(page: Page): Promise<void> {

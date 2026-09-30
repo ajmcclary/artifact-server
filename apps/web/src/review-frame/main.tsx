@@ -1,3 +1,5 @@
+import "@/zod-jitless";
+
 import { setIdentityProvider } from "@plannotator/ui/utils/identity";
 import { setSkillCatalogTransport } from "@plannotator/ui/utils/skillCatalog";
 import { setStorageBackend } from "@plannotator/ui/utils/storage";

@@ -4,6 +4,7 @@ import {z} from "zod";
 import {apiHeaders} from "../support/runtime-harness.js";
 import {publishNew} from "../support/publishing.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
+import {openInspectorTab, openReview} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 import {
   callTool,
@@ -46,10 +47,8 @@ test.describe("WMC-002 WebMCP authority", () => {
 
       await localLogin(fixture);
       const page = fixture.page;
-      await page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${artifactId}&version=${published.version.id}`,
-      );
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openReview(fixture, {artifactId, versionId: published.version.id});
+      await openInspectorTab(page, "Comments");
       await expect(page.getByRole("article")).toHaveCount(1);
       await expect.poll(() => registeredToolNames(page)).toEqual([...expectedToolNames]);
 
@@ -100,7 +99,7 @@ test.describe("WMC-002 WebMCP authority", () => {
       );
       expect(archived.status).toBe(200);
       await page.reload();
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openInspectorTab(page, "Comments");
       await expect(
         page.getByText("Comments are read-only for this account or archived project."),
       ).toBeVisible();

@@ -6,6 +6,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
+import {openInspectorTab, reviewHref} from "./review-helpers.js";
 import {
   createThreadOverApi,
   deleteThreadOverApi,
@@ -32,15 +33,11 @@ test.describe("comment revision convergence", () => {
       await expect(pageB.getByRole("link", {name: "Artifact Server"}))
         .toBeVisible();
 
-      const target = `${fixture.server.baseUrl}/review?${new URLSearchParams({
-        artifact: published.body.artifact.id,
-        project: "prj_default",
-        version: published.body.version.id,
-      })}`;
+      const target = reviewHref(fixture.server.baseUrl, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
       await fixture.page.goto(target);
       await pageB.goto(target);
-      await fixture.page.getByRole("tab", {name: /Comments/u}).click();
-      await pageB.getByRole("tab", {name: /Comments/u}).click();
+      await openInspectorTab(fixture.page, "Comments");
+      await openInspectorTab(pageB, "Comments");
 
       const cardA = fixture.page.getByRole("article")
         .filter({hasText: "Converges everywhere"});

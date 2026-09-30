@@ -24,6 +24,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
+import {isolatedReviewFrame, openInspectorTab, openReview, openSettings} from "./review-helpers.js";
 import {listThreadsOverApi} from "./comment-api.js";
 
 const reviewImagePaths = [
@@ -136,7 +137,7 @@ test.describe("Artifact Server frontend MVP", () => {
       });
       await expect(accessRow.getByText("private", {exact: true})).toBeVisible();
       await expect(accessRow.getByText("Account required", {exact: true})).toHaveCount(0);
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
@@ -434,7 +435,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(preview.locator("#review-target")).toBeVisible();
       await expect(preview.locator("button[data-plannotator-marker]"))
         .toHaveCount(1);
-      await fixture.page.getByRole("tab", {name: "Details"}).click();
+      await openInspectorTab(fixture.page, "Details");
 
       await fixture.page.getByRole("button", {name: "Edit tags"}).click();
       await fixture.page.getByRole("textbox", {name: "Tags"})
@@ -549,9 +550,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("f");
       await expect(fixture.page.getByRole("button", {name: "Full screen"})).toBeVisible();
 
-      await fixture.page.getByRole("tab", {name: /Files/u}).click();
+      await openInspectorTab(fixture.page, "Files");
       await expect(fixture.page.getByText("index.html", {exact: true})).toBeVisible();
-      await fixture.page.getByRole("tab", {name: /Versions/u}).click();
+      await openInspectorTab(fixture.page, "Versions");
       await expect(fixture.page.getByRole("button", {name: /Version 2/u}))
         .toHaveAttribute("aria-current", "true");
       await expect(fixture.page.locator('a[href^="/projects"], a[href^="/workbench"]'))
@@ -849,13 +850,7 @@ test.describe("Artifact Server frontend MVP", () => {
     try {
       const downloadFixture = await publishReviewDownloadFixture(fixture);
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?${new URLSearchParams({
-          artifact: downloadFixture.artifactId,
-          project: downloadFixture.projectId,
-          version: downloadFixture.versionId,
-        })}`,
-      );
+      await openReview(fixture, {artifactId: downloadFixture.artifactId, projectId: downloadFixture.projectId, versionId: downloadFixture.versionId});
 
       const standardDownload = fixture.page.getByRole("link", {
         exact: true,
@@ -951,7 +946,7 @@ test.describe("Artifact Server frontend MVP", () => {
       });
 
       await fixture.page.goto(target.body.links.review);
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Historical exact target"}))
         .toBeVisible();
@@ -1003,7 +998,7 @@ test.describe("Artifact Server frontend MVP", () => {
       historicalReview.searchParams.set("path", "site/pages/index.html");
       await fixture.page.goto(historicalReview.toString());
 
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       const assertMultifilePreview = async (): Promise<void> => {
         const title = preview.getByRole("heading", {name: "Private historical site"});
@@ -1087,14 +1082,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await localLogin(fixture);
       const exactReviewLink = new URL(published.body.links.review);
       exactReviewLink.searchParams.set("path", "index.html");
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?${new URLSearchParams({
-          artifact: published.body.artifact.id,
-          path: "index.html",
-          project: published.body.artifact.projectId,
-          version: published.body.version.id,
-        })}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, path: "index.html", projectId: published.body.artifact.projectId, versionId: published.body.version.id});
 
       const headerActions = fixture.page.locator(".as-preview-header__actions");
       const headerShare = headerActions.getByRole("button", {exact: true, name: "Share"});
@@ -1216,14 +1204,8 @@ test.describe("Artifact Server frontend MVP", () => {
     try {
       const media = await publishReviewMediaFixture(fixture);
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?${new URLSearchParams({
-          artifact: media.artifactId,
-          project: media.projectId,
-          version: media.versionId,
-        })}`,
-      );
-      await fixture.page.getByRole("tab", {name: /Files/u}).click();
+      await openReview(fixture, {artifactId: media.artifactId, projectId: media.projectId, versionId: media.versionId});
+      await openInspectorTab(fixture.page, "Files");
 
       const selectImage = async (
         path: (typeof reviewImagePaths)[number],
@@ -1302,14 +1284,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.locator(".as-preview-state--terminal")
         .getByText("application/zip", {exact: true})).toBeVisible();
 
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?${new URLSearchParams({
-          artifact: media.artifactId,
-          path: "missing/not-in-manifest.png",
-          project: media.projectId,
-          version: media.versionId,
-        })}`,
-      );
+      await openReview(fixture, {artifactId: media.artifactId, path: "missing/not-in-manifest.png", projectId: media.projectId, versionId: media.versionId});
       await expect(fixture.page.getByRole("heading", {name: "File not found"}))
         .toBeVisible();
       await expect(fixture.page.getByText("missing/not-in-manifest.png", {exact: true}))
@@ -1418,14 +1393,14 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Save tags"}).click();
       await expect(fixture.page.getByText("approved", {exact: true})).toBeVisible();
 
-      await fixture.page.getByRole("tab", {name: "Versions"}).click();
+      await openInspectorTab(fixture.page, "Versions");
       await fixture.page.getByRole("button", {name: "Compare"}).click();
       await expect(fixture.page.getByRole("heading", {name: "Changed files"})).toBeVisible();
       await expect(
         fixture.page.getByRole("tabpanel", {name: "Compare"}).getByText("payload.txt", {exact: true}),
       ).toBeVisible();
 
-      await fixture.page.getByRole("tab", {name: "Versions"}).click();
+      await openInspectorTab(fixture.page, "Versions");
       await fixture.page.getByRole("button", {name: "Make current"}).click();
       await fixture.page.getByRole("button", {name: "Make current", exact: true}).last().click();
       await expect(fixture.page.getByText("current", {exact: true})).toBeVisible();
@@ -1438,7 +1413,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Load more"}).click();
       await expect(fixture.page.locator(".as-activity-list > li")).toHaveCount(56);
 
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/members`);
+      await openSettings(fixture.page, "members");
       await fixture.page.getByRole("button", {name: "Admit member"}).click();
       await fixture.page.getByLabel("Display name").fill("Frontend member");
       await fixture.page.getByLabel("Email").fill("frontend-member@example.test");
@@ -1485,9 +1460,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "I stored it"}).click();
       await expect(keyCard.getByText("Revoked", {exact: true})).toBeVisible();
 
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${first.body.artifact.id}`,
-      );
+      await openReview(fixture, {artifactId: first.body.artifact.id});
       await fixture.page.getByRole("button", {name: "Delete artifact"}).click();
       await fixture.page.getByRole("textbox", {name: "Artifact name"}).fill("Workflow fixture");
       await fixture.page.getByRole("button", {name: "Delete artifact", exact: true}).last().click();
@@ -1522,7 +1495,7 @@ test.describe("Artifact Server frontend MVP", () => {
       });
 
       await localLogin(fixture);
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/public-links`);
+      await openSettings(fixture.page, "public-links");
       await expect(fixture.page.getByRole("heading", {name: "Public links"})).toBeVisible();
       const firstRow = fixture.page.getByRole("row").filter({hasText: "First public link"});
       await expect(firstRow.getByText("Default", {exact: true})).toBeVisible();
@@ -1721,7 +1694,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Try again"}).click();
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"})).toBeVisible();
 
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/api-keys`);
+      await openSettings(fixture.page, "api-keys");
       await fixture.page.getByRole("button", {name: "Issue API key"}).click();
       await expect(fixture.page.getByLabel("Expires at", {exact: true})).toHaveAttribute(
         "min",

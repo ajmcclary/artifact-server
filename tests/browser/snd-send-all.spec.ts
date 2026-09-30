@@ -20,6 +20,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
+import {openInspectorTab, openReview, previewFrame} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -115,16 +116,13 @@ test.describe("Review send-all", () => {
 
       await localLogin(fixture);
       const page = fixture.page;
-      await page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.artifact.id}&version=${published.version.id}`,
-      );
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
+      await openInspectorTab(page, "Comments");
       await expect(page.getByRole("button", {
         name: "Send all open (101) to builder",
       })).toBeVisible();
       await expect(page.locator(".as-comment-card")).toHaveCount(101);
-      const preview = page.frameLocator(".as-artifact-frame")
-        .frameLocator("iframe");
+      const preview = previewFrame(page);
       await expect(preview.locator("button[data-plannotator-marker]")).toHaveCount(1);
 
       await page.getByRole("button", {name: "Send all open (101) to builder"}).click();
@@ -196,10 +194,8 @@ test.describe("Review send-all", () => {
       });
       await localLogin(fixture);
       const page = fixture.page;
-      await page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.artifact.id}&version=${published.version.id}`,
-      );
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
+      await openInspectorTab(page, "Comments");
       await expect(page.getByText("No agent connected — connect one to send."))
         .toBeVisible();
 

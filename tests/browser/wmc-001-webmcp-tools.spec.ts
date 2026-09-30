@@ -5,6 +5,7 @@ import {z} from "zod";
 import {ApiClient, issueApiKey, signInAdministrator} from "../support/agent-dispatch.js";
 import {publishNew} from "../support/publishing.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
+import {openInspectorTab, openReview, openSettings, reviewHref} from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
 import {
   callTool,
@@ -93,10 +94,8 @@ test.describe("WMC-001 WebMCP review tools", () => {
 
       await localLogin(fixture);
       const page = fixture.page;
-      await page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${artifactId}&version=${published.version.id}`,
-      );
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openReview(fixture, {artifactId, versionId: published.version.id});
+      await openInspectorTab(page, "Comments");
       await expect(page.getByRole("article")).toHaveCount(2);
 
       // Registration: exactly the seven provenance-prefixed tools.
@@ -192,7 +191,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         path: "index.html",
       })).body;
       const reviewUrl =
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.artifact.id}&version=${published.version.id}`;
+        reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, versionId: published.version.id});
 
       // No model context: the same page, the same UI, and a silent console.
       // Resource-load lines are the browser's own network log (the session
@@ -210,7 +209,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
       fixture.page.on("pageerror", (error) => consoleMessages.push(`pageerror: ${error.message}`));
       await localLogin(fixture);
       await fixture.page.goto(reviewUrl);
-      await fixture.page.getByRole("tab", {name: "Comments"}).click();
+      await openInspectorTab(fixture.page, "Comments");
       await expect(fixture.page.getByText("No open comments on this version.")).toBeVisible();
       expect(await fixture.page.evaluate(() => "modelContext" in document)).toBe(false);
       expect(consoleMessages).toEqual([]);
@@ -237,7 +236,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect(page.getByRole("tab", {name: "Comments"})).toBeVisible();
         expect(await registeredToolNames(page)).toEqual([]);
 
-        await page.goto(`${fixture.server.baseUrl}/review/settings/mcp`);
+        await openSettings(page, "mcp");
         await expect(page.getByRole("heading", {name: "Connect agents with MCP"})).toBeVisible();
         await expect(page.getByText(`${fixture.server.baseUrl}/mcp`, {exact: true})).toBeVisible();
         await expect(page.getByText("artifactserver connect", {exact: true})).toBeVisible();

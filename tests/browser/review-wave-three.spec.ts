@@ -7,6 +7,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
+import {openInspectorTab, previewFrame} from "./review-helpers.js";
 import {createReplyOverApi, createThreadOverApi} from "./comment-api.js";
 
 test.describe("Artifact Server Review wave three", () => {
@@ -31,11 +32,11 @@ test.describe("Artifact Server Review wave three", () => {
         first.body.artifact.id,
         first.body.version.id,
       ));
-      const preview = fixture.page.frameLocator(".as-artifact-frame").frameLocator("iframe");
+      const preview = previewFrame(fixture.page);
       await expect(preview.getByRole("heading", {name: "Historical review stays open"}))
         .toBeVisible();
 
-      await fixture.page.getByRole("tab", {name: /Versions/u}).click();
+      await openInspectorTab(fixture.page, "Versions");
       const firstRow = fixture.page.locator(".as-version-list li").filter({hasText: "Version 1"});
       await firstRow.getByRole("button", {name: "Make current"}).click();
       const confirmation = fixture.page.getByRole("dialog", {
@@ -109,7 +110,7 @@ test.describe("Artifact Server Review wave three", () => {
         published.body.artifact.id,
         published.body.version.id,
       ));
-      await fixture.page.getByRole("tab", {name: /Comments/u}).click();
+      await openInspectorTab(fixture.page, "Comments");
       const conversation = fixture.page.getByRole("article").filter({hasText: "Root feedback"});
       await expect(conversation.getByText("Agent reply already in this conversation"))
         .toBeVisible();
@@ -198,7 +199,7 @@ test.describe("Artifact Server Review wave three", () => {
         selected.body.artifact.id,
         selected.body.version.id,
       ));
-      const preview = fixture.page.frameLocator(".as-artifact-frame").frameLocator("iframe");
+      const preview = previewFrame(fixture.page);
       await expect(preview.getByRole("heading", {name: "Selected preview remains"}))
         .toBeVisible();
 

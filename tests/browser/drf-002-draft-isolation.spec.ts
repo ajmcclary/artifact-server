@@ -7,6 +7,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
+import {openInspectorTab, reviewHref} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const pageHtml =
@@ -42,9 +43,9 @@ test.describe("DRF-002 draft isolation", () => {
         await (await page.request.get(`${fixture.server.baseUrl}/api/v1/session`)).json(),
       ).principal.id;
       const reviewUrl =
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${artifactId}&version=${versionId}`;
+        reviewHref(fixture.server.baseUrl, {artifactId, versionId});
       await page.goto(reviewUrl);
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openInspectorTab(page, "Comments");
 
       // Only a reply draft exists; the new-thread composer must stay empty.
       // The mirror write is debounced: poll until the single reply draft key
@@ -69,7 +70,7 @@ test.describe("DRF-002 draft isolation", () => {
       }, [foreignKey]);
       page.on("dialog", (dialog) => void dialog.accept());
       await page.reload();
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openInspectorTab(page, "Comments");
       await expect(page.getByLabel("Add a comment")).toHaveValue("");
       await expect(page.getByLabel("Reply", {exact: true})).toHaveValue("Reply-only draft.");
       expect(await page.evaluate(([key]) => localStorage.getItem(key ?? ""), [foreignKey]))
@@ -89,7 +90,7 @@ test.describe("DRF-002 draft isolation", () => {
       ).catch(() => null)).toEqual([foreignKey]);
       await localLogin(fixture);
       await page.goto(reviewUrl);
-      await page.getByRole("tab", {name: "Comments"}).click();
+      await openInspectorTab(page, "Comments");
       await expect(page.getByLabel("Reply", {exact: true})).toHaveCount(0);
       await expect(page.getByRole("button", {exact: true, name: "Reply"})).toBeVisible();
       await expect(page.getByLabel("Add a comment")).toHaveValue("");

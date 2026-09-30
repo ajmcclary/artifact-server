@@ -6,6 +6,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
+import {isolatedReviewFrame, openInspectorTab, openReview, reviewHref} from "./review-helpers.js";
 import {
   createThreadOverApi,
   deleteThreadOverApi,
@@ -36,7 +37,7 @@ test.describe("critical engine review paths @critical", () => {
       await localLogin(fixture);
       await fixture.page.goto(target.body.links.review);
 
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Critical historical target"}))
         .toBeVisible();
@@ -61,11 +62,9 @@ test.describe("critical engine review paths @critical", () => {
         path: "index.html",
       });
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const sandboxElement = reviewFrame.locator("iframe");
       await expect(sandboxElement).toHaveAttribute("sandbox", "allow-scripts");
       await expect(sandboxElement).not.toHaveAttribute("sandbox", /allow-same-origin/u);
@@ -97,7 +96,7 @@ test.describe("critical engine review paths @critical", () => {
 
       await localLogin(fixture);
       await fixture.page.goto(historical.body.links.review);
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Private historical asset"}))
         .toBeVisible();
@@ -125,15 +124,11 @@ test.describe("critical engine review paths @critical", () => {
       await pageB.goto(fixture.server.baseUrl);
       await expect(pageB.getByRole("link", {name: "Artifact Server"})).toBeVisible();
 
-      const target = `${fixture.server.baseUrl}/review?${new URLSearchParams({
-        artifact: published.body.artifact.id,
-        project: "prj_default",
-        version: published.body.version.id,
-      })}`;
+      const target = reviewHref(fixture.server.baseUrl, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
       await fixture.page.goto(target);
       await pageB.goto(target);
-      await fixture.page.getByRole("tab", {name: /Comments/u}).click();
-      await pageB.getByRole("tab", {name: /Comments/u}).click();
+      await openInspectorTab(fixture.page, "Comments");
+      await openInspectorTab(pageB, "Comments");
 
       const cardA = fixture.page.getByRole("article")
         .filter({hasText: "Critical convergence"});

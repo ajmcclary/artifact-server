@@ -6,6 +6,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
+import {isolatedReviewFrame, openReview} from "./review-helpers.js";
 
 const hostileArtifact = `<!doctype html>
 <html lang="en">
@@ -67,9 +68,7 @@ test.describe("Review sandbox isolation", () => {
           htmlFileRequests += 1;
         }
       });
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
       await expect(fixture.page.getByText("Preview too large")).toBeVisible();
       await expect(fixture.page.getByText(/Open or download the raw artifact/u))
         .toBeVisible();
@@ -91,11 +90,9 @@ test.describe("Review sandbox isolation", () => {
         path: "index.html",
       });
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
-      const reviewFrame = fixture.page.frameLocator(".as-artifact-frame");
+      const reviewFrame = isolatedReviewFrame(fixture.page);
       const sandboxElement = reviewFrame.locator("iframe");
       await expect(sandboxElement).toHaveAttribute("sandbox", "allow-scripts");
       await expect(sandboxElement).not.toHaveAttribute("sandbox", /allow-same-origin/u);
@@ -136,9 +133,7 @@ test.describe("Review sandbox isolation", () => {
         path: "index.html",
       });
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
       const preview = fixture.page.locator(".as-html-preview");
       await expect(preview).toHaveAttribute("data-mode", "interactive");
@@ -191,9 +186,7 @@ test.describe("Review sandbox isolation", () => {
         path: "nested/index.html",
       });
       await localLogin(fixture);
-      await fixture.page.goto(
-        `${fixture.server.baseUrl}/review?project=prj_default&artifact=${published.body.artifact.id}&version=${published.body.version.id}`,
-      );
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
       const preview = fixture.page.locator(".as-html-preview");
       await expect(preview).toHaveAttribute("data-mode", "interactive");
