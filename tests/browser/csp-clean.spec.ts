@@ -318,3 +318,36 @@ test.describe("CSP-clean administration", () => {
     });
   }
 });
+
+const queueThemeModes = ["system", "default", "dark", "high-contrast"] as const;
+
+for (const mode of queueThemeModes) {
+  test(`the review queue raises no CSP violation in ${mode} mode`, async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = (await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><title>CSP queue fixture</title><h1>CSP queue fixture</h1></html>",
+        idempotencyKey: `csp-queue-fixture-${mode}`,
+        mediaType: "text/html; charset=utf-8",
+        name: "CSP queue fixture",
+        path: "index.html",
+      })).body;
+      await createThreadOverApi(fixture, {
+        artifactId: published.artifact.id,
+        body: "A conversation so the queue has a row.",
+        idempotencyKey: `csp-queue-thread-key-${mode}`,
+        path: "index.html",
+        versionId: published.version.id,
+      });
+      await localLogin(fixture);
+      const violations = collectCspViolations(fixture.page);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?theme=${mode}`);
+      await expect(fixture.page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(fixture.page.getByRole("button", {name: /CSP queue fixture/u})).toBeVisible();
+      expect(await violations()).toEqual([]);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+}

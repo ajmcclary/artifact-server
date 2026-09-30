@@ -155,3 +155,13 @@ function parsePathSegment(segment: string | undefined): string | null {
     return null;
   }
 }
+
+/**
+ * Move to another review location without a document load. The workspace and
+ * the application route both re-read `window.location` on popstate, which is
+ * the same path the browser's own back and forward take.
+ */
+export function navigateReview(href: string): void {
+  window.history.pushState(null, "", href);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}

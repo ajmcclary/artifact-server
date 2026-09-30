@@ -68,6 +68,7 @@ import {
   writeReviewHistory,
 } from "./review-routes.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
+import {ReviewQueueScreen} from "./queue/review-queue-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
@@ -259,11 +260,9 @@ export function ReviewApp() {
   }
   if (session === null) return null;
 
-  // The queue and the workspace render the same element until the review queue lands, so
-  // ArtifactReview keeps its state when it rewrites a bare /review into a project URL.
   return (
     <ReviewShell
-      mainStyle={route.kind === "settings" ? {overflowY: "auto"} : {overflow: "hidden"}}
+      mainStyle={route.kind === "workspace" ? {overflow: "hidden"} : {overflowY: "auto"}}
       onCreateProject={createProject}
       projects={projects}
       route={route}
@@ -276,6 +275,8 @@ export function ReviewApp() {
           route={route.settings}
           session={session}
         />
+      ) : route.kind === "queue" ? (
+        <ReviewQueueScreen projects={projects} />
       ) : (
         <ArtifactReview projects={projects} session={session} />
       )}

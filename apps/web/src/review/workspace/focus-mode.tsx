@@ -106,7 +106,7 @@ export function FocusViewerControls({
               Download
             </Button>
           )}
-          <Button icon="bi-fullscreen-exit" keyshortcuts="F" onClick={onExit} size="sm" title="Exit full screen (F)">
+          <Button icon="bi-fullscreen" keyshortcuts="F" onClick={onExit} size="sm" title="Exit full screen (F)">
             Exit full screen
           </Button>
           <IconButton ariaLabel="Hide viewer controls" icon="bi-chevron-bar-right" onClick={onHide} size="sm" />

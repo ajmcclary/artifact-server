@@ -74,7 +74,7 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(legacyReview.headers()["location"]).toBe("/review?project=prj_default");
 
       await localLogin(fixture);
-      await fixture.page.goto(`${fixture.server.baseUrl}/review`);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
 
       await expect(
         fixture.page.getByRole("heading", {exact: true, name: "Review fixture"}),

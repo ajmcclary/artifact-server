@@ -220,7 +220,7 @@ export function PreviewCanvas({
             <SurfaceState
               count={0}
               emptyBody="The project, artifact, or version named by this Review URL is unavailable."
-              emptyIcon="bi-question-octagon"
+              emptyIcon="bi-question-circle"
               emptyTitle="Review target unavailable"
               noun="artifacts"
               phase="ready"
