@@ -1725,6 +1725,26 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
+  test("session expiry with a modal and the account menu open leaves no portal, scroll lock or inert sibling", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.getByRole("button", {name: "New project"}).click();
+      await expect(page.getByRole("dialog", {name: "New project"})).toBeVisible();
+      await page.evaluate(() => window.dispatchEvent(new Event("artifact-session-expired")));
+      await expect(page.getByRole("link", {name: "Artifact Server"})).toBeVisible();
+      await expect(page.getByRole("dialog", {name: "New project"})).toHaveCount(0);
+      expect(await page.evaluate(() => ({
+        inert: document.querySelectorAll("body > [inert]").length,
+        overflow: document.body.style.overflow,
+        portals: document.querySelectorAll("[data-ak-modal-portal]").length,
+      }))).toEqual({inert: 0, overflow: "", portals: 0});
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("project bootstrap failures remain visible and local expiration bounds use wall-clock time", async ({browser}) => {
     const fixture = await startBrowserFixture(browser, {
       timezoneId: "America/Los_Angeles",
@@ -1733,7 +1753,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.clock.install({
         time: new Date("2026-08-16T12:34:00.000Z"),
       });
+      const projectsHeld = Promise.withResolvers<void>();
       await fixture.page.route("**/api/v1/projects", async (route) => {
+        await projectsHeld.promise;
         await route.fulfill({
           body: JSON.stringify({
             error: {
@@ -1745,8 +1767,13 @@ test.describe("Artifact Server frontend MVP", () => {
           status: 500,
         });
       });
-      await localLogin(fixture, false);
+      await fixture.page.goto(fixture.server.baseUrl);
+      await expect(fixture.page.getByRole("heading", {name: "Loading Artifact Server"})).toBeVisible();
+      projectsHeld.resolve();
       await expect(fixture.page.getByRole("heading", {name: "Artifact Server unavailable"})).toBeVisible();
+      await expect(fixture.page.getByRole("alert").filter({
+        hasText: "Project storage is temporarily unavailable.",
+      })).toBeVisible();
       await expect(fixture.page.getByRole("heading", {name: "No projects"})).toHaveCount(0);
 
       await fixture.page.unroute("**/api/v1/projects");

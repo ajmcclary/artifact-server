@@ -57,6 +57,7 @@ import {
   sourceFreshnessLabel,
 } from "@/lib/presentation";
 import {ReviewShell} from "@/shell/review-shell";
+import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
 import {useThemeMode} from "@/theme/use-theme-mode";
 import {
   useReviewComments,
@@ -421,6 +422,9 @@ export function ReviewApp() {
   useEffect(() => {
     void bootstrap();
     const expire = (): void => {
+      // The first session probe 401s by design; bootstrap handles it (local-owner sign-in)
+      // before the access mode is known, so an expiry during bootstrap is not a sign-out.
+      if (bootstrapInFlightRef.current) return;
       if (accessContextRef.current?.accessMode === "local_owner") {
         void bootstrap();
         return;
@@ -458,31 +462,12 @@ export function ReviewApp() {
     return loaded;
   }, []);
 
-  if (sessionState === "loading") {
-    return <ReviewGate description="Opening the local artifact catalog." title="Loading Artifact Server" />;
-  }
+  if (sessionState === "loading") return <LoadingGate />;
   if (sessionState === "unauthenticated") {
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    return (
-      <ReviewGate
-        action={(
-          <a className="as-button as-button--primary" href={`/auth/login?returnTo=${encodeURIComponent(returnTo)}`}>
-            Sign in
-          </a>
-        )}
-        description="This installation requires an authenticated browser session."
-        title="Sign in required"
-      />
-    );
+    return <SignInGate returnTo={`${window.location.pathname}${window.location.search}`} />;
   }
   if (error !== null) {
-    return (
-      <ReviewGate
-        action={<button className="as-button" onClick={() => void bootstrap()} type="button">Try again</button>}
-        description={error.message}
-        title="Artifact Server unavailable"
-      />
-    );
+    return <UnavailableGate message={error.message} onRetry={() => void bootstrap()} />;
   }
   if (session === null) return null;
 
@@ -2586,28 +2571,6 @@ function InlineState({
       <strong>{title}</strong>
       <p>{description}</p>
     </div>
-  );
-}
-
-function ReviewGate({
-  action,
-  description,
-  title,
-}: {
-  readonly action?: React.ReactNode;
-  readonly description: string;
-  readonly title: string;
-}) {
-  return (
-    <main className="as-gate">
-      <section>
-        <span aria-hidden="true" className="as-gate__mark">A</span>
-        <p>Artifact Server</p>
-        <h1>{title}</h1>
-        <small>{description}</small>
-        {action}
-      </section>
-    </main>
   );
 }
 

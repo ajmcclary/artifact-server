@@ -1,6 +1,19 @@
-import {expect, test, type Page} from "@playwright/test";
+import {expect, test, type Browser, type Page} from "@playwright/test";
+import {Redacted} from "effect";
 
+import {
+  browserLoginKinds,
+  privateTeamBrowserAccess,
+} from "../../src/core/browser-access.js";
+import {createOidcIdentityProvider} from "../../src/identity/oidc-identity-provider.js";
 import {publishNew} from "../support/publishing.js";
+import {
+  createTestInstallation,
+  removeTestInstallation,
+  reserveLoopbackPort,
+  startTestServer,
+} from "../support/runtime-harness.js";
+import {startStubOidcProvider} from "../support/stub-oidc-provider.js";
 import {
   localLogin,
   startBrowserFixture,
@@ -87,4 +100,64 @@ test.describe("CSP-clean production build", () => {
       await stopBrowserFixture(fixture);
     }
   });
+});
+
+const signInThemeModes = ["system", "default", "dark", "high-contrast"] as const;
+
+async function expectCleanSignInGate(
+  browser: Browser,
+  baseUrl: string,
+  mode: typeof signInThemeModes[number],
+): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    await context.addInitScript((stored) => {
+      localStorage.setItem("arkcase.theme.v1", stored);
+    }, JSON.stringify(mode));
+    const page = await context.newPage();
+    const violations = collectCspViolations(page);
+    await page.goto(`${baseUrl}/review?project=prj_default`);
+    await expect(page.getByRole("heading", {name: "Sign in required"})).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-mode", mode);
+    const signIn = page.getByRole("link", {name: "Continue to sign in"});
+    await expect(signIn).toHaveCount(1);
+    await expect(signIn).toHaveAttribute(
+      "href",
+      `/auth/login?returnTo=${encodeURIComponent("/review?project=prj_default")}`,
+    );
+    await expect(page.getByRole("link", {name: "Artifact Server"})).toHaveCount(0);
+    expect(await violations()).toEqual([]);
+  } finally {
+    await context.close();
+  }
+}
+
+test("AUTH-026-B: the private-team sign-in gate offers one sign-in action and renders without CSP violations in every theme mode", async ({browser}) => {
+  const clientSecret = "csp-clean-oidc-client-secret-with-entropy";
+  const installation = await createTestInstallation();
+  const provider = await startStubOidcProvider({
+    clientId: "artifact-server-csp-clean",
+    clientSecret,
+  });
+  const port = await reserveLoopbackPort();
+  const applicationOrigin = `http://127.0.0.1:${port}`;
+  const server = await startTestServer(installation, {
+    applicationOrigin,
+    browserAccess: privateTeamBrowserAccess(browserLoginKinds.oidc),
+    interactiveIdentityProvider: createOidcIdentityProvider({
+      applicationOrigin,
+      clientId: provider.clientId,
+      clientSecret: Redacted.make(clientSecret, {label: "oidc-client-secret"}),
+      issuer: provider.issuer,
+      scopes: "openid email profile",
+    }),
+    port,
+  });
+  try {
+    await Promise.all(signInThemeModes.map((mode) => expectCleanSignInGate(browser, server.baseUrl, mode)));
+  } finally {
+    await server.stop();
+    await provider.stop();
+    await removeTestInstallation(installation);
+  }
 });
