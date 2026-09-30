@@ -1,5 +1,5 @@
 import {AxeBuilder} from "@axe-core/playwright";
-import {expect, test} from "@playwright/test";
+import {expect, test, type Page} from "@playwright/test";
 import {unzipSync} from "fflate";
 import {readFile} from "node:fs/promises";
 import {z} from "zod";
@@ -420,12 +420,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: "Full screen"})).toBeVisible();
 
       await openInspectorTab(fixture.page, "Files");
-      // The canvas title bar names the path too; the file list lives in the inspector.
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"})
-        .getByText("index.html", {exact: true})).toBeVisible();
+      await expect(inspector.getByRole("region", {name: /^Files in version \d+$/u}).getByRole("button", {name: /^index\.html · /u})).toBeVisible();
       await openInspectorTab(fixture.page, "Versions");
-      await expect(fixture.page.getByRole("button", {name: /Version 2/u}))
-        .toHaveAttribute("aria-current", "true");
+      await expect(inspector.getByRole("list", {name: "Versions"}).getByRole("button", {name: "Version 2"})).toHaveAttribute("aria-current", "true");
       await expect(fixture.page.locator('a[href^="/projects"], a[href^="/workbench"]'))
         .toHaveCount(0);
 
@@ -1082,7 +1079,7 @@ test.describe("Artifact Server frontend MVP", () => {
       const selectImage = async (
         path: (typeof reviewImagePaths)[number],
       ): Promise<void> => {
-        await fixture.page.locator(".as-file-list button").filter({hasText: path}).click();
+        await selectManifestFile(fixture.page, path);
         const image = fixture.page.getByRole("img", {
           name: `Review media fixture — ${path}`,
         });
@@ -1101,8 +1098,7 @@ test.describe("Artifact Server frontend MVP", () => {
         "__artifactSvgExecuted" in window
       )).toBe(false);
 
-      await fixture.page.locator(".as-file-list button")
-        .filter({hasText: "media/preview.png"}).click();
+      await selectManifestFile(fixture.page, "media/preview.png");
       await fixture.page.getByRole("button", {name: "Full screen"}).click();
       await expect(fixture.page.getByRole("img", {
         name: "Review media fixture — media/preview.png",
@@ -1110,8 +1106,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: "Exit full screen"})).toBeVisible();
       await fixture.page.getByRole("button", {name: "Exit full screen"}).click();
 
-      await fixture.page.locator(".as-file-list button")
-        .filter({hasText: "media/clip.webm"}).click();
+      await selectManifestFile(fixture.page, "media/clip.webm");
       const video = fixture.page.locator(
         'video[aria-label="Review media fixture — media/clip.webm"]',
       );
@@ -1136,8 +1131,7 @@ test.describe("Artifact Server frontend MVP", () => {
         media.versionId,
       );
 
-      await fixture.page.locator(".as-file-list button")
-        .filter({hasText: "media/broken.png"}).click();
+      await selectManifestFile(fixture.page, "media/broken.png");
       await expect(fixture.page.getByRole("heading", {
         name: "Image preview unavailable",
       })).toBeVisible();
@@ -1148,8 +1142,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: "Retry preview"})).toBeVisible();
       await expect(fixture.page.getByRole("link", {name: "Download file"})).toBeVisible();
 
-      await fixture.page.locator(".as-file-list button")
-        .filter({hasText: "bundle/archive.zip"}).click();
+      await selectManifestFile(fixture.page, "bundle/archive.zip");
       await expect(fixture.page.getByRole("heading", {
         name: "Preview not supported",
       })).toBeVisible();
@@ -1276,7 +1269,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await openInspectorTab(fixture.page, "Versions");
       await fixture.page.getByRole("button", {name: "Make current"}).click();
       await fixture.page.getByRole("button", {name: "Make current", exact: true}).last().click();
-      await expect(fixture.page.getByText("current", {exact: true})).toBeVisible();
+      await expect(fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 1"}).getByText(/^Current/u)).toBeVisible();
 
       await openComparison(fixture.page, "Activity");
       const activityPanel = fixture.page.getByRole("tabpanel", {name: "Activity"});
@@ -1907,4 +1900,23 @@ async function createActionHistory(
     )
   ));
   expect(responses.every((response) => response.status === 200)).toBe(true);
+}
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/** Choose one manifest file in the Files tab, opening its folder first. */
+async function selectManifestFile(page: Page, path: string): Promise<void> {
+  const inventory = page.getByRole("complementary", {name: "Artifact inspector"})
+    .getByRole("region", {name: /^Files in version \d+$/u});
+  const slash = path.indexOf("/");
+  const folder = slash < 0 ? null : path.slice(0, slash);
+  const name = slash < 0 ? path : path.slice(slash + 1);
+  if (folder !== null) {
+    const disclosure = inventory.getByRole("button", {name: new RegExp(`^${escapeRegExp(folder)}/`, "u")});
+    if (await disclosure.getAttribute("aria-expanded") === "false") await disclosure.click();
+  }
+  const list = folder === null
+    ? inventory.getByRole("list").first()
+    : inventory.getByRole("list", {name: `Files in ${folder}`});
+  await list.getByRole("button", {name: new RegExp(`^${escapeRegExp(name)} · `, "u")}).click();
 }

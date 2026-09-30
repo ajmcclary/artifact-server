@@ -15,10 +15,8 @@ import {
   Comment01Icon,
   Download04Icon,
   Edit02Icon,
-  File01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {Dialog} from "@base-ui/react/dialog";
 
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
 import {useCommentPoll} from "@/components/comments/comment-poll";
@@ -34,28 +32,24 @@ import {
   type ArtifactVersion,
   type Project,
   type Session,
-  type Version,
 } from "@/api/client";
-import {
-  formatBytes,
-  formatTimestamp,
-} from "@/lib/presentation";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {ReviewShell} from "@/shell/review-shell";
-import {Button, dismissInnermost, SurfaceState} from "@/arkcase";
+import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
+import {FilesTab} from "./workspace/files-tab.tsx";
 import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
 import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {SharePopover} from "./workspace/share-popover.tsx";
+import {VersionsTab} from "./workspace/versions-tab.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useViewportHeight, useViewportWidth} from "./workspace/use-viewport-size.ts";
-import {compactId} from "./workspace/workspace-format.ts";
 import {catalogWidth, dockingFor, inspectorDefaultWidth, isPhoneWidth, workspaceBudget} from "./workspace/workspace-layout.ts";
 import {
   type CatalogCommentFilter,
@@ -1141,13 +1135,13 @@ function ArtifactReview({
       versionId={selectedVersionId}
     />
   ) : inspectorTab === "files" ? (
-    <FilesInspector
+    <FilesTab
       onSelect={selectManifestPath}
       selectedPath={selectedPath ?? selectedVersion.manifest.entryPath}
       version={selectedVersion}
     />
   ) : (
-    <VersionsInspector
+    <VersionsTab
       canManage={canManageArtifacts}
       currentVersionId={details.artifact.currentVersionId}
       onMakeCurrent={makeVersionCurrent}
@@ -1546,173 +1540,6 @@ function ReviewDownloadControl({
       <HugeiconsIcon aria-hidden="true" icon={Download04Icon} strokeWidth={1.8} />
       <span className="as-button__label">Download</span>
     </a>
-  );
-}
-
-function FilesInspector({
-  onSelect,
-  selectedPath,
-  version,
-}: {
-  readonly onSelect: (path: string) => void;
-  readonly selectedPath: string;
-  readonly version: ArtifactVersion;
-}) {
-  return (
-    <div className="as-inspector-stack">
-      <InspectorSection count={version.manifest.entries.length} title="Manifest">
-        <ol className="as-file-list">
-          {version.manifest.entries.map((entry) => (
-            <li key={entry.path}>
-              <button
-                aria-current={selectedPath === entry.path ? "true" : undefined}
-                data-selected={selectedPath === entry.path}
-                onClick={() => onSelect(entry.path)}
-                type="button"
-              >
-                <span className="as-file-list__icon"><HugeiconsIcon icon={File01Icon} strokeWidth={1.8} /></span>
-                <span className="as-file-list__identity">
-                  <code>{entry.path}</code>
-                  <small>{entry.mediaType}</small>
-                </span>
-                <span className="as-file-list__size">{formatBytes(entry.size)}</span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      </InspectorSection>
-    </div>
-  );
-}
-
-function VersionsInspector({
-  canManage,
-  currentVersionId,
-  onMakeCurrent,
-  onOpenComparison,
-  onSelect,
-  selectedVersionId,
-  versions,
-}: {
-  readonly canManage: boolean;
-  readonly currentVersionId: string;
-  readonly onMakeCurrent: (
-    versionId: string,
-    expectedCurrentVersionId: string,
-  ) => Promise<boolean>;
-  readonly onOpenComparison: () => void;
-  readonly onSelect: (versionId: string) => void;
-  readonly selectedVersionId: string | null;
-  readonly versions: readonly VersionListItem[];
-}) {
-  return (
-    <div className="as-inspector-stack">
-      <InspectorSection count={versions.length} title="Immutable history">
-        <ol className="as-version-list">
-          {versions.map(({version}) => (
-            <li key={version.id}>
-              <div className="as-version-list__row">
-                <button
-                  aria-current={selectedVersionId === version.id ? "true" : undefined}
-                  className="as-version-list__select"
-                  data-selected={selectedVersionId === version.id}
-                  onClick={() => onSelect(version.id)}
-                  type="button"
-                >
-                  <span>
-                    <strong>Version {version.number}</strong>
-                    <time dateTime={version.createdAt}>{formatTimestamp(version.createdAt)}</time>
-                  </span>
-                  <span className="as-version-list__state">
-                    {version.id === currentVersionId ? "current" : compactId(version.id)}
-                  </span>
-                </button>
-                {!canManage || version.id === currentVersionId ? null : (
-                  <MakeCurrentControl
-                    expectedCurrentVersionId={currentVersionId}
-                    onConfirm={onMakeCurrent}
-                    version={version}
-                  />
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </InspectorSection>
-      <Button icon="bi-clock-history" onClick={onOpenComparison} size="sm" variant="link">Comparison and history</Button>
-    </div>
-  );
-}
-
-function MakeCurrentControl({
-  expectedCurrentVersionId,
-  onConfirm,
-  version,
-}: {
-  readonly expectedCurrentVersionId: string;
-  readonly onConfirm: (
-    versionId: string,
-    expectedCurrentVersionId: string,
-  ) => Promise<boolean>;
-  readonly version: Version;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const confirm = async (): Promise<void> => {
-    setPending(true);
-    await onConfirm(version.id, expectedCurrentVersionId);
-    setPending(false);
-    setOpen(false);
-  };
-  return (
-    <Dialog.Root onOpenChange={setOpen} open={open}>
-      <Dialog.Trigger className="as-version-list__make-current">
-        Make current
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="as-confirm-dialog__backdrop" />
-        <Dialog.Popup className="as-confirm-dialog">
-          <Dialog.Title>Make Version {version.number} current?</Dialog.Title>
-          <Dialog.Description>
-            The stable artifact link will point to Version {version.number}. No saved version is changed or duplicated.
-          </Dialog.Description>
-          <div className="as-confirm-dialog__actions">
-            <Dialog.Close className="as-button" disabled={pending}>Cancel</Dialog.Close>
-            <button
-              className="as-button as-button--primary"
-              disabled={pending}
-              onClick={() => void confirm()}
-              type="button"
-            >
-              {pending ? "Making current…" : "Make current"}
-            </button>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function InspectorSection({
-  action,
-  children,
-  count,
-  title,
-}: {
-  readonly action?: React.ReactNode;
-  readonly children: React.ReactNode;
-  readonly count: number;
-  readonly title: string;
-}) {
-  return (
-    <section className="as-inspector-section">
-      <header>
-        <h2>{title}</h2>
-        <span>{count}</span>
-        {action}
-      </header>
-      <div className="as-inspector-section__body">{children}</div>
-    </section>
   );
 }
 

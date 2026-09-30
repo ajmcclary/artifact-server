@@ -37,20 +37,20 @@ test.describe("Artifact Server Review wave three", () => {
         .toBeVisible();
 
       await openInspectorTab(fixture.page, "Versions");
-      const firstRow = fixture.page.locator(".as-version-list li").filter({hasText: "Version 1"});
+      const firstRow = fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 1"});
       await firstRow.getByRole("button", {name: "Make current"}).click();
       const confirmation = fixture.page.getByRole("dialog", {
         name: "Make Version 1 current?",
       });
       await expect(confirmation).toContainText("No saved version is changed or duplicated.");
       await confirmation.getByRole("button", {name: "Make current"}).click();
-      await expect(firstRow.getByText("current", {exact: true})).toBeVisible();
+      await expect(firstRow.getByText(/^Current/u)).toBeVisible();
       await expect(preview.getByRole("heading", {name: "Historical review stays open"}))
         .toBeVisible();
       expect(new URL(fixture.page.url()).searchParams.get("version"))
         .toBe(first.body.version.id);
 
-      const secondRow = fixture.page.locator(".as-version-list li").filter({hasText: "Version 2"});
+      const secondRow = fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 2"});
       await secondRow.getByRole("button", {name: "Make current"}).click();
       const third = await publishVersion(fixture.server, fixture.installation, {
         artifactId: first.body.artifact.id,
