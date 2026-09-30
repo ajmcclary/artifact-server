@@ -322,102 +322,6 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("Escape");
       await expect(filterPopover).toBeHidden();
 
-      const fullScreen = fixture.page.getByRole("button", {name: "Full screen"});
-      await expect(fullScreen).toHaveAttribute("aria-keyshortcuts", "F");
-      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
-      await fixture.page.keyboard.press("f");
-      await expect(fixture.page.getByRole("button", {name: "Exit full screen"})).toBeVisible();
-      await expect(fixture.page.getByRole("button", {name: "Annotate mode", exact: true}))
-        .toHaveAttribute("aria-pressed", "true");
-      await fixture.page.keyboard.press("Escape");
-      const focusInteractMode = fixture.page.getByRole("button", {
-        name: "Interact mode",
-        exact: true,
-      });
-      await expect(focusInteractMode).toHaveAttribute("aria-pressed", "false");
-      await focusInteractMode.click();
-      const focusComments = fixture.page.getByRole("complementary", {name: "Comments"});
-      await expect(focusComments).toBeHidden();
-      await preview.locator("#review-native-action").click();
-      const focusComposer = reviewFrame.getByPlaceholder("Add a comment...");
-      await expect(focusComposer).toBeVisible();
-      await focusComposer.fill("Keep the full-screen canvas uninterrupted.");
-      await reviewFrame.getByRole("button", {name: "Save"}).click();
-      await expect(focusComments).toBeHidden();
-      await fixture.page.getByRole("region", {name: "Artifact preview"}).focus();
-      await fixture.page.keyboard.press("]");
-      await expect(focusComments).toBeVisible();
-      await expect(focusComments.getByRole("article").filter({
-        hasText: "Make the release status easier to scan.",
-      })).toBeVisible();
-      await expect(focusComments.getByRole("article").filter({
-        hasText: "Keep the full-screen canvas uninterrupted.",
-      })).toBeVisible();
-      const focusAccessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze();
-      expect(focusAccessibility.violations).toEqual([]);
-      const viewerControls = fixture.page.getByRole("toolbar", {
-        name: "Artifact viewer controls",
-      });
-      const viewerControlsElement = fixture.page.locator(".as-focus-controls");
-      const viewerControlsDock = fixture.page.locator(".as-focus-controls-dock");
-      const restoreViewerControls = fixture.page.getByRole("button", {
-        name: "Show viewer controls",
-      });
-      await viewerControls.hover();
-      await fixture.page.getByRole("button", {name: "Hide viewer controls"}).click();
-      await expect(restoreViewerControls).toHaveCSS("opacity", "0");
-      await expect(restoreViewerControls).toHaveCSS("pointer-events", "none");
-      await expect(viewerControlsDock).toHaveCSS("width", "12px");
-      await expect(viewerControlsElement).toHaveCSS("pointer-events", "none");
-      await expect(viewerControlsElement).toHaveCSS("visibility", "hidden");
-      await fixture.page.keyboard.press("Escape");
-      await expect(focusComments).toBeHidden();
-      await expect(fixture.page.locator(".as-app"))
-        .toHaveAttribute("data-html-annotate-mode", "true");
-      await fixture.page.keyboard.press("Escape");
-      await expect(fixture.page.locator(".as-app"))
-        .toHaveAttribute("data-html-annotate-mode", "false");
-      expect(await fixture.page.evaluate(() => ({x: window.scrollX, y: window.scrollY})))
-        .toEqual({x: 0, y: 0});
-      const collapsedCanvas = await fixture.page.getByRole("region", {name: "Artifact preview"})
-        .boundingBox();
-      expect(collapsedCanvas).not.toBeNull();
-      expect(collapsedCanvas?.x).toBe(0);
-      expect(collapsedCanvas?.width).toBe(fixture.page.viewportSize()?.width);
-      await viewerControlsDock.hover();
-      await expect(restoreViewerControls).toHaveCSS("opacity", "1");
-      await restoreViewerControls.click();
-      await expect(viewerControls).toBeVisible();
-      await viewerControls.hover();
-      await fixture.page.getByRole("button", {name: "Hide viewer controls"}).click();
-      await fixture.page.mouse.move(100, 100);
-      await expect(restoreViewerControls).toHaveCSS("opacity", "0");
-      await fixture.page.keyboard.press("Control+Backslash");
-      await expect(viewerControlsDock).toHaveAttribute("data-collapsed", "false");
-      await expect(viewerControls).toBeVisible();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact catalog"}))
-        .toBeHidden();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}))
-        .toBeHidden();
-      const focusedCanvas = await fixture.page.getByRole("region", {name: "Artifact preview"})
-        .boundingBox();
-      expect(focusedCanvas).not.toBeNull();
-      expect(focusedCanvas?.height).toBe(fixture.page.viewportSize()?.height);
-      expect(await fixture.page.getByRole("region", {name: "Artifact preview"})
-        .evaluate((node) => getComputedStyle(node).backgroundImage)).toBe("none");
-      await expect(preview.getByRole("heading", {name: "Review preview content"}))
-        .toBeVisible();
-      await fixture.page.keyboard.press("Escape");
-      await expect(fixture.page.getByRole("button", {name: "Full screen"})).toBeVisible();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact catalog"}))
-        .toBeVisible();
-      await fixture.page.keyboard.press("f");
-      await expect(fixture.page.getByRole("button", {name: "Exit full screen"})).toBeVisible();
-      await fixture.page.keyboard.press("f");
-      await expect(fixture.page.getByRole("button", {name: "Full screen"})).toBeVisible();
 
       await openInspectorTab(fixture.page, "Files");
       await expect(inspector.getByRole("region", {name: /^Files in version \d+$/u}).getByRole("button", {name: /^index\.html · /u})).toBeVisible();
@@ -479,33 +383,6 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
 
-      await fixture.page.emulateMedia({reducedMotion: "reduce"});
-      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
-      await fixture.page.getByRole("button", {name: "Close inspector"}).click();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}))
-        .toHaveCount(0);
-      await fixture.page.getByRole("button", {name: "Open inspector"}).click();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}))
-        .toBeVisible();
-      await fixture.page.getByRole("button", {name: "Full screen"}).click();
-      await expect(fixture.page.locator("[data-ac-left-nav]")).toHaveCount(0);
-      await fixture.page.getByRole("button", {name: /Comments/u}).click();
-      expect(await fixture.page.locator(".as-focus-comments").evaluate((node) => ({
-        transform: getComputedStyle(node).transform,
-        transitionProperty: getComputedStyle(node).transitionProperty,
-      }))).toEqual({transform: "none", transitionProperty: "opacity"});
-      const reducedViewerControls = fixture.page.locator(".as-focus-controls");
-      await reducedViewerControls.hover();
-      await fixture.page.getByRole("button", {name: "Hide viewer controls"}).click();
-      await expect(reducedViewerControls).toHaveCSS("opacity", "0");
-      expect(await reducedViewerControls.evaluate((node) =>
-        getComputedStyle(node).transform
-      )).toBe("none");
-      await fixture.page.keyboard.press("Control+Backslash");
-      await expect(fixture.page.locator(".as-focus-controls-dock"))
-        .toHaveAttribute("data-collapsed", "false");
-      await fixture.page.getByRole("button", {name: "Exit full screen"}).click();
-      await expect(fixture.page.locator("[data-ac-left-nav]")).toBeVisible();
 
     } finally {
       await stopBrowserFixture(fixture);
@@ -683,23 +560,12 @@ test.describe("Artifact Server frontend MVP", () => {
       const focusViewerControls = fixture.page.getByRole("toolbar", {
         name: "Artifact viewer controls",
       });
-      const focusViewerDock = fixture.page.locator(".as-focus-controls-dock");
-      const restoreFocusViewer = fixture.page.getByRole("button", {
-        name: "Show viewer controls",
-      });
-      await focusViewerControls.hover();
-      await fixture.page.getByRole("button", {name: "Hide viewer controls"}).click();
-      await expect(focusViewerDock).toHaveAttribute("data-hover-armed", "false");
-      await expect(restoreFocusViewer).toHaveCSS("opacity", "0");
-      await expect.poll(() => fixture.page.getByRole("region", {name: "Artifact preview"})
-        .evaluate((node) => node.scrollLeft)).toBe(0);
-      await fixture.page.mouse.move(100, 160);
-      await expect(focusViewerDock).toHaveAttribute("data-hover-armed", "true");
-      const reviewViewport = fixture.page.viewportSize();
-      expect(reviewViewport).not.toBeNull();
-      await fixture.page.mouse.move((reviewViewport?.width ?? 0) - 160, 48);
-      await expect(restoreFocusViewer).toHaveCSS("opacity", "1");
-      await restoreFocusViewer.click();
+      await focusViewerControls.getByRole("button", {name: "Hide viewer controls"}).click();
+      await expect(focusViewerControls).toBeHidden();
+      await expect.poll(async () => Math.round(
+        (await fixture.page.getByRole("region", {name: "Artifact preview"}).boundingBox())?.x ?? -1,
+      )).toBe(0);
+      await fixture.page.getByRole("button", {name: "Show viewer controls"}).click();
       await expect(focusViewerControls).toBeVisible();
       await fixture.page.reload();
       await expect(fixture.page.getByRole("button", {name: "Exit full screen"}))

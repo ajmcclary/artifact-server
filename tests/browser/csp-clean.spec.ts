@@ -6,7 +6,7 @@ import {
   privateTeamBrowserAccess,
 } from "../../src/core/browser-access.js";
 import {createOidcIdentityProvider} from "../../src/identity/oidc-identity-provider.js";
-import {publishNew} from "../support/publishing.js";
+import {publishNew, publishVersion} from "../support/publishing.js";
 import {
   createTestInstallation,
   removeTestInstallation,
@@ -14,6 +14,7 @@ import {
   startTestServer,
 } from "../support/runtime-harness.js";
 import {startStubOidcProvider} from "../support/stub-oidc-provider.js";
+import {createThreadOverApi} from "./comment-api.js";
 import {
   localLogin,
   startBrowserFixture,
@@ -21,6 +22,8 @@ import {
 } from "./browser-fixture.js";
 import {
   collectCspViolations,
+  openComparison,
+  openInspectorTab,
   openReview,
   openSettings,
   previewFrame,
@@ -159,5 +162,69 @@ test("AUTH-026-B: the private-team sign-in gate offers one sign-in action and re
     await server.stop();
     await provider.stop();
     await removeTestInstallation(installation);
+  }
+});
+
+test("CSP-clean: the artifact review workspace raises no policy violation in any theme mode", async ({browser}) => {
+  const fixture = await startBrowserFixture(browser);
+  try {
+    const first = await publishNew(fixture.server, fixture.installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><html lang=\"en\"><title>CSP workspace</title><main><h1>CSP workspace content</h1></main></html>",
+      idempotencyKey: "csp-workspace-v1",
+      name: "CSP workspace fixture",
+    });
+    const second = await publishVersion(fixture.server, fixture.installation, {
+      artifactId: first.body.artifact.id,
+      content: "<!doctype html><html lang=\"en\"><title>CSP workspace</title><main><h1>CSP workspace content</h1><p>Second</p></main></html>",
+      expectedCurrentVersionId: first.body.version.id,
+      idempotencyKey: "csp-workspace-v2",
+    });
+    await createThreadOverApi(fixture, {
+      artifactId: first.body.artifact.id,
+      body: "CSP workspace thread",
+      idempotencyKey: "csp-workspace-thread",
+      versionId: second.body.version.id,
+    });
+    const page = fixture.page;
+    const violations = collectCspViolations(page);
+    await localLogin(fixture);
+
+    const walkWorkspace = async (
+      media: {readonly colorScheme: "dark" | "light"; readonly contrast: "more" | "no-preference"},
+    ): Promise<void> => {
+      await page.emulateMedia(media);
+      await openReview(fixture, {artifactId: first.body.artifact.id});
+      await expect(previewFrame(page).getByRole("heading", {name: "CSP workspace content"})).toBeVisible();
+      const toolbar = page.getByRole("toolbar", {exact: true, name: "Artifact"});
+      await toolbar.getByRole("button", {exact: true, name: "Share"}).click();
+      const share = page.getByRole("dialog", {name: "Share artifact"});
+      await share.getByRole("button", {name: "Connect MCP"}).click();
+      await share.getByRole("button", {name: "Back to Share"}).click();
+      await share.getByRole("button", {name: "Manage access"}).click();
+      await share.getByRole("button", {name: "Close Share"}).click();
+      await openInspectorTab(page, "Comments");
+      await openInspectorTab(page, "Details");
+      await openInspectorTab(page, "Files");
+      await openInspectorTab(page, "Versions");
+      await openComparison(page, "Compare");
+      await page.getByRole("tabpanel", {name: "Compare"}).getByRole("button", {exact: true, name: "Compare"}).click();
+      await expect(page.getByRole("heading", {name: "Changed files"})).toBeVisible();
+      await openComparison(page, "Activity");
+      await page.getByRole("button", {name: "Back to the preview"}).click();
+      await toolbar.getByRole("button", {name: "Full screen"}).click();
+      const controls = page.getByRole("toolbar", {name: "Artifact viewer controls"});
+      await controls.getByRole("button", {name: /^Comments/u}).click();
+      await expect(page.getByRole("complementary", {name: "Comments"})).toBeVisible();
+      await controls.getByRole("button", {name: "Hide viewer controls"}).click();
+      await page.keyboard.press("Control+Backslash");
+      await controls.getByRole("button", {name: "Exit full screen"}).click();
+    };
+    await walkWorkspace({colorScheme: "light", contrast: "no-preference"});
+    await walkWorkspace({colorScheme: "dark", contrast: "no-preference"});
+    await walkWorkspace({colorScheme: "light", contrast: "more"});
+    expect(await violations()).toEqual([]);
+  } finally {
+    await stopBrowserFixture(fixture);
   }
 });

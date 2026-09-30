@@ -1,5 +1,5 @@
 import {
-  type MouseEvent as ReactMouseEvent,
+  type CSSProperties,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -7,16 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  ArrowShrinkIcon,
-  Cancel01Icon,
-  Comment01Icon,
-  Download04Icon,
-  Edit02Icon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
 import {useCommentPoll} from "@/components/comments/comment-poll";
@@ -42,6 +32,7 @@ import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
 import {CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
+import {FocusComments, FocusViewerControls, useFocusContainment} from "./workspace/focus-mode.tsx";
 import {FilesTab} from "./workspace/files-tab.tsx";
 import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
@@ -80,6 +71,26 @@ import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
 
 type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
+
+const workspaceStyle = {
+  background: "var(--surface-canvas)",
+  display: "flex",
+  height: "100%",
+  minHeight: 0,
+  minWidth: 0,
+} satisfies CSSProperties;
+const focusLayerStyle = {
+  background: "var(--surface-canvas)",
+  display: "flex",
+  inset: 0,
+  position: "fixed",
+  zIndex: 1030,
+} satisfies CSSProperties;
+const workspaceColumnStyle = {display: "flex", flex: "1 1 0", flexDirection: "column", minHeight: 0, minWidth: 0} satisfies CSSProperties;
+const canvasRowStyle = {display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0, position: "relative"} satisfies CSSProperties;
+const canvasColumnStyle = {display: "flex", flex: "1 1 0", flexDirection: "column", minHeight: 0, minWidth: 0} satisfies CSSProperties;
+const canvasSlotStyle = {flex: "1 1 auto", flexDirection: "column", minHeight: 0, minWidth: 0} satisfies CSSProperties;
+const catalogLandmarkStyle = {display: "flex", flex: "none", minHeight: 0} satisfies CSSProperties;
 
 const inspectorTitles = {
   comments: "Comments",
@@ -347,13 +358,12 @@ function ArtifactReview({
   const [focusMode, setFocusMode] = useState(initialLocation.view === "focus");
   const [focusCommentsOpen, setFocusCommentsOpen] = useState(false);
   const [focusControlsCollapsed, setFocusControlsCollapsed] = useState(false);
-  const [focusControlsHoverArmed, setFocusControlsHoverArmed] = useState(true);
-  const [focusControlsInstant, setFocusControlsInstant] = useState(false);
   const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(true);
   const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
-  const focusCommentsButtonRef = useRef<HTMLButtonElement>(null);
-  const focusControlsRestoreRef = useRef<HTMLButtonElement>(null);
-  const previewPanelRef = useRef<HTMLElement>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const commentsToggleRef = useRef<HTMLSpanElement | null>(null);
+  const restoreControlsRef = useRef<HTMLSpanElement | null>(null);
+  useFocusContainment(workspaceRef, focusMode);
   const commentsInspectorRef = useRef<CommentsTabHandle | null>(null);
   const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogRequestGenerationRef = useRef(0);
@@ -907,10 +917,15 @@ function ArtifactReview({
     setFocusControlsCollapsed(false);
     setFocusMode(false);
   }, [projectId, selectedArtifactId, selectedPath, selectedVersionId]);
-  const {setNavExpandable} = useShellLayout();
+  const {setChromeHidden, setNavExpandable} = useShellLayout();
   useEffect(() => {
     setNavExpandable(docking.navExpandable && !focusMode);
   }, [docking.navExpandable, focusMode, setNavExpandable]);
+  useEffect(() => {
+    // Full screen is a fixed layer inside the shell; the nav beneath it must not take focus.
+    setChromeHidden(focusMode);
+    return () => setChromeHidden(false);
+  }, [focusMode, setChromeHidden]);
   useEffect(() => {
     const handleReviewShortcut = (event: KeyboardEvent): void => {
       if (reviewShortcutBlocked(event)) return;
@@ -997,21 +1012,18 @@ function ArtifactReview({
     selectedVersionId,
     toggleCatalog,
   ]);
-  const hideFocusControls = (event: ReactMouseEvent<HTMLButtonElement>): void => {
-    previewPanelRef.current?.focus({preventScroll: true});
-    setFocusControlsHoverArmed(event.detail === 0);
+  const hideFocusControls = (): void => {
     setFocusControlsCollapsed(true);
-    if (event.detail === 0) {
-      window.requestAnimationFrame(() => {
-        focusControlsRestoreRef.current?.focus({preventScroll: true});
-      });
-    }
+    window.requestAnimationFrame(() => {
+      restoreControlsRef.current?.querySelector("button")?.focus({preventScroll: true});
+    });
   };
-  const showFocusControls = (): void => {
-    setFocusControlsHoverArmed(true);
+  const showFocusControls = useCallback((): void => {
     setFocusControlsCollapsed(false);
-    window.requestAnimationFrame(() => focusCommentsButtonRef.current?.focus({preventScroll: true}));
-  };
+    window.requestAnimationFrame(() => {
+      commentsToggleRef.current?.querySelector("button")?.focus({preventScroll: true});
+    });
+  }, []);
   useEffect(() => {
     if (!focusMode) return undefined;
     const revealFocusControls = (event: KeyboardEvent): void => {
@@ -1024,21 +1036,16 @@ function ArtifactReview({
         !isShortcut
         || event.defaultPrevented
         || event.isComposing
-        || target?.closest('[role="dialog"], [data-slot="popover-content"]')
+        || target?.closest('[role="dialog"]')
       ) {
         return;
       }
       event.preventDefault();
-      setFocusControlsInstant(true);
-      setFocusControlsCollapsed(false);
-      window.requestAnimationFrame(() => {
-        focusCommentsButtonRef.current?.focus({preventScroll: true});
-        window.requestAnimationFrame(() => setFocusControlsInstant(false));
-      });
+      showFocusControls();
     };
     window.addEventListener("keydown", revealFocusControls);
     return () => window.removeEventListener("keydown", revealFocusControls);
-  }, [focusMode]);
+  }, [focusMode, showFocusControls]);
 
   const selectAnnotation = (threadId: string | null): void => {
     comments.selectThread(threadId);
@@ -1103,6 +1110,32 @@ function ArtifactReview({
     {count: selectedVersion?.manifest.entries.length ?? 0, countTone: "neutral", icon: "bi-folder2", id: "files", label: "Files"},
     {count: versions.length, countTone: "neutral", icon: "bi-layers", id: "versions", label: "Versions"},
   ];
+
+  const annotateToggle = {
+    active: htmlAnnotateModeActive,
+    available: previewKind === "html" && canComment && htmlViewerMode === "annotate",
+    onToggle: () => setHtmlAnnotateModeActive((active) => !active),
+  };
+  const comparisonOpen = comparisonView !== null && details !== null;
+  const sharePopover = (placement: "focus" | "toolbar") => (
+    <SharePopover
+      details={details}
+      key={`${placement}-share-${details?.artifact.id ?? "empty"}`}
+      onArtifactChanged={updateArtifact}
+      selectedPath={selectedPath}
+      selectedVersion={selectedVersion}
+    />
+  );
+  const commentsTab = (
+    <CommentsTab
+      canComment={canComment}
+      canDeleteAny={canDeleteAnyComment}
+      handleRef={commentsInspectorRef}
+      principalId={session.principal.id}
+      session={comments}
+      versionId={selectedVersionId}
+    />
+  );
   const inspectorBody = details === null || selectedVersion === null ? (
     <SurfaceState
       count={0}
@@ -1123,14 +1156,7 @@ function ArtifactReview({
       version={selectedVersion}
     />
   ) : inspectorTab === "comments" ? (
-    <CommentsTab
-      canComment={canComment}
-      canDeleteAny={canDeleteAnyComment}
-      handleRef={commentsInspectorRef}
-      principalId={session.principal.id}
-      session={comments}
-      versionId={selectedVersionId}
-    />
+    commentsTab
   ) : inspectorTab === "files" ? (
     <FilesTab
       onSelect={selectManifestPath}
@@ -1154,19 +1180,9 @@ function ArtifactReview({
   );
 
   return (
-    <div
-      className="as-app"
-      data-focus-mode={focusMode}
-      data-html-annotate-mode={htmlViewerMode === "annotate" && htmlAnnotateModeActive}
-    >
-      <a className="as-skip-link" href="#review-preview">Skip to artifact preview</a>
-
-
+    <div ref={workspaceRef} style={focusMode ? focusLayerStyle : workspaceStyle}>
       {focusMode || (phone && !catalogSheetOpen) ? null : (
-        <aside
-          aria-label="Artifact catalog"
-          style={{display: "flex", flex: "none", minHeight: 0}}
-        >
+        <aside aria-label="Artifact catalog" style={catalogLandmarkStyle}>
           <ArtifactListPanel
             canPin={docking.listDocked}
             commentFilter={catalogCommentFilter}
@@ -1211,191 +1227,43 @@ function ArtifactReview({
           />
         </aside>
       )}
-
-      <main className="as-workspace">
-        <section
-          className="as-preview-panel"
-          id="review-preview"
-          ref={previewPanelRef}
-          tabIndex={-1}
-        >
-          {focusMode ? (
-            <>
-              <div
-                className="as-focus-controls-dock"
-                data-collapsed={focusControlsCollapsed}
-                data-comments-open={focusCommentsOpen}
-                data-hover-armed={focusControlsHoverArmed}
-                data-instant={focusControlsInstant}
-                onPointerLeave={() => setFocusControlsHoverArmed(true)}
-              >
-                <span aria-hidden="true" className="as-focus-controls__hover-zone" />
-                <div
-                  aria-hidden={focusControlsCollapsed}
-                  aria-label="Artifact viewer controls"
-                  className="as-focus-controls"
-                  inert={focusControlsCollapsed}
-                  role="toolbar"
-                >
-                  {previewKind === "html" && canComment && htmlViewerMode === "annotate" ? (
-                    <button
-                      aria-pressed={htmlAnnotateModeActive}
-                      className="as-button as-focus-controls__button"
-                      data-active={htmlAnnotateModeActive}
-                      onClick={() => setHtmlAnnotateModeActive((active) => !active)}
-                      title={htmlAnnotateModeActive
-                        ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
-                        : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
-                      type="button"
-                    >
-                      <HugeiconsIcon aria-hidden="true" icon={Edit02Icon} strokeWidth={1.8} />
-                      {htmlAnnotateModeActive ? "Annotate mode" : "Interact mode"}
-                    </button>
-                  ) : null}
-                  <button
-                    aria-controls="review-focus-comments"
-                    aria-expanded={focusCommentsOpen}
-                    aria-keyshortcuts="]"
-                    className="as-button as-focus-controls__button"
-                    data-active={focusCommentsOpen}
-                    onClick={() => setFocusCommentsOpen((current) => !current)}
-                    ref={focusCommentsButtonRef}
-                    title="Toggle comments (])"
-                    type="button"
-                  >
-                    <HugeiconsIcon aria-hidden="true" icon={Comment01Icon} strokeWidth={1.8} />
-                    Comments
-                    <span className="as-focus-controls__count">{openCommentCount}</span>
-                  </button>
-                  <SharePopover
-                    details={details}
-                    key={`focus-share-${details?.artifact.id ?? "empty"}`}
-                    onArtifactChanged={updateArtifact}
-                    selectedPath={selectedPath}
-                    selectedVersion={selectedVersion}
-                  />
-                  <ReviewDownloadControl
-                    className="as-button as-focus-controls__button"
-                    download={download}
-                  />
-                  <button
-                    aria-keyshortcuts="F"
-                    className="as-button as-focus-controls__button"
-                    onClick={exitFocusMode}
-                    title="Exit full screen (F)"
-                    type="button"
-                  >
-                    <HugeiconsIcon aria-hidden="true" icon={ArrowShrinkIcon} strokeWidth={1.8} />
-                    Exit full screen
-                  </button>
-                  <button
-                    aria-label="Hide viewer controls"
-                    className="as-icon-button as-focus-controls__collapse"
-                    onClick={hideFocusControls}
-                    title="Hide viewer controls"
-                    type="button"
-                  >
-                    <HugeiconsIcon aria-hidden="true" icon={ArrowRight01Icon} strokeWidth={1.8} />
-                  </button>
-                </div>
-                <button
-                  aria-hidden={!focusControlsCollapsed}
-                  aria-keyshortcuts="Meta+\\ Control+\\"
-                  aria-label="Show viewer controls"
-                  className="as-focus-controls__restore"
-                  onClick={showFocusControls}
-                  ref={focusControlsRestoreRef}
-                  tabIndex={focusControlsCollapsed ? 0 : -1}
-                  title="Show viewer controls (Command/Control + \\)"
-                  type="button"
-                >
-                  <HugeiconsIcon aria-hidden="true" icon={ArrowLeft01Icon} strokeWidth={1.8} />
-                </button>
-              </div>
-              <aside
-                aria-hidden={!focusCommentsOpen}
-                aria-labelledby="review-focus-comments-title"
-                className="as-focus-comments"
-                data-open={focusCommentsOpen}
-                id="review-focus-comments"
-                inert={!focusCommentsOpen}
-              >
-                <header className="as-focus-comments__header">
-                  <div>
-                    <HugeiconsIcon aria-hidden="true" icon={Comment01Icon} strokeWidth={1.8} />
-                    <h2 id="review-focus-comments-title">Comments</h2>
-                    <span>{openCommentCount}</span>
-                  </div>
-                  <IconButton
-                    keyShortcuts="] Escape"
-                    label="Close comments"
-                    onClick={() => setFocusCommentsOpen(false)}
-                    title="Close comments (] or Esc)"
-                  >
-                    <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.8} />
-                  </IconButton>
-                </header>
-                <div className="as-focus-comments__body">
-                  <CommentsTab
-                    canComment={canComment}
-                    canDeleteAny={canDeleteAnyComment}
-                    handleRef={commentsInspectorRef}
-                    principalId={session.principal.id}
-                    session={comments}
-                    versionId={selectedVersionId}
-                  />
-                </div>
-              </aside>
-            </>
-          ) : null}
-          {focusMode ? null : (
-            <ReviewToolbar
-              annotate={{
-                active: htmlAnnotateModeActive,
-                available: previewKind === "html" && canComment && htmlViewerMode === "annotate",
-                onToggle: () => setHtmlAnnotateModeActive((active) => !active),
-              }}
-              artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
-              canManage={canManageArtifacts}
-              catalogDocked={catalogDocked}
-              details={details}
-              download={download}
-              inspectorOpen={inspectorOpen}
-              linkedArtifacts={session.capabilities.linkedArtifacts}
-              onCapture={captureLinkedArtifact}
-              onDelete={tombstoneArtifact}
-              onEnterFocus={enterFocusMode}
-              onOpenCatalog={toggleCatalog}
-              onOpenComparison={() => setComparisonView("compare")}
-              onOpenLive={openLinkedArtifact}
-              onOpenRawArtifact={() => void openRawArtifact()}
-              onSelectPath={selectManifestPath}
-              onSelectVersion={(versionId) => {
-                setDetailError(null);
-                setSelectedVersionId(versionId);
-                setSelectedPath(null);
-              }}
-              onToggleInspector={() => setInspectorOpen((open) => !open)}
-              opening={opening}
-              phone={phone}
-              projectName={selectedProject?.name ?? "project"}
-              selectedPath={selectedPath}
-              selectedVersion={selectedVersion}
-              share={(
-                <SharePopover
-                  details={details}
-                  key={`header-share-${details?.artifact.id ?? "empty"}`}
-                  onArtifactChanged={updateArtifact}
-                  selectedPath={selectedPath}
-                  selectedVersion={selectedVersion}
-                />
-              )}
-              versions={versions}
-            />
-          )}
-
-          <div style={{display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0, minWidth: 0}}>
-            {comparisonView === null || details === null ? null : (
+      <div style={workspaceColumnStyle}>
+        {focusMode ? null : (
+          <ReviewToolbar
+            annotate={annotateToggle}
+            artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
+            canManage={canManageArtifacts}
+            catalogDocked={catalogDocked}
+            details={details}
+            download={download}
+            inspectorOpen={inspectorOpen}
+            linkedArtifacts={session.capabilities.linkedArtifacts}
+            onCapture={captureLinkedArtifact}
+            onDelete={tombstoneArtifact}
+            onEnterFocus={enterFocusMode}
+            onOpenCatalog={toggleCatalog}
+            onOpenComparison={() => setComparisonView("compare")}
+            onOpenLive={openLinkedArtifact}
+            onOpenRawArtifact={() => void openRawArtifact()}
+            onSelectPath={selectManifestPath}
+            onSelectVersion={(versionId) => {
+              setDetailError(null);
+              setSelectedVersionId(versionId);
+              setSelectedPath(null);
+            }}
+            onToggleInspector={() => setInspectorOpen((open) => !open)}
+            opening={opening}
+            phone={phone}
+            projectName={selectedProject?.name ?? "project"}
+            selectedPath={selectedPath}
+            selectedVersion={selectedVersion}
+            share={sharePopover("toolbar")}
+            versions={versions}
+          />
+        )}
+        <div style={canvasRowStyle}>
+          <div style={canvasColumnStyle}>
+            {!comparisonOpen || details === null || comparisonView === null ? null : (
               <ComparisonView
                 actions={actions}
                 activityError={activityError}
@@ -1415,15 +1283,7 @@ function ArtifactReview({
                 versions={versions}
               />
             )}
-            <div
-              style={{
-                display: comparisonView !== null && details !== null ? "none" : "flex",
-                flex: "1 1 auto",
-                flexDirection: "column",
-                minHeight: 0,
-                minWidth: 0,
-              }}
-            >
+            <div style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
               <PreviewCanvas
                 accessSetting={details?.artifact.accessSetting ?? "account_required"}
                 annotateModeActive={htmlAnnotateModeActive}
@@ -1455,33 +1315,53 @@ function ArtifactReview({
               />
             </div>
           </div>
-        </section>
-
-        {focusMode ? null : (
-          <InspectorPanel
-            active={inspectorTab}
-            canPin={!phone && viewportWidth >= workspaceBudget.inspector}
-            items={inspectorItems}
-            onAnnounce={announce}
-            onClose={() => setInspectorOpen(false)}
-            onPinChange={inspectorPreference.setPinned}
-            onSelect={selectInspectorTab}
-            onWidthChange={inspectorPreference.setWidth}
-            open={inspectorOpen}
-            pinned={inspectorPreference.pinned}
-            railLabels={viewportHeight >= 680}
-            sheet={phone}
-            subtitle={details === null || selectedVersion === null
-              ? null
-              : `${details.artifact.name} · v${selectedVersion.version.number}`}
-            title={inspectorTitles[inspectorTab]}
-            titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
-            width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorTab)}
-          >
-            {inspectorBody}
-          </InspectorPanel>
-        )}
-      </main>
+          {focusMode ? null : (
+            <InspectorPanel
+              active={inspectorTab}
+              canPin={!phone && viewportWidth >= workspaceBudget.inspector}
+              items={inspectorItems}
+              onAnnounce={announce}
+              onClose={() => setInspectorOpen(false)}
+              onPinChange={inspectorPreference.setPinned}
+              onSelect={selectInspectorTab}
+              onWidthChange={inspectorPreference.setWidth}
+              open={inspectorOpen}
+              pinned={inspectorPreference.pinned}
+              railLabels={viewportHeight >= 680}
+              sheet={phone}
+              subtitle={details === null || selectedVersion === null
+                ? null
+                : `${details.artifact.name} · v${selectedVersion.version.number}`}
+              title={inspectorTitles[inspectorTab]}
+              titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
+              width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorTab)}
+            >
+              {inspectorBody}
+            </InspectorPanel>
+          )}
+          {focusMode && focusCommentsOpen ? (
+            <FocusComments commentCount={openCommentCount} onClose={() => setFocusCommentsOpen(false)}>
+              {commentsTab}
+            </FocusComments>
+          ) : null}
+          {focusMode ? (
+            <FocusViewerControls
+              annotate={annotateToggle}
+              collapsed={focusControlsCollapsed}
+              commentCount={openCommentCount}
+              commentsOpen={focusCommentsOpen}
+              commentsToggleRef={commentsToggleRef}
+              download={download}
+              onExit={exitFocusMode}
+              onHide={hideFocusControls}
+              onShow={showFocusControls}
+              onToggleComments={() => setFocusCommentsOpen((open) => !open)}
+              restoreRef={restoreControlsRef}
+              share={sharePopover("focus")}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1509,69 +1389,6 @@ function reviewDownload(
     href: api.versionArchiveUrl(projectId, artifactId, version.version.id),
     title: `Download ${entries.length} files as a ZIP`,
   };
-}
-
-function ReviewDownloadControl({
-  className,
-  download,
-}: {
-  readonly className: string;
-  readonly download: ReviewDownload | null;
-}) {
-  if (download === null) {
-    return (
-      <button aria-label="Download" className={className} disabled type="button">
-        <HugeiconsIcon aria-hidden="true" icon={Download04Icon} strokeWidth={1.8} />
-        <span className="as-button__label">Download</span>
-      </button>
-    );
-  }
-  return (
-    <a
-      aria-label="Download"
-      className={className}
-      download
-      href={download.href}
-      title={download.title}
-    >
-      <HugeiconsIcon aria-hidden="true" icon={Download04Icon} strokeWidth={1.8} />
-      <span className="as-button__label">Download</span>
-    </a>
-  );
-}
-
-function IconButton({
-  active,
-  children,
-  disabled = false,
-  keyShortcuts,
-  label,
-  onClick,
-  title,
-}: {
-  readonly active?: boolean;
-  readonly children: React.ReactNode;
-  readonly disabled?: boolean;
-  readonly keyShortcuts?: string;
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly title?: string;
-}) {
-  return (
-    <button
-      aria-keyshortcuts={keyShortcuts}
-      aria-label={label}
-      aria-pressed={active}
-      className="as-icon-button"
-      data-active={active}
-      disabled={disabled}
-      onClick={onClick}
-      title={title ?? label}
-      type="button"
-    >
-      {children}
-    </button>
-  );
 }
 
 function readInitialInspectorOpen(): boolean {
