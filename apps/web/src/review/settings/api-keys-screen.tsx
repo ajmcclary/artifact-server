@@ -8,10 +8,10 @@ import {
   type PrincipalCapability,
 } from "@/api/client";
 import {
+  Alert,
   AutoGrid,
   Button,
   Checkbox,
-  CodeBlock,
   Eyebrow,
   Input,
   Modal,
@@ -22,8 +22,7 @@ import {
   Tag,
 } from "@/arkcase";
 import {formatTimestamp} from "@/lib/presentation";
-import {useAnnounce} from "@/ui/announcer";
-import {copyText} from "@/ui/copy";
+import {CopyableCode} from "@/ui/copyable-code";
 import {
   AdminActions,
   AdminPanel,
@@ -375,11 +374,9 @@ function SecretModal({
   readonly issued: IssuedApiKey | null;
   readonly onDiscard: () => void;
 }) {
-  const announce = useAnnounce();
+  const [refused, setRefused] = useState(false);
+  useEffect(() => setRefused(false), [issued]);
   if (issued === null) return null;
-  const copySecret = async (): Promise<void> => {
-    if (await copyText(issued.token)) announce("API key copied");
-  };
   return (
     <Modal
       footer={<Button onClick={onDiscard} size="sm">I stored it</Button>}
@@ -391,12 +388,18 @@ function SecretModal({
       subtitle="This secret is displayed once. Store it in the intended client's secret input or a deployment secret manager. Artifact Server cannot show it again."
       title="Copy API key now"
     >
-      <CodeBlock
-        copy={{copiedLabel: "API key copied", label: "Copy API key", onCopy: () => void copySecret()}}
+      <CopyableCode
+        code={issued.token}
+        copiedLabel="API key copied"
+        copyLabel="Copy API key"
         label="API key secret"
-      >
-        {issued.token}
-      </CodeBlock>
+        onResult={(copied) => setRefused(!copied)}
+      />
+      {refused ? (
+        <Alert live="assertive" style={{marginTop: 12}} variant="danger">
+          The browser did not copy the API key. Select the secret above and copy it manually before closing.
+        </Alert>
+      ) : null}
     </Modal>
   );
 }

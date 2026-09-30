@@ -1,7 +1,6 @@
 import type {Project} from "@/api/client";
-import {CodeBlock, SurfaceState} from "@/arkcase";
-import {useAnnounce} from "@/ui/announcer";
-import {copyText} from "@/ui/copy";
+import {SurfaceState} from "@/arkcase";
+import {CopyableCode} from "@/ui/copyable-code";
 import {AdminStack} from "./admin-parts.tsx";
 
 export interface EmptyProjectStateProps {
@@ -10,7 +9,6 @@ export interface EmptyProjectStateProps {
 
 /** The existing publish guidance for a project with no artifacts, with this project's CLI command. */
 export function EmptyProjectState({project}: EmptyProjectStateProps) {
-  const announce = useAnnounce();
   if (project.archivedAt !== null) {
     return (
       <SurfaceState
@@ -25,9 +23,6 @@ export function EmptyProjectState({project}: EmptyProjectStateProps) {
     );
   }
   const command = `artifactserver publish ./dist --project ${project.id}`;
-  const copyCommand = async (): Promise<void> => {
-    if (await copyText(command)) announce("Publish command copied");
-  };
   return (
     <AdminStack>
       <SurfaceState
@@ -39,16 +34,12 @@ export function EmptyProjectState({project}: EmptyProjectStateProps) {
         phase="ready"
         titleLevel={3}
       />
-      <CodeBlock
-        copy={{
-          copiedLabel: "Publish command copied",
-          label: "Copy publish command",
-          onCopy: () => void copyCommand(),
-        }}
+      <CopyableCode
+        code={command}
+        copiedLabel="Publish command copied"
+        copyLabel="Copy publish command"
         tone="navy"
-      >
-        {command}
-      </CodeBlock>
+      />
     </AdminStack>
   );
 }

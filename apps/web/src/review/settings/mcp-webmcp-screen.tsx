@@ -4,14 +4,12 @@ import {
   Alert,
   AutoGrid,
   Button,
-  CodeBlock,
   PageScaffold,
   SectionHeading,
   Switch,
   Tag,
 } from "@/arkcase";
-import {useAnnounce} from "@/ui/announcer";
-import {copyText} from "@/ui/copy";
+import {CopyableCode} from "@/ui/copyable-code";
 import {setWebmcpEnabled, webmcpEnabled} from "../webmcp.tsx";
 import {AdminActions, AdminNote, AdminPanel, AdminStack, useDsDensity} from "./admin-parts.tsx";
 
@@ -23,21 +21,12 @@ export interface McpWebmcpScreenProps {
 
 /** One screen for connecting external agents over MCP and for the browser-agent (WebMCP) preference. */
 export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
-  const announce = useAnnounce();
   const density = useDsDensity();
   const [failure, setFailure] = useState<string | null>(null);
   const mcpAddress = `${window.location.origin}/mcp`;
 
-  const copy = async (value: string, confirmation: string): Promise<void> => {
-    setFailure(null);
-    if (await copyText(value)) {
-      announce(confirmation);
-      return;
-    }
-    setFailure("Unable to copy. Select the value and copy it manually.");
-  };
-  const onCopy = (value: string, confirmation: string): void => {
-    void copy(value, confirmation);
+  const onCopied = (copied: boolean): void => {
+    setFailure(copied ? null : "Unable to copy. Select the value and copy it manually.");
   };
 
   return (
@@ -60,7 +49,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
             <CommandWell
               confirmation="Local connection command copied"
               label="Copy local connection command"
-              onCopy={onCopy}
+              onCopied={onCopied}
               value="artifactserver connect"
             />
             <AdminNote>If more than one supported client is installed, add its name:</AdminNote>
@@ -79,7 +68,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
             <CommandWell
               confirmation="MCP server address copied"
               label="Copy MCP server address"
-              onCopy={onCopy}
+              onCopied={onCopied}
               value={mcpAddress}
             />
             <AdminNote>
@@ -103,7 +92,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
           <CommandWell
             confirmation="Connection check command copied"
             label="Copy connection check command"
-            onCopy={onCopy}
+            onCopied={onCopied}
             value="artifactserver doctor"
           />
           <AdminNote>
@@ -123,7 +112,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
           <CommandWell
             confirmation="Skill installation command copied"
             label="Copy skill installation command"
-            onCopy={onCopy}
+            onCopied={onCopied}
             value="npx skills add plannotator/artifact-server"
           />
         </AdminStack>
@@ -137,21 +126,16 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
 function CommandWell({
   confirmation,
   label,
-  onCopy,
+  onCopied,
   value,
 }: {
   readonly confirmation: string;
   readonly label: string;
-  readonly onCopy: (value: string, confirmation: string) => void;
+  readonly onCopied: (copied: boolean) => void;
   readonly value: string;
 }) {
   return (
-    <CodeBlock
-      copy={{copiedLabel: confirmation, label, onCopy: () => onCopy(value, confirmation)}}
-      tone="navy"
-    >
-      {value}
-    </CodeBlock>
+    <CopyableCode code={value} copiedLabel={confirmation} copyLabel={label} onResult={onCopied} tone="navy" />
   );
 }
 

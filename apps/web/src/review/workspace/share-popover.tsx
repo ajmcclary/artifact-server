@@ -5,13 +5,12 @@ import {
   Alert,
   Button,
   Checkbox,
-  CodeBlock,
   IconButton,
   Popover,
 } from "@/arkcase";
 import {useThemeMode} from "@/theme/use-theme-mode";
-import {copyText} from "@/ui/copy";
 import {CopyAction} from "@/ui/copy-action";
+import {CopyableCode} from "@/ui/copyable-code";
 import {ArtifactLinks} from "@/ui/review-ui";
 
 import claudeLogoUrl from "../assets/agents/claude.svg";
@@ -261,22 +260,24 @@ export function SharePopover({
           <section style={sectionStyle}>
             <div style={rowStyle}><strong>On this computer</strong><span style={subtleStyle}>Recommended for local use</span></div>
             <p style={subtleStyle}>Detect a supported client, install its private MCP connection, and verify it without copying a token.</p>
-            <CodeBlock
-              copy={{copiedLabel: "Copied", label: "Copy local connection command", onCopy: () => void copyText("artifactserver connect")}}
+            <CopyableCode
+              code="artifactserver connect"
+              copiedLabel="Copied"
+              copyLabel="Copy local connection command"
+              onResult={(copied) => setFailure(copied ? null : copyRefusal("local connection command"))}
               tone="navy"
-            >
-              artifactserver connect
-            </CodeBlock>
+            />
           </section>
           <section style={sectionStyle}>
             <div style={rowStyle}><strong>Team or remote server</strong><span style={subtleStyle}>MCP</span></div>
             <p style={subtleStyle}>Add this server address to the agent. Compatible deployments open browser sign-in; other self-hosted deployments use an administrator-issued scoped key.</p>
-            <CodeBlock
-              copy={{copiedLabel: "Copied", label: "Copy MCP server address", onCopy: () => void copyText(mcpAddress)}}
+            <CopyableCode
+              code={mcpAddress}
+              copiedLabel="Copied"
+              copyLabel="Copy MCP server address"
+              onResult={(copied) => setFailure(copied ? null : copyRefusal("MCP server address"))}
               tone="navy"
-            >
-              {mcpAddress}
-            </CodeBlock>
+            />
           </section>
           <section style={sectionStyle}>
             <div style={rowStyle}><strong>Without MCP</strong><span style={subtleStyle}>HTTP API</span></div>
@@ -341,6 +342,10 @@ export function AgentLogos() {
       ))}
     </span>
   );
+}
+
+function copyRefusal(subject: string): string {
+  return `The browser did not copy the ${subject}. Select it and copy it manually.`;
 }
 
 function exactReviewLink(

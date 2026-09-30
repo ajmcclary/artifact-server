@@ -18,6 +18,8 @@ export function CopyAction(props: {
   readonly copiedLabel?: string;
   readonly variant?: "ghost" | "outline" | "link" | "navy";
   readonly children?: ReactNode;
+  /** Told whether the clipboard write resolved, so a caller can show a refusal on screen. */
+  readonly onResult?: (copied: boolean) => void;
 }): JSX.Element {
   const announce = useAnnounce();
   const [copied, setCopied] = useState(false);
@@ -28,9 +30,11 @@ export function CopyAction(props: {
   const copiedLabel = props.copiedLabel ?? `${props.label} copied`;
   const copyAndConfirm = async (): Promise<void> => {
     if (!await copyText(props.text)) {
-      announce(`Could not copy ${props.label}.`, "assertive");
+      announce(`Could not copy ${props.label.replace(/^Copy /u, "")}.`, "assertive");
+      props.onResult?.(false);
       return;
     }
+    props.onResult?.(true);
     setCopied(true);
     announce(copiedLabel);
     if (timer.current !== null) clearTimeout(timer.current);
