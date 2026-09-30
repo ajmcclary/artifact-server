@@ -19,7 +19,10 @@ import {
   type RunningTestServer,
   type TestInstallation,
 } from "../support/runtime-harness.js";
-import {localLogin} from "./browser-fixture.js";
+import {
+  localLogin,
+  workspaceViewport,
+} from "./browser-fixture.js";
 import {openReview} from "./review-helpers.js";
 
 /** The link answer these tests read, mirroring the HTTP response shaping. */
@@ -70,7 +73,7 @@ async function startLinkedFixture(browser: Browser): Promise<LinkedFixture> {
     linkedFiles: "on",
     linkRoots: [linkRoot],
   });
-  const context = await browser.newContext();
+  const context = await browser.newContext({viewport: workspaceViewport});
   const page = await context.newPage();
   return {context, installation, linkRoot, page, server};
 }

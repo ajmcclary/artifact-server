@@ -89,32 +89,18 @@ test.describe("Artifact Server frontend MVP", () => {
       );
       await catalogRefresh.click();
       await expect(catalogRefresh).toHaveAttribute("data-state", "complete");
-      const catalogFooter = fixture.page.locator(".as-catalog__footer");
-      await expect(catalogFooter).toHaveCount(1);
-      await expect(catalogFooter.getByRole("button", {
+      const catalog = fixture.page.getByRole("complementary", {name: "Artifact catalog"});
+      const inspector = fixture.page.getByRole("complementary", {name: "Artifact inspector"});
+      const catalogPanel = fixture.page.locator('[data-panel="artifact-catalog"]');
+      await expect(catalog.getByRole("button", {
         name: "Refresh artifacts published by agents, the CLI, or other sessions",
       })).toBeVisible();
-      await expect(fixture.page.locator(".as-catalog__tools").getByRole("button", {
-        name: "Refresh artifacts published by agents, the CLI, or other sessions",
-      })).toHaveCount(0);
-      await expect(catalogFooter.getByRole("button", {name: "Load more"})).toHaveCount(0);
-      const shortcutTrigger = catalogFooter.getByRole("button", {
-        name: "Keyboard shortcuts",
-      });
+      await expect(catalog.getByRole("button", {name: "Load more"})).toHaveCount(0);
+      const shortcutTrigger = catalog.getByRole("button", {name: "Keyboard shortcuts"});
       await expect(shortcutTrigger).toBeVisible();
       await expect(shortcutTrigger).toHaveAttribute("title", "Keyboard shortcuts");
-      const catalogFooterBox = await catalogFooter.boundingBox();
-      const shortcutTriggerBox = await shortcutTrigger.boundingBox();
-      expect(catalogFooterBox).not.toBeNull();
-      expect(shortcutTriggerBox).not.toBeNull();
-      if (catalogFooterBox === null || shortcutTriggerBox === null) {
-        throw new Error("Keyboard shortcut footer geometry was unavailable.");
-      }
-      expect(shortcutTriggerBox.x).toBeGreaterThan(
-        catalogFooterBox.x + catalogFooterBox.width / 2,
-      );
       await shortcutTrigger.click();
-      const shortcutMap = fixture.page.locator(".as-keyboard-shortcuts[data-open]");
+      const shortcutMap = fixture.page.getByRole("dialog", {name: "Keyboard shortcuts"});
       await expect(shortcutMap).toBeVisible();
       await expect(shortcutMap).toContainText("Previous artifact");
       await expect(shortcutMap).toContainText("Inspector or comments");
@@ -159,130 +145,6 @@ test.describe("Artifact Server frontend MVP", () => {
       await interactMode.click();
       await expect(annotateMode).toHaveAttribute("aria-pressed", "true");
 
-      const catalog = fixture.page.getByRole("complementary", {
-        name: "Artifact catalog",
-      });
-      const catalogResizeHit = fixture.page.locator(
-        '.as-panel-assembly[data-side="left"] .as-panel-edge__hit',
-      );
-      await expect(fixture.page.getByRole("separator", {
-        name: "Artifact catalog width",
-      })).toHaveAttribute("aria-valuenow", "336");
-      const catalogBeforeResize = await catalog.boundingBox();
-      const catalogHitBeforeResize = await catalogResizeHit.boundingBox();
-      expect(catalogBeforeResize).not.toBeNull();
-      expect(catalogHitBeforeResize).not.toBeNull();
-      if (catalogBeforeResize === null || catalogHitBeforeResize === null) {
-        throw new Error("Review catalog resize geometry was unavailable.");
-      }
-      await fixture.page.mouse.move(
-        catalogHitBeforeResize.x + catalogHitBeforeResize.width / 2,
-        catalogHitBeforeResize.y + 180,
-      );
-      await expect(fixture.page.getByRole("tooltip", {
-        name: "Click to close · Drag to resize",
-      })).toBeVisible();
-      await fixture.page.mouse.down();
-      await fixture.page.mouse.move(
-        catalogHitBeforeResize.x + catalogHitBeforeResize.width / 2 + 48,
-        catalogHitBeforeResize.y + 180,
-        {steps: 4},
-      );
-      await fixture.page.mouse.up();
-      await expect.poll(async () => (await catalog.boundingBox())?.width ?? 0)
-        .toBeGreaterThan(catalogBeforeResize.width + 40);
-      expect(await fixture.page.evaluate(() =>
-        window.localStorage.getItem("artifact-review-catalog-width")
-      )).not.toBeNull();
-
-      const inspector = fixture.page.getByRole("complementary", {
-        name: "Artifact inspector",
-      });
-      const inspectorResizeHit = fixture.page.locator(
-        '.as-panel-assembly[data-side="right"] .as-panel-edge__hit',
-      );
-      await expect(fixture.page.getByRole("separator", {
-        name: "Artifact inspector width",
-      })).toHaveAttribute("aria-valuenow", "352");
-      const inspectorBeforeResize = await inspector.boundingBox();
-      const inspectorHitBeforeResize = await inspectorResizeHit.boundingBox();
-      expect(inspectorBeforeResize).not.toBeNull();
-      expect(inspectorHitBeforeResize).not.toBeNull();
-      if (inspectorBeforeResize === null || inspectorHitBeforeResize === null) {
-        throw new Error("Review inspector resize geometry was unavailable.");
-      }
-      await fixture.page.mouse.move(
-        inspectorHitBeforeResize.x + inspectorHitBeforeResize.width / 2,
-        inspectorHitBeforeResize.y + 180,
-      );
-      await fixture.page.mouse.down();
-      await fixture.page.mouse.move(
-        inspectorHitBeforeResize.x + inspectorHitBeforeResize.width / 2 - 36,
-        inspectorHitBeforeResize.y + 180,
-        {steps: 4},
-      );
-      await fixture.page.mouse.up();
-      await expect.poll(async () => (await inspector.boundingBox())?.width ?? 0)
-        .toBeGreaterThan(inspectorBeforeResize.width + 28);
-
-      const inspectorSeparator = fixture.page.getByRole("separator", {
-        name: "Artifact inspector width",
-      });
-      const keyboardWidth = Number(await inspectorSeparator.getAttribute("aria-valuenow"));
-      await inspectorSeparator.focus();
-      await fixture.page.keyboard.press("ArrowLeft");
-      await expect(inspectorSeparator).toHaveAttribute(
-        "aria-valuenow",
-        String(keyboardWidth + 10),
-      );
-
-      const inspectorHitBeforeCollapse = await inspectorResizeHit.boundingBox();
-      expect(inspectorHitBeforeCollapse).not.toBeNull();
-      if (inspectorHitBeforeCollapse === null) {
-        throw new Error("Review inspector collapse edge was unavailable.");
-      }
-      await fixture.page.mouse.click(
-        inspectorHitBeforeCollapse.x + inspectorHitBeforeCollapse.width / 2,
-        inspectorHitBeforeCollapse.y + 180,
-      );
-      await expect(fixture.page.getByRole("button", {name: "Open inspector"}))
-        .toBeVisible();
-      await expect(inspector).toBeHidden();
-      await fixture.page.getByRole("button", {name: "Open inspector"}).click();
-      await expect(inspector).toBeVisible();
-
-      const catalogHitBeforeSnap = await catalogResizeHit.boundingBox();
-      expect(catalogHitBeforeSnap).not.toBeNull();
-      if (catalogHitBeforeSnap === null) {
-        throw new Error("Review catalog snap edge was unavailable.");
-      }
-      const snapY = catalogHitBeforeSnap.y + 220;
-      await fixture.page.mouse.move(
-        catalogHitBeforeSnap.x + catalogHitBeforeSnap.width / 2,
-        snapY,
-      );
-      await fixture.page.mouse.down();
-      await fixture.page.mouse.move(60, snapY, {steps: 6});
-      await expect(fixture.page.getByRole("button", {name: "Open artifact catalog"}))
-        .toBeVisible();
-      await fixture.page.mouse.move(300, snapY, {steps: 6});
-      await expect(fixture.page.getByRole("separator", {name: "Artifact catalog width"}))
-        .toHaveCount(1);
-      await expect.poll(async () => (await catalog.boundingBox())?.width ?? 0)
-        .toBeGreaterThan(120);
-      await fixture.page.mouse.up();
-      await expect(catalog).toBeVisible();
-
-      await fixture.page.setViewportSize({height: 720, width: 1024});
-      await expect(fixture.page.locator('.as-panel-assembly[data-side="right"]'))
-        .toHaveCSS("position", "absolute");
-      await expect.poll(async () =>
-        (await fixture.page.locator(".as-preview-panel").boundingBox())?.width ?? 0
-      ).toBeGreaterThan(600);
-      await fixture.page.setViewportSize({height: 720, width: 680});
-      await expect(fixture.page.locator('.as-panel-assembly[data-side="left"]'))
-        .toHaveCSS("position", "absolute");
-      await fixture.page.setViewportSize({height: 720, width: 1280});
 
       await preview.locator("#review-target").hover();
       await expect(preview.locator("[data-plannotator-pinpoint-box]"))
@@ -342,7 +204,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(catalogRefresh).toHaveAttribute("data-state", "complete");
       const catalogFilters = fixture.page.getByRole("button", {name: /Filter artifacts/u});
       await catalogFilters.click();
-      const filterPopover = fixture.page.locator(".as-catalog-filter-popover[data-open]");
+      const filterPopover = catalog.getByRole("group", {name: "Filters"});
       const catalogSort = fixture.page.getByRole("combobox", {name: "Sort artifacts"});
       await filterPopover.getByRole("radio", {name: "With comments"}).check();
       await expect(fixture.page.getByRole("button", {name: /Review fixture/u})).toBeVisible();
@@ -352,21 +214,25 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: /Review fixture/u})).toHaveCount(0);
       await expect(preview.getByRole("heading", {name: "Review preview content"})).toBeVisible();
       await filterPopover.getByRole("radio", {name: "All artifacts"}).check();
-      await filterPopover.getByRole("checkbox", {name: "quiet"}).check();
+      // The DS check mark sits over the native input, so the reader clicks the label.
+      await filterPopover.getByText("quiet", {exact: true}).click();
+      await expect(filterPopover.getByRole("checkbox", {name: "quiet"})).toBeChecked();
       await expect(fixture.page.getByRole("button", {name: /Quiet fixture/u})).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: /Review fixture/u})).toHaveCount(0);
-      await filterPopover.getByRole("checkbox", {name: "inspection"}).check();
+      await filterPopover.getByText("inspection", {exact: true}).click();
+      await expect(filterPopover.getByRole("checkbox", {name: "inspection"})).toBeChecked();
       await expect(fixture.page.getByRole("button", {name: /Quiet fixture/u})).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: /Review fixture/u})).toBeVisible();
-      await filterPopover.getByRole("checkbox", {name: "quiet"}).uncheck();
+      await filterPopover.getByText("quiet", {exact: true}).click();
+      await expect(filterPopover.getByRole("checkbox", {name: "quiet"})).not.toBeChecked();
       await expect(fixture.page.getByRole("button", {name: /Quiet fixture/u})).toHaveCount(0);
       await expect(fixture.page.getByRole("button", {name: /Review fixture/u})).toBeVisible();
       await filterPopover.getByRole("button", {name: "Any tag"}).click();
       await catalogSort.selectOption("comments");
-      await expect(fixture.page.locator(".as-artifact-card").first())
+      await expect(catalog.getByRole("list", {name: "Artifacts"}).getByRole("button").first())
         .toContainText("Review fixture");
       await catalogSort.selectOption("newest");
-      await expect(fixture.page.locator(".as-artifact-card").first())
+      await expect(catalog.getByRole("list", {name: "Artifacts"}).getByRole("button").first())
         .toContainText("Quiet fixture");
       expect(quietArtifact.body.artifact.id).not.toBe(first.body.artifact.id);
       await fixture.page.keyboard.press("Escape");
@@ -411,11 +277,12 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(collapseCatalog).toHaveAttribute("aria-keyshortcuts", "[");
       await fixture.page.locator(".as-preview-panel").focus();
       await fixture.page.keyboard.press("[");
+      await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
       const openCatalog = fixture.page.getByRole("button", {name: "Open artifact catalog"});
       await expect(openCatalog).toBeVisible();
       await expect(openCatalog).toHaveAttribute("aria-keyshortcuts", "[");
       await fixture.page.keyboard.press("[");
-      await expect(catalog).toBeVisible();
+      await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");
 
       const closeInspector = fixture.page.getByRole("button", {name: "Close inspector"});
       await expect(closeInspector).toHaveAttribute("aria-keyshortcuts", "]");
@@ -447,7 +314,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(updatedCatalogCard).not.toContainText("polished");
       await catalogFilters.click();
       await expect(
-        fixture.page.locator(".as-catalog-filter-popover[data-open]")
+        filterPopover
           .getByRole("checkbox", {name: "polished"}),
       ).toBeVisible();
       await fixture.page.keyboard.press("Escape");
@@ -585,14 +452,10 @@ test.describe("Artifact Server frontend MVP", () => {
       // The 52 px rail plus its 1 px seam hairline.
       expect(navigationBox).toMatchObject({width: 53, x: 0});
       expect(catalogBox?.x).toBe(53);
-      await fixture.page.getByRole("button", {name: "Collapse artifact catalog"})
-        .click();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact catalog"}))
-        .toBeHidden();
-      await fixture.page.getByRole("button", {name: "Open artifact catalog"})
-        .click();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact catalog"}))
-        .toBeVisible();
+      await catalog.getByRole("button", {name: "Collapse artifact catalog"}).click();
+      await expect(catalogPanel).toHaveAttribute("data-panel-state", "railed");
+      await fixture.page.getByRole("button", {name: "Open artifact catalog"}).click();
+      await expect(catalogPanel).toHaveAttribute("data-panel-state", "pinned");
       await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
       await fixture.page.getByRole("button", {name: /Review fixture/u}).click();
       await expect(
@@ -633,6 +496,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("Escape");
       await expect(accountMenu).toHaveCount(0);
       await expect(accountButton).toBeFocused();
+      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
       const darkAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(".as-artifact-frame")
         .withTags(["wcag2a", "wcag2aa"])
@@ -647,6 +511,8 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
         .toBe(JSON.stringify("default"));
       await fixture.page.keyboard.press("Escape");
+      // Controls animate their ink across a theme change; scan the settled page.
+      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
       const lightAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(".as-artifact-frame")
         .withTags(["wcag2a", "wcag2aa"])

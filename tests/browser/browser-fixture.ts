@@ -16,13 +16,21 @@ export interface BrowserFixture {
   readonly server: RunningTestServer;
 }
 
+/**
+ * The desktop profile every browser spec starts on: wide enough (1640 px or
+ * more) for the artifact catalog to dock beside a docked inspector, as the
+ * previous single layout always did. Narrower profiles are set explicitly by
+ * the specs that prove them.
+ */
+export const workspaceViewport = {height: 1000, width: 1680} as const;
+
 export async function startBrowserFixture(
   browser: Browser,
   options: {readonly timezoneId?: string} = {},
 ): Promise<BrowserFixture> {
   const installation = await createTestInstallation();
   const server = await startTestServer(installation);
-  const context = await browser.newContext(options);
+  const context = await browser.newContext({viewport: workspaceViewport, ...options});
   const page = await context.newPage();
   return {context, installation, page, server};
 }

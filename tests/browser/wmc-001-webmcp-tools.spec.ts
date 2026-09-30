@@ -4,7 +4,12 @@ import {z} from "zod";
 
 import {ApiClient, issueApiKey, signInAdministrator} from "../support/agent-dispatch.js";
 import {publishNew} from "../support/publishing.js";
-import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
+import {
+  localLogin,
+  startBrowserFixture,
+  stopBrowserFixture,
+  workspaceViewport,
+} from "./browser-fixture.js";
 import {openInspectorTab, openReview, openSettings, reviewHref} from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
 import {
@@ -218,7 +223,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
       // preference off unregisters them live (the abort-signal path), the
       // settings page shows the stored choice, and switching it back on
       // registers again on the next review load.
-      const toggled = await browser.newContext();
+      const toggled = await browser.newContext({viewport: workspaceViewport});
       try {
         await installFakeModelContext(toggled);
         const page = await toggled.newPage();

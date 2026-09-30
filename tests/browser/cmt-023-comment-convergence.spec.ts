@@ -5,6 +5,7 @@ import {
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
+  workspaceViewport,
 } from "./browser-fixture.js";
 import {openInspectorTab, reviewHref} from "./review-helpers.js";
 import {
@@ -18,7 +19,7 @@ test.describe("comment revision convergence", () => {
   test("two open reviewers converge when a thread is created and deleted elsewhere", async ({browser}) => {
     test.setTimeout(120_000);
     const fixture = await startBrowserFixture(browser);
-    const secondContext = await browser.newContext();
+    const secondContext = await browser.newContext({viewport: workspaceViewport});
     try {
       const published = await publishNew(fixture.server, fixture.installation, {
         accessSetting: "account_required",

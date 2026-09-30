@@ -18,20 +18,14 @@ import {
   Edit02Icon,
   ExternalLinkIcon,
   File01Icon,
-  FilterIcon,
   FullScreenIcon,
-  KeyboardIcon,
   LayoutLeftIcon,
   Link01Icon,
   PanelRightIcon,
   RefreshIcon,
-  Search01Icon,
-  Settings02Icon,
-  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {Dialog} from "@base-ui/react/dialog";
-import {Popover} from "@base-ui/react/popover";
 import {motion} from "motion/react";
 
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
@@ -57,6 +51,20 @@ import {
   sourceFreshnessLabel,
 } from "@/lib/presentation";
 import {ReviewShell} from "@/shell/review-shell";
+import {dismissInnermost} from "@/arkcase";
+import {useAnnounce} from "@/ui/announcer";
+import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {catalogPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
+import {useViewportWidth} from "./workspace/use-viewport-size.ts";
+import {catalogWidth, dockingFor, isPhoneWidth} from "./workspace/workspace-layout.ts";
+import type {
+  CatalogCommentFilter,
+  CatalogRefreshState,
+  CatalogSort,
+  ReviewDownload,
+  VersionListItem,
+} from "./workspace/workspace-types.ts";
+import {useShellLayout} from "@/shell/shell-layout-context";
 import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
 import {useThemeMode} from "@/theme/use-theme-mode";
 import {
@@ -85,12 +93,6 @@ import {writeStored} from "@/lib/safe-storage";
 
 type InspectorTab = "activity" | "comments" | "compare" | "details" | "files" | "versions";
 type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
-type CatalogCommentFilter = "all" | "with" | "without";
-type CatalogRefreshState = "complete" | "idle" | "loading";
-type CatalogSort = "comments" | "newest";
-const catalogDefaultWidth = 336;
-const catalogMinimumWidth = 240;
-const catalogMaximumWidth = 520;
 const inspectorDefaultWidth = 352;
 const inspectorMinimumWidth = 240;
 const inspectorMaximumWidth = 480;
@@ -125,232 +127,10 @@ function reviewShortcutBlocked(event: KeyboardEvent): boolean {
     return true;
   }
 
-  return document.querySelector([
-    ".as-catalog-filter-popover[data-open]",
-    "[data-slot='popover-content'][data-open]",
-    "[role='dialog'][data-open]",
-    "[role='listbox'][data-open]",
-    "[role='menu'][data-open]",
-  ].join(", ")) !== null;
+  // DS popovers, menus and modals exist in the DOM only while open.
+  return document.querySelector("[role='dialog'], [role='menu'], [role='listbox']") !== null;
 }
 
-interface VersionListItem {
-  readonly links: {readonly review: string; readonly version: string};
-  readonly version: Version;
-}
-
-interface ReviewDownload {
-  readonly href: string;
-  readonly title: string;
-}
-
-
-function CatalogFilters({
-  commentFilter,
-  knownTags,
-  onCommentFilterChange,
-  onTagFiltersChange,
-  tagFilters,
-}: {
-  readonly commentFilter: CatalogCommentFilter;
-  readonly knownTags: readonly string[];
-  readonly onCommentFilterChange: (filter: CatalogCommentFilter) => void;
-  readonly onTagFiltersChange: (tags: readonly string[]) => void;
-  readonly tagFilters: readonly string[];
-}) {
-  const activeFilterCount = Number(commentFilter !== "all") + tagFilters.length;
-  let triggerLabel = "All artifacts";
-  if (commentFilter === "all" && tagFilters.length === 1) {
-    triggerLabel = tagFilters[0] ?? "1 tag";
-  } else if (commentFilter === "all" && tagFilters.length > 1) {
-    triggerLabel = `${tagFilters.length} tags`;
-  } else if (commentFilter === "with" && tagFilters.length === 0) {
-    triggerLabel = "With comments";
-  } else if (commentFilter === "without" && tagFilters.length === 0) {
-    triggerLabel = "No comments";
-  } else if (activeFilterCount > 0) {
-    triggerLabel = `${activeFilterCount} filters`;
-  }
-  const tags = [...new Set([...knownTags, ...tagFilters])].toSorted();
-  const toggleTag = (tag: string): void => {
-    onTagFiltersChange(
-      tagFilters.includes(tag)
-        ? tagFilters.filter((selected) => selected !== tag)
-        : [...tagFilters, tag].toSorted(),
-    );
-  };
-
-  return (
-    <Popover.Root>
-      <Popover.Trigger
-        render={(
-          <button
-            aria-label={`Filter artifacts. ${activeFilterCount === 0 ? "No filters applied" : `${activeFilterCount} applied`}.`}
-            className="as-catalog-filter-trigger"
-            type="button"
-          />
-        )}
-      >
-        <HugeiconsIcon aria-hidden="true" icon={FilterIcon} strokeWidth={1.8} />
-        <span>{triggerLabel}</span>
-        {activeFilterCount === 0 ? null : (
-          <span aria-hidden="true" className="as-catalog-filter-trigger__count">
-            {activeFilterCount}
-          </span>
-        )}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner
-          align="start"
-          className="as-catalog-filter-positioner"
-          sideOffset={6}
-        >
-          <Popover.Popup aria-label="Filter artifacts" className="as-catalog-filter-popover">
-            {activeFilterCount === 0 ? null : (
-              <div className="as-catalog-filter-popover__actions">
-                <button
-                  className="as-catalog-filter-popover__clear"
-                  onClick={() => {
-                    onCommentFilterChange("all");
-                    onTagFiltersChange([]);
-                  }}
-                  type="button"
-                >
-                  Clear filters
-                </button>
-              </div>
-            )}
-            <fieldset>
-              <legend>Comments</legend>
-              {([
-                ["all", "All artifacts"],
-                ["with", "With comments"],
-                ["without", "No comments"],
-              ] as const).map(([value, label]) => (
-                <label className="as-catalog-filter-option" data-selected={commentFilter === value} key={value}>
-                  <input
-                    checked={commentFilter === value}
-                    name="catalog-comment-filter"
-                    onChange={() => onCommentFilterChange(value)}
-                    type="radio"
-                    value={value}
-                  />
-                  <span>{label}</span>
-                  {commentFilter === value ? (
-                    <HugeiconsIcon aria-hidden="true" icon={Tick02Icon} strokeWidth={2} />
-                  ) : null}
-                </label>
-              ))}
-            </fieldset>
-            <fieldset>
-              <legend>Tags</legend>
-              <button
-                aria-pressed={tagFilters.length === 0}
-                className="as-catalog-filter-option"
-                data-selected={tagFilters.length === 0}
-                onClick={() => onTagFiltersChange([])}
-                type="button"
-              >
-                <span>Any tag</span>
-                {tagFilters.length === 0 ? (
-                  <HugeiconsIcon aria-hidden="true" icon={Tick02Icon} strokeWidth={2} />
-                ) : null}
-              </button>
-              {tags.length === 0 ? (
-                <p className="as-catalog-filter-popover__empty">No tags in the loaded catalog.</p>
-              ) : tags.map((tag) => (
-                <label className="as-catalog-filter-option" data-selected={tagFilters.includes(tag)} key={tag}>
-                  <input
-                    checked={tagFilters.includes(tag)}
-                    name="catalog-tag-filter"
-                    onChange={() => toggleTag(tag)}
-                    type="checkbox"
-                    value={tag}
-                  />
-                  <span>{tag}</span>
-                  {tagFilters.includes(tag) ? (
-                    <HugeiconsIcon aria-hidden="true" icon={Tick02Icon} strokeWidth={2} />
-                  ) : null}
-                </label>
-              ))}
-            </fieldset>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
-
-function ReviewKeyboardShortcuts() {
-  return (
-    <Popover.Root>
-      <Popover.Trigger
-        render={(
-          <button
-            aria-label="Keyboard shortcuts"
-            className="as-keyboard-shortcuts__trigger"
-            title="Keyboard shortcuts"
-            type="button"
-          />
-        )}
-      >
-        <HugeiconsIcon aria-hidden="true" icon={KeyboardIcon} strokeWidth={1.8} />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner
-          align="end"
-          className="as-keyboard-shortcuts__positioner"
-          side="top"
-          sideOffset={8}
-        >
-          <Popover.Popup className="as-keyboard-shortcuts">
-            <Popover.Title className="as-keyboard-shortcuts__title">
-              Keyboard shortcuts
-            </Popover.Title>
-            <section aria-labelledby="review-shortcuts-navigation">
-              <h3 id="review-shortcuts-navigation">Navigate</h3>
-              <dl>
-                <div>
-                  <dt>Previous artifact</dt>
-                  <dd><kbd>K</kbd><span>or</span><kbd>↑</kbd></dd>
-                </div>
-                <div>
-                  <dt>Next artifact</dt>
-                  <dd><kbd>J</kbd><span>or</span><kbd>↓</kbd></dd>
-                </div>
-              </dl>
-            </section>
-            <section aria-labelledby="review-shortcuts-layout">
-              <h3 id="review-shortcuts-layout">Layout</h3>
-              <dl>
-                <div>
-                  <dt>Artifact catalog</dt>
-                  <dd><kbd>[</kbd></dd>
-                </div>
-                <div>
-                  <dt>Inspector or comments</dt>
-                  <dd><kbd>]</kbd></dd>
-                </div>
-                <div>
-                  <dt>Full screen</dt>
-                  <dd><kbd>F</kbd></dd>
-                </div>
-                <div>
-                  <dt>Back or close current layer</dt>
-                  <dd><kbd>Esc</kbd></dd>
-                </div>
-                <div>
-                  <dt>Reveal hidden viewer controls</dt>
-                  <dd><kbd>⌘ / Ctrl</kbd><span>+</span><kbd>\</kbd></dd>
-                </div>
-              </dl>
-            </section>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
 
 /** Start the artifact-first Artifact Server review application. */
 export function ReviewApp() {
@@ -544,8 +324,33 @@ function ArtifactReview({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<Error | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
-  const [catalogOpen, setCatalogOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(readInitialInspectorOpen);
+  const announce = useAnnounce();
+  const viewportWidth = useViewportWidth();
+  const phone = isPhoneWidth(viewportWidth);
+  const docking = dockingFor(viewportWidth, inspectorOpen);
+  const catalogPreference = usePanelPreference(catalogPanelId);
+  const [catalogPeeking, setCatalogPeeking] = useState(false);
+  const [catalogSheetOpen, setCatalogSheetOpen] = useState(false);
+  const [catalogFiltersOpen, setCatalogFiltersOpen] = useState(false);
+  const catalogDocked = docking.listDocked && catalogPreference.pinned && !phone;
+  const {setPinned: setCatalogPinned} = catalogPreference;
+  const toggleCatalog = useCallback((): void => {
+    if (phone) {
+      setCatalogSheetOpen((open) => !open);
+      return;
+    }
+    if (catalogDocked) {
+      setCatalogPinned(false);
+      return;
+    }
+    if (docking.listDocked) {
+      setCatalogPinned(true);
+      setCatalogPeeking(false);
+      return;
+    }
+    setCatalogPeeking((peeking) => !peeking);
+  }, [catalogDocked, docking.listDocked, phone, setCatalogPinned]);
   const [opening, setOpening] = useState(false);
   const [focusMode, setFocusMode] = useState(initialLocation.view === "focus");
   const [focusCommentsOpen, setFocusCommentsOpen] = useState(false);
@@ -560,19 +365,7 @@ function ArtifactReview({
   const commentsInspectorRef = useRef<ReviewCommentsInspectorHandle>(null);
   const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogRequestGenerationRef = useRef(0);
-  const catalogWidthApplyRef = useRef<(width: number) => void>(() => undefined);
   const inspectorWidthApplyRef = useRef<(width: number) => void>(() => undefined);
-  const catalogResize = useReviewResizablePanel({
-    apply: (width) => catalogWidthApplyRef.current(width),
-    defaultWidth: catalogDefaultWidth,
-    maxWidth: catalogMaximumWidth,
-    minWidth: catalogMinimumWidth,
-    onClick: () => setCatalogOpen(false),
-    onSnapClose: () => setCatalogOpen(false),
-    onSnapOpen: () => setCatalogOpen(true),
-    side: "left",
-    storageKey: "artifact-review-catalog-width",
-  });
   const inspectorResize = useReviewResizablePanel({
     apply: (width) => inspectorWidthApplyRef.current(width),
     defaultWidth: inspectorDefaultWidth,
@@ -584,16 +377,14 @@ function ArtifactReview({
     side: "right",
     storageKey: "artifact-review-inspector-width",
   });
-  const catalogMotion = useReviewPanelMotion(catalogOpen, catalogResize.width);
   const inspectorMotion = useReviewPanelMotion(
     inspectorOpen,
     inspectorResize.width,
     inspectorGapPixels,
   );
   useEffect(() => {
-    catalogWidthApplyRef.current = (width) => catalogMotion.width.set(width);
     inspectorWidthApplyRef.current = (width) => inspectorMotion.width.set(width);
-  }, [catalogMotion.width, inspectorMotion.width]);
+  }, [inspectorMotion.width]);
   const followCommentVersion = useCallback((versionId: string): void => {
     setDetailError(null);
     setSelectedVersionId(versionId);
@@ -729,17 +520,19 @@ function ArtifactReview({
       catalogRefreshTimerRef.current = null;
     }
     setCatalogRefreshState("loading");
+    announce("Refreshing artifact catalog.");
     const result = await loadArtifacts(null, true);
     if (result !== "loaded") {
       setCatalogRefreshState("idle");
       return;
     }
     setCatalogRefreshState("complete");
+    announce("Artifact catalog refreshed.");
     catalogRefreshTimerRef.current = setTimeout(() => {
       catalogRefreshTimerRef.current = null;
       setCatalogRefreshState("idle");
     }, catalogRefreshConfirmationMilliseconds);
-  }, [listLoading, loadArtifacts]);
+  }, [announce, listLoading, loadArtifacts]);
 
   useEffect(() => () => {
     if (catalogRefreshTimerRef.current !== null) {
@@ -1142,24 +935,36 @@ function ArtifactReview({
     setFocusControlsCollapsed(false);
     setFocusMode(false);
   }, [projectId, selectedArtifactId, selectedPath, selectedVersionId]);
+  const {setNavExpandable} = useShellLayout();
+  useEffect(() => {
+    setNavExpandable(docking.navExpandable && !focusMode);
+  }, [docking.navExpandable, focusMode, setNavExpandable]);
   useEffect(() => {
     const handleReviewShortcut = (event: KeyboardEvent): void => {
       if (reviewShortcutBlocked(event)) return;
 
       const key = event.key.toLowerCase();
       if (key === "escape") {
-        if (focusCommentsOpen) {
-          event.preventDefault();
-          setFocusCommentsOpen(false);
-        } else if (htmlViewerMode === "annotate" && htmlAnnotateModeActive) {
-          event.preventDefault();
-          setHtmlAnnotateModeActive(false);
-        } else if (focusMode) {
-          event.preventDefault();
-          exitFocusMode();
-        }
+        const dismissed = dismissInnermost([
+          {close: () => setCatalogFiltersOpen(false), open: catalogFiltersOpen},
+          {
+            close: () => {
+              setCatalogPeeking(false);
+              setCatalogSheetOpen(false);
+            },
+            open: catalogPeeking || catalogSheetOpen,
+          },
+          {close: () => setFocusCommentsOpen(false), open: focusCommentsOpen},
+          {
+            close: () => setHtmlAnnotateModeActive(false),
+            open: htmlViewerMode === "annotate" && htmlAnnotateModeActive,
+          },
+          {close: exitFocusMode, open: focusMode},
+        ]);
+        if (dismissed) event.preventDefault();
         return;
       }
+      if (catalogFiltersOpen) return;
 
       if (key === "f" && selectedVersionId !== null) {
         event.preventDefault();
@@ -1177,7 +982,7 @@ function ArtifactReview({
 
       if (key === "[" && !focusMode) {
         event.preventDefault();
-        setCatalogOpen((current) => !current);
+        toggleCatalog();
         return;
       }
 
@@ -1198,7 +1003,10 @@ function ArtifactReview({
     window.addEventListener("keydown", handleReviewShortcut);
     return () => window.removeEventListener("keydown", handleReviewShortcut);
   }, [
+    catalogFiltersOpen,
     catalogItems,
+    catalogPeeking,
+    catalogSheetOpen,
     enterFocusMode,
     exitFocusMode,
     focusCommentsOpen,
@@ -1208,6 +1016,7 @@ function ArtifactReview({
     selectArtifact,
     selectedIndex,
     selectedVersionId,
+    toggleCatalog,
   ]);
   const hideFocusControls = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     previewPanelRef.current?.focus({preventScroll: true});
@@ -1255,207 +1064,63 @@ function ArtifactReview({
   return (
     <div
       className="as-app"
-      data-catalog-open={catalogOpen}
       data-focus-mode={focusMode}
       data-html-annotate-mode={htmlViewerMode === "annotate" && htmlAnnotateModeActive}
       data-inspector-open={inspectorOpen}
-      data-panel-resizing={catalogResize.isDragging || inspectorResize.isDragging}
+      data-panel-resizing={inspectorResize.isDragging}
     >
       <a className="as-skip-link" href="#review-preview">Skip to artifact preview</a>
 
 
-      {!focusMode && catalogMotion.mounted ? (
-        <div className="as-panel-assembly" data-side="left">
-          <motion.div
-            className="as-panel-clip as-catalog-clip"
-            data-side="left"
-            style={{width: catalogMotion.outerWidth}}
-          >
-            <motion.aside
-              aria-label="Artifact catalog"
-              className="as-catalog"
-              style={{width: catalogMotion.width}}
-            >
-        <header className="as-pane-header as-catalog__header">
-          <div className="as-catalog__context">
-            <strong className="as-catalog__project-name">
-              {selectedProject?.name ?? "No project"}
-            </strong>
-          </div>
-          <div className="as-catalog__header-actions">
-            <a
-              aria-label="Project settings"
-              className="as-icon-button"
-              href={selectedProject === null
-                ? "/review/settings/projects"
-                : projectSettingsHref(selectedProject.id)}
-              title="Project settings"
-            >
-              <HugeiconsIcon icon={Settings02Icon} strokeWidth={1.8} />
-            </a>
-            <IconButton
-              keyShortcuts="["
-              label="Collapse artifact catalog"
-              onClick={() => setCatalogOpen(false)}
-              title="Collapse artifact catalog ([)"
-            >
-              <HugeiconsIcon icon={LayoutLeftIcon} strokeWidth={1.8} />
-            </IconButton>
-          </div>
-        </header>
-
-        <div className="as-catalog__tools">
-          <div className="as-search-group">
-            <label className="as-search">
-              <span className="as-visually-hidden">Search artifacts</span>
-              <HugeiconsIcon aria-hidden="true" icon={Search01Icon} strokeWidth={1.8} />
-              <input
-                onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Search artifacts…"
-                type="search"
-                value={query}
-              />
-              {query === "" ? null : (
-                <button aria-label="Clear search" onClick={() => setQuery("")} type="button">
-                  <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.8} />
-                </button>
-              )}
-            </label>
-            <div className="as-catalog-query-controls">
-              <CatalogFilters
-                commentFilter={catalogCommentFilter}
-                knownTags={catalogKnownTags}
-                onCommentFilterChange={setCatalogCommentFilter}
-                onTagFiltersChange={setCatalogTagFilters}
-                tagFilters={catalogTagFilters}
-              />
-              <label>
-                <span className="as-visually-hidden">Sort artifacts</span>
-                <select
-                  aria-label="Sort artifacts"
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    if (value === "comments" || value === "newest") setCatalogSort(value);
-                  }}
-                  value={catalogSort}
-                >
-                  <option value="newest">Newest first</option>
-                  <option value="comments">Most comments</option>
-                </select>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="as-catalog__list">
-          {listError === null ? null : (
-            <InlineState description={listError.message} title="Catalog unavailable" tone="error" />
-          )}
-          {listLoading && items.length === 0 ? (
-            <InlineState description="Reading this project." title="Loading artifacts" />
-          ) : null}
-          {!listLoading && listError === null && catalogItems.length === 0 ? (
-            <InlineState
-              description={
-                query !== "" || catalogCommentFilter !== "all" || catalogTagFilters.length > 0
-                  ? "Try clearing a filter or using a wider search."
-                  : "Publish from the CLI to populate this project."
-              }
-              title={
-                query !== "" || catalogCommentFilter !== "all" || catalogTagFilters.length > 0
-                  ? "No matching artifacts"
-                  : "No artifacts yet"
-              }
-            />
-          ) : null}
-          {catalogItems.map(({artifact, commentCount, versionCount}) => {
-            const displayedCommentCount = artifact.id === selectedArtifactId && !comments.loading
-              ? comments.threads.length
-              : commentCount;
-            return (
-              <button
-                aria-current={artifact.id === selectedArtifactId ? "true" : undefined}
-                className="as-artifact-card"
-                data-selected={artifact.id === selectedArtifactId}
-                key={artifact.id}
-                onClick={() => selectArtifact(artifact.id, artifact.currentVersionId)}
-                type="button"
-              >
-                <span className="as-artifact-card__title-row">
-                  <strong>{artifact.name}</strong>
-                  <AccessPill access={artifact.accessSetting} />
-                </span>
-                <span className="as-artifact-card__meta">
-                  <span className="as-artifact-card__history">
-                    <time dateTime={artifact.createdAt}>{formatTimestamp(artifact.createdAt)}</time>
-                    <span aria-hidden="true">·</span>
-                    <span>{versionCount} version{versionCount === 1 ? "" : "s"}</span>
-                  </span>
-                  <span className="as-artifact-card__counts">
-                    <span>
-                      <HugeiconsIcon aria-hidden="true" icon={Comment01Icon} strokeWidth={1.8} />
-                      {displayedCommentCount} comment{displayedCommentCount === 1 ? "" : "s"}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <footer className="as-app-footer as-catalog__footer">
-          <button
-            aria-busy={catalogRefreshState === "loading"}
-            aria-label="Refresh artifacts published by agents, the CLI, or other sessions"
-            className="as-catalog-refresh"
-            data-state={catalogRefreshState}
-            disabled={listLoading}
-            onClick={() => void refreshArtifacts()}
-            title="Refresh artifacts published by agents, the CLI, or other sessions"
-            type="button"
-          >
-            <HugeiconsIcon
-              aria-hidden="true"
-              className="as-catalog-refresh__icon"
-              icon={catalogRefreshState === "complete" ? Tick02Icon : RefreshIcon}
-              strokeWidth={1.8}
-            />
-            <span>
-              {catalogRefreshState === "loading"
-                ? "Refreshing…"
-                : catalogRefreshState === "complete"
-                  ? "Refreshed"
-                  : "Refresh"}
-            </span>
-          </button>
-          <span aria-live="polite" className="as-visually-hidden">
-            {catalogRefreshState === "loading"
-              ? "Refreshing artifact catalog."
-              : catalogRefreshState === "complete"
-                ? "Artifact catalog refreshed."
-                : ""}
-          </span>
-          <div className="as-catalog__footer-actions">
-            {nextCursor === null ? null : (
-              <button disabled={listLoading} onClick={() => void loadArtifacts(nextCursor, false)} type="button">
-                {listLoading ? "Loading…" : "Load more"}
-              </button>
-            )}
-            <ReviewKeyboardShortcuts />
-          </div>
-        </footer>
-            </motion.aside>
-          </motion.div>
-          {catalogOpen ? (
-            <ReviewPanelEdge
-              label="Artifact catalog width"
-              onCollapse={() => setCatalogOpen(false)}
-              resize={catalogResize}
-              side="left"
-            />
-          ) : null}
-        </div>
-      ) : null}
+      {focusMode || (phone && !catalogSheetOpen) ? null : (
+        <aside
+          aria-label="Artifact catalog"
+          style={{display: "flex", flex: "none", minHeight: 0}}
+        >
+          <ArtifactListPanel
+            canPin={docking.listDocked}
+            commentFilter={catalogCommentFilter}
+            filtersOpen={catalogFiltersOpen}
+            items={catalogItems}
+            knownTags={catalogKnownTags}
+            listError={listError}
+            listLoading={listLoading}
+            nextCursor={nextCursor}
+            onAnnounce={announce}
+            onCollapse={toggleCatalog}
+            onCommentFilterChange={setCatalogCommentFilter}
+            onFiltersOpenChange={setCatalogFiltersOpen}
+            onLoadMore={() => void loadArtifacts(nextCursor, false)}
+            onPeekChange={setCatalogPeeking}
+            onPinChange={(pinned) => {
+              setCatalogPinned(pinned);
+              setCatalogPeeking(false);
+            }}
+            onQueryChange={setQuery}
+            onRefresh={() => void refreshArtifacts()}
+            onSelect={(artifactId, versionId) => {
+              setCatalogSheetOpen(false);
+              selectArtifact(artifactId, versionId);
+            }}
+            onSheetClose={() => setCatalogSheetOpen(false)}
+            onSortChange={setCatalogSort}
+            onTagFiltersChange={setCatalogTagFilters}
+            onWidthChange={catalogPreference.setWidth}
+            peeking={catalogPeeking}
+            pinned={catalogPreference.pinned}
+            projectName={selectedProject?.name ?? "this project"}
+            query={query}
+            refreshState={catalogRefreshState}
+            selectedArtifactId={selectedArtifactId}
+            selectedCommentCount={comments.loading ? null : comments.threads.length}
+            settingsHref={selectedProject === null ? null : projectSettingsHref(selectedProject.id)}
+            sheet={phone}
+            sort={catalogSort}
+            tagFilters={catalogTagFilters}
+            width={catalogPreference.width ?? catalogWidth.defaultWidth}
+          />
+        </aside>
+      )}
 
       <main className="as-workspace">
         <section
@@ -1596,11 +1261,11 @@ function ArtifactReview({
           ) : null}
           <header className="as-pane-header as-preview-header">
             <div className="as-preview-header__identity">
-              {!catalogOpen ? (
+              {!catalogDocked ? (
                 <IconButton
                   keyShortcuts="["
                   label="Open artifact catalog"
-                  onClick={() => setCatalogOpen(true)}
+                  onClick={toggleCatalog}
                   title="Open artifact catalog ([)"
                 >
                   <HugeiconsIcon icon={LayoutLeftIcon} strokeWidth={1.8} />
@@ -2575,7 +2240,7 @@ function InlineState({
 }
 
 function readInitialInspectorOpen(): boolean {
-  return window.matchMedia("(min-width: 1181px)").matches;
+  return window.matchMedia("(min-width: 1640px)").matches;
 }
 
 function currentReviewLocation(): ReviewLocation {

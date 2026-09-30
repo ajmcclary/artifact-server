@@ -5,6 +5,7 @@ import {
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
+  workspaceViewport,
 } from "./browser-fixture.js";
 import {isolatedReviewFrame, openInspectorTab, openReview, reviewHref} from "./review-helpers.js";
 import {
@@ -110,7 +111,7 @@ test.describe("critical engine review paths @critical", () => {
   test("CMT-023-B CMT-023-F: two open reviewers converge on thread create and delete @critical", async ({browser}) => {
     test.setTimeout(120_000);
     const fixture = await startBrowserFixture(browser);
-    const secondContext = await browser.newContext();
+    const secondContext = await browser.newContext({viewport: workspaceViewport});
     try {
       const published = await publishNew(fixture.server, fixture.installation, {
         accessSetting: "account_required",
