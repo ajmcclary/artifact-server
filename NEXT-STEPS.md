@@ -1887,6 +1887,13 @@ gate.
   not reused. Producer-side capture with renderer/viewport/source provenance,
   documentation links from gallery items, and the cross-project Design Library
   (moving view first, frozen collections under T24) are next.
+- **Progress, September 30 (second slice):** Design now captures producer-side
+  thumbnails (`build:thumbnails`, per-item fingerprint provenance; stale captures
+  are never referenced). Preview sources and indexes moved to version 2 with
+  related guide links; Review renders text guides as plain text, keeps the
+  gallery return in the toolbar, and adds the project Design library as a moving
+  view over current versions (DSN-005). Remaining: frozen, shareable collections
+  pinning a version set (T24) and optional theme/phone thumbnail variants.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

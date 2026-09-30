@@ -1,6 +1,7 @@
 import type {Principal, Project} from "@/api/client";
 import type {NavItem} from "@/arkcase";
 import {
+  libraryHref,
   projectWorkspaceHref,
   reviewQueueHref,
   type SettingsRoute,
@@ -18,6 +19,8 @@ export interface ShellNavInput {
   readonly activeSettings: SettingsRoute["kind"] | null;
   readonly canCreateProjects: boolean;
   readonly isAdministrator: boolean;
+  /** The design library is open (for `activeProjectId`, or the first active project). */
+  readonly libraryActive: boolean;
   readonly mode: ShellMode;
   readonly projects: readonly Project[];
   readonly queueActive: boolean;
@@ -51,7 +54,7 @@ export function administrationHref(isAdministrator: boolean): string {
 export function shellNavItems(input: ShellNavInput): NavItem[] {
   return input.mode === "admin"
     ? administrationItems(input.isAdministrator, input.returnHref)
-    : reviewItems(input.projects, input.canCreateProjects);
+    : reviewItems(input.projects, input.canCreateProjects, libraryProjectId(input));
 }
 
 /** The `link` of the current row, or "" when no row is current. */
@@ -73,6 +76,7 @@ export function shellActiveLink(input: ShellNavInput): string {
     }
   }
   if (input.queueActive) return reviewQueueHref();
+  if (input.libraryActive) return libraryHref(libraryProjectId(input));
   return input.activeProjectId === null ? "" : projectWorkspaceHref(input.activeProjectId);
 }
 
@@ -80,9 +84,15 @@ function isDirectHuman(principal: Principal): boolean {
   return principal.kind === "human" && principal.authorizedByPrincipalId === null;
 }
 
-function reviewItems(projects: readonly Project[], canCreateProjects: boolean): NavItem[] {
+/** The library follows the project in view, else the first active project. */
+function libraryProjectId(input: ShellNavInput): string | null {
+  return input.activeProjectId ?? orderedProjects(input.projects)[0]?.id ?? null;
+}
+
+function reviewItems(projects: readonly Project[], canCreateProjects: boolean, libraryProject: string | null): NavItem[] {
   const items: NavItem[] = [
     {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: reviewQueueHref()},
+    {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref(libraryProject)},
   ];
   for (const project of orderedProjects(projects)) {
     const item: NavItem = {
@@ -91,12 +101,12 @@ function reviewItems(projects: readonly Project[], canCreateProjects: boolean): 
       label: project.name,
       link: projectWorkspaceHref(project.id),
     };
-    if (items.length === 1) item.group = "Projects";
+    if (items.length === 2) item.group = "Projects";
     items.push(item);
   }
   if (canCreateProjects) {
     const create: NavItem = {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"};
-    if (items.length === 1) create.group = "Projects";
+    if (items.length === 2) create.group = "Projects";
     items.push(create);
   }
   return items;

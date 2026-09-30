@@ -42,6 +42,8 @@ export interface ReviewToolbarProps {
   readonly onOpenComparison: (() => void) | null;
   readonly onOpenLive: () => Promise<void>;
   readonly onOpenRawArtifact: () => void;
+  /** Returns to the version's design gallery while one of its pages is open. */
+  readonly onReturnToGallery: (() => void) | null;
   readonly onSelectPath: (path: string) => void;
   readonly onSelectVersion: (versionId: string) => void;
   readonly opening: boolean;
@@ -100,6 +102,7 @@ export function ReviewToolbar({
   onOpenComparison,
   onOpenLive,
   onOpenRawArtifact,
+  onReturnToGallery,
   onSelectPath,
   onSelectVersion,
   opening,
@@ -176,6 +179,19 @@ export function ReviewToolbar({
               width={270}
             />
           </span>
+        )}
+        {onReturnToGallery === null ? null : (
+          <Button
+            aria-label="Back to gallery"
+            icon="bi-grid-3x3-gap"
+            onClick={onReturnToGallery}
+            outline
+            size="sm"
+            title="Back to gallery"
+            variant="secondary"
+          >
+            {phone ? null : "Gallery"}
+          </Button>
         )}
         {pages.length === 0 || selectedVersion === null ? null : (
           <span style={pagePickerStyle}>

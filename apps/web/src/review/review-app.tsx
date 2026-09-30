@@ -70,6 +70,7 @@ import {
   writeReviewHistory,
 } from "./review-routes.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
+import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
 import {ReviewQueueScreen} from "./queue/review-queue-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
@@ -265,7 +266,7 @@ export function ReviewApp() {
 
   return (
     <ReviewShell
-      mainStyle={route.kind === "workspace" ? {overflow: "hidden"} : {overflowY: "auto"}}
+      mainStyle={route.kind === "workspace" || route.kind === "library" ? {overflow: "hidden"} : {overflowY: "auto"}}
       onCreateProject={createProject}
       onOpenPalette={openPalette}
       projects={projects}
@@ -281,6 +282,8 @@ export function ReviewApp() {
         />
       ) : route.kind === "queue" ? (
         <ReviewQueueScreen projects={projects} />
+      ) : route.kind === "library" ? (
+        <DesignLibraryScreen projectId={route.projectId} projects={projects} />
       ) : (
         <ArtifactReview projects={projects} session={session} />
       )}
@@ -1280,6 +1283,7 @@ function ArtifactReview({
             onOpenComparison={() => setComparisonView("compare")}
             onOpenLive={openLinkedArtifact}
             onOpenRawArtifact={() => void openRawArtifact()}
+            onReturnToGallery={galleryCanvas.onReturnToGallery}
             onSelectPath={selectManifestPath}
             onSelectVersion={(versionId) => {
               setDetailError(null);
@@ -1331,7 +1335,6 @@ function ArtifactReview({
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
                 gallery={galleryCanvas.gallery}
                 galleryNotice={galleryCanvas.galleryNotice}
-                galleryReturn={galleryCanvas.galleryReturn}
                 hasDetails={details !== null}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 modeControlsTarget={previewModeTarget}
@@ -1393,6 +1396,7 @@ function ArtifactReview({
               download={download}
               onExit={exitFocusMode}
               onHide={hideFocusControls}
+              onReturnToGallery={galleryCanvas.onReturnToGallery}
               onShow={showFocusControls}
               onToggleComments={() => setFocusCommentsOpen((open) => !open)}
               restoreRef={restoreControlsRef}

@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 
 import {
+  libraryHref,
   parseReviewRoute,
   projectWorkspaceHref,
   readReviewLocation,
@@ -22,6 +23,16 @@ const emptyLocation: ReviewLocation = {
 function routeOf(href: string) {
   return parseReviewRoute(new URL(href, origin));
 }
+
+describe("design library route", () => {
+  it("round-trips the project the library shows and tolerates a missing one", () => {
+    expect(libraryHref("prj_a b")).toBe("/review/library?project=prj_a+b");
+    expect(routeOf(libraryHref("prj_a b"))).toEqual({kind: "library", projectId: "prj_a b"});
+    expect(routeOf("/review/library")).toEqual({kind: "library", projectId: null});
+    expect(routeOf("/review/library/?project=")).toEqual({kind: "library", projectId: null});
+    expect(libraryHref(null)).toBe("/review/library");
+  });
+});
 
 describe("parseReviewRoute", () => {
   it("resolves bare /review to the review queue", () => {

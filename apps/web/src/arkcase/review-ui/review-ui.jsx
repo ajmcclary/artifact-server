@@ -113,6 +113,7 @@ export function createReviewUI(React, DS) {
      file as the exact selected page; the gallery never renders a live preview itself.
      A missing or broken thumbnail becomes a placeholder drawn at the declared viewport's
      proportions, so a tile never depends on image bytes to be useful. */
+  const galleryId = (item) => item.id ?? item.path;
   const plainClick = (event) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   function GalleryThumbnail({ item, compact }) {
     const [failed, setFailed] = React.useState(false);
@@ -136,16 +137,18 @@ export function createReviewUI(React, DS) {
     const kind = galleryKind(item.kind);
     const [hover, setHover] = React.useState(false);
     const Element = href ? 'a' : 'button';
-    const activate = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(item.path); };
+    const activate = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(galleryId(item)); };
     const frame = { flex: 'none', overflow: 'hidden', background: 'var(--surface-tertiary, #E9ECEF)',
       borderRadius: list ? 'var(--radius-sm, 4px)' : 0, ...(list ? { width: 96, height: 60 } : { aspectRatio: '16 / 10' }) };
     const meta = <div style={{ ...secondary, display: 'flex', flexWrap: 'wrap', gap: '2px 8px', alignItems: 'center' }}>
       <span><i className={`bi ${kind.icon}`} aria-hidden="true" style={{ marginRight: 4 }} />{kind.singular}</span>
       <span style={{ fontFamily: 'var(--font-data, monospace)' }}>{item.viewport.width} × {item.viewport.height}</span>
       {!item.thumbnailUrl && <span>No thumbnail</span>}
+      {!list && item.related?.length > 0 && <span>{item.related.length} {item.related.length === 1 ? 'guide' : 'guides'}</span>}
+      {item.context && <span style={{ overflowWrap: 'anywhere' }}>{item.context}</span>}
     </div>;
-    return <Element {...(href ? { href } : { type: 'button' })} onClick={activate} data-gallery-path={item.path}
-      aria-label={`Open ${item.title} · ${kind.singular} · ${item.section}`}
+    return <Element {...(href ? { href } : { type: 'button' })} onClick={activate} data-gallery-path={galleryId(item)}
+      aria-label={`Open ${item.title} · ${kind.singular} · ${item.section}${item.context ? ` · ${item.context}` : ''}`}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: 'flex', flexDirection: list ? 'row' : 'column', alignItems: list ? 'center' : 'stretch', gap: list ? 12 : 0,
         minWidth: 0, width: '100%', boxSizing: 'border-box', padding: list ? 8 : 0, textAlign: 'left', font: 'inherit', color: 'inherit',
@@ -160,6 +163,19 @@ export function createReviewUI(React, DS) {
         {list && <div style={{ ...code, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.path}</div>}
       </div>
     </Element>;
+  }
+  /* Related guides sit beside a tile, never inside its link, so each stays its own target. */
+  function RelatedLinks({ item, hrefFor, onOpen }) {
+    return <nav aria-label={`Guides for ${item.title}`} style={{ ...secondary, display: 'flex', flexWrap: 'wrap', gap: '2px 10px', paddingLeft: 116 }}>
+      {item.related.map((link) => {
+        const id = link.id ?? link.path;
+        const href = hrefFor?.(id);
+        const open = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(id); };
+        return href
+          ? <a key={id} href={href} onClick={open} style={{ color: 'var(--text-link, #0079A8)' }}>{link.title}</a>
+          : <button key={id} type="button" onClick={open} style={{ font: 'inherit', color: 'var(--text-link, #0079A8)', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>{link.title}</button>;
+      })}
+    </nav>;
   }
   function DesignGallery({ title, description, coverUrl, items, query, onQueryChange, kind = 'all', onKindChange,
     view = 'grid', onViewChange, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, notice, phone = false }) {
@@ -208,8 +224,9 @@ export function createReviewUI(React, DS) {
           {(group.sections.length > 1 || section !== group.label) && <GroupBand label={section} count={inSection.length} />}
           <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: list ? 8 : 14,
             gridTemplateColumns: list ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(min(100%, 232px), 1fr))' }}>
-            {inSection.map((item) => <li key={item.path} style={{ display: 'flex', minWidth: 0 }}>
-              <GalleryTile item={item} list={list} href={hrefFor?.(item.path)} onOpen={onOpen} /></li>)}
+            {inSection.map((item) => <li key={galleryId(item)} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <GalleryTile item={item} list={list} href={hrefFor?.(galleryId(item))} onOpen={onOpen} />
+              {list && item.related?.length > 0 && <RelatedLinks item={item} hrefFor={hrefFor} onOpen={onOpen} />}</li>)}
           </ul>
         </section>)}
       </section>)}

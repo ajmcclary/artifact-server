@@ -35,6 +35,8 @@ export async function writeDesignCardFixture(directory: string, nested = false):
 
 /** A decodable 16 × 10 JPEG cover and PNG thumbnail, small enough to inline. */
 export const fixtureCoverJpeg = Buffer.from("/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAACgAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgACgAQAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwDAQACEQMRAD8A/Syiiiv5XP4rP//Z", "base64");
+/** The smallest valid lossless WebP (1 × 1). */
+export const fixtureThumbnailWebp = Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64");
 export const fixtureThumbnailPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAKCAYAAAC9vt6cAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAEKADAAQAAAABAAAACgAAAAAeBf7RAAAAHklEQVQoFWNk+M9Qz0ABYKJAL1jrqAEMDKNhwMAAAOINAZLMvqZfAAAAAElFTkSuQmCC", "base64");
 
 /**
@@ -50,6 +52,8 @@ export async function writePreviewSourceFixture(directory: string): Promise<stri
     writeFile(path.join(directory, "project/Portal.dc.html"), "<!doctype html><h1>Claimant portal</h1>"),
     writeFile(path.join(directory, "project/.thumbnail"), fixtureCoverJpeg),
     writeFile(path.join(directory, "project/thumbnails/app.png"), fixtureThumbnailPng),
+    writeFile(path.join(directory, "project/thumbnails/button.webp"), fixtureThumbnailWebp),
+    writeFile(path.join(directory, "project/components/Button.README.md"), "# Button\n\nUse one primary button per view.\n"),
     writeFile(path.join(directory, "artifactserver.previews.json"), JSON.stringify(previewSourceFixture(), null, 2)),
   ]);
   return root;
@@ -58,7 +62,7 @@ export async function writePreviewSourceFixture(directory: string): Promise<stri
 export function previewSourceFixture() {
   return {
     format: "artifact-server.preview-source",
-    version: 1,
+    version: 2,
     title: "Claims Workspace",
     description: "Examiner app, portal and starter screens.",
     cover: "project/.thumbnail",
@@ -66,7 +70,7 @@ export function previewSourceFixture() {
       {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: "project/thumbnails/app.png"},
       {kind: "prototype", section: "Portal", title: "Claimant Portal", path: "project/Portal.dc.html"},
       {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}},
-      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}},
+      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: "project/thumbnails/button.webp", related: [{title: "Button guide", path: "project/components/Button.README.md"}]},
     ],
   };
 }

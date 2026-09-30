@@ -7,6 +7,8 @@ import type {ReviewDownload} from "./workspace-types.ts";
 
 export interface FocusViewerControlsProps {
   readonly annotate: AnnotateToggle;
+  /** Returns to the version's design gallery while one of its pages is open. */
+  readonly onReturnToGallery: (() => void) | null;
   readonly collapsed: boolean;
   readonly commentCount: number;
   readonly commentsOpen: boolean;
@@ -50,6 +52,7 @@ export function FocusViewerControls({
   download,
   onExit,
   onHide,
+  onReturnToGallery,
   onShow,
   onToggleComments,
   restoreRef,
@@ -59,6 +62,11 @@ export function FocusViewerControls({
     <>
       <div hidden={collapsed} style={controlsDockStyle}>
         <Toolbar gap={6} label="Artifact viewer controls" style={controlsStyle}>
+          {onReturnToGallery === null ? null : (
+            <Button icon="bi-grid-3x3-gap" onClick={onReturnToGallery} outline size="sm" title="Back to gallery" variant="secondary">
+              Back to gallery
+            </Button>
+          )}
           {annotate.available ? (
             <Button
               icon="bi-pencil-square"

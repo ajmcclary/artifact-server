@@ -14,36 +14,36 @@ const label = (maximum: number) => z.string().max(maximum).regex(/^(?=.*\S)[^\p{
 const description = z.string().max(1_000).regex(/^[^\p{Cc}\p{Cf}]*$/u);
 const dimension = z.number().int().min(1).max(4_096);
 const imageSchema = z.object({path: z.string().min(1).max(1_024), mediaType: z.enum(imageTypes)}).strict();
-const indexSchema = z.object({
+const itemFields = {
+  kind: z.enum(previewKinds),
+  section: label(120),
+  title: label(200),
+  description,
+  path: z.string().min(1).max(1_024),
+  viewport: z.object({width: dimension, height: dimension}).strict(),
+  thumbnail: imageSchema.nullable(),
+};
+const linkSchema = z.object({title: label(200), path: z.string().min(1).max(1_024)}).strict();
+const indexFields = {
   format: z.literal("artifact-server.preview-index"),
-  version: z.literal(1),
   origin: z.enum(["producer", "claude-design-manifest", "design-cards", "artboards"]),
   title: label(200),
   description,
   cover: imageSchema.nullable(),
-  items: z.array(z.object({
-    kind: z.enum(previewKinds),
-    section: label(120),
-    title: label(200),
-    description,
-    path: z.string().min(1).max(1_024),
-    viewport: z.object({width: dimension, height: dimension}).strict(),
-    thumbnail: imageSchema.nullable(),
-  }).strict()).min(1).max(2_000),
-}).strict();
+};
+// Version 2 adds related links; version 1 indexes remain readable as published.
+const indexSchema = z.discriminatedUnion("version", [
+  z.object({...indexFields, version: z.literal(1), items: z.array(z.object(itemFields).strict()).min(1).max(2_000)}).strict(),
+  z.object({
+    ...indexFields,
+    version: z.literal(2),
+    items: z.array(z.object({...itemFields, related: z.array(linkSchema).max(24)}).strict()).min(1).max(2_000),
+  }).strict(),
+]);
 const headerSchema = z.object({format: z.literal("artifact-server.preview-index"), version: z.number()});
 
 export type GalleryKind = typeof previewKinds[number];
 
-/** Singular names, matching the gallery's own tile labels. */
-export const galleryKindNames = {
-  artboard: "Artboard",
-  component: "Component",
-  documentation: "Document",
-  guideline: "Guideline",
-  prototype: "Prototype",
-  template: "Template",
-} as const satisfies Record<GalleryKind, string>;
 
 export interface GalleryIndexItem {
   readonly kind: GalleryKind;
@@ -54,6 +54,8 @@ export interface GalleryIndexItem {
   readonly viewport: {readonly width: number; readonly height: number};
   /** An exact-version image path, or null when the index names none or it is unusable. */
   readonly thumbnailPath: string | null;
+  /** Related documents that exist in this exact version; unusable links are dropped. */
+  readonly related: readonly {readonly title: string; readonly path: string}[];
 }
 
 export type PreviewIndexResult =
@@ -100,11 +102,13 @@ export function parsePreviewIndex(
     return {status: "invalid", reason: "The preview index is not valid JSON."};
   }
   const header = headerSchema.safeParse(value);
-  if (header.success && header.data.version !== 1) {
+  if (header.success && header.data.version !== 1 && header.data.version !== 2) {
     return {status: "invalid", reason: `Preview index version ${header.data.version} is not supported by this Review.`};
   }
   const parsed = indexSchema.safeParse(value);
-  if (!parsed.success) return {status: "invalid", reason: "The preview index does not match format version 1."};
+  if (!parsed.success) {
+    return {status: "invalid", reason: `The preview index does not match format version ${header.success ? header.data.version : 2}.`};
+  }
   const byPath = new Map(entries.map((entry) => [entry.path, entry]));
   const image = (candidate: z.infer<typeof imageSchema> | null): string | null => {
     const entry = candidate === null ? undefined : byPath.get(candidate.path);
@@ -129,6 +133,7 @@ export function parsePreviewIndex(
       path: item.path,
       viewport: item.viewport,
       thumbnailPath: image(item.thumbnail),
+      related: "related" in item ? usableLinks(item.related, byPath) : [],
     });
   }
   return {
@@ -138,6 +143,18 @@ export function parsePreviewIndex(
     coverPath: image(parsed.data.cover),
     items,
   };
+}
+
+function usableLinks(
+  links: readonly {readonly title: string; readonly path: string}[],
+  byPath: ReadonlyMap<string, ManifestEntry>,
+): {readonly title: string; readonly path: string}[] {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    if (!byPath.has(link.path) || seen.has(link.path)) return false;
+    seen.add(link.path);
+    return true;
+  });
 }
 
 /** Host-owned gallery state, kept per exact version so a return restores it. */

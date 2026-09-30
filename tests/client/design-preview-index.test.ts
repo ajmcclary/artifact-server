@@ -60,7 +60,7 @@ function generated(prepared: Awaited<ReturnType<typeof prepare>>, filePath: stri
 const imageSchema = z.object({path: z.string(), mediaType: z.string()}).strict();
 const publishedIndexSchema = z.object({
   format: z.literal("artifact-server.preview-index"),
-  version: z.literal(1),
+  version: z.literal(2),
   origin: z.string(),
   title: z.string(),
   description: z.string(),
@@ -73,6 +73,7 @@ const publishedIndexSchema = z.object({
     path: z.string(),
     viewport: z.object({width: z.number(), height: z.number()}).strict(),
     thumbnail: imageSchema.nullable(),
+    related: z.array(z.object({title: z.string(), path: z.string()}).strict()),
   }).strict()),
 }).strict();
 const versionManifestSchema = z.object({manifest: z.object({entries: z.array(z.object({path: z.string()}))})});
@@ -99,16 +100,16 @@ test("DSN-003-B: a producer preview source publishes a versioned index, typed th
   expect(coverCopy?.path).toMatch(/^artifact-server-previews\/thumbnails\/[a-f0-9]{64}\.jpg$/u);
   expect(indexOf(first)).toEqual({
     format: "artifact-server.preview-index",
-    version: 1,
+    version: 2,
     origin: "producer",
     title: "Claims Workspace",
     description: "Examiner app, portal and starter screens.",
     cover: {path: coverCopy?.path, mediaType: "image/jpeg"},
     items: [
-      {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: {path: "project/thumbnails/app.png", mediaType: "image/png"}},
-      {kind: "prototype", section: "Portal", title: "Claimant Portal", description: "", path: "project/Portal.dc.html", viewport: {width: 1280, height: 900}, thumbnail: null},
-      {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}, thumbnail: null},
-      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: null},
+      {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: {path: "project/thumbnails/app.png", mediaType: "image/png"}, related: []},
+      {kind: "prototype", section: "Portal", title: "Claimant Portal", description: "", path: "project/Portal.dc.html", viewport: {width: 1280, height: 900}, thumbnail: null, related: []},
+      {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}, thumbnail: null, related: []},
+      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: {path: "project/thumbnails/button.webp", mediaType: "image/webp"}, related: [{title: "Button guide", path: "project/components/Button.README.md"}]},
     ],
   });
 
@@ -205,14 +206,17 @@ test("DSN-003-F: malformed, unsafe, duplicate and mistyped preview sources fail 
   };
   await writeFile(source, "{not json");
   await rejects(/Cannot prepare design export/u);
-  await writeSource(inputPath, (value) => ({...value, version: 2}));
-  await rejects(/Unsupported preview source version 2/u);
+  await writeSource(inputPath, (value) => ({...value, version: 3}));
+  await rejects(/Unsupported preview source version 3/u);
+  await writeSource(inputPath, (value) => ({...value, version: 1}));
+  await rejects(/Related links require preview source version 2/u);
   await writeSource(inputPath, (value) => ({...value, generator: "unexpected"}));
   await rejects(/Cannot prepare design export/u);
   await writeSource(inputPath, (value) => ({...value, items: []}));
   await rejects(/Cannot prepare design export/u);
   interface ItemPatch {
     readonly kind?: string;
+    readonly related?: readonly {readonly path: string; readonly title: string}[];
     readonly path?: string;
     readonly thumbnail?: string;
     readonly title?: string;
@@ -238,6 +242,17 @@ test("DSN-003-F: malformed, unsafe, duplicate and mistyped preview sources fail 
   await rejects(/Cannot prepare design export/u);
   await writeSource(inputPath, (value) => ({...value, items: [value.items[0], {...value.items[1], path: "project/App.dc.html"}]}));
   await rejects(/more than once/u);
+  const guide = {title: "Guide", path: "project/components/Button.README.md"};
+  await withItem({related: [guide, guide]});
+  await rejects(/links "project\/components\/Button.README.md" more than once/u);
+  await withItem({related: [{title: "Escape", path: "../secrets.md"}]});
+  await rejects(/not portable or safe/u);
+  await withItem({related: [{title: "Missing", path: "project/Missing.md"}]});
+  await rejects(/not published/u);
+  await withItem({related: [{title: "Tab\u0009guide", path: guide.path}]});
+  await rejects(/Cannot prepare design export/u);
+  await withItem({related: Array.from({length: 25}, () => guide)});
+  await rejects(/Cannot prepare design export/u);
   await writeFile(path.join(inputPath, "project/thumbnails/fake.png"), "<svg onload=alert(1)>");
   await withItem({thumbnail: "project/thumbnails/fake.png"});
   await rejects(/PNG, JPEG or WebP/u);

@@ -216,4 +216,34 @@ test.describe("critical engine review paths @critical", () => {
       await rm(directory, {recursive: true, force: true});
     }
   });
+
+  test("DSN-005 library: the design library opens an exact gallery page and returns through history @critical", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    const directory = await mkdtemp(path.join(tmpdir(), "critical-design-library-"));
+    try {
+      await writePreviewSourceFixture(directory);
+      const published = await Effect.runPromise(publishPath({
+        serverOrigin: fixture.server.baseUrl,
+        apiToken: Redacted.make(fixture.installation.apiToken),
+      }, {
+        inputPath: directory,
+        idempotencyKey: randomUUID(),
+        target: {kind: "new_artifact", accessSetting: "account_required", name: "Claims Workspace", tags: []},
+      }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
+      await localLogin(fixture);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/library?project=prj_default`);
+      const card = fixture.page.getByRole("region", {name: "Default design library gallery"})
+        .getByRole("link", {name: "Open Primary button · Component · Claims Workspace · Actions"});
+      await card.click();
+      const exact = new URL(fixture.page.url());
+      expect(exact.searchParams.get("version")).toBe(published.version.id);
+      expect(exact.searchParams.get("path")).toBe("project/components/buttons.card.html");
+      await expect(isolatedReviewFrame(fixture.page).frameLocator("iframe").getByRole("button", {name: "Try button"})).toBeVisible();
+      await fixture.page.goBack();
+      await expect(card).toBeFocused();
+    } finally {
+      await stopBrowserFixture(fixture);
+      await rm(directory, {recursive: true, force: true});
+    }
+  });
 });

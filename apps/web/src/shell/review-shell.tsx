@@ -78,10 +78,13 @@ function ReviewShellFrame({
 
   const mode = route.kind === "settings" ? "admin" : "review";
   const navInput: ShellNavInput = {
-    activeProjectId: route.kind === "workspace" ? route.location.projectId : null,
+    activeProjectId: route.kind === "workspace"
+      ? route.location.projectId
+      : route.kind === "library" ? route.projectId : null,
     activeSettings: route.kind === "settings" ? route.settings.kind : null,
     canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
+    libraryActive: route.kind === "library",
     mode,
     projects,
     queueActive: route.kind === "queue",

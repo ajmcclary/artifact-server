@@ -22,7 +22,8 @@ export interface ReviewLocation {
 export type ReviewRoute =
   | {readonly kind: "queue"}
   | {readonly kind: "settings"; readonly settings: SettingsRoute}
-  | {readonly kind: "workspace"; readonly location: ReviewLocation};
+  | {readonly kind: "workspace"; readonly location: ReviewLocation}
+  | {readonly kind: "library"; readonly projectId: string | null};
 
 /** Session-storage key holding the last review workspace URL that "Back to review" returns to. */
 export const REVIEW_RETURN_URL_KEY = "artifact-review-return-url";
@@ -72,10 +73,23 @@ export function parseSettingsRoute(pathname: string): SettingsRoute {
   return {kind: "notFound"};
 }
 
+const libraryPathname = "/review/library";
+
+/** The project design library: every gallery in one project, following current versions. */
+export function libraryHref(projectId: string | null): string {
+  return projectId === null || projectId === ""
+    ? libraryPathname
+    : `${libraryPathname}?${new URLSearchParams({project: projectId})}`;
+}
+
 /** Resolve one application URL to its screen. Bare `/review` is the review queue. */
 export function parseReviewRoute(url: URL): ReviewRoute {
   if (isSettingsPath(url.pathname)) {
     return {kind: "settings", settings: parseSettingsRoute(url.pathname)};
+  }
+  if (url.pathname === libraryPathname || url.pathname === `${libraryPathname}/`) {
+    const projectId = url.searchParams.get("project");
+    return {kind: "library", projectId: projectId === "" ? null : projectId};
   }
   const location = readReviewLocation(url.searchParams);
   return location.projectId === null && location.artifactId === null

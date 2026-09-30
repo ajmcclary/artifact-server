@@ -77,8 +77,6 @@ export interface PreviewCanvasProps {
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
   /** Explains why a version's gallery fell back to its original catalog. */
   readonly galleryNotice: string | null;
-  /** Offered while an exact page of a gallery version is open. */
-  readonly galleryReturn: {readonly label: string; readonly onReturn: () => void} | null;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;
   /** The Comments view owns the preview mode controls, outside the artifact canvas. */
@@ -117,21 +115,6 @@ const focusFrameStyle = {...frameStyle, border: 0, borderRadius: 0, boxShadow: "
 const frameBodyStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
 const controlsStyle = {flex: "none"} satisfies CSSProperties;
 const galleryStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
-const returnBarStyle = {alignItems: "center", display: "flex", flex: "none", gap: 10, minWidth: 0} satisfies CSSProperties;
-const focusReturnBarStyle = {
-  ...returnBarStyle,
-  background: "var(--surface-secondary)",
-  borderBottom: "1px solid var(--border-color)",
-  padding: "6px 10px",
-} satisfies CSSProperties;
-const returnLabelStyle = {
-  color: "var(--text-secondary)",
-  fontSize: 12,
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-} satisfies CSSProperties;
 const positionStyle = {color: "var(--text-data)", fontFamily: "var(--font-data)", fontSize: 12} satisfies CSSProperties;
 const metaStyle = {color: "var(--text-secondary)", fontSize: 12, whiteSpace: "nowrap"} satisfies CSSProperties;
 const htmlPreviewStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
@@ -153,6 +136,22 @@ const frameElementStyle = {
   width: "100%",
 } satisfies CSSProperties;
 const stateStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"} satisfies CSSProperties;
+/** Guides and other text files render as text, never as markup. */
+const maximumTextPreviewBytes = 1024 * 1024;
+const textPreviewStyle = {
+  background: "var(--surface-card)",
+  color: "var(--text-body)",
+  flex: "1 1 auto",
+  fontFamily: "var(--font-data)",
+  fontSize: 13,
+  lineHeight: 1.55,
+  margin: 0,
+  minHeight: 0,
+  overflow: "auto",
+  overflowWrap: "anywhere",
+  padding: "16px 20px",
+  whiteSpace: "pre-wrap",
+} satisfies CSSProperties;
 const stateActionsStyle = {display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 12} satisfies CSSProperties;
 const mediaStageStyle = {
   alignItems: "center",
@@ -180,7 +179,6 @@ export function PreviewCanvas({
   emptyProject,
   gallery,
   galleryNotice,
-  galleryReturn,
   hasDetails,
   isCurrentVersion,
   modeControlsTarget,
@@ -213,14 +211,6 @@ export function PreviewCanvas({
     <div ref={columnRef} style={focus ? focusColumnStyle : columnStyle}>
       {detailError === null || focus ? null : <Alert variant="danger">{detailError.message}</Alert>}
       {galleryNotice === null ? null : <Alert variant="warning">{galleryNotice}</Alert>}
-      {galleryReturn === null ? null : (
-        <div style={focus ? focusReturnBarStyle : returnBarStyle}>
-          <Button icon="bi-arrow-left" onClick={galleryReturn.onReturn} outline size="sm" variant="secondary">
-            Back to gallery
-          </Button>
-          <span style={returnLabelStyle}>{galleryReturn.label}</span>
-        </div>
-      )}
       <PreviewFrame
         bodyStyle={frameBodyStyle}
         label="Artifact preview"
@@ -460,6 +450,28 @@ function ReviewPreview({
         readOnly={readOnly}
         selectedThreadId={selectedThreadId}
         version={version}
+      />
+    );
+  }
+  if (mediaType.startsWith("text/")) {
+    if (entry.size > maximumTextPreviewBytes) {
+      return (
+        <TerminalPreviewState
+          actions={commonActions}
+          description={`Review shows text files up to ${formatBytes(maximumTextPreviewBytes)}. Open or download the raw artifact to read this file.`}
+          mediaType={entry.mediaType}
+          path={entry.path}
+          size={entry.size}
+          title="Text too large"
+        />
+      );
+    }
+    return (
+      <TextPreview
+        actions={commonActions}
+        entry={entry}
+        key={identity}
+        load={() => api.versionFile(projectId, artifactId, version.version.id, entry.path)}
       />
     );
   }
@@ -1007,6 +1019,49 @@ function TerminalPreviewState({actions, description, mediaType, onRetry, path, s
         )}
       </div>
     </div>
+  );
+}
+
+function TextPreview({actions, entry, load}: {
+  readonly actions: PreviewActions;
+  readonly entry: PreviewEntry;
+  readonly load: () => Promise<string>;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setFailed(false);
+    void (async () => {
+      try {
+        const loaded = await load();
+        if (current) setText(loaded);
+      } catch {
+        if (current) setFailed(true);
+      }
+    })();
+    return () => {
+      current = false;
+    };
+    // `load` names one immutable file; `attempt` re-runs it on retry.
+  }, [attempt]);
+  if (failed) {
+    return (
+      <TerminalPreviewState
+        actions={actions}
+        description="The text could not be read from this version."
+        mediaType={entry.mediaType}
+        onRetry={() => setAttempt((value) => value + 1)}
+        path={entry.path}
+        size={entry.size}
+        title="Text unavailable"
+      />
+    );
+  }
+  if (text === null) return <PreviewState description="Reading the text of this immutable file." title="Loading text" />;
+  return (
+    <pre aria-label={`Text of ${entry.path}`} style={textPreviewStyle} tabIndex={0}>{text}</pre>
   );
 }
 

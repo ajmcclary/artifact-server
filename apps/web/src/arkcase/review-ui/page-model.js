@@ -136,7 +136,7 @@ export const galleryKind = (id) => galleryKinds.find((kind) => kind.id === id) |
 export function filterGallery(items, query = '', kind = 'all') {
   const q = query.trim().toLocaleLowerCase();
   return items.filter((item) => (kind === 'all' || item.kind === kind)
-    && `${item.title} ${item.section} ${item.description || ''} ${item.path} ${galleryKind(item.kind).label}`
+    && `${item.title} ${item.section} ${item.description || ''} ${item.path} ${item.context || ''} ${galleryKind(item.kind).label}`
       .toLocaleLowerCase().includes(q));
 }
 

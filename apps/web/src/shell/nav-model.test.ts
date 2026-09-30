@@ -38,6 +38,7 @@ const reviewInput: ShellNavInput = {
   activeSettings: null,
   canCreateProjects: true,
   isAdministrator: true,
+  libraryActive: false,
   mode: "review",
   projects: [
     project("prj_old", "Zeta", "2026-09-02T00:00:00.000Z"),
@@ -49,9 +50,10 @@ const reviewInput: ShellNavInput = {
 };
 
 describe("shellNavItems in review mode", () => {
-  it("lists the queue, active projects by name, archived projects, then New project", () => {
+  it("lists the queue, the design library, active projects by name, archived projects, then New project", () => {
     expect(shellNavItems(reviewInput)).toEqual([
       {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: "/review"},
+      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library?project=prj_b"},
       {
         group: "Projects",
         icon: "bi-folder2",
@@ -67,12 +69,13 @@ describe("shellNavItems in review mode", () => {
 
   it("omits New project for a principal that cannot manage projects", () => {
     const items = shellNavItems({...reviewInput, canCreateProjects: false});
-    expect(items.map((item) => item.label)).toEqual(["Review queue", "Beta", "Default", "Zeta"]);
+    expect(items.map((item) => item.label)).toEqual(["Review queue", "Design library", "Beta", "Default", "Zeta"]);
   });
 
   it("starts the Projects group with New project when there are no projects", () => {
     expect(shellNavItems({...reviewInput, projects: []})).toEqual([
       {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: "/review"},
+      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library"},
       {group: "Projects", icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
     ]);
   });
@@ -111,6 +114,9 @@ describe("shellNavItems in administration mode", () => {
 describe("shellActiveLink", () => {
   it("marks the queue, the active project, or the active administration screen", () => {
     expect(shellActiveLink({...reviewInput, queueActive: true})).toBe("/review");
+    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library?project=prj_default");
+    expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
+      .toBe("/review/library?project=prj_default");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default"}))
       .toBe("/review?project=prj_default");
     expect(shellActiveLink(reviewInput)).toBe("");

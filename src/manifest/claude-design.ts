@@ -188,6 +188,7 @@ function previewDraft(origin: PreviewDraft["origin"], title: string, previews: r
       description: preview.description,
       path: preview.path,
       viewport: {width: preview.width, height: preview.height},
+      related: [],
     })),
   };
 }

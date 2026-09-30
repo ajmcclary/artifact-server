@@ -13,7 +13,10 @@ export const previewAssetDirectory = "artifact-server-previews/";
 /** Optional producer declaration at the publication root. */
 export const previewSourcePath = "artifactserver.previews.json";
 export const previewSourceFormat = "artifact-server.preview-source";
-export const previewFormatVersion = 1;
+/** Sources may be version 1 or 2 (2 adds related links); indexes are written as version 2. */
+export const previewSourceVersions = [1, 2] as const;
+export const previewFormatVersion = 2;
+export const maximumRelatedLinks = 24;
 
 export const previewKinds = [
   "prototype",
@@ -52,6 +55,7 @@ const sourceHeaderSchema = Schema.Struct({
   format: Schema.Literal(previewSourceFormat),
   version: Schema.Int,
 });
+const relatedSchema = Schema.Struct({title: label(200), path: referenceSchema});
 const sourceItemSchema = Schema.Struct({
   kind: Schema.Literals(previewKinds),
   section: label(120),
@@ -60,10 +64,11 @@ const sourceItemSchema = Schema.Struct({
   path: referenceSchema,
   viewport: Schema.optional(viewportSchema),
   thumbnail: Schema.optional(referenceSchema),
+  related: Schema.optional(Schema.Array(relatedSchema).check(Schema.isMaxLength(maximumRelatedLinks))),
 });
 const sourceSchema = Schema.Struct({
   format: Schema.Literal(previewSourceFormat),
-  version: Schema.Literal(previewFormatVersion),
+  version: Schema.Literals(previewSourceVersions),
   title: label(200),
   description: Schema.optional(description),
   cover: Schema.optional(referenceSchema),
@@ -81,6 +86,11 @@ export interface PreviewImage {
   readonly mediaType: "image/jpeg" | "image/png" | "image/webp";
 }
 
+export interface PreviewLink {
+  readonly title: string;
+  readonly path: string;
+}
+
 export interface PreviewIndexItem {
   readonly kind: PreviewKind;
   readonly section: string;
@@ -89,6 +99,7 @@ export interface PreviewIndexItem {
   readonly path: string;
   readonly viewport: PreviewViewport;
   readonly thumbnail: PreviewImage | null;
+  readonly related: readonly PreviewLink[];
 }
 
 export interface PreviewIndex {
@@ -118,10 +129,13 @@ export interface PreviewDraft extends Omit<PreviewIndex, "cover" | "format" | "i
 export function parsePreviewSource(text: string, paths: readonly string[]): PreviewDraft {
   const value: unknown = JSON.parse(text);
   const header = Schema.decodeUnknownSync(sourceHeaderSchema)(value);
-  if (header.version !== previewFormatVersion) {
-    throw new Error(`Unsupported preview source version ${header.version}; this CLI reads version ${previewFormatVersion}.`);
+  if (!previewSourceVersions.some((version) => version === header.version)) {
+    throw new Error(`Unsupported preview source version ${header.version}; this CLI reads versions ${previewSourceVersions.join(" and ")}.`);
   }
   const source = Schema.decodeUnknownSync(sourceSchema)(value, strictParseOptions);
+  if (source.version === 1 && source.items.some((item) => item.related !== undefined)) {
+    throw new Error("Related links require preview source version 2.");
+  }
   const published = new Set(paths);
   const seen = new Set<string>();
   const items = source.items.map((item): PreviewDraftItem => {
@@ -135,6 +149,7 @@ export function parsePreviewSource(text: string, paths: readonly string[]): Prev
       description: item.description ?? "",
       path: itemPath,
       viewport: item.viewport ?? defaultPreviewViewport,
+      related: relatedLinks(item.related ?? [], itemPath, published),
     };
     return item.thumbnail === undefined
       ? draft
@@ -172,6 +187,7 @@ export function createPreviewIndex(
       path: item.path,
       viewport: {width: item.viewport.width, height: item.viewport.height},
       thumbnail: item.thumbnail === undefined ? null : resolveImage(item.thumbnail),
+      related: item.related.map((link) => ({title: link.title, path: link.path})),
     })),
   };
 }
@@ -205,6 +221,20 @@ export function previewThumbnailCopyPath(sha256: string, mediaType: PreviewImage
 /** True when a publication path would collide with generated preview assets. */
 export function isReservedPreviewPath(candidate: string): boolean {
   return candidate.toLowerCase().startsWith(previewAssetDirectory);
+}
+
+function relatedLinks(
+  links: readonly {readonly title: string; readonly path: string}[],
+  itemPath: string,
+  published: ReadonlySet<string>,
+): PreviewLink[] {
+  const seen = new Set<string>();
+  return links.map((link) => {
+    const linkPath = publishedPath(link.path, published);
+    if (seen.has(linkPath)) throw new Error(`Preview ${JSON.stringify(itemPath)} links ${JSON.stringify(linkPath)} more than once.`);
+    seen.add(linkPath);
+    return {title: link.title.trim(), path: linkPath};
+  });
 }
 
 function publishedPath(candidate: string, published: ReadonlySet<string>): string {

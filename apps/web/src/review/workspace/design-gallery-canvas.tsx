@@ -6,7 +6,6 @@ import {DesignGallery} from "@/ui/review-ui";
 
 import {workspaceHref} from "../review-routes.ts";
 import {
-  galleryKindNames,
   initialGalleryViewState,
   type GalleryViewState,
 } from "./design-gallery.ts";
@@ -16,10 +15,11 @@ import {usePreviewIndex} from "./use-preview-index.ts";
 export interface DesignGalleryCanvas {
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
   readonly galleryNotice: string | null;
-  readonly galleryReturn: {readonly label: string; readonly onReturn: () => void} | null;
+  /** Returns to the gallery while one of this version's exact pages is open. */
+  readonly onReturnToGallery: (() => void) | null;
 }
 
-const noGallery: DesignGalleryCanvas = {gallery: null, galleryNotice: null, galleryReturn: null};
+const noGallery: DesignGalleryCanvas = {gallery: null, galleryNotice: null, onReturnToGallery: null};
 const loadingStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"};
 
 /**
@@ -85,20 +85,7 @@ export function useDesignGalleryCanvas({
     states.current.set(versionId, {...(states.current.get(versionId) ?? initialGalleryViewState), ...patch});
     if (render) setRevision((revision) => revision + 1);
   };
-  if (!onEntry) {
-    const item = index.items.find((candidate) => candidate.path === selectedPath);
-    return {
-      ...noGallery,
-      galleryReturn: {
-        label: item !== undefined
-          ? `${item.title} · ${galleryKindNames[item.kind]} · ${item.section}`
-          : selectedPath === version.manifest.entryPath
-            ? "Original generated catalog"
-            : `${selectedPath ?? ""} · not listed in the gallery`,
-        onReturn: () => onNavigate(null),
-      },
-    };
-  }
+  if (!onEntry) return {...noGallery, onReturnToGallery: () => onNavigate(null)};
   const media = (path: string | null): string | null => path === null
     ? null
     : api.versionMediaUrl(projectId, artifactId, versionId, path);
@@ -110,7 +97,7 @@ export function useDesignGalleryCanvas({
         <DesignGallery
           coverUrl={media(index.coverPath)}
           description={index.description}
-          focusPath={state.focusPath ?? ""}
+          focusPath={state.focusPath}
           hrefFor={(path) => workspaceHref({
             artifactId,
             path,
@@ -122,6 +109,7 @@ export function useDesignGalleryCanvas({
             description: item.description,
             kind: item.kind,
             path: item.path,
+            related: item.related.map((link) => ({path: link.path, title: link.title})),
             section: item.section,
             thumbnailUrl: media(item.thumbnailPath),
             title: item.title,

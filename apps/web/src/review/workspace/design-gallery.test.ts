@@ -14,6 +14,7 @@ const entries = [
   {mediaType: "text/html; charset=utf-8", path: "templates/Doc.dc.html", size: 10},
   {mediaType: "image/png", path: "thumbs/app.png", size: 10},
   {mediaType: "text/css; charset=utf-8", path: "styles.css", size: 10},
+  {mediaType: "text/markdown; charset=utf-8", path: "guides/App.README.md", size: 10},
 ];
 interface ItemOverrides {
   readonly kind?: string;
@@ -26,10 +27,11 @@ interface ItemOverrides {
 interface IndexOverrides {
   readonly cover?: {readonly mediaType: string; readonly path: string} | null;
   readonly format?: string;
-  readonly items?: readonly ReturnType<typeof item>[];
+  readonly items?: readonly (ReturnType<typeof item> & {readonly related?: readonly {readonly path: string; readonly title: string}[]})[];
   readonly unexpected?: boolean;
   readonly version?: number;
 }
+const related = (links: readonly {readonly path: string; readonly title: string}[]) => ({related: links});
 const item = (overrides: ItemOverrides = {}) => ({
   kind: "prototype",
   section: "Prototypes",
@@ -68,11 +70,26 @@ describe("design gallery preview index", () => {
     ]);
   });
 
+  it("reads version 2 related links and drops ones that are not files of this version", () => {
+    const guide = {title: "App guide", path: "guides/App.README.md"};
+    const parsed = parsePreviewIndex(index({
+      version: 2,
+      items: [
+        {...item(), ...related([guide, guide, {title: "Missing", path: "guides/Missing.md"}])},
+        {...item({path: "templates/Doc.dc.html", thumbnail: null}), ...related([])},
+      ],
+    }), entries);
+    expect(parsed.status === "ready" && parsed.items.map((candidate) => candidate.related)).toEqual([[guide], []]);
+    expect(parsePreviewIndex(index({version: 1, items: [{...item(), ...related([guide])}]}), entries).status).toBe("invalid");
+    expect(parsePreviewIndex(index({version: 2}), entries).status).toBe("invalid");
+    expect(parsePreviewIndex(index({version: 3}), entries)).toMatchObject({reason: expect.stringMatching(/version 3/u)});
+  });
+
   it("DSN-004-F: malformed, unsupported, duplicate and escaping indexes fail closed; bad thumbnails become placeholders", () => {
     const invalid = (text: string) => expect(parsePreviewIndex(text, entries).status).toBe("invalid");
     invalid("{");
-    invalid(index({version: 2}));
-    expect(parsePreviewIndex(index({version: 2}), entries)).toMatchObject({reason: expect.stringMatching(/version 2/u)});
+    invalid(index({version: 7}));
+    expect(parsePreviewIndex(index({version: 7}), entries)).toMatchObject({reason: expect.stringMatching(/version 7/u)});
     invalid(index({format: "something-else"}));
     invalid(index({unexpected: true}));
     invalid(index({items: []}));

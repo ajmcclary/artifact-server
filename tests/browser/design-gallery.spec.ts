@@ -79,7 +79,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(page).toHaveURL(/path=project%2FPortal\.dc\.html/u);
     expect(new URL(page.url()).searchParams.get("version")).toBe(published.version.id);
     await expect(interactiveFrame(page).getByRole("heading", {name: "Claimant portal"})).toBeVisible();
-    await expect(page.getByText("Claimant Portal · Prototype · Portal")).toBeVisible();
+    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
 
     await page.goBack();
     await expect(view.getByRole("radio", {name: "List"})).toHaveAttribute("aria-checked", "true");
@@ -91,6 +91,15 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(view.getByRole("heading", {name: "Claims Workspace", level: 2})).toBeVisible();
     expect(new URL(page.url()).searchParams.has("path")).toBe(false);
 
+    // Related guides open as exact text pages and keep their item in reach.
+    await view.getByRole("button", {name: /^All/u}).click();
+    await view.getByRole("navigation", {name: "Guides for Primary button"}).getByRole("link", {name: "Button guide"}).click();
+    await expect(page).toHaveURL(/path=project%2Fcomponents%2FButton\.README\.md/u);
+    await expect(page.getByLabel("Text of project/components/Button.README.md")).toContainText("Use one primary button per view.");
+    await page.goBack();
+    await expect(view.getByRole("navigation", {name: "Guides for Primary button"})).toBeVisible();
+    await expect(view.getByRole("heading", {name: "Claims Workspace", level: 2})).toBeVisible();
+
     await app.click();
     // Claude Design artboards run their own runtime, so they open in the Interactive preview.
     const interactive = interactiveFrame(page);
@@ -98,7 +107,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(interactive.locator("output")).toHaveText("Clicked");
     // The reversible mode switch sits with the workspace comment controls.
     await page.getByRole("button", {name: "Exit full screen"}).click();
-    await expect(page.getByText("Examiner App · Prototype · Prototypes")).toBeVisible();
+    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
     await openInspectorTab(page, "Comments");
     const mode = page.getByRole("group", {name: "HTML preview mode"});
     await expect(mode.getByRole("button", {name: "Interactive preview"})).toHaveAttribute("aria-pressed", "true");
@@ -118,7 +127,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     catalogUrl.searchParams.set("path", "artifact-server-design.html");
     await page.goto(catalogUrl.toString());
     await expect(interactiveFrame(page).getByRole("heading", {name: "Claims Workspace"})).toBeVisible();
-    await expect(page.getByText("Original generated catalog")).toBeVisible();
+    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});
@@ -188,7 +197,7 @@ test("DSN-004: pre-index publications keep their catalog, later versions gain th
     await expect(interactiveFrame(page).getByRole("heading", {name: "Legacy system"})).toBeVisible();
 
     const hostile = [
-      [JSON.stringify({format: "artifact-server.preview-index", version: 2}), /Preview index version 2 is not supported/u],
+      [JSON.stringify({format: "artifact-server.preview-index", version: 3}), /Preview index version 3 is not supported/u],
       ["{not json", /not valid JSON/u],
       [JSON.stringify({
         format: "artifact-server.preview-index", version: 1, origin: "producer", title: "Escape", description: "", cover: null,
