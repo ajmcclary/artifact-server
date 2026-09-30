@@ -16,12 +16,8 @@ import {
   Comment01Icon,
   Download04Icon,
   Edit02Icon,
-  ExternalLinkIcon,
   File01Icon,
-  FullScreenIcon,
-  LayoutLeftIcon,
   Link01Icon,
-  PanelRightIcon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -54,6 +50,7 @@ import {ReviewShell} from "@/shell/review-shell";
 import {dismissInnermost} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {catalogPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useViewportWidth} from "./workspace/use-viewport-size.ts";
 import {catalogWidth, dockingFor, isPhoneWidth} from "./workspace/workspace-layout.ts";
@@ -1259,80 +1256,52 @@ function ArtifactReview({
               </aside>
             </>
           ) : null}
-          <header className="as-pane-header as-preview-header">
-            <div className="as-preview-header__identity">
-              {!catalogDocked ? (
-                <IconButton
-                  keyShortcuts="["
-                  label="Open artifact catalog"
-                  onClick={toggleCatalog}
-                  title="Open artifact catalog ([)"
-                >
-                  <HugeiconsIcon icon={LayoutLeftIcon} strokeWidth={1.8} />
-                </IconButton>
-              ) : null}
-              <h1>{details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}</h1>
-            </div>
-            <div className="as-preview-header__actions">
-              {previewKind === "html" && canComment && htmlViewerMode === "annotate" ? (
-                <IconButton
-                  active={htmlAnnotateModeActive}
-                  label={htmlAnnotateModeActive
-                    ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
-                    : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
-                  onClick={() => setHtmlAnnotateModeActive((active) => !active)}
-                >
-                  <HugeiconsIcon icon={Edit02Icon} strokeWidth={1.8} />
-                </IconButton>
-              ) : null}
-              <button
-                aria-label={opening ? "Opening raw artifact" : "Open raw artifact"}
-                className="as-button as-button--secondary as-preview-header__raw"
-                disabled={selectedVersionId === null || opening}
-                onClick={() => void openRawArtifact()}
-                type="button"
-              >
-                <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
-                <span className="as-button__label">
-                  {opening ? "Opening…" : "Open raw artifact"}
-                </span>
-              </button>
-              <ReviewShareControl
-                details={details}
-                key={`header-share-${details?.artifact.id ?? "empty"}`}
-                onArtifactChanged={updateArtifact}
-                selectedPath={selectedPath}
-                selectedVersion={selectedVersion}
-                triggerClassName="as-button as-button--secondary"
-              />
-              <ReviewDownloadControl
-                className="as-button as-button--secondary"
-                download={download}
-              />
-              <button
-                aria-label="Full screen"
-                aria-keyshortcuts="F"
-                className="as-button as-button--primary"
-                disabled={selectedVersionId === null}
-                onClick={enterFocusMode}
-                title="Full screen (F)"
-                type="button"
-              >
-                <HugeiconsIcon aria-hidden="true" icon={FullScreenIcon} strokeWidth={1.8} />
-                <span className="as-button__label">Full screen</span>
-              </button>
-              {!inspectorOpen ? (
-                <IconButton
-                  keyShortcuts="]"
-                  label="Open inspector"
-                  onClick={() => setInspectorOpen(true)}
-                  title="Open inspector (])"
-                >
-                  <HugeiconsIcon icon={PanelRightIcon} strokeWidth={1.8} />
-                </IconButton>
-              ) : null}
-            </div>
-          </header>
+          {focusMode ? null : (
+            <ReviewToolbar
+              annotate={{
+                active: htmlAnnotateModeActive,
+                available: previewKind === "html" && canComment && htmlViewerMode === "annotate",
+                onToggle: () => setHtmlAnnotateModeActive((active) => !active),
+              }}
+              artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
+              canManage={canManageArtifacts}
+              catalogDocked={catalogDocked}
+              details={details}
+              download={download}
+              inspectorOpen={inspectorOpen}
+              linkedArtifacts={session.capabilities.linkedArtifacts}
+              onCapture={captureLinkedArtifact}
+              onDelete={tombstoneArtifact}
+              onEnterFocus={enterFocusMode}
+              onOpenCatalog={toggleCatalog}
+              onOpenComparison={null}
+              onOpenLive={openLinkedArtifact}
+              onOpenRawArtifact={() => void openRawArtifact()}
+              onSelectPath={selectManifestPath}
+              onSelectVersion={(versionId) => {
+                setDetailError(null);
+                setSelectedVersionId(versionId);
+                setSelectedPath(null);
+              }}
+              onToggleInspector={() => setInspectorOpen((open) => !open)}
+              opening={opening}
+              phone={phone}
+              projectName={selectedProject?.name ?? "project"}
+              selectedPath={selectedPath}
+              selectedVersion={selectedVersion}
+              share={(
+                <ReviewShareControl
+                  details={details}
+                  key={`header-share-${details?.artifact.id ?? "empty"}`}
+                  onArtifactChanged={updateArtifact}
+                  selectedPath={selectedPath}
+                  selectedVersion={selectedVersion}
+                  triggerClassName="as-button as-button--secondary"
+                />
+              )}
+              versions={versions}
+            />
+          )}
 
           <div className="as-preview-panel__body" data-preview-kind={previewKind}>
             {detailError === null ? null : (
@@ -1487,14 +1456,6 @@ function ArtifactReview({
                 <InspectorTabButton active={inspectorTab === "compare"} label="Compare" onClick={() => setInspectorTab("compare")} tab="compare" />
               )}
             </div>
-            <IconButton
-              keyShortcuts="]"
-              label="Close inspector"
-              onClick={() => setInspectorOpen(false)}
-              title="Close inspector (])"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.8} />
-            </IconButton>
           </header>
           <div
             aria-labelledby={`review-inspector-tab-${inspectorTab}`}
@@ -1512,7 +1473,6 @@ function ArtifactReview({
                 onCapture={captureLinkedArtifact}
                 onOpenLive={openLinkedArtifact}
                 onTagsChange={changeTags}
-                onTombstone={tombstoneArtifact}
                 version={selectedVersion}
               />
             ) : inspectorTab === "comments" ? (
@@ -1627,7 +1587,6 @@ function DetailsInspector({
   onCapture,
   onOpenLive,
   onTagsChange,
-  onTombstone,
   version,
 }: {
   readonly canManage: boolean;
@@ -1636,7 +1595,6 @@ function DetailsInspector({
   readonly onCapture: () => Promise<void>;
   readonly onOpenLive: () => Promise<void>;
   readonly onTagsChange: (tags: readonly string[]) => Promise<void>;
-  readonly onTombstone: () => Promise<boolean>;
   readonly version: ArtifactVersion;
 }) {
   const linkedDriftDescription = details.sourceBinding === undefined
@@ -1687,11 +1645,6 @@ function DetailsInspector({
           </div>
         </InspectorSection>
       )}
-      {canManage ? (
-        <InspectorSection count={0} title="Danger zone">
-          <TombstoneArtifactControl artifact={details.artifact} onConfirm={onTombstone} />
-        </InspectorSection>
-      ) : null}
     </div>
   );
 }
@@ -1988,52 +1941,6 @@ function ComparisonInspector({
         )}
       </InspectorSection>
     </div>
-  );
-}
-
-function TombstoneArtifactControl({
-  artifact,
-  onConfirm,
-}: {
-  readonly artifact: ArtifactDetails["artifact"];
-  readonly onConfirm: () => Promise<boolean>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState("");
-  const [pending, setPending] = useState(false);
-  const confirm = async (): Promise<void> => {
-    if (value !== artifact.name) return;
-    setPending(true);
-    const removed = await onConfirm();
-    setPending(false);
-    if (removed) setOpen(false);
-  };
-  return (
-    <Dialog.Root onOpenChange={(nextOpen) => {
-      setOpen(nextOpen);
-      if (!nextOpen) setValue("");
-    }} open={open}>
-      <Dialog.Trigger className="as-button as-button--danger">Delete artifact</Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="as-confirm-dialog__backdrop" />
-        <Dialog.Popup className="as-confirm-dialog">
-          <Dialog.Title>Delete {artifact.name}?</Dialog.Title>
-          <Dialog.Description>
-            This removes the artifact from normal use but retains its immutable version records. Type the artifact name to confirm.
-          </Dialog.Description>
-          <label>
-            <span className="as-visually-hidden">Artifact name</span>
-            <input autoFocus onChange={(event) => setValue(event.currentTarget.value)} value={value} />
-          </label>
-          <div className="as-confirm-dialog__actions">
-            <Dialog.Close className="as-button">Cancel</Dialog.Close>
-            <button className="as-button as-button--danger" disabled={pending || value !== artifact.name} onClick={() => void confirm()} type="button">
-              {pending ? "Deleting…" : "Delete artifact"}
-            </button>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
   );
 }
 

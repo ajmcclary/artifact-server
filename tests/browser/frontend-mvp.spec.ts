@@ -71,9 +71,6 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(
         fixture.page.getByRole("heading", {exact: true, name: "Review fixture"}),
       ).toBeVisible();
-      const previewHeader = fixture.page.locator(".as-preview-header");
-      await expect(previewHeader.locator("p")).toHaveCount(0);
-      await expect(previewHeader.locator(".as-pill")).toHaveCount(0);
       await expect(
         fixture.page.getByRole("button", {name: /Review fixture/u}),
       ).toHaveAttribute("aria-current", "true");
@@ -1003,7 +1000,7 @@ test.describe("Artifact Server frontend MVP", () => {
       exactReviewLink.searchParams.set("path", "index.html");
       await openReview(fixture, {artifactId: published.body.artifact.id, path: "index.html", projectId: published.body.artifact.projectId, versionId: published.body.version.id});
 
-      const headerActions = fixture.page.locator(".as-preview-header__actions");
+      const headerActions = fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"});
       const headerShare = headerActions.getByRole("button", {exact: true, name: "Share"});
       const fullScreen = headerActions.getByRole("button", {name: "Full screen"});
       await expect(headerShare).toBeVisible();
@@ -1380,7 +1377,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(keyCard.getByText("Revoked", {exact: true})).toBeVisible();
 
       await openReview(fixture, {artifactId: first.body.artifact.id});
-      await fixture.page.getByRole("button", {name: "Delete artifact"}).click();
+      await fixture.page.getByRole("button", {name: "More artifact actions"}).click();
+      await fixture.page.getByRole("menuitem", {name: "Delete artifact"}).click();
       await fixture.page.getByRole("textbox", {name: "Artifact name"}).fill("Workflow fixture");
       await fixture.page.getByRole("button", {name: "Delete artifact", exact: true}).last().click();
       await expect(fixture.page.getByRole("button", {name: /Workflow fixture/u})).toHaveCount(0);

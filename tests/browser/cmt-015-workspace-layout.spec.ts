@@ -1,13 +1,20 @@
 import {expect, test, type Page} from "@playwright/test";
 
-import {publishNew} from "../support/publishing.js";
+import {
+  commitStagedUpload,
+  createStagedUpload,
+  publishNew,
+  publishVersion,
+  testSiteFile,
+  uploadEveryStagedFile,
+} from "../support/publishing.js";
 import {
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openReview} from "./review-helpers.js";
+import {openReview, previewFrame} from "./review-helpers.js";
 
 function catalogPanel(page: Page) {
   return page.locator('[data-panel="artifact-catalog"]');
@@ -75,9 +82,9 @@ test.describe("Artifact review workspace layout", () => {
       await page.mouse.move(minimumBox.x + minimumBox.width / 2, seamY);
       await page.mouse.down();
       await page.mouse.move(minimumBox.x - 240, seamY, {steps: 6});
-      await page.waitForTimeout(1_300);
+      // The one-second hold is measured in animation frames; keep holding until it fires.
+      await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed", {timeout: 5_000});
       await page.mouse.up();
-      await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
       await expect(page.getByRole("button", {name: "Open artifact catalog"}))
         .toHaveAttribute("aria-keyshortcuts", "[");
 
@@ -101,13 +108,15 @@ test.describe("Artifact review workspace layout", () => {
       await page.setViewportSize({height: 800, width: 1023});
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed");
       await page.setViewportSize({height: 800, width: 1024});
-      await page.getByRole("button", {name: "Close inspector"}).click();
+      // Until Task 13a docks the inspector as a DS Panel, the old inspector overlays the toolbar
+      // here, so the kept ] shortcut closes it.
+      await page.keyboard.press("]");
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "pinned");
 
       // On a phone the catalog is a sheet that opens on request and closes on a choice.
       await page.setViewportSize({height: 844, width: 390});
       await expect(catalog).toHaveCount(0);
-      await page.getByRole("button", {name: "Open artifact catalog"}).click();
+      await page.getByRole("button", {name: "Back to Default"}).click();
       await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "sheet");
       await catalog.getByRole("button", {name: /Layout fixture/u}).click();
       await expect(catalog).toHaveCount(0);
@@ -149,6 +158,58 @@ test.describe("Artifact review workspace layout", () => {
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "expanded");
       await page.getByRole("button", {name: "Open inspector"}).click();
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "rail");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+  test("CMT-015-B CMT-015-F: the toolbar switches the exact version and page and offers raw, download, share and full screen", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const files = [
+        testSiteFile("<!doctype html><html lang=\"en\"><title>Home</title><main><h1>Pages home</h1></main></html>", undefined, "index.html"),
+        testSiteFile("<!doctype html><html lang=\"en\"><title>About</title><main><h1>Pages about</h1></main></html>", undefined, "about.html"),
+      ];
+      const upload = await createStagedUpload(fixture.server, fixture.installation, "index.html", files);
+      await uploadEveryStagedFile(fixture.installation, upload.body, files);
+      const first = await commitStagedUpload(fixture.installation, upload.body, "cmt-015-toolbar-v1", {
+        accessSetting: "account_required",
+        kind: "new_artifact",
+        name: "Pages fixture",
+      });
+      await publishVersion(fixture.server, fixture.installation, {
+        artifactId: first.body.artifact.id,
+        content: "<!doctype html><html lang=\"en\"><title>Home</title><main><h1>Pages second version</h1></main></html>",
+        expectedCurrentVersionId: first.body.version.id,
+        idempotencyKey: "cmt-015-toolbar-v2",
+      });
+      await localLogin(fixture);
+      await openReview(fixture, {artifactId: first.body.artifact.id});
+      const page = fixture.page;
+      const toolbar = page.getByRole("toolbar", {exact: true, name: "Artifact"});
+      await expect(toolbar.getByRole("heading", {level: 1, name: "Pages fixture"})).toBeVisible();
+      await expect(previewFrame(page).getByRole("heading", {name: "Pages second version"})).toBeVisible();
+
+      await toolbar.getByRole("button", {name: /^Choose version, showing v2 of 2, current$/u}).click();
+      const versionMenu = page.getByRole("menu", {name: "Version"});
+      await expect(versionMenu.getByRole("menuitemradio", {name: /Version 2/u})).toHaveAttribute("aria-checked", "true");
+      await versionMenu.getByRole("menuitemradio", {name: /Version 1/u}).click();
+      await expect(previewFrame(page).getByRole("heading", {name: "Pages home"})).toBeVisible();
+      expect(new URL(page.url()).searchParams.get("version")).toBe(first.body.version.id);
+
+      await toolbar.getByRole("button", {name: /^Pages · index\.html · 2 pages$/u}).click();
+      await page.getByRole("dialog", {name: "Pages"}).getByRole("button", {name: "Open page about.html"}).click();
+      await expect(previewFrame(page).getByRole("heading", {name: "Pages about"})).toBeVisible();
+      expect(new URL(page.url()).searchParams.get("path")).toBe("about.html");
+
+      await expect(toolbar.getByRole("button", {name: "Open raw artifact"})).toBeEnabled();
+      await expect(toolbar.getByRole("link", {exact: true, name: "Download"}))
+        .toHaveAttribute("title", "Download 2 files as a ZIP");
+      await expect(toolbar.getByRole("button", {name: "Full screen"})).toHaveAttribute("aria-keyshortcuts", "F");
+      await expect(toolbar.getByRole("button", {name: "Close inspector"})).toHaveAttribute("aria-keyshortcuts", "]");
+      await toolbar.getByRole("button", {name: "More artifact actions"}).click();
+      await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: "Delete artifact"})).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu", {name: "More artifact actions"})).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);
     }

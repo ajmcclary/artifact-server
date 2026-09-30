@@ -137,7 +137,7 @@ test.describe("Review sandbox isolation", () => {
 
       const preview = fixture.page.locator(".as-html-preview");
       await expect(preview).toHaveAttribute("data-mode", "interactive");
-      await expect(fixture.page.locator(".as-preview-header__actions")
+      await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
         .getByRole("button", {name: /Annotate mode:|Interact mode:/u}))
         .toHaveCount(0);
       const interactiveFrame = preview.locator("iframe");
@@ -151,7 +151,7 @@ test.describe("Review sandbox isolation", () => {
 
       await preview.getByRole("button", {name: "Annotate"}).click();
       await expect(preview).toHaveAttribute("data-mode", "annotate");
-      await expect(fixture.page.locator(".as-preview-header__actions")
+      await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
         .getByRole("button", {name: /Annotate mode:/u}))
         .toBeVisible();
       const annotationFrame = preview.frameLocator("iframe");
