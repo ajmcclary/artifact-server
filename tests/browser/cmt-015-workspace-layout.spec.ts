@@ -79,14 +79,17 @@ test.describe("Artifact review workspace layout", () => {
       await expect.poll(() => storedPanels(page)).not.toContain("artifact-catalog.w");
 
       // Holding the seam at its minimum collapses the catalog to its rail.
-      const minimumBox = await seam.boundingBox();
-      if (minimumBox === null) throw new Error("The catalog seam has no geometry.");
-      // The one-second hold is measured in animation frames; hold until it fires, retrying a
-      // press that landed before the seam was ready.
+      // Let the reset width settle before aiming at the seam, and re-measure on every attempt.
+      await expect.poll(() => catalogPanel(page).evaluate(
+        (node) => Math.round(node.getBoundingClientRect().width),
+      )).toBe(302);
       await expect(async () => {
-        await page.mouse.move(minimumBox.x + minimumBox.width / 2, seamY);
+        const minimumBox = await seam.boundingBox();
+        if (minimumBox === null) throw new Error("The catalog seam has no geometry.");
+        const holdY = minimumBox.y + 200;
+        await page.mouse.move(minimumBox.x + minimumBox.width / 2, holdY);
         await page.mouse.down();
-        await page.mouse.move(minimumBox.x - 240, seamY, {steps: 6});
+        await page.mouse.move(minimumBox.x - 240, holdY, {steps: 6});
         try {
           await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed", {timeout: 3_000});
         } finally {
@@ -286,9 +289,13 @@ test.describe("Artifact review workspace layout", () => {
       await page.keyboard.press("ArrowLeft");
       await expect(seam).toHaveAttribute("aria-valuenow", "408");
       await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector.w\":408");
-      const seamBox = await seam.boundingBox();
-      if (seamBox === null) throw new Error("The inspector seam has no geometry.");
+      // Aim at the seam only once the stepped width has settled, and re-measure per attempt.
+      await expect.poll(() => page.locator('[data-panel="artifact-inspector"]').evaluate(
+        (node) => Math.round(node.getBoundingClientRect().width),
+      )).toBe(408);
       await expect(async () => {
+        const seamBox = await seam.boundingBox();
+        if (seamBox === null) throw new Error("The inspector seam has no geometry.");
         await page.mouse.move(seamBox.x + seamBox.width / 2, seamBox.y + 200);
         await page.mouse.down();
         await page.mouse.move(seamBox.x + seamBox.width / 2 - 40, seamBox.y + 200, {steps: 4});
