@@ -78,7 +78,7 @@ test.describe("DRF-002 draft isolation", () => {
 
       // A real sign-out (settings header, through api.logout) purges the
       // departing principal's drafts and nobody else's.
-      await page.getByRole("link", {name: "Open settings"}).click();
+      await page.getByRole("link", {name: "Project settings"}).click();
       await page.getByRole("button", {name: "Sign out"}).click();
       // Sign-out purges the drafts and then navigates to /review. Reading
       // storage while that navigation is in flight destroys the evaluate's

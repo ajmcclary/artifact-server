@@ -52,6 +52,9 @@ test.describe("CSP-clean production build", () => {
         await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
         await expect(previewFrame(fixture.page).getByRole("heading", {name: "CSP walk fixture"})).toBeVisible();
         await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", mode);
+        // The DS shell adopts its injected styles as constructable sheets; none reach a <style>.
+        expect(await fixture.page.evaluate(() => document.adoptedStyleSheets.length)).toBeGreaterThan(0);
+        await expect(fixture.page.locator("style")).toHaveCount(0);
 
         await visitSettings(fixture.page, "project", "Project identity");
         await visitSettings(fixture.page, "members", "Members");

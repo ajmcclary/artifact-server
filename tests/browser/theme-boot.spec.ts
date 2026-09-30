@@ -86,7 +86,8 @@ test("theme boot and the review app survive a localStorage that throws", async (
     const errors: string[] = [];
     fixture.page.on("pageerror", (error) => errors.push(error.message));
     await localLogin(fixture);
-    await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", "system");
+    // "dark" until Task 7: the interim sync maps the old default (moon) onto the DS mode.
+    await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", /^(?:system|dark)$/u);
     expect(errors).toEqual([]);
   } finally {
     await stopBrowserFixture(fixture);

@@ -6,6 +6,8 @@ import { themeBootPlugin } from "./vite/theme-boot-plugin.ts";
 
 export default defineConfig({
   build: {
+    // font-src 'self' refuses data: fonts, so every woff2 ships as a same-origin file.
+    assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined),
     emptyOutDir: true,
     outDir: "../../dist/web",
     rollupOptions: {

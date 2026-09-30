@@ -12,7 +12,6 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowShrinkIcon,
-  BookOpen01Icon,
   Cancel01Icon,
   Comment01Icon,
   Download04Icon,
@@ -21,8 +20,6 @@ import {
   File01Icon,
   FilterIcon,
   FullScreenIcon,
-  GithubIcon,
-  Home01Icon,
   KeyboardIcon,
   LayoutLeftIcon,
   Link01Icon,
@@ -39,6 +36,7 @@ import {Dialog} from "@base-ui/react/dialog";
 import {Popover} from "@base-ui/react/popover";
 import {motion} from "motion/react";
 
+import {bootTheme} from "@/arkcase";
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
 import {useCommentPoll} from "@/components/comments/comment-poll";
 import {
@@ -61,19 +59,26 @@ import {
   sourceDriftDescription,
   sourceFreshnessLabel,
 } from "@/lib/presentation";
-import artifactServerAnimationUrl from "./assets/artifact-server.svg";
-import {ArtifactMark} from "./artifact-mark.tsx";
+import {ReviewShell} from "@/shell/review-shell";
 import {
   useReviewComments,
   ReviewCommentsInspector,
   type ReviewCommentsInspectorHandle,
 } from "./review-comments.tsx";
 import { ReviewPreview } from "./review-preview.tsx";
-import {ReviewProjectPicker} from "./review-project-picker.tsx";
-import {isSettingsPath} from "./review-routes.ts";
+import {
+  parseReviewRoute,
+  projectSettingsHref,
+  readReviewLocation,
+  REVIEW_LOCATION_EVENT,
+  REVIEW_RETURN_URL_KEY,
+  type ReviewLocation,
+  workspaceHref,
+  writeReviewHistory,
+} from "./review-routes.ts";
 import {ReviewSettings} from "./review-settings.tsx";
 import {ReviewPanelEdge} from "./review-panel-edge.tsx";
-import {AgentLogos, ReviewShareControl} from "./review-share.tsx";
+import {ReviewShareControl} from "./review-share.tsx";
 import {useReviewPanelMotion} from "./use-review-panel-motion.ts";
 import {useReviewResizablePanel} from "./use-review-resizable-panel.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
@@ -141,13 +146,6 @@ interface ReviewDownload {
   readonly title: string;
 }
 
-interface ReviewLocation {
-  readonly artifactId: string | null;
-  readonly path: string | null;
-  readonly projectId: string | null;
-  readonly versionId: string | null;
-  readonly view: "focus" | null;
-}
 
 function CatalogFilters({
   commentFilter,
@@ -370,6 +368,11 @@ export function ReviewApp() {
   >("loading");
   const [error, setError] = useState<Error | null>(null);
   const [theme, setTheme] = useState<ReviewTheme>(readInitialTheme);
+  const [locationHref, setLocationHref] = useState(readDocumentHref);
+  const route = useMemo(
+    () => parseReviewRoute(new URL(locationHref, window.location.origin)),
+    [locationHref],
+  );
 
   const bootstrap = useCallback(async (): Promise<void> => {
     if (bootstrapInFlightRef.current) return;
@@ -434,9 +437,26 @@ export function ReviewApp() {
   }, [bootstrap]);
 
   useEffect(() => {
+    // Child effects rewrite the URL before this listener exists, so read it once on subscribe.
+    const syncLocation = (): void => setLocationHref(readDocumentHref());
+    syncLocation();
+    window.addEventListener("popstate", syncLocation);
+    window.addEventListener(REVIEW_LOCATION_EVENT, syncLocation);
+    return () => {
+      window.removeEventListener("popstate", syncLocation);
+      window.removeEventListener(REVIEW_LOCATION_EVENT, syncLocation);
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset["reviewTheme"] = theme;
     document.documentElement.classList.toggle("dark", theme === "moon");
     writeStored("local", "artifact-review-theme", theme);
+    // Interim until the account menu replaces the toggle: DS tokens follow the old appearance
+    // unless a DS mode was chosen, without persisting anything.
+    if (readStored("local", "arkcase.theme.v1") === null) {
+      bootTheme()?.setMode(theme === "moon" ? "dark" : "default", {persist: false});
+    }
   }, [theme]);
 
   const createProject = useCallback(async (name: string): Promise<Project> => {
@@ -481,43 +501,47 @@ export function ReviewApp() {
   }
   if (session === null) return null;
 
-  if (isSettingsPath(window.location.pathname)) {
-    return (
-      <ReviewSettings
-        onProjectsChanged={loadProjects}
-        onThemeChange={() => setTheme((current) => current === "moon" ? "dawn" : "moon")}
-        projects={projects}
-        session={session}
-        theme={theme}
-      />
-    );
-  }
-
+  // The queue and the workspace render the same element until the review queue lands, so
+  // ArtifactReview keeps its state when it rewrites a bare /review into a project URL.
   return (
-    <ArtifactReview
+    <ReviewShell
+      mainStyle={route.kind === "settings" ? {overflowY: "auto"} : {overflow: "hidden"}}
       onCreateProject={createProject}
-      onThemeChange={() => setTheme((current) => current === "moon" ? "dawn" : "moon")}
       projects={projects}
+      route={route}
       session={session}
-      theme={theme}
-    />
+    >
+      {route.kind === "settings" ? (
+        <ReviewSettings
+          onProjectsChanged={loadProjects}
+          projects={projects}
+          route={route.settings}
+          session={session}
+        />
+      ) : (
+        <ArtifactReview
+          onThemeChange={() => setTheme((current) => current === "moon" ? "dawn" : "moon")}
+          projects={projects}
+          session={session}
+          theme={theme}
+        />
+      )}
+    </ReviewShell>
   );
 }
 
 function ArtifactReview({
-  onCreateProject,
   onThemeChange,
   projects,
   session,
   theme,
 }: {
-  readonly onCreateProject: (name: string) => Promise<Project>;
   readonly onThemeChange: () => void;
   readonly projects: readonly Project[];
   readonly session: Session;
   readonly theme: ReviewTheme;
 }) {
-  const initialLocation = useMemo(readReviewLocation, []);
+  const initialLocation = useMemo(currentReviewLocation, []);
   const initialProjectId = initialLocation.projectId
     ?? projects.find((project) => project.archivedAt === null)?.id
     ?? projects[0]?.id
@@ -568,7 +592,6 @@ function ArtifactReview({
   const [focusControlsInstant, setFocusControlsInstant] = useState(false);
   const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(true);
   const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
-  const [homeOpen, setHomeOpen] = useState(false);
   const focusCommentsButtonRef = useRef<HTMLButtonElement>(null);
   const focusControlsRestoreRef = useRef<HTMLButtonElement>(null);
   const previewPanelRef = useRef<HTMLElement>(null);
@@ -888,20 +911,20 @@ function ArtifactReview({
   }, [details, projectId, selectedArtifactId, selectedVersionId]);
 
   useEffect(() => {
-    const href = reviewHref({
+    const href = workspaceHref({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
       versionId: selectedVersionId,
       view: focusMode ? "focus" : null,
     });
-    window.history.replaceState(null, "", href);
-    writeStored("session", "artifact-review-return-url", href);
+    writeReviewHistory(href, "replace");
+    writeStored("session", REVIEW_RETURN_URL_KEY, href);
   }, [focusMode, projectId, selectedArtifactId, selectedPath, selectedVersionId]);
 
   useEffect(() => {
     const restoreLocation = (): void => {
-      const restored = readReviewLocation();
+      const restored = currentReviewLocation();
       if (restored.projectId !== null) {
         setCatalogKnownTags([]);
         setCatalogTagFilters([]);
@@ -951,10 +974,6 @@ function ArtifactReview({
       )
       || session.principal.capabilities.includes("comment:write")
     );
-  const canManageProjects = (
-    session.principal.kind === "human"
-    && session.principal.authorizedByPrincipalId === null
-  ) || session.principal.capabilities.includes("project:manage");
   const canManageArtifacts = selectedProject?.archivedAt === null && (
     (
       session.principal.kind === "human"
@@ -979,24 +998,14 @@ function ArtifactReview({
     setSelectedVersionId(versionId ?? null);
     setSelectedPath(null);
   }, []);
-  const selectProject = (nextProjectId: string): void => {
-    if (nextProjectId !== projectId) {
-      setCatalogKnownTags([]);
-      setCatalogTagFilters([]);
-      setSelectedArtifactId(null);
-      setSelectedVersionId(null);
-      setSelectedPath(null);
-    }
-    setProjectId(nextProjectId);
-  };
   const selectManifestPath = (path: string): void => {
-    window.history.pushState(null, "", reviewHref({
+    writeReviewHistory(workspaceHref({
       artifactId: selectedArtifactId,
       path,
       projectId,
       versionId: selectedVersionId,
       view: focusMode ? "focus" : null,
-    }));
+    }), "push");
     setSelectedPath(path);
   };
   const changeTags = async (tags: readonly string[]): Promise<void> => {
@@ -1148,32 +1157,32 @@ function ArtifactReview({
     }
   };
   const enterFocusMode = useCallback((): void => {
-    window.history.pushState(null, "", reviewHref({
+    writeReviewHistory(workspaceHref({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
       versionId: selectedVersionId,
       view: "focus",
-    }));
+    }), "push");
     setFocusCommentsOpen(false);
     setFocusControlsCollapsed(false);
     setFocusMode(true);
   }, [projectId, selectedArtifactId, selectedPath, selectedVersionId]);
   const exitFocusMode = useCallback((): void => {
-    window.history.pushState(null, "", reviewHref({
+    writeReviewHistory(workspaceHref({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
       versionId: selectedVersionId,
       view: null,
-    }));
+    }), "push");
     setFocusCommentsOpen(false);
     setFocusControlsCollapsed(false);
     setFocusMode(false);
   }, [projectId, selectedArtifactId, selectedPath, selectedVersionId]);
   useEffect(() => {
     const handleReviewShortcut = (event: KeyboardEvent): void => {
-      if (homeOpen || reviewShortcutBlocked(event)) return;
+      if (reviewShortcutBlocked(event)) return;
 
       const key = event.key.toLowerCase();
       if (key === "escape") {
@@ -1232,7 +1241,6 @@ function ArtifactReview({
     exitFocusMode,
     focusCommentsOpen,
     focusMode,
-    homeOpen,
     htmlAnnotateModeActive,
     htmlViewerMode,
     selectArtifact,
@@ -1281,19 +1289,6 @@ function ArtifactReview({
     window.addEventListener("keydown", revealFocusControls);
     return () => window.removeEventListener("keydown", revealFocusControls);
   }, [focusMode]);
-  const returnHome = (event: ReactMouseEvent<HTMLAnchorElement>): void => {
-    if (
-      event.button !== 0
-      || event.metaKey
-      || event.ctrlKey
-      || event.shiftKey
-      || event.altKey
-    ) {
-      return;
-    }
-    event.preventDefault();
-    setHomeOpen(true);
-  };
 
   return (
     <div
@@ -1306,95 +1301,6 @@ function ArtifactReview({
     >
       <a className="as-skip-link" href="#review-preview">Skip to artifact preview</a>
 
-      <Dialog.Root onOpenChange={setHomeOpen} open={homeOpen}>
-        <Dialog.Portal>
-          <Dialog.Backdrop className="as-home-overlay__backdrop" />
-          <Dialog.Popup className="as-home-overlay">
-            <Dialog.Title className="as-visually-hidden">Artifact Server home</Dialog.Title>
-            <Dialog.Close
-              aria-label="Close Artifact Server home"
-              className="as-icon-button as-home-overlay__close"
-              title="Close Artifact Server home"
-            >
-              <HugeiconsIcon aria-hidden="true" icon={Cancel01Icon} strokeWidth={1.8} />
-            </Dialog.Close>
-            <div className="as-home-overlay__content">
-            <img
-              alt=""
-              aria-hidden="true"
-                className="as-home-overlay__animation"
-              src={artifactServerAnimationUrl}
-            />
-              <nav aria-label="Artifact Server resources" className="as-home-resources">
-                <a
-                  className="as-home-resources__link"
-                  href="https://github.com/plannotator/artifact-server"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <span className="as-home-resources__icon">
-                    <HugeiconsIcon aria-hidden="true" icon={GithubIcon} strokeWidth={1.8} />
-                  </span>
-                  <span className="as-home-resources__identity">
-                    <strong>GitHub</strong>
-                    <span>Source and releases</span>
-                  </span>
-                  <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
-                </a>
-                <a
-                  className="as-home-resources__link"
-                  href="https://artifactserver.com/"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <span className="as-home-resources__icon">
-                    <HugeiconsIcon aria-hidden="true" icon={Home01Icon} strokeWidth={1.8} />
-                  </span>
-                  <span className="as-home-resources__identity">
-                    <strong>Homepage</strong>
-                    <span>Product overview</span>
-                  </span>
-                  <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
-                </a>
-                <a
-                  className="as-home-resources__link"
-                  href="https://artifactserver.com/docs/"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <span className="as-home-resources__icon">
-                    <HugeiconsIcon aria-hidden="true" icon={BookOpen01Icon} strokeWidth={1.8} />
-                  </span>
-                  <span className="as-home-resources__identity">
-                    <strong>Docs</strong>
-                    <span>Install and deploy</span>
-                  </span>
-                  <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
-                </a>
-                {/* TODO(open-source-launch): publish the dedicated agent-connection guide at this canonical route. */}
-                <a
-                  className="as-home-resources__link"
-                  href="https://artifactserver.com/docs/connect-agents/"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="as-home-resources__icon as-home-resources__icon--agents"
-                  >
-                    <AgentLogos />
-                  </span>
-                  <span className="as-home-resources__identity">
-                    <strong>Connect agents</strong>
-                    <span>MCP and client setup</span>
-                  </span>
-                  <HugeiconsIcon aria-hidden="true" icon={ExternalLinkIcon} strokeWidth={1.8} />
-                </a>
-              </nav>
-            </div>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
 
       {!focusMode && catalogMotion.mounted ? (
         <div className="as-panel-assembly" data-side="left">
@@ -1410,22 +1316,9 @@ function ArtifactReview({
             >
         <header className="as-pane-header as-catalog__header">
           <div className="as-catalog__context">
-            <a
-              aria-label="Artifact Server"
-              className="as-catalog__brand"
-              href="/review"
-              onClick={returnHome}
-              title="Artifact Server"
-            >
-              <ArtifactMark className="as-catalog__brand-mark" />
-            </a>
-            <ReviewProjectPicker
-              canCreate={canManageProjects}
-              onCreate={onCreateProject}
-              onSelect={selectProject}
-              projects={projects}
-              selectedProjectId={projectId}
-            />
+            <strong className="as-catalog__project-name">
+              {selectedProject?.name ?? "No project"}
+            </strong>
           </div>
           <div className="as-catalog__header-actions">
             <IconButton
@@ -1435,12 +1328,12 @@ function ArtifactReview({
               <HugeiconsIcon icon={theme === "moon" ? Sun03Icon : Moon02Icon} strokeWidth={1.8} />
             </IconButton>
             <a
-              aria-label="Open settings"
+              aria-label="Project settings"
               className="as-icon-button"
               href={selectedProject === null
                 ? "/review/settings/projects"
-                : `/review/settings/projects/${encodeURIComponent(selectedProject.id)}`}
-              title="Open settings"
+                : projectSettingsHref(selectedProject.id)}
+              title="Project settings"
             >
               <HugeiconsIcon icon={Settings02Icon} strokeWidth={1.8} />
             </a>
@@ -2757,27 +2650,12 @@ function readInitialInspectorOpen(): boolean {
   return window.matchMedia("(min-width: 1181px)").matches;
 }
 
-function readReviewLocation(): ReviewLocation {
-  const search = new URLSearchParams(window.location.search);
-  return {
-    artifactId: search.get("artifact"),
-    path: search.get("path"),
-    projectId: search.get("project"),
-    versionId: search.get("version"),
-    view: search.get("view") === "focus" ? "focus" : null,
-  };
+function currentReviewLocation(): ReviewLocation {
+  return readReviewLocation(new URLSearchParams(window.location.search));
 }
 
-function reviewHref(location: ReviewLocation): string {
-  const search = new URLSearchParams();
-  if (location.projectId !== null && location.projectId !== "") {
-    search.set("project", location.projectId);
-  }
-  if (location.artifactId !== null) search.set("artifact", location.artifactId);
-  if (location.versionId !== null) search.set("version", location.versionId);
-  if (location.path !== null) search.set("path", location.path);
-  if (location.view !== null) search.set("view", location.view);
-  return search.size === 0 ? "/review" : `/review?${search}`;
+function readDocumentHref(): string {
+  return `${window.location.pathname}${window.location.search}`;
 }
 
 function reviewPreviewKind(

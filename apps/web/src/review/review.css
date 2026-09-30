@@ -112,9 +112,20 @@ select:focus-visible {
 .as-app {
   background: var(--as-canvas);
   display: flex;
-  height: 100dvh;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.as-catalog__project-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .as-app[data-panel-resizing="true"] {
@@ -140,7 +151,7 @@ select:focus-visible {
 
 .as-app[data-focus-mode="true"] .as-workspace {
   display: block;
-  height: 100dvh;
+  height: 100%;
   padding: 0;
   width: 100%;
 }
@@ -2492,7 +2503,8 @@ select:focus-visible {
 .as-button--danger {
   background: color-mix(in oklab, var(--as-love) 18%, transparent);
   border-color: color-mix(in oklab, var(--as-love) 52%, var(--as-border));
-  color: var(--as-love);
+  /* Mixed toward body ink so the label clears 4.5:1 on its own tint in the light theme. */
+  color: color-mix(in oklab, var(--as-love) 62%, var(--as-text));
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -3513,20 +3525,19 @@ select:focus-visible {
   --as-settings-accent: color-mix(in oklab, var(--as-iris) 72%, var(--as-text));
   background: var(--as-canvas);
   color: var(--as-text);
-  min-height: 100dvh;
+  flex: 1 0 auto;
+}
+
+.as-settings__session {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
 }
 
 .as-settings .text-primary {
   color: var(--as-settings-accent);
 }
 
-html:has(.as-settings),
-body:has(.as-settings),
-#review-root:has(.as-settings) {
-  height: auto;
-  min-height: 100%;
-  overflow: auto;
-}
 
 .as-settings .font-heading {
   font-family: inherit;
@@ -3612,7 +3623,7 @@ body:has(.as-settings) [data-slot="dialog-trigger"]:active:not(:disabled) {
 .as-settings__layout {
   display: grid;
   gap: clamp(2rem, 5vw, 5rem);
-  grid-template-columns: 12rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   margin: 0 auto;
   max-width: 82rem;
   min-width: 0;

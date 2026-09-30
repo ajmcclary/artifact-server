@@ -1,20 +1,30 @@
 import "@/zod-jitless";
 
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import {StrictMode} from "react";
+import {createRoot} from "react-dom/client";
 
-import { installDraftGuard } from "@/components/comments/comment-drafts";
-import { installArkcaseRuntime } from "@/arkcase-runtime";
-import { readStored } from "@/lib/safe-storage";
+import {installArkcaseRuntime} from "@/arkcase-runtime";
+import {installDraftGuard} from "@/components/comments/comment-drafts";
+import {readStored} from "@/lib/safe-storage";
+import {AnnouncerProvider} from "@/ui/announcer";
+import {DensityProvider} from "@/ui/density";
+import {ToastProvider} from "@/ui/toasts";
 
-import { ReviewApp } from "./review-app.tsx";
+import {ReviewApp} from "./review-app.tsx";
+import "@/arkcase/tokens/fonts.css";
+import "@/arkcase/tokens/icons.css";
+import "@/arkcase/tokens/colors.css";
+import "@/arkcase/tokens/typography.css";
+import "@/arkcase/tokens/spacing.css";
+import "@/arkcase/tokens/elevation.css";
 import "../index.css";
 import "./review.css";
 
+// Modal portals through the ReactDOM global; install it before the first render.
+installArkcaseRuntime();
 // Lives for the whole session, above every route: the leave prompt and the
 // logout purge must not depend on which screen is mounted.
 installDraftGuard();
-installArkcaseRuntime();
 
 const initialTheme = readStored("local", "artifact-review-theme") === "dawn"
   ? "dawn"
@@ -30,6 +40,12 @@ if (!(rootElement instanceof HTMLElement)) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ReviewApp />
+    <DensityProvider>
+      <AnnouncerProvider>
+        <ToastProvider>
+          <ReviewApp />
+        </ToastProvider>
+      </AnnouncerProvider>
+    </DensityProvider>
   </StrictMode>,
 );

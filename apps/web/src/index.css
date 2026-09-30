@@ -1,4 +1,6 @@
+@layer arkcase-base, theme, base, components, utilities;
 @import "tailwindcss";
+@import "./arkcase/tokens/base.css" layer(arkcase-base);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";

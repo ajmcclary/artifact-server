@@ -560,32 +560,31 @@ test.describe("Artifact Server frontend MVP", () => {
 
       await expect(fixture.page.getByRole("complementary", {name: "Review navigation"}))
         .toHaveCount(0);
-      const projectPicker = fixture.page.getByRole("button", {
-        name: "Current project: Default",
-      });
-      await expect(projectPicker).toBeVisible();
-      await projectPicker.click();
-      await expect(fixture.page.getByRole("listbox", {name: "Projects"}))
-        .toBeVisible();
-      await fixture.page.getByRole("button", {name: "New project"}).click();
-      const projectPopover = fixture.page.getByRole("dialog", {name: "Create project"});
-      const projectNameInput = projectPopover.getByLabel("Project name");
+      const reviewNavigation = fixture.page.getByRole("navigation", {name: "Review and projects"});
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review queue"}))
+        .toHaveAttribute("href", "/review");
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
+        .toHaveAttribute("aria-current", "page");
+      await reviewNavigation.getByRole("button", {exact: true, name: "New project"}).click();
+      const projectDialog = fixture.page.getByRole("dialog", {name: "New project"});
+      const projectNameInput = projectDialog.getByLabel("Project name");
       await expect(projectNameInput).toBeFocused();
-      await expect(projectPopover.getByText("Create a new place for related artifacts."))
-        .toHaveCount(0);
       await projectNameInput.fill("Review project");
-      await projectPopover.getByRole("button", {name: "Create project"}).click();
-      await expect(fixture.page.getByRole("button", {
-        name: "Current project: Review project",
-      })).toBeVisible();
-      await fixture.page.getByRole("button", {
-        name: "Current project: Review project",
-      }).click();
-      await fixture.page.getByRole("option", {name: "Default"}).click();
+      await projectDialog.getByRole("button", {name: "Create project"}).click();
+      await expect(fixture.page).toHaveURL(/\/review\?project=(?!prj_default)[^&]+/u);
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review project"}))
+        .toHaveAttribute("aria-current", "page");
+      await reviewNavigation.getByRole("link", {exact: true, name: "Default"}).click();
+      await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
+        .toHaveAttribute("aria-current", "page");
+      const navigationBox = await fixture.page.locator("[data-ac-left-nav]").boundingBox();
       const catalogBox = await fixture.page.getByRole("complementary", {
         name: "Artifact catalog",
       }).boundingBox();
-      expect(catalogBox?.x).toBe(0);
+      // The 52 px rail plus its 1 px seam hairline.
+      expect(navigationBox).toMatchObject({width: 53, x: 0});
+      expect(catalogBox?.x).toBe(53);
       await fixture.page.getByRole("button", {name: "Collapse artifact catalog"})
         .click();
       await expect(fixture.page.getByRole("complementary", {name: "Artifact catalog"}))
@@ -606,7 +605,10 @@ test.describe("Artifact Server frontend MVP", () => {
         .analyze();
       expect(accessibility.violations).toEqual([]);
 
-      await fixture.page.getByRole("button", {name: /^Interact mode:/u}).click();
+      // Project rows are real links, so returning to Default reloads the review in its default
+      // Annotate mode (the old in-page picker kept Interact).
+      await expect(fixture.page.getByRole("button", {name: /^Annotate mode:/u}))
+        .toHaveAttribute("aria-pressed", "true");
       await preview.locator("#review-theme-target").click();
       const themedCommentPopover = reviewFrame.locator('[data-comment-popover="true"]');
       await expect(themedCommentPopover).toBeVisible();
@@ -641,52 +643,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
 
-      const documentIdentity = crypto.randomUUID();
-      const review = fixture.page.locator(".as-app");
-      await review.evaluate((node, identity) => {
-        if (node instanceof HTMLElement) node.dataset["documentIdentity"] = identity;
-      }, documentIdentity);
-      const reviewHomeLink = fixture.page.getByRole("link", {name: "Artifact Server"});
-      await reviewHomeLink.click();
-      const homeOverlay = fixture.page.getByRole("dialog", {name: "Artifact Server home"});
-      await expect(homeOverlay).toBeVisible();
-      const homeAnimation = homeOverlay.locator(".as-home-overlay__animation");
-      await expect(homeAnimation).toBeVisible();
-      const transitionColors = await homeOverlay.evaluate((node) => ({
-        body: getComputedStyle(document.body).backgroundColor,
-        transition: getComputedStyle(node).backgroundColor,
-      }));
-      expect(transitionColors.transition).toBe(transitionColors.body);
-      const homeAnimationGeometry = await homeAnimation.evaluate((node) => ({
-        height: node.getBoundingClientRect().height,
-        naturalWidth: node instanceof HTMLImageElement ? node.naturalWidth : 0,
-        width: node.getBoundingClientRect().width,
-      }));
-      expect(homeAnimationGeometry.width).toBeLessThanOrEqual(672);
-      expect(homeAnimationGeometry.height).toBeGreaterThan(0);
-      expect(homeAnimationGeometry.naturalWidth).toBeGreaterThan(0);
-      await expect(homeOverlay.getByRole("link", {name: /^GitHub Source and releases$/u}))
-        .toHaveAttribute("href", "https://github.com/plannotator/artifact-server");
-      await expect(homeOverlay.getByRole("link", {name: /Homepage/u}))
-        .toHaveAttribute("href", "https://artifactserver.com/");
-      await expect(homeOverlay.getByRole("link", {name: /Docs/u}))
-        .toHaveAttribute("href", "https://artifactserver.com/docs/");
-      await expect(homeOverlay.getByRole("link", {name: /Connect agents/u}))
-        .toHaveAttribute("href", "https://artifactserver.com/docs/connect-agents/");
-      await expect(homeOverlay).toBeVisible();
-      await fixture.page.keyboard.press("Escape");
-      await expect(homeOverlay).toHaveCount(0);
-      await expect(reviewHomeLink).toBeFocused();
-
-      await reviewHomeLink.click();
-      await fixture.page.getByRole("button", {name: "Close Artifact Server home"}).click();
-      await expect(homeOverlay).toHaveCount(0);
-      expect(new URL(fixture.page.url()).pathname).toBe("/review");
-      expect(new URL(fixture.page.url()).searchParams.get("artifact")).not.toBeNull();
-      expect(new URL(fixture.page.url()).searchParams.get("version")).not.toBeNull();
-      expect(await review.evaluate((node) =>
-        node instanceof HTMLElement ? node.dataset["documentIdentity"] : undefined
-      )).toBe(documentIdentity);
+      await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
+        .toHaveAttribute("href", "/review");
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toBeVisible();
       await expect(
@@ -704,6 +662,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}))
         .toBeVisible();
       await fixture.page.getByRole("button", {name: "Full screen"}).click();
+      await expect(fixture.page.locator("[data-ac-left-nav]")).toHaveCount(0);
       await fixture.page.getByRole("button", {name: /Comments/u}).click();
       expect(await fixture.page.locator(".as-focus-comments").evaluate((node) => ({
         transform: getComputedStyle(node).transform,
@@ -720,14 +679,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.locator(".as-focus-controls-dock"))
         .toHaveAttribute("data-collapsed", "false");
       await fixture.page.getByRole("button", {name: "Exit full screen"}).click();
-      await fixture.page.getByRole("link", {name: "Artifact Server"}).click();
-      const reducedHomeOverlay = fixture.page.getByRole("dialog", {name: "Artifact Server home"});
-      await expect(reducedHomeOverlay).toBeVisible();
-      await expect(reducedHomeOverlay.locator(".as-home-overlay__animation"))
-        .toHaveCSS("animation-name", "none");
-      await fixture.page.keyboard.press("Escape");
-      await expect(reducedHomeOverlay).toHaveCount(0);
-      expect(new URL(fixture.page.url()).pathname).toBe("/review");
+      await expect(fixture.page.locator("[data-ac-left-nav]")).toBeVisible();
 
     } finally {
       await stopBrowserFixture(fixture);
@@ -753,9 +705,11 @@ test.describe("Artifact Server frontend MVP", () => {
 
       await localLogin(fixture);
       await fixture.page.goto(`${fixture.server.baseUrl}${reviewUrl}`);
-      await expect(fixture.page.getByRole("button", {
-        name: "Current project: Navigation state project",
-      })).toBeVisible();
+      const reviewNavigation = fixture.page.getByRole("navigation", {name: "Review and projects"});
+      await expect(reviewNavigation.getByRole("link", {
+        exact: true,
+        name: "Navigation state project",
+      })).toHaveAttribute("aria-current", "page");
       await expect(fixture.page.getByRole("heading", {
         exact: true,
         name: "Navigation state artifact",
@@ -763,24 +717,64 @@ test.describe("Artifact Server frontend MVP", () => {
       const canonicalReviewLocation = new URL(fixture.page.url());
       const canonicalReviewUrl = `${canonicalReviewLocation.pathname}${canonicalReviewLocation.search}`;
 
-      await fixture.page.getByRole("link", {name: "Open settings"}).click();
+      await fixture.page.getByRole("link", {name: "Project settings"}).click();
       await expect(fixture.page).toHaveURL(
         new RegExp(`/review/settings/projects/${project.id}$`, "u"),
       );
-      const backToReview = fixture.page.getByRole("link", {name: "Back to review"});
+      const administrationNavigation = fixture.page.getByRole("navigation", {name: "Administration"});
+      const backToReview = administrationNavigation.getByRole("link", {name: "Back to review"});
       await expect(backToReview).toHaveAttribute("href", canonicalReviewUrl);
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
-        .toHaveAttribute("href", canonicalReviewUrl);
+        .toHaveAttribute("href", "/review");
 
       await backToReview.click();
       await expect(fixture.page).toHaveURL(`${fixture.server.baseUrl}${canonicalReviewUrl}`);
-      await expect(fixture.page.getByRole("button", {
-        name: "Current project: Navigation state project",
-      })).toBeVisible();
+      await expect(reviewNavigation.getByRole("link", {
+        exact: true,
+        name: "Navigation state project",
+      })).toHaveAttribute("aria-current", "page");
       await expect(fixture.page.getByRole("heading", {
         exact: true,
         name: "Navigation state artifact",
       })).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("CMT-015-F: on a phone the navigation rail becomes the menu drawer and returns focus to its launcher", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      await fixture.page.setViewportSize({height: 844, width: 390});
+      await expect(fixture.page.locator("[data-ac-left-nav]")).toHaveCount(0);
+      const launcher = fixture.page.getByRole("button", {name: "Open menu"});
+      await launcher.click();
+      const drawer = fixture.page.getByRole("dialog", {name: "Review and projects"});
+      await expect(drawer.getByRole("link", {name: "Artifact Server"}))
+        .toHaveAttribute("href", "/review");
+      await expect(drawer.getByRole("link", {exact: true, name: "Default"}))
+        .toHaveAttribute("aria-current", "page");
+      await fixture.page.keyboard.press("Escape");
+      await expect(drawer).toHaveCount(0);
+      await expect(launcher).toBeFocused();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("CMT-015-F: a long project name stays inside the phone menu without widening the page", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const longName = "Quarterly review of the northern regional claims intake backlog and duplicate submission reconciliation";
+      await createProject(fixture, longName);
+      await localLogin(fixture);
+      await fixture.page.setViewportSize({height: 844, width: 390});
+      await fixture.page.getByRole("button", {name: "Open menu"}).click();
+      const row = fixture.page.getByRole("link", {name: longName});
+      await expect(row).toBeVisible();
+      expect(await fixture.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+        .toBe(true);
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -1513,14 +1507,16 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(accessibility.violations).toEqual([]);
 
       await fixture.page.setViewportSize({height: 600, width: 1024});
-      const settingsScrollRange = await fixture.page.evaluate(() => ({
-        clientHeight: document.documentElement.clientHeight,
-        scrollHeight: document.documentElement.scrollHeight,
+      // Settings scroll inside the shell's main landmark, not the document.
+      const settingsMain = fixture.page.getByRole("main");
+      const settingsScrollRange = await settingsMain.evaluate((node) => ({
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight,
       }));
       expect(settingsScrollRange.scrollHeight).toBeGreaterThan(settingsScrollRange.clientHeight);
-      await fixture.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-      expect(await fixture.page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-      await fixture.page.evaluate(() => window.scrollTo(0, 0));
+      await settingsMain.evaluate((node) => node.scrollTo(0, node.scrollHeight));
+      expect(await settingsMain.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+      await settingsMain.evaluate((node) => node.scrollTo(0, 0));
 
       const inventory = fixture.page.getByRole("table", {name: "Public links inventory"});
       expect(await inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
@@ -1619,14 +1615,19 @@ test.describe("Artifact Server frontend MVP", () => {
       await defaultProjectRow.getByRole("link", {name: "Settings"}).click();
       await expect(fixture.page.getByRole("heading", {name: "Project identity"})).toBeVisible();
       await expect(fixture.page.getByRole("heading", {name: "Git history"})).toHaveCount(0);
-      await expect(fixture.page.getByRole("link", {name: "Artifact Server"})).toContainText("Settings");
-      const settingsHeaderBox = await fixture.page.locator(".as-settings__header-inner").boundingBox();
-      const settingsMarkBox = await fixture.page.locator(".as-settings__brand-mark").boundingBox();
-      expect(settingsHeaderBox?.height).toBeLessThanOrEqual(48);
-      expect(settingsMarkBox).toMatchObject({height: 32, width: 32});
+      await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
+        .toHaveAttribute("href", "/review");
+      const administrationNavigation = fixture.page.getByRole("navigation", {name: "Administration"});
+      await expect(administrationNavigation.getByRole("link", {exact: true, name: "Back to review"}))
+        .toBeVisible();
+      const settingsRailBox = await fixture.page.locator("[data-ac-left-nav]").boundingBox();
+      const projectIdentityBox = await fixture.page.getByRole("heading", {name: "Project identity"})
+        .boundingBox();
+      // The 52 px rail plus its 1 px seam hairline.
+      expect(settingsRailBox).toMatchObject({width: 53, x: 0});
+      expect(projectIdentityBox?.x).toBeGreaterThan(53);
       const compactSettingsActions = [
         fixture.page.getByRole("button", {name: "Sign out"}),
-        fixture.page.getByRole("link", {name: "Back to review"}),
         fixture.page.getByRole("button", {name: "Save name"}),
         fixture.page.getByRole("button", {name: "Archive project"}),
       ];
