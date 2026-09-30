@@ -1,0 +1,27 @@
+{
+  "description": "Size of dist/web for the ArkCase redesign; see docs/superpowers/specs/2026-09-29-arkcase-artifacts-redesign-design.md (Risks).",
+  "maximumGrowth": 0.25,
+  "measurements": [
+    {
+      "bytesByExtension": {
+        "css": 345631,
+        "html": 1274,
+        "js": 1270279,
+        "svg": 5535,
+        "woff": 71632,
+        "woff2": 574720
+      },
+      "commit": "49a00a25866675cea5597598bab80741656a763a",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 56216,
+        "html": 727,
+        "js": 389458
+      },
+      "label": "before-arkcase",
+      "measuredAt": "2026-09-30T01:38:35.921Z",
+      "node": "v24.15.0",
+      "totalBytes": 2269071
+    }
+  ]
+}

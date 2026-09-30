@@ -40,6 +40,7 @@
     "capture:web": "pnpm build && tsx tests/browser/capture-frontend-mvp.ts",
     "check": "pnpm check:release-version && pnpm lint && pnpm typecheck && pnpm build && pnpm verify:site && pnpm test && pnpm conformance:validate && pnpm conformance:tests && pnpm check:cloudflare",
     "check:ci": "node scripts/check-ci-full-gate.mjs",
+    "measure:web-bundle": "node scripts/measure-web-bundle.mjs",
     "check:cloudflare": "pnpm --filter @artifact-server/cloudflare-deployment check",
     "check:cloudflare:prebuilt": "pnpm --dir deploy/cloudflare lint && pnpm --dir deploy/cloudflare typecheck && pnpm --dir deploy/cloudflare exec vitest run",
     "check:release-version": "node scripts/check-release-version.mjs",
