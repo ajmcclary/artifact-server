@@ -64,12 +64,14 @@ test.describe("Artifact review workspace layout", () => {
       if (seamBox === null) throw new Error("The catalog seam has no geometry.");
       const seamX = seamBox.x + seamBox.width / 2;
       const seamY = seamBox.y + 200;
-      await page.mouse.move(seamX, seamY);
-      await page.mouse.down();
-      await page.mouse.move(seamX + 60, seamY, {steps: 4});
-      await page.mouse.up();
-      await expect.poll(async () => Number(await seam.getAttribute("aria-valuenow")))
-        .toBeGreaterThanOrEqual(370);
+      // A press can land before the seam's pointer handlers attach; retry the whole drag.
+      await expect(async () => {
+        await page.mouse.move(seamX, seamY);
+        await page.mouse.down();
+        await page.mouse.move(seamX + 60, seamY, {steps: 4});
+        await page.mouse.up();
+        expect(Number(await seam.getAttribute("aria-valuenow"))).toBeGreaterThanOrEqual(370);
+      }).toPass({timeout: 10_000});
 
       // A double-click resets the default width and forgets the stored one.
       await seam.dblclick();
@@ -79,12 +81,18 @@ test.describe("Artifact review workspace layout", () => {
       // Holding the seam at its minimum collapses the catalog to its rail.
       const minimumBox = await seam.boundingBox();
       if (minimumBox === null) throw new Error("The catalog seam has no geometry.");
-      await page.mouse.move(minimumBox.x + minimumBox.width / 2, seamY);
-      await page.mouse.down();
-      await page.mouse.move(minimumBox.x - 240, seamY, {steps: 6});
-      // The one-second hold is measured in animation frames; keep holding until it fires.
-      await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed", {timeout: 5_000});
-      await page.mouse.up();
+      // The one-second hold is measured in animation frames; hold until it fires, retrying a
+      // press that landed before the seam was ready.
+      await expect(async () => {
+        await page.mouse.move(minimumBox.x + minimumBox.width / 2, seamY);
+        await page.mouse.down();
+        await page.mouse.move(minimumBox.x - 240, seamY, {steps: 6});
+        try {
+          await expect(catalogPanel(page)).toHaveAttribute("data-panel-state", "railed", {timeout: 3_000});
+        } finally {
+          await page.mouse.up();
+        }
+      }).toPass({timeout: 15_000});
       await expect(page.getByRole("button", {name: "Open artifact catalog"}))
         .toHaveAttribute("aria-keyshortcuts", "[");
 
@@ -280,12 +288,13 @@ test.describe("Artifact review workspace layout", () => {
       await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector.w\":408");
       const seamBox = await seam.boundingBox();
       if (seamBox === null) throw new Error("The inspector seam has no geometry.");
-      await page.mouse.move(seamBox.x + seamBox.width / 2, seamBox.y + 200);
-      await page.mouse.down();
-      await page.mouse.move(seamBox.x + seamBox.width / 2 - 40, seamBox.y + 200, {steps: 4});
-      await page.mouse.up();
-      await expect.poll(async () => Number(await seam.getAttribute("aria-valuenow")))
-        .toBeGreaterThanOrEqual(440);
+      await expect(async () => {
+        await page.mouse.move(seamBox.x + seamBox.width / 2, seamBox.y + 200);
+        await page.mouse.down();
+        await page.mouse.move(seamBox.x + seamBox.width / 2 - 40, seamBox.y + 200, {steps: 4});
+        await page.mouse.up();
+        expect(Number(await seam.getAttribute("aria-valuenow"))).toBeGreaterThanOrEqual(440);
+      }).toPass({timeout: 10_000});
 
       // Pressing the open view again closes it; the rail stays.
       await inspectorTabButton(page, "Details").click();

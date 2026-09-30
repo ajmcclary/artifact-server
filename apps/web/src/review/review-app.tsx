@@ -37,16 +37,16 @@ import {
   type Version,
 } from "@/api/client";
 import {
-  actionLabel,
   formatBytes,
   formatTimestamp,
 } from "@/lib/presentation";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {ReviewShell} from "@/shell/review-shell";
-import {dismissInnermost, SurfaceState} from "@/arkcase";
+import {Button, dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
 import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
@@ -55,13 +55,17 @@ import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {SharePopover} from "./workspace/share-popover.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useViewportHeight, useViewportWidth} from "./workspace/use-viewport-size.ts";
+import {compactId} from "./workspace/workspace-format.ts";
 import {catalogWidth, dockingFor, inspectorDefaultWidth, isPhoneWidth, workspaceBudget} from "./workspace/workspace-layout.ts";
-import type {
-  CatalogCommentFilter,
-  CatalogRefreshState,
-  CatalogSort,
-  ReviewDownload,
-  VersionListItem,
+import {
+  type CatalogCommentFilter,
+  type CatalogRefreshState,
+  type CatalogSort,
+  type ComparisonTab,
+  type InspectorTab,
+  inspectorTabs,
+  type ReviewDownload,
+  type VersionListItem,
 } from "./workspace/workspace-types.ts";
 import {useShellLayout} from "@/shell/shell-layout-context";
 import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
@@ -84,23 +88,10 @@ import {ReviewSettings} from "./review-settings.tsx";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
 
-type InspectorTab = "activity" | "comments" | "compare" | "details" | "files" | "versions";
 type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
 
-/** Temporary rail views until Task 16 moves Activity and Compare into Comparison and history. */
-const inspectorRailTabs = [
-  "comments",
-  "details",
-  "files",
-  "versions",
-  "activity",
-  "compare",
-] as const satisfies readonly InspectorTab[];
-
 const inspectorTitles = {
-  activity: "Activity",
   comments: "Comments",
-  compare: "Compare",
   details: "Details",
   files: "Files",
   versions: "Versions",
@@ -327,6 +318,7 @@ function ArtifactReview({
   const [comparison, setComparison] = useState<ArtifactComparison | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<Error | null>(null);
+  const [comparisonView, setComparisonView] = useState<ComparisonTab | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<ArtifactVersion | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<Error | null>(null);
@@ -540,6 +532,7 @@ function ArtifactReview({
   }, [loadArtifacts]);
 
   useEffect(() => {
+    setComparisonView(null);
     if (selectedArtifactId === null || projectId === "") {
       setDetails(null);
       setVersions([]);
@@ -614,10 +607,10 @@ function ArtifactReview({
   }, [projectId, selectedArtifactId]);
 
   useEffect(() => {
-    if (inspectorTab === "activity" && actions.length === 0 && !activityLoading) {
+    if (comparisonView === "activity" && actions.length === 0 && !activityLoading) {
       void loadActions(null);
     }
-  }, [actions.length, activityLoading, inspectorTab, loadActions]);
+  }, [actions.length, activityLoading, comparisonView, loadActions]);
 
   useEffect(() => {
     if (
@@ -829,7 +822,6 @@ function ArtifactReview({
         fromVersionId,
         toVersionId,
       ));
-      setInspectorTab("compare");
     } catch (caught) {
       setComparisonError(caught instanceof Error ? caught : new Error("Version comparison failed."));
     } finally {
@@ -948,6 +940,7 @@ function ArtifactReview({
             open: inspectorOpen && !docking.inspectorDocked && !focusMode,
           },
           {close: () => setFocusCommentsOpen(false), open: focusCommentsOpen},
+          {close: () => setComparisonView(null), open: comparisonView !== null},
           {
             close: () => setHtmlAnnotateModeActive(false),
             open: htmlViewerMode === "annotate" && htmlAnnotateModeActive,
@@ -998,6 +991,7 @@ function ArtifactReview({
   }, [
     catalogFiltersOpen,
     catalogItems,
+    comparisonView,
     docking.inspectorDocked,
     catalogPeeking,
     catalogSheetOpen,
@@ -1103,7 +1097,7 @@ function ArtifactReview({
     announce(changed.notice);
   };
   const selectInspectorTab = (id: string): void => {
-    const tab = inspectorRailTabs.find((candidate) => candidate === id);
+    const tab = inspectorTabs.find((candidate) => candidate === id);
     if (tab === undefined) return;
     if (inspectorOpen && inspectorTab === tab) {
       setInspectorOpen(false);
@@ -1117,12 +1111,7 @@ function ArtifactReview({
     {count: null, countTone: "neutral", icon: "bi-info-circle", id: "details", label: "Details"},
     {count: selectedVersion?.manifest.entries.length ?? 0, countTone: "neutral", icon: "bi-folder2", id: "files", label: "Files"},
     {count: versions.length, countTone: "neutral", icon: "bi-layers", id: "versions", label: "Versions"},
-    {count: null, countTone: "neutral", icon: "bi-clock-history", id: "activity", label: "Activity"},
-    ...(comparison === null ? [] : [
-      {count: null, countTone: "neutral", icon: "bi-arrow-left-right", id: "compare", label: "Compare"} satisfies InspectorRailItem,
-    ]),
   ];
-  const inspectorWidthTab = inspectorTab === "activity" || inspectorTab === "compare" ? "versions" : inspectorTab;
   const inspectorBody = details === null || selectedVersion === null ? (
     <SurfaceState
       count={0}
@@ -1157,13 +1146,12 @@ function ArtifactReview({
       selectedPath={selectedPath ?? selectedVersion.manifest.entryPath}
       version={selectedVersion}
     />
-  ) : inspectorTab === "versions" ? (
+  ) : (
     <VersionsInspector
       canManage={canManageArtifacts}
-      comparisonLoading={comparisonLoading}
       currentVersionId={details.artifact.currentVersionId}
-      onCompare={compareVersions}
       onMakeCurrent={makeVersionCurrent}
+      onOpenComparison={() => setComparisonView("compare")}
       onSelect={(versionId) => {
         setDetailError(null);
         setSelectedVersionId(versionId);
@@ -1172,16 +1160,6 @@ function ArtifactReview({
       selectedVersionId={selectedVersionId}
       versions={versions}
     />
-  ) : inspectorTab === "activity" ? (
-    <ActivityInspector
-      actions={actions}
-      error={activityError}
-      loading={activityLoading}
-      nextCursor={actionNextCursor}
-      onLoadMore={() => void loadActions(actionNextCursor)}
-    />
-  ) : (
-    <ComparisonInspector comparison={comparison} error={comparisonError} />
   );
 
   return (
@@ -1397,7 +1375,7 @@ function ArtifactReview({
               onDelete={tombstoneArtifact}
               onEnterFocus={enterFocusMode}
               onOpenCatalog={toggleCatalog}
-              onOpenComparison={null}
+              onOpenComparison={() => setComparisonView("compare")}
               onOpenLive={openLinkedArtifact}
               onOpenRawArtifact={() => void openRawArtifact()}
               onSelectPath={selectManifestPath}
@@ -1425,35 +1403,67 @@ function ArtifactReview({
             />
           )}
 
-          <PreviewCanvas
-            accessSetting={details?.artifact.accessSetting ?? "account_required"}
-            annotateModeActive={htmlAnnotateModeActive}
-            annotations={comments.annotations}
-            artifactId={selectedArtifactId}
-            artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
-            chrome={focusMode ? "focus" : "workspace"}
-            commentsLoading={comments.loading}
-            detailError={detailError}
-            detailLoading={detailLoading}
-            hasDetails={details !== null}
-            isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
-            onAnnotateModeChange={setHtmlAnnotateModeActive}
-            onNextArtifact={nextArtifact}
-            onOpenRawArtifact={() => void openRawArtifact()}
-            onPreviousArtifact={previousArtifact}
-            onReload={() => void (commentsInspectorRef.current?.reload() ?? comments.reload())}
-            onSelectAnnotation={selectAnnotation}
-            onSubmitAnnotation={submitAnnotation}
-            onUnanchoredChange={comments.updateUnanchored}
-            onViewModeChange={setHtmlViewerMode}
-            opening={opening}
-            position={{index: selectedIndex, total: catalogItems.length}}
-            projectId={projectId}
-            readOnly={!canComment}
-            selectedPath={selectedPath}
-            selectedThreadId={comments.selectedThreadId}
-            version={selectedVersion}
-          />
+          <div style={{display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0, minWidth: 0}}>
+            {comparisonView === null || details === null ? null : (
+              <ComparisonView
+                actions={actions}
+                activityError={activityError}
+                activityLoading={activityLoading}
+                activityNextCursor={actionNextCursor}
+                artifactName={details.artifact.name}
+                comparison={comparison}
+                comparisonError={comparisonError}
+                comparisonLoading={comparisonLoading}
+                currentVersionId={details.artifact.currentVersionId}
+                key={details.artifact.id}
+                onBack={() => setComparisonView(null)}
+                onCompare={compareVersions}
+                onLoadMoreActivity={() => void loadActions(actionNextCursor)}
+                onTabChange={setComparisonView}
+                tab={comparisonView}
+                versions={versions}
+              />
+            )}
+            <div
+              style={{
+                display: comparisonView !== null && details !== null ? "none" : "flex",
+                flex: "1 1 auto",
+                flexDirection: "column",
+                minHeight: 0,
+                minWidth: 0,
+              }}
+            >
+              <PreviewCanvas
+                accessSetting={details?.artifact.accessSetting ?? "account_required"}
+                annotateModeActive={htmlAnnotateModeActive}
+                annotations={comments.annotations}
+                artifactId={selectedArtifactId}
+                artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
+                chrome={focusMode ? "focus" : "workspace"}
+                commentsLoading={comments.loading}
+                detailError={detailError}
+                detailLoading={detailLoading}
+                hasDetails={details !== null}
+                isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
+                onAnnotateModeChange={setHtmlAnnotateModeActive}
+                onNextArtifact={nextArtifact}
+                onOpenRawArtifact={() => void openRawArtifact()}
+                onPreviousArtifact={previousArtifact}
+                onReload={() => void (commentsInspectorRef.current?.reload() ?? comments.reload())}
+                onSelectAnnotation={selectAnnotation}
+                onSubmitAnnotation={submitAnnotation}
+                onUnanchoredChange={comments.updateUnanchored}
+                onViewModeChange={setHtmlViewerMode}
+                opening={opening}
+                position={{index: selectedIndex, total: catalogItems.length}}
+                projectId={projectId}
+                readOnly={!canComment}
+                selectedPath={selectedPath}
+                selectedThreadId={comments.selectedThreadId}
+                version={selectedVersion}
+              />
+            </div>
+          </div>
         </section>
 
         {focusMode ? null : (
@@ -1475,7 +1485,7 @@ function ArtifactReview({
               : `${details.artifact.name} · v${selectedVersion.version.number}`}
             title={inspectorTitles[inspectorTab]}
             titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
-            width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorWidthTab)}
+            width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorTab)}
           >
             {inspectorBody}
           </InspectorPanel>
@@ -1577,59 +1587,26 @@ function FilesInspector({
 
 function VersionsInspector({
   canManage,
-  comparisonLoading,
   currentVersionId,
-  onCompare,
   onMakeCurrent,
+  onOpenComparison,
   onSelect,
   selectedVersionId,
   versions,
 }: {
   readonly canManage: boolean;
-  readonly comparisonLoading: boolean;
   readonly currentVersionId: string;
-  readonly onCompare: (fromVersionId: string, toVersionId: string) => Promise<void>;
   readonly onMakeCurrent: (
     versionId: string,
     expectedCurrentVersionId: string,
   ) => Promise<boolean>;
+  readonly onOpenComparison: () => void;
   readonly onSelect: (versionId: string) => void;
   readonly selectedVersionId: string | null;
   readonly versions: readonly VersionListItem[];
 }) {
-  const [fromVersionId, setFromVersionId] = useState(
-    versions.at(-1)?.version.id ?? currentVersionId,
-  );
-  const [toVersionId, setToVersionId] = useState(currentVersionId);
   return (
     <div className="as-inspector-stack">
-      {versions.length < 2 ? null : (
-        <InspectorSection count={2} title="Compare versions">
-          <form
-            className="as-compare-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void onCompare(fromVersionId, toVersionId);
-            }}
-          >
-            <label>
-              <span>From</span>
-              <select onChange={(event) => setFromVersionId(event.currentTarget.value)} value={fromVersionId}>
-                {versions.map(({version}) => <option key={version.id} value={version.id}>Version {version.number}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>To</span>
-              <select onChange={(event) => setToVersionId(event.currentTarget.value)} value={toVersionId}>
-                {versions.map(({version}) => <option key={version.id} value={version.id}>Version {version.number}</option>)}
-              </select>
-            </label>
-            <button className="as-button" disabled={comparisonLoading || fromVersionId === toVersionId} type="submit">
-              {comparisonLoading ? "Comparing…" : "Compare"}
-            </button>
-          </form>
-        </InspectorSection>
-      )}
       <InspectorSection count={versions.length} title="Immutable history">
         <ol className="as-version-list">
           {versions.map(({version}) => (
@@ -1662,83 +1639,7 @@ function VersionsInspector({
           ))}
         </ol>
       </InspectorSection>
-    </div>
-  );
-}
-
-function ActivityInspector({
-  actions,
-  error,
-  loading,
-  nextCursor,
-  onLoadMore,
-}: {
-  readonly actions: readonly ArtifactAction[];
-  readonly error: Error | null;
-  readonly loading: boolean;
-  readonly nextCursor: string | null;
-  readonly onLoadMore: () => void;
-}) {
-  return (
-    <div className="as-inspector-stack">
-      <InspectorSection count={actions.length} title="Artifact activity">
-        {error === null ? null : <p className="as-inspector-error" role="alert">{error.message}</p>}
-        {actions.length === 0 && loading ? <p className="as-inspector-empty">Loading activity…</p> : null}
-        {actions.length === 0 && !loading ? <p className="as-inspector-empty">No activity recorded.</p> : null}
-        <ol className="as-activity-list">
-          {actions.map((action) => (
-            <li key={action.id}>
-              <strong>{actionLabel(action.action)}</strong>
-              <time dateTime={action.createdAt}>{formatTimestamp(action.createdAt)}</time>
-              <code title={action.principalId}>{compactId(action.principalId)}</code>
-            </li>
-          ))}
-        </ol>
-        {nextCursor === null ? null : (
-          <button className="as-button" disabled={loading} onClick={onLoadMore} type="button">
-            {loading ? "Loading…" : "Load more"}
-          </button>
-        )}
-      </InspectorSection>
-    </div>
-  );
-}
-
-function ComparisonInspector({
-  comparison,
-  error,
-}: {
-  readonly comparison: ArtifactComparison | null;
-  readonly error: Error | null;
-}) {
-  if (error !== null) return <InlineState description={error.message} title="Comparison unavailable" />;
-  if (comparison === null) return <InlineState description="Choose two versions from Versions." title="No comparison" />;
-  const changedEntries = [
-    ...comparison.added.map((entry) => ({kind: "Added", path: entry.path})),
-    ...comparison.changed.map((entry) => ({kind: "Changed", path: entry.after.path})),
-    ...comparison.removed.map((entry) => ({kind: "Removed", path: entry.path})),
-    ...comparison.renamed.map((entry) => ({kind: "Renamed", path: `${entry.from.path} → ${entry.to.path}`})),
-  ];
-  return (
-    <div className="as-inspector-stack">
-      <InspectorSection count={2} title={`Version ${comparison.from.number} → ${comparison.to.number}`}>
-        <div className="as-comparison-summary">
-          <span>{comparison.added.length} added</span>
-          <span>{comparison.changed.length} changed</span>
-          <span>{comparison.removed.length} removed</span>
-          <span>{comparison.renamed.length} renamed</span>
-          <span>{comparison.unchangedCount} unchanged</span>
-        </div>
-      </InspectorSection>
-      <InspectorSection count={changedEntries.length} title="Changed files">
-        {changedEntries.length === 0 ? <p className="as-inspector-empty">These versions have the same files.</p> : (
-          <ol className="as-comparison-list">
-            {changedEntries.map((entry) => (
-              <li key={`${entry.kind}-${entry.path}`}><span>{entry.kind}</span><code>{entry.path}</code></li>
-            ))}
-          </ol>
-        )}
-      </InspectorSection>
+      <Button icon="bi-clock-history" onClick={onOpenComparison} size="sm" variant="link">Comparison and history</Button>
     </div>
   );
 }
@@ -1849,23 +1750,6 @@ function IconButton({
   );
 }
 
-function InlineState({
-  description,
-  title,
-  tone = "neutral",
-}: {
-  readonly description: string;
-  readonly title: string;
-  readonly tone?: "error" | "neutral";
-}) {
-  return (
-    <div className="as-inline-state" data-tone={tone} role="status">
-      <strong>{title}</strong>
-      <p>{description}</p>
-    </div>
-  );
-}
-
 function readInitialInspectorOpen(): boolean {
   return window.matchMedia("(min-width: 1640px)").matches;
 }
@@ -1892,7 +1776,3 @@ function reviewPreviewKind(
   return "other";
 }
 
-function compactId(value: string): string {
-  const unprefixed = value.startsWith("ver_") ? value.slice(4) : value;
-  return unprefixed.slice(0, 8);
-}

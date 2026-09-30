@@ -128,3 +128,18 @@ export function collectCspViolations(page: Page): () => Promise<readonly string[
     return [...violations];
   };
 }
+
+/** Open Comparison and history from the toolbar's version menu and choose one tab. */
+export async function openComparison(page: Page, tab: "Compare" | "Activity"): Promise<void> {
+  const view = page.getByRole("region", {name: "Comparison and history"});
+  if (!(await view.isVisible())) {
+    await page.getByRole("toolbar", {exact: true, name: "Artifact"})
+      .getByRole("button", {name: /^Choose version, showing /u}).click();
+    await page.getByRole("menu", {name: "Version"})
+      .getByRole("menuitem", {name: "Comparison and history"}).click();
+    await expect(view).toBeVisible();
+  }
+  const control = view.getByRole("tab", {exact: true, name: tab});
+  await control.click();
+  await expect(control).toHaveAttribute("aria-selected", "true");
+}

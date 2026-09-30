@@ -28,6 +28,7 @@ import {
   artifactFrameSelectors,
   inspectorTabButton,
   isolatedReviewFrame,
+  openComparison,
   openInspectorTab,
   openReview,
   openSettings,
@@ -1264,25 +1265,29 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Save tags"}).click();
       await expect(fixture.page.getByText("approved", {exact: true})).toBeVisible();
 
-      await openInspectorTab(fixture.page, "Versions");
-      await fixture.page.getByRole("button", {name: "Compare"}).click();
-      await expect(fixture.page.getByRole("heading", {name: "Changed files"})).toBeVisible();
-      await expect(
-        fixture.page.getByRole("complementary", {name: "Artifact inspector"}).getByText("payload.txt", {exact: true}),
-      ).toBeVisible();
+      await openComparison(fixture.page, "Compare");
+      const comparePanel = fixture.page.getByRole("tabpanel", {name: "Compare"});
+      await comparePanel.getByRole("button", {exact: true, name: "Compare"}).click();
+      await expect(comparePanel.getByRole("heading", {name: "Changed files"})).toBeVisible();
+      await expect(comparePanel.getByText("payload.txt", {exact: true})).toBeVisible();
+      await fixture.page.getByRole("button", {name: "Back to the preview"}).click();
+      await expect(fixture.page.getByRole("region", {name: "Comparison and history"})).toHaveCount(0);
 
       await openInspectorTab(fixture.page, "Versions");
       await fixture.page.getByRole("button", {name: "Make current"}).click();
       await fixture.page.getByRole("button", {name: "Make current", exact: true}).last().click();
       await expect(fixture.page.getByText("current", {exact: true})).toBeVisible();
 
-      await fixture.page.getByRole("group", {name: "Inspector"}).getByRole("button", {name: /^Activity/u}).click();
-      await expect(fixture.page.getByText("Restored version")).toBeVisible();
-      await expect(fixture.page.getByText("Replaced tags").first()).toBeVisible();
-      await expect(fixture.page.getByRole("button", {name: "Load more"})).toBeVisible();
-      await expect(fixture.page.locator(".as-activity-list > li")).toHaveCount(50);
-      await fixture.page.getByRole("button", {name: "Load more"}).click();
-      await expect(fixture.page.locator(".as-activity-list > li")).toHaveCount(56);
+      await openComparison(fixture.page, "Activity");
+      const activityPanel = fixture.page.getByRole("tabpanel", {name: "Activity"});
+      await expect(activityPanel.getByText("Restored version")).toBeVisible();
+      await expect(activityPanel.getByText("Replaced tags").first()).toBeVisible();
+      const activityRows = activityPanel.getByRole("table", {name: "Artifact activity"})
+        .getByRole("row").filter({has: fixture.page.getByRole("cell")});
+      await expect(activityPanel.getByRole("button", {name: "Load more"})).toBeVisible();
+      await expect(activityRows).toHaveCount(50);
+      await activityPanel.getByRole("button", {name: "Load more"}).click();
+      await expect(activityRows).toHaveCount(56);
 
       await openSettings(fixture.page, "members");
       await fixture.page.getByRole("button", {name: "Admit member"}).click();
