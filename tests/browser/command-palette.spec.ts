@@ -1,4 +1,4 @@
-import {expect, test} from "@playwright/test";
+import {expect, test, type Request} from "@playwright/test";
 
 import {ApiClient} from "../support/agent-dispatch.js";
 import {publishNew, type PublishResponse} from "../support/publishing.js";
@@ -25,6 +25,11 @@ async function publishPaletteFixture(
     path: "index.html",
     projectId,
   })).body;
+}
+
+/** A palette catalog search: the workspace's own catalog listing carries no search text. */
+function paletteSearchRequest(request: Request): boolean {
+  return request.url().includes("/api/v1/artifacts?") && new URL(request.url()).searchParams.has("search");
 }
 
 test.describe("Command palette", () => {
@@ -129,6 +134,57 @@ test.describe("Command palette", () => {
       await page.keyboard.press("ControlOrMeta+k");
       await field.fill("nothing is called this");
       await expect(palette.getByText("No artifact or project matches")).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("searching many projects keeps at most four catalog requests in flight and drops superseded keystrokes", async ({browser}) => {
+    test.setTimeout(120_000);
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const owner = new ApiClient(fixture.server, fixture.installation.apiToken);
+      const projectIds = await Promise.all(Array.from({length: 12}, async (_, index) =>
+        owner.createProject(`Palette load project ${index + 1}`, `palette-load-project-${index + 1}`)));
+      await publishPaletteFixture(fixture, "Palette load target", "palette-load-target", projectIds[11]);
+      await localLogin(fixture);
+      const page = fixture.page;
+
+      let inFlight = 0;
+      let peak = 0;
+      let started = 0;
+      page.on("request", (request) => {
+        if (!paletteSearchRequest(request)) return;
+        started += 1;
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+      });
+      const settle = (request: Request): void => {
+        if (paletteSearchRequest(request)) inFlight -= 1;
+      };
+      page.on("requestfinished", settle);
+      page.on("requestfailed", settle);
+      // Slow catalogs make consecutive debounced searches overlap, as on a busy server.
+      await page.route("**/api/v1/artifacts?**", async (route) => {
+        if (paletteSearchRequest(route.request())) await new Promise((resolve) => setTimeout(resolve, 250));
+        await route.continue();
+      });
+
+      await page.keyboard.press("ControlOrMeta+k");
+      const palette = page.getByRole("dialog", {name: "Search"});
+      const field = palette.getByRole("combobox", {name: "Search"});
+      // Each pause outlasts the debounce, so every keystroke starts a search.
+      await field.fill("Pal");
+      await page.waitForTimeout(200);
+      await field.fill("Pale");
+      await page.waitForTimeout(200);
+      await field.fill("Palet");
+      await page.waitForTimeout(200);
+      await field.fill("Palette load");
+      await expect(palette.getByRole("option", {name: /Palette load target/u})).toBeVisible();
+      expect(peak).toBeLessThanOrEqual(4);
+      // Four overlapping unbounded searches would ask every project four times.
+      expect(started).toBeLessThan(projectIds.length * 2);
     } finally {
       await stopBrowserFixture(fixture);
     }

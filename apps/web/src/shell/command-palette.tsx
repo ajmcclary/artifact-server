@@ -16,6 +16,7 @@ import {
   isTypingTarget,
   matchesHotkey,
 } from "@/arkcase";
+import {createRequestLimiter} from "@/lib/request-limiter";
 import {navigateReview, projectWorkspaceHref, workspaceHref} from "@/review/review-routes";
 import {useAnnounce} from "@/ui/announcer";
 
@@ -110,20 +111,38 @@ async function artifactInProject(project: Project, artifactId: string): Promise<
   }
 }
 
-async function searchArtifacts(projects: readonly Project[], text: string): Promise<PaletteSearch> {
-  const byName = await Promise.allSettled(projects.map(async (project) => {
+/**
+ * Catalog requests the palette keeps in flight across every search, the same
+ * bound the review queue uses. It is shared so a superseded search's
+ * unfinished requests count against the next one.
+ */
+const paletteRequests = createRequestLimiter(4);
+
+class SupersededSearch extends Error {}
+
+async function searchArtifacts(
+  projects: readonly Project[],
+  text: string,
+  isCurrent: () => boolean,
+): Promise<PaletteSearch> {
+  // A superseded search stops asking; its queued projects never reach the network.
+  const ask = <T,>(task: () => Promise<T>): Promise<T> => paletteRequests(async () => {
+    if (!isCurrent()) throw new SupersededSearch();
+    return task();
+  });
+  const byName = await Promise.allSettled(projects.map((project) => ask(async () => {
     const page = await api.artifacts(project.id, null, [], text);
     return page.artifacts.map((entry) => ({
       artifact: entry.artifact,
       project,
       versionCount: entry.versionCount,
     }));
-  }));
+  })));
   const hits: ArtifactHit[] = byName.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   const nameFailures = byName.filter((result) => result.status === "rejected").length;
   let idFailures = 0;
-  if (artifactIdentifierPattern.test(text) && !hits.some((hit) => hit.artifact.id === text)) {
-    const byId = await Promise.allSettled(projects.map((project) => artifactInProject(project, text)));
+  if (isCurrent() && artifactIdentifierPattern.test(text) && !hits.some((hit) => hit.artifact.id === text)) {
+    const byId = await Promise.allSettled(projects.map((project) => ask(() => artifactInProject(project, text))));
     for (const result of byId) {
       if (result.status === "rejected") idFailures += 1;
       else if (result.value !== null) hits.push(result.value);
@@ -170,7 +189,7 @@ export function ReviewCommandPalette({
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const next = await searchArtifacts(projects, text);
+          const next = await searchArtifacts(projects, text, () => current);
           if (current) setSearch(next);
         } catch {
           if (current) setSearch({hits: [], phase: "failed"});
