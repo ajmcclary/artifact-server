@@ -1,0 +1,120 @@
+/* ============================================================
+   ArkCase Showcase — Base element styling
+   Minimal global resets so specimen cards & components render
+   correctly. Keep this lean — component styling lives in the
+   React primitives, not here.
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  font-weight: var(--bs-font-weight-normal);
+  line-height: var(--line-height-normal);
+  color: var(--text-body);
+  background-color: var(--surface-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 0.375rem;
+  font-family: var(--font-heading);
+  font-weight: var(--headings-font-weight);
+  line-height: var(--headings-line-height);
+  color: var(--text-body);
+}
+h1 { font-size: var(--h1-font-size); }
+h2 { font-size: var(--h2-font-size); }
+h3 { font-size: var(--h3-font-size); }
+h4 { font-size: var(--h4-font-size); }
+h5 { font-size: var(--h5-font-size); }
+h6 { font-size: var(--h6-font-size); }
+
+p { margin: 0 0 0.75rem; }
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover { color: var(--text-link-hover); text-decoration: underline; }
+
+code, pre, kbd { font-family: var(--font-mono); }
+
+small { font-size: 0.875em; }
+
+/* Single loading-spinner keyframe of record. Button and the DataGrid overlay
+   both animate a CSS border-spinner off this — no icon-font spinner glyph
+   (the retired bi-arrow-repeat / fa-circle-notch) anywhere in the system. */
+@keyframes ak-spin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------
+   Accessibility baseline (2026 a11y remediation)
+   ------------------------------------------------------------ */
+
+/* WCAG 2.4.7 / 2.4.11 / 2.4.13 — a solid, offset focus indicator on
+   every interactive element. `outline` is unclipped by overflow and the
+   2px offset shows the element's own surface first, so the ring reads
+   at >=3:1 on white, tinted rows AND colored button fills alike.
+   Beats inline `outline:none` via specificity + is keyboard-only. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-outline, 2px solid #0079a8);
+  outline-offset: var(--focus-outline-offset, 2px);
+  border-radius: inherit;
+}
+
+/* Screen-reader-only text (accessible names, live-region copy). */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* WCAG 2.4.1 — skip link: hidden until focused, then pinned top-left. */
+.ak-skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 2000;
+  padding: 0.5rem 0.875rem;
+  background: var(--surface-header, #073652);
+  color: #fff;
+  border-radius: var(--radius-md, 5px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.ak-skip-link:focus {
+  top: 8px;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* Input variant="navy" (the app bar's search field): an inline style cannot reach the
+   placeholder, and the browser's grey fails on navy. */
+[data-ak-input="navy"]::placeholder {
+  color: var(--text-on-navy-secondary, rgba(255, 255, 255, 0.72));
+  opacity: 1;
+}
+
+/* WCAG 2.3.3 — honor a reduced-motion preference system-wide. The
+   !important override reaches component inline transitions too, so the
+   theme cross-fade, side-nav slide and progress-bar fills short-circuit. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

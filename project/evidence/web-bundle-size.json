@@ -22,6 +22,27 @@
       "measuredAt": "2026-09-30T01:38:35.921Z",
       "node": "v24.15.0",
       "totalBytes": 2269071
+    },
+    {
+      "bytesByExtension": {
+        "css": 349572,
+        "html": 1274,
+        "js": 1270279,
+        "svg": 5535,
+        "woff": 71632,
+        "woff2": 574720
+      },
+      "commit": "845b2c98d64d316a87750126f76d6adb2df09b4a",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 56836,
+        "html": 727,
+        "js": 389458
+      },
+      "label": "after-task-1",
+      "measuredAt": "2026-09-30T01:39:32.699Z",
+      "node": "v24.15.0",
+      "totalBytes": 2273012
     }
   ]
 }

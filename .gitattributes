@@ -1,0 +1,2 @@
+# The vendored ArkCase tree is hashed byte for byte in its SOURCE.json.
+apps/web/src/arkcase/** -text

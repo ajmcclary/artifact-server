@@ -1,0 +1,47 @@
+/* ============================================================
+   ArkCase Showcase — Elevation, Radii & Borders
+   Restrained shadow system — enterprise data app, depth is subtle.
+   Source: src/styles/themes/_light.scss
+   ============================================================ */
+:root {
+  /* ---- Corner radii ---- */
+  /* 2025 refresh: crisper than the 2018 6px default. Controls read
+     sharper; pills tightened. Modal radius (lg) held at 8px. */
+  --radius-sm: 0.25rem;     /* 4px — small chips, inputs sm */
+  --radius-md: 0.3125rem;   /* 5px — default: buttons, inputs, cards (was 6px) */
+  --radius-lg: 0.5rem;      /* 8px — modals, large cards */
+  --radius-pill: 10px;      /* status badges / pills (was 12px) */
+  --radius-circle: 50%;     /* avatars, icon buttons */
+
+  /* ---- Border widths ---- */
+  --border-width: 1px;
+  --border-width-accent: 4px;   /* metric-card left accent rule */
+
+  /* ---- Shadows ---- */
+  /* 2025 refresh: the 2018 Bootstrap shadows (large offsets, 0.15–0.175
+     alpha) read heavy. Replaced with tighter, layered, lower-alpha
+     shadows — crisper lift, less smear. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);   /* cards at rest */
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.10);   /* dropdowns, popovers, toasts */
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.14);  /* modals */
+  --shadow-card: 0 1px 3px rgba(7, 54, 82, 0.10);           /* resting panel & card lift —
+     navy-tinted single layer, promoted from the applications (113 uses). Warmer against
+     the #F1F5F7 canvas than the neutral --shadow-sm, which stays for cards on white. */
+  --shadow-nav: 0 0 24px rgba(0, 0, 0, 0.12);               /* slide-in side navigation */
+  --shadow-up: 0 -6px 16px rgba(0, 0, 0, 0.14);             /* the one upward lift: sticky
+     footers and menus that open above their trigger. Same alpha as --shadow-lg. */
+
+  /* ---- Scroll edges ---- */
+  /* The wash a scroll box paints over the edge its content continues past. A tint rather than
+     a fade to a surface colour: the data grid's rows alternate white and --surface-secondary,
+     so a gradient to either one bands on every other row. Same navy family as --shadow-card. */
+  --grid-scroll-fade: rgba(7, 54, 82, 0.16);
+  --grid-scroll-fade-width: 26px;
+
+  /* ---- Inset (pressed) ---- */
+  --shadow-inset-active: inset 0 2px 3px rgba(0, 0, 0, 0.10);
+
+  /* ---- Motion ---- */
+  --transition-fast: 0.15s ease; /* @kind other */
+  --transition-base: 0.2s ease; /* @kind other */
+}

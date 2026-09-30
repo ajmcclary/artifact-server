@@ -1,0 +1,117 @@
+/* ============================================================
+   ArkCase Showcase — Typography Tokens
+   Refresh pairing:
+     Serif  (Source Serif 4)  — display, page & section headings, editorial leads
+     Sans   (Public Sans)     — body, UI controls, table cells, labels, buttons, nav
+     Data   (Source Code Pro) — coded values: identifiers, dates/times, currency,
+                                counts/durations, codes, contact strings.
+                                NOT person or organisation names (see the value-class
+                                table in readme.md → Type).
+   The 2026 type pass retired the SFMono system stack: it only rendered on Apple
+   devices, so IDs/dates/amounts fell back to whatever monospace each other OS
+   shipped, breaking column alignment. Source Code Pro — the monospace sibling of
+   Source Serif 4 — replaces it as a webfont, so coded values render identically
+   everywhere. System stacks remain the resilient fallbacks.
+   Source: src/styles/tokens/_typography.scss
+   ============================================================ */
+:root {
+  /* ---- Families ---- */
+  --bs-font-sans-serif: "Public Sans", system-ui, -apple-system, "Segoe UI", "Helvetica Neue",
+    "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-serif: "Source Serif 4", Georgia, Cambria, "Times New Roman", serif;
+  /* Monospace family — Source Code Pro (webfont, loaded in fonts.css). The
+     system-mono tail is a last-ditch fallback if the webfont fails to load. */
+  --bs-font-monospace: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-body: var(--bs-font-sans-serif);      /* body, UI, data */
+  --font-heading: var(--font-serif);           /* headings render in the serif */
+  --font-display: var(--font-serif);           /* large display / hero headings */
+  --font-sans: var(--bs-font-sans-serif);      /* explicit alias for UI text */
+  /* Data role. Applies to: record identifiers · dates & times · currency ·
+     counts & durations · codes (FEIN/SSN, policy, bar, batch, class) · contact
+     strings (username, email, hostname, IP). Does NOT apply to person or
+     organisation names, statuses, or free text — those stay in the sans.
+     Source Code Pro is monospaced, so figures already align; pair it with
+     --font-numeric-feature so proportional digits can't slip in via a fallback.
+     Size: a data-font cell takes the SAME px as the sans text beside it (14px in
+     the grid) — never one step down. Color: --text-data (#495057), the one dark
+     that clears 4.5:1 on both #FFF and the #F8F9FA zebra row. */
+  --font-mono: var(--bs-font-monospace);
+  --font-data: var(--bs-font-monospace);       /* clearer alias for the data role */
+  --font-numeric-feature: tabular-nums;        /* pair with --font-data on numbers */
+
+  /* ---- Weights ---- */
+  --bs-font-weight-normal: 400;
+  --bs-font-weight-medium: 500;     /* headings & emphasis default */
+  --bs-font-weight-semibold: 600;
+  --bs-font-weight-bold: 700;
+
+  /* ---- Type scale (rem, 16px base) ----
+     2026: the app was setting 13px and 11px inline because the ramp jumped 12 → 14 → 16
+     with nothing in between. Both are now sanctioned steps, named by role rather than
+     wedged into the t-shirt sequence. Do not invent a sixth. */
+  --font-size-label: 0.6875rem;  /* 11px — uppercase micro-labels, chip meta, axis ticks,
+                                    AND every pill (2026: see below) */
+  --font-size-xs: 0.75rem;    /* 12px — captions, status-bar meta, list-card identifier /
+                                 attribution / clock. NOT grid cells (14px) and no longer
+                                 pills — pills moved to --font-size-label. */
+  --font-size-dense: 0.8125rem;  /* 13px — dense body: toolbars, side panels, inline meta */
+  --font-size-sm: 0.875rem;   /* 14px — grid header + body cells (sans and data alike),
+                                 secondary UI. The workhorse. */
+  --font-size-md: 1rem;       /* 16px — base body */
+  --font-size-lg: 1.25rem;    /* 20px */
+  --font-size-xl: 1.5rem;     /* 24px */
+  --font-size-2xl: 1.75rem;   /* 28px */
+  --font-size-3xl: 2rem;      /* 32px; matches tokens.json */
+  --font-size-4xl: 2.5rem;    /* 40px */
+  --font-size-5xl: 3rem;      /* 48px */
+
+  /* ---- Heading sizes ---- */
+  /* 2025 refresh: the 2018 display scale ran large for a dense app.
+     Heading steps pulled in ~20% so titles sit closer to the data. */
+  --h1-font-size: 2rem;       /* was 2.5rem */
+  --h2-font-size: 1.625rem;   /* was 2rem */
+  --h3-font-size: 1.375rem;   /* was 1.75rem */
+  --h4-font-size: 1.25rem;    /* was 1.5rem */
+  --h5-font-size: 1.125rem;   /* was 1.25rem */
+  --h6-font-size: 1rem;
+  --headings-font-weight: 600;   /* serif headings sit at semibold */
+  --headings-line-height: 1.2;
+
+  /* ---- Line heights ---- */
+  --line-height-tight: 1.25;
+  --line-height-snug: 1.375;
+  --line-height-normal: 1.5;
+  /* 1.375 (--line-height-snug) is also the list-card title line-height: two clamped
+     lines at 14px/600 must fit the 3-line row without the clamp cutting a descender. */
+
+  /* ---- Letter spacing ---- */
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-wide: 0.025em;   /* uppercase eyebrow labels */
+
+  /* ---- Pills ----
+     2026 resolution: pills are 11px, not 12px. A dense list card carries three
+     lines plus up to three pills in a ~76px row; at 12px/500 the pills set the
+     row height and every list grew ~2px. --font-size-label is therefore sanctioned
+     for pills as well as micro-labels, and the pill is ONE thing everywhere:
+     11px / 600 / uppercase, padding 2px 8px, radius 10px (--radius-pill).
+     Status, priority, category and type chips are all that pill. No 12px pills,
+     no 500 weight, no radius-4px chips. Colors: soft tint (--pill-*-bg/-fg);
+     the solid fill (--pill-critical-*) is reserved for Critical. */
+  --font-size-pill: 0.6875rem;   /* 11px — alias of --font-size-label, pill role */
+  --font-weight-pill: 600;
+
+  /* ---- Icon sizes (2026 iconography pass) ----
+     Bootstrap Icons render on a 16px optical grid at ~1px stroke. Before this
+     pass, icon font-size was set inline per-usage (14/16/18/22/24 all appeared);
+     the stray 18px had no home. These five steps cover control and content
+     contexts; the two Portal hero steps are deliberate display exceptions. */
+  --icon-xs: 0.75rem;    /* 12px — metadata and compact indicators */
+  --icon-sm: 0.875rem;   /* 14px — grid cells, dense chrome */
+  --icon-md: 1rem;       /* 16px — inline with text, buttons, inputs */
+  --icon-lg: 1.25rem;    /* 20px — nav items, app bar */
+  --icon-xl: 1.5rem;     /* 24px — empty / error state heroes */
+  --icon-hero-sm: 1.625rem; /* 26px — Portal compact hero mark */
+  --icon-hero-lg: 2.5rem;   /* 40px — Portal primary hero mark */
+}
