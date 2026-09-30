@@ -404,6 +404,19 @@ function openLoopbackCallback(
   });
 }
 
+/**
+ * The loopback page's only styling. It runs on the CLI's own origin under
+ * `default-src 'none'; style-src 'unsafe-inline'`, so it cannot load the
+ * application's fonts or tokens: colours are the ArkCase token values and the
+ * type falls back to the system face when Public Sans is not installed.
+ */
+const cliCallbackStyle = 'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f1f5f7;color:#212529;font:16px/1.5 "Public Sans",system-ui,-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif}main{max-width:42rem;margin:3rem 1.5rem;padding:2rem;background:#fff;border:1px solid #dee2e6;border-top:4px solid #073652;border-radius:5px}h1{margin:0 0 .5rem;font-size:1.5rem;color:#073652}p{margin:0;color:#5a6268}@media (prefers-color-scheme:dark){body{background:#0b141c;color:#e6ebf0}main{background:#15232f;border-color:#2e4559;border-top-color:#9ad7f0}h1{color:#9ad7f0}p{color:#a9b6c2}}';
+
+/** The page the browser shows once the CLI has its authorization code. */
+export function cliCallbackPageHtml(): string {
+  return `<!doctype html><html lang="en"><meta charset=utf-8><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifact Server connected</title><style>${cliCallbackStyle}</style><main><h1>Artifact Server is connected.</h1><p>You can close this tab.</p></main></html>`;
+}
+
 async function createLoopbackCallback(
   expectedState: string,
 ): Promise<LoopbackCallback> {
@@ -435,9 +448,7 @@ async function createLoopbackCallback(
       "Content-Type": "text/html; charset=utf-8",
       "Referrer-Policy": "no-referrer",
     });
-    response.end(
-      "<!doctype html><meta charset=utf-8><title>Artifact Server connected</title><style>body{font:16px system-ui;margin:3rem;max-width:42rem}h1{font-size:1.5rem}</style><h1>Artifact Server is connected.</h1><p>You can close this tab.</p>",
-    );
+    response.end(cliCallbackPageHtml());
     resolveResult(parsed.data);
   });
   await listenLoopback(server);
