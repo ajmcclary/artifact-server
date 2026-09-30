@@ -49,7 +49,7 @@ test.describe("WMC-002 WebMCP authority", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
-      await expect(page.getByRole("article")).toHaveCount(1);
+      await expect(page.getByRole("article", {name: /^Comment by /u})).toHaveCount(1);
       await expect.poll(() => registeredToolNames(page)).toEqual([...expectedToolNames]);
 
       // Only the application document registers: every other frame the page
@@ -103,9 +103,9 @@ test.describe("WMC-002 WebMCP authority", () => {
       await expect(
         page.getByText("Comments are read-only for this account or archived project."),
       ).toBeVisible();
-      // Exact matching keeps the read-only assertion separate from the
-      // always-available "Resolved" list filter.
-      await expect(page.getByRole("button", {exact: true, name: "Resolve"}))
+      // The DS names each resolve action "Resolve comment by <author>", which keeps
+      // the read-only assertion apart from the always-available "Resolved" filter.
+      await expect(page.getByRole("button", {name: /^Resolve comment by /u}))
         .toHaveCount(0);
       // The same mutation the session's own client sends: cookie session
       // plus the CSRF token the client reads from its cookie.

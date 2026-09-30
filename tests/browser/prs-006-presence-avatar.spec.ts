@@ -107,7 +107,7 @@ test.describe("PRS-006 presence avatar", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
-      const cards = page.getByRole("article");
+      const cards = page.getByRole("article", {name: /^Comment by /u});
       await expect(cards).toHaveCount(2);
 
       // The primary compose action reads as a real input at rest: its label

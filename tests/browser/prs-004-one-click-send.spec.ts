@@ -93,7 +93,7 @@ test.describe("PRS-004 one-click send and undo", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId});
       await openInspectorTab(page, "Comments");
-      const cards = page.getByRole("article");
+      const cards = page.getByRole("article", {name: /^Comment by /u});
       await expect(cards).toHaveCount(2);
       await expect(page.getByLabel("Selected annotations")).toHaveCount(0);
       await expect(page.getByRole("checkbox", {name: /Select comment:/u}))

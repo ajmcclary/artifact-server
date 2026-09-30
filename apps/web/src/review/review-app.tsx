@@ -39,6 +39,7 @@ import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
 import {FilesTab} from "./workspace/files-tab.tsx";
@@ -63,11 +64,7 @@ import {
 } from "./workspace/workspace-types.ts";
 import {useShellLayout} from "@/shell/shell-layout-context";
 import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
-import {
-  useReviewComments,
-  ReviewCommentsInspector,
-  type ReviewCommentsInspectorHandle,
-} from "./review-comments.tsx";
+import {useReviewComments} from "./review-comments.tsx";
 import {
   parseReviewRoute,
   projectSettingsHref,
@@ -357,7 +354,7 @@ function ArtifactReview({
   const focusCommentsButtonRef = useRef<HTMLButtonElement>(null);
   const focusControlsRestoreRef = useRef<HTMLButtonElement>(null);
   const previewPanelRef = useRef<HTMLElement>(null);
-  const commentsInspectorRef = useRef<ReviewCommentsInspectorHandle>(null);
+  const commentsInspectorRef = useRef<CommentsTabHandle | null>(null);
   const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const catalogRequestGenerationRef = useRef(0);
   const followCommentVersion = useCallback((versionId: string): void => {
@@ -1126,11 +1123,11 @@ function ArtifactReview({
       version={selectedVersion}
     />
   ) : inspectorTab === "comments" ? (
-    <ReviewCommentsInspector
+    <CommentsTab
       canComment={canComment}
       canDeleteAny={canDeleteAnyComment}
+      handleRef={commentsInspectorRef}
       principalId={session.principal.id}
-      ref={commentsInspectorRef}
       session={comments}
       versionId={selectedVersionId}
     />
@@ -1339,11 +1336,11 @@ function ArtifactReview({
                   </IconButton>
                 </header>
                 <div className="as-focus-comments__body">
-                  <ReviewCommentsInspector
+                  <CommentsTab
                     canComment={canComment}
                     canDeleteAny={canDeleteAnyComment}
+                    handleRef={commentsInspectorRef}
                     principalId={session.principal.id}
-                    ref={commentsInspectorRef}
                     session={comments}
                     versionId={selectedVersionId}
                   />

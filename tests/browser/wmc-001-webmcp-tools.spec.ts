@@ -107,7 +107,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
-      await expect(page.getByRole("article")).toHaveCount(2);
+      await expect(page.getByRole("article", {name: /^Comment by /u})).toHaveCount(2);
 
       // Registration: exactly the seven provenance-prefixed tools.
       await expect.poll(() => registeredToolNames(page)).toEqual([...expectedToolNames]);
@@ -134,7 +134,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
       expect(replied.thread.id).toBe(first.id);
       expect(replied.thread.replies.map((reply) => reply.body)).toEqual(["Cited the 2024 survey."]);
       expect(replied.counts).toEqual({open: 2, resolved: 0});
-      const firstCard = page.getByRole("article").filter({hasText: "The first claim needs a source."});
+      const firstCard = page.getByRole("article", {name: /^Comment by /u}).filter({hasText: "The first claim needs a source."});
       await expect(firstCard.getByText("Cited the 2024 survey.")).toBeVisible();
 
       // Resolve echoes the new state and the decremented open count; the
@@ -173,7 +173,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         path: "index.html",
       }));
       expect(commented.counts).toEqual({open: 3, resolved: 0});
-      await expect(page.getByRole("article")).toHaveCount(3);
+      await expect(page.getByRole("article", {name: /^Comment by /u})).toHaveCount(3);
       await expect(page.getByText("Add a summary paragraph.")).toBeVisible();
 
       // list_artifacts is project-scoped, and open returns the new view.

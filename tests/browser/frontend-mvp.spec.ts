@@ -159,11 +159,11 @@ test.describe("Artifact Server frontend MVP", () => {
 
       await expect(inspectorTabButton(fixture.page, "Comments")).toHaveAttribute("aria-pressed", "true");
       await expect(inspectorTabButton(fixture.page, "Comments")).toHaveAccessibleName("Comments — 1");
-      const selectedComment = fixture.page.getByRole("article").filter({
+      const selectedComment = fixture.page.getByRole("article", {name: /^Comment by /u}).filter({
         hasText: "Make the release status easier to scan.",
       });
       await expect(selectedComment).toBeVisible();
-      await expect(selectedComment).toHaveAttribute("aria-current", "true");
+      await expect(selectedComment.locator('[aria-current="true"]')).toBeVisible();
       expect(await selectedComment.evaluate((element) => getComputedStyle(element).boxShadow))
         .not.toContain("inset");
       await expect(fixture.page.getByText(

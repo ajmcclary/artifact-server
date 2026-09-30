@@ -115,11 +115,11 @@ test.describe("Artifact Server Review wave three", () => {
       await expect(conversation.getByText("Agent reply already in this conversation"))
         .toBeVisible();
       await expect(conversation.getByText("1 reply", {exact: true})).toBeVisible();
-      await expect(conversation.locator(".as-comment-card__meta")).toContainText("Updated");
-      await expect(conversation.locator(".as-comment-card__meta")).toContainText("Whole version");
+      await expect(conversation.getByText(/^Updated /u)).toBeVisible();
+      await expect(conversation.getByText("Whole version", {exact: true})).toBeVisible();
       await expect(conversation.getByRole("textbox", {exact: true, name: "Reply"}))
         .toHaveCount(0);
-      const agentReply = conversation.locator(".as-comment-replies li")
+      const agentReply = conversation.getByRole("article", {name: /^Reply by /u})
         .filter({hasText: "Agent reply already in this conversation"});
       await expect(agentReply.getByRole("button", {name: "Edit"})).toHaveCount(0);
 
@@ -133,7 +133,7 @@ test.describe("Artifact Server Review wave three", () => {
       await postReply.click();
       await expect(conversation.getByText("Human follow-up", {exact: true})).toBeVisible();
       await expect(conversation.getByText("2 replies", {exact: true})).toBeVisible();
-      const humanReply = conversation.locator(".as-comment-replies li")
+      const humanReply = conversation.getByRole("article", {name: /^Reply by /u})
         .filter({hasText: "Human follow-up"});
       await humanReply.getByRole("button", {name: "Edit"}).click();
       await humanReply.getByLabel("Edit reply").fill("Human follow-up, revised");
