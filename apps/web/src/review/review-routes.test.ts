@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 
 import {
+  isApplicationPath,
   libraryHref,
   parseReviewRoute,
   projectWorkspaceHref,
@@ -128,5 +129,18 @@ describe("review hrefs", () => {
     expect(reviewReturnHref("https://example.test/review?project=prj_a")).toBe("/review");
     expect(reviewReturnHref("//example.test/review")).toBe("/review");
     expect(reviewReturnHref("/reviewer?project=prj_a")).toBe("/review");
+  });
+});
+
+describe("in-place navigation", () => {
+  it("opens only application screens in place, never the review frame, sign-in, APIs, or content", () => {
+    expect(isApplicationPath("/review")).toBe(true);
+    expect(isApplicationPath("/review/library")).toBe(true);
+    expect(isApplicationPath("/review/settings/members")).toBe(true);
+    expect(isApplicationPath("/review-frame")).toBe(false);
+    expect(isApplicationPath("/reviewer")).toBe(false);
+    expect(isApplicationPath("/auth/login")).toBe(false);
+    expect(isApplicationPath("/api/v1/artifacts/art_1/archive")).toBe(false);
+    expect(isApplicationPath("/")).toBe(false);
   });
 });

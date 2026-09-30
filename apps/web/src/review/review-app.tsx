@@ -106,6 +106,7 @@ const inspectorTitles = {
   versions: "Versions",
 } satisfies Record<InspectorTab, string>;
 const catalogRefreshConfirmationMilliseconds = 1_600;
+const noVersions: readonly VersionListItem[] = [];
 
 function reviewShortcutBlocked(event: KeyboardEvent): boolean {
   if (
@@ -164,10 +165,15 @@ export function ReviewApp() {
     if (replaceWith !== null) window.history.replaceState(null, "", replaceWith);
   }, [replaceWith]);
 
-  const bootstrap = useCallback(async (): Promise<void> => {
+  /**
+   * Start the application, or renew an expired local-owner session. A renewal
+   * keeps the current screen mounted: the reviewer's place, open panels, and
+   * unsent text survive it.
+   */
+  const bootstrap = useCallback(async (mode: "renew" | "start" = "start"): Promise<void> => {
     if (bootstrapInFlightRef.current) return;
     bootstrapInFlightRef.current = true;
-    setSessionState("loading");
+    if (mode === "start") setSessionState("loading");
     setError(null);
     try {
       const [loadedAccessContext, initialSession] = await Promise.all([
@@ -219,7 +225,7 @@ export function ReviewApp() {
       // before the access mode is known, so an expiry during bootstrap is not a sign-out.
       if (bootstrapInFlightRef.current) return;
       if (accessContextRef.current?.accessMode === "local_owner") {
-        void bootstrap();
+        void bootstrap("renew");
         return;
       }
       setSession(null);
@@ -298,12 +304,33 @@ function ArtifactReview({
   readonly projects: readonly Project[];
   readonly session: Session;
 }) {
-  const initialLocation = useMemo(currentReviewLocation, []);
-  const initialProjectId = initialLocation.projectId
+  const [projectId, setProjectId] = useState(() => currentReviewLocation().projectId
     ?? projects.find((project) => project.archivedAt === null)?.id
     ?? projects[0]?.id
-    ?? "";
-  const [projectId, setProjectId] = useState(initialProjectId);
+    ?? "");
+  useEffect(() => {
+    const followProject = (): void => {
+      const named = currentReviewLocation().projectId;
+      if (named !== null) setProjectId(named);
+    };
+    window.addEventListener("popstate", followProject);
+    return () => window.removeEventListener("popstate", followProject);
+  }, []);
+  // A project switch mounts a fresh workspace: the catalog, its search and
+  // filters, the open record, and comments all belong to one project.
+  return <ProjectReview key={projectId} projectId={projectId} projects={projects} session={session} />;
+}
+
+function ProjectReview({
+  projectId,
+  projects,
+  session,
+}: {
+  readonly projectId: string;
+  readonly projects: readonly Project[];
+  readonly session: Session;
+}) {
+  const initialLocation = useMemo(currentReviewLocation, []);
   const [items, setItems] = useState<ArtifactPage["artifacts"]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
@@ -326,17 +353,30 @@ function ArtifactReview({
   const [catalogRefreshState, setCatalogRefreshState] = useState<CatalogRefreshState>(
     "idle",
   );
-  const [details, setDetails] = useState<ArtifactDetails | null>(null);
-  const [versions, setVersions] = useState<readonly VersionListItem[]>([]);
+  const [fetchedDetails, setDetails] = useState<ArtifactDetails | null>(null);
+  const [fetchedVersions, setVersions] = useState<readonly VersionListItem[]>([]);
+  // The record on screen is only ever the selected artifact's: while the next
+  // artifact loads, the previous one's details and versions are not shown.
+  const details = fetchedDetails?.artifact.id === selectedArtifactId ? fetchedDetails : null;
+  const versions = details === null ? noVersions : fetchedVersions;
+  const selectedArtifactRef = useRef(selectedArtifactId);
+  selectedArtifactRef.current = selectedArtifactId;
   const [actions, setActions] = useState<readonly ArtifactAction[]>([]);
   const [actionNextCursor, setActionNextCursor] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState<Error | null>(null);
+  // Opening Activity loads it once per artifact; an empty or failed history is not re-requested.
+  const [activityRequested, setActivityRequested] = useState(false);
   const [comparison, setComparison] = useState<ArtifactComparison | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<Error | null>(null);
   const [comparisonView, setComparisonView] = useState<ComparisonTab | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<ArtifactVersion | null>(null);
+  const [fetchedVersion, setSelectedVersion] = useState<ArtifactVersion | null>(null);
+  const selectedVersion = details !== null && fetchedVersion?.version.id === selectedVersionId
+    ? fetchedVersion
+    : null;
+  const fetchedVersionRef = useRef(fetchedVersion);
+  fetchedVersionRef.current = fetchedVersion;
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<Error | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
@@ -464,6 +504,8 @@ function ArtifactReview({
     searchQuery,
     versions.length,
   ]);
+  const catalogItemsRef = useRef(catalogItems);
+  catalogItemsRef.current = catalogItems;
   const selectedIndex = catalogItems.findIndex(
     ({artifact}) => artifact.id === selectedArtifactId,
   );
@@ -562,6 +604,8 @@ function ArtifactReview({
     let current = true;
     setActions([]);
     setActionNextCursor(null);
+    setActivityRequested(false);
+    setActivityError(null);
     setComparison(null);
     setDetailLoading(true);
     setDetailError(null);
@@ -597,7 +641,8 @@ function ArtifactReview({
   const refreshLinkedDetails = useCallback(async (): Promise<void> => {
     if (selectedArtifactId === null || projectId === "") return;
     try {
-      setDetails(await api.artifact(projectId, selectedArtifactId));
+      const refreshed = await api.artifact(projectId, selectedArtifactId);
+      if (selectedArtifactRef.current === selectedArtifactId) setDetails(refreshed);
     } catch {
       // Ambient freshness never replaces the last readable artifact state.
     }
@@ -610,13 +655,16 @@ function ArtifactReview({
 
   const loadActions = useCallback(async (cursor: string | null): Promise<void> => {
     if (selectedArtifactId === null || projectId === "") return;
+    const artifactId = selectedArtifactId;
     setActivityLoading(true);
     setActivityError(null);
     try {
-      const page = await api.actions(projectId, selectedArtifactId, cursor);
+      const page = await api.actions(projectId, artifactId, cursor);
+      if (selectedArtifactRef.current !== artifactId) return;
       setActions((current) => cursor === null ? page.actions : [...current, ...page.actions]);
       setActionNextCursor(page.nextCursor);
     } catch (caught) {
+      if (selectedArtifactRef.current !== artifactId) return;
       setActivityError(caught instanceof Error ? caught : new Error("Activity loading failed."));
     } finally {
       setActivityLoading(false);
@@ -624,24 +672,35 @@ function ArtifactReview({
   }, [projectId, selectedArtifactId]);
 
   useEffect(() => {
-    if (comparisonView === "activity" && actions.length === 0 && !activityLoading) {
+    if (comparisonView === "activity" && !activityRequested) {
+      setActivityRequested(true);
       void loadActions(null);
     }
-  }, [actions.length, activityLoading, comparisonView, loadActions]);
+  }, [activityRequested, comparisonView, loadActions]);
 
+  // Versions are immutable, so a refreshed record (the linked-source poll, a
+  // tag or access edit) keeps the version on screen; only a different version
+  // or a new current version re-resolves it.
+  const recordLoaded = details !== null;
+  const recordCurrent = details?.current ?? null;
+  const recordCurrentRef = useRef(recordCurrent);
+  recordCurrentRef.current = recordCurrent;
+  const recordCurrentVersionId = recordCurrent?.version.id ?? null;
   useEffect(() => {
     if (
-      details === null
+      !recordLoaded
       || selectedArtifactId === null
       || selectedVersionId === null
     ) {
       setSelectedVersion(null);
       return undefined;
     }
-    if (selectedVersionId === details.current.version.id) {
-      setSelectedVersion(details.current);
+    const currentVersion = recordCurrentRef.current;
+    if (currentVersion !== null && selectedVersionId === currentVersion.version.id) {
+      setSelectedVersion(currentVersion);
       return undefined;
     }
+    if (fetchedVersionRef.current?.version.id === selectedVersionId) return undefined;
     let current = true;
     setSelectedVersion(null);
     void (async () => {
@@ -662,7 +721,7 @@ function ArtifactReview({
     return () => {
       current = false;
     };
-  }, [details, projectId, selectedArtifactId, selectedVersionId]);
+  }, [projectId, recordCurrentVersionId, recordLoaded, selectedArtifactId, selectedVersionId]);
 
   useEffect(() => {
     const href = workspaceHref({
@@ -677,21 +736,23 @@ function ArtifactReview({
   }, [focusMode, projectId, selectedArtifactId, selectedPath, selectedVersionId]);
 
   useEffect(() => {
+    // Back, forward, and in-place links within this project. Another project
+    // remounts the workspace instead (see ArtifactReview), so the catalog,
+    // search, and filters are kept here. The project's own link names no
+    // artifact and opens its first one.
     const restoreLocation = (): void => {
       const restored = currentReviewLocation();
-      if (restored.projectId !== null) {
-        setCatalogKnownTags([]);
-        setCatalogTagFilters([]);
-        setProjectId(restored.projectId);
-      }
-      setSelectedArtifactId(restored.artifactId);
-      setSelectedVersionId(restored.versionId);
+      if (restored.projectId !== null && restored.projectId !== projectId) return;
+      const first = restored.artifactId === null ? catalogItemsRef.current[0]?.artifact ?? null : null;
+      setDetailError(null);
+      setSelectedArtifactId(restored.artifactId ?? first?.id ?? null);
+      setSelectedVersionId(restored.versionId ?? first?.currentVersionId ?? null);
       setSelectedPath(restored.path);
       setFocusMode(restored.view === "focus");
     };
     window.addEventListener("popstate", restoreLocation);
     return () => window.removeEventListener("popstate", restoreLocation);
-  }, []);
+  }, [projectId]);
 
   const openRawArtifact = async (): Promise<void> => {
     if (selectedArtifactId === null || selectedVersionId === null) return;
@@ -793,6 +854,16 @@ function ArtifactReview({
       ? {...item, artifact}
       : item));
   };
+  /** Show a record re-read after a mutation, unless the reviewer has moved to another artifact since. */
+  const showReloadedRecord = (
+    reloaded: ArtifactDetails,
+    reloadedVersions: readonly VersionListItem[],
+  ): boolean => {
+    if (selectedArtifactRef.current !== reloaded.artifact.id) return false;
+    setDetails(reloaded);
+    setVersions(reloadedVersions);
+    return true;
+  };
   const makeVersionCurrent = async (
     versionId: string,
     expectedCurrentVersionId: string,
@@ -812,8 +883,7 @@ function ArtifactReview({
         api.artifact(details.artifact.projectId, details.artifact.id),
         api.versions(details.artifact.projectId, details.artifact.id),
       ]);
-      setDetails(loadedDetails);
-      setVersions(loadedVersions);
+      showReloadedRecord(loadedDetails, loadedVersions);
       return true;
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
@@ -822,8 +892,7 @@ function ArtifactReview({
             api.artifact(details.artifact.projectId, details.artifact.id),
             api.versions(details.artifact.projectId, details.artifact.id),
           ]);
-          setDetails(loadedDetails);
-          setVersions(loadedVersions);
+          showReloadedRecord(loadedDetails, loadedVersions);
           updateArtifact(loadedDetails.artifact);
         } catch {
           // Keep the original conflict visible when refreshing pointer state fails.
@@ -871,9 +940,7 @@ function ArtifactReview({
         api.artifact(details.artifact.projectId, details.artifact.id),
         api.versions(details.artifact.projectId, details.artifact.id),
       ]);
-      setDetails(loadedDetails);
-      setVersions(loadedVersions);
-      setSelectedVersionId(captured.version.id);
+      if (showReloadedRecord(loadedDetails, loadedVersions)) setSelectedVersionId(captured.version.id);
       updateArtifact(loadedDetails.artifact);
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught : new Error("Linked artifact capture failed."));
@@ -947,6 +1014,8 @@ function ArtifactReview({
   const {setChromeHidden, setNavExpandable} = useShellLayout();
   useEffect(() => {
     setNavExpandable(docking.navExpandable && !focusMode);
+    // Other screens have no catalog or inspector competing for the width.
+    return () => setNavExpandable(true);
   }, [docking.navExpandable, focusMode, setNavExpandable]);
   useEffect(() => {
     // Full screen is a fixed layer inside the shell; the nav beneath it must not take focus.

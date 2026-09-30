@@ -5,7 +5,7 @@ import {Alert, Button, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {DesignGallery} from "@/ui/review-ui";
 
-import {libraryHref, navigateReview, workspaceHref} from "../review-routes.ts";
+import {libraryHref, navigateReview, workspaceHref, writeReviewHistory} from "../review-routes.ts";
 import {useViewportWidth} from "../workspace/use-viewport-size.ts";
 import {isPhoneWidth} from "../workspace/workspace-layout.ts";
 import {initialGalleryViewState, type GalleryViewState} from "../workspace/design-gallery.ts";
@@ -33,18 +33,15 @@ export function DesignLibraryScreen({
   readonly projectId: string | null;
   readonly projects: readonly Project[];
 }) {
-  const announce = useAnnounce();
-  const phone = isPhoneWidth(useViewportWidth());
   const project = projects.find((candidate) => candidate.id === projectId)
     ?? (projectId === null
       ? projects.find((candidate) => candidate.archivedAt === null) ?? projects[0]
       : undefined);
   const resolvedId = project?.id ?? null;
   useLayoutEffect(() => {
-    if (projectId === null && resolvedId !== null) window.history.replaceState(null, "", libraryHref(resolvedId));
+    // Tell the shell too, so its navigation marks the project this library shows.
+    if (projectId === null && resolvedId !== null) writeReviewHistory(libraryHref(resolvedId), "replace");
   }, [projectId, resolvedId]);
-  const {refresh, state} = useDesignLibrary(resolvedId);
-  const [, setRevision] = useState(0);
 
   if (project === undefined) {
     return (
@@ -54,6 +51,16 @@ export function DesignLibraryScreen({
       </div>
     );
   }
+  // Keyed by project: another project's galleries and refresh state never show here.
+  return <ProjectDesignLibrary key={project.id} project={project} />;
+}
+
+function ProjectDesignLibrary({project}: {readonly project: Project}) {
+  const announce = useAnnounce();
+  const phone = isPhoneWidth(useViewportWidth());
+  const {refresh, state} = useDesignLibrary(project.id);
+  const [, setRevision] = useState(0);
+
   if (state.status === "loading") {
     return (
       <div style={stateStyle}>

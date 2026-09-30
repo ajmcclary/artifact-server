@@ -9,6 +9,7 @@ import {
   type ThemeMode,
 } from "@/arkcase";
 import {
+  navigateReview,
   REVIEW_RETURN_URL_KEY,
   reviewQueueHref,
   reviewReturnHref,
@@ -70,14 +71,14 @@ export function AccountMenu({mode, rail, session}: AccountMenuProps) {
       ? {
         icon: "bi-arrow-left",
         label: "Back to review",
-        onClick: () => window.location.assign(
+        onClick: () => navigateReview(
           reviewReturnHref(readStored("session", REVIEW_RETURN_URL_KEY)),
         ),
       }
       : {
         icon: "bi-sliders",
         label: "Administration",
-        onClick: () => window.location.assign(
+        onClick: () => navigateReview(
           administrationHref(isInstallationAdministrator(principal)),
         ),
       },

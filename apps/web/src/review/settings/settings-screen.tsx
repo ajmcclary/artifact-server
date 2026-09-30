@@ -2,7 +2,7 @@ import {useEffect} from "react";
 
 import type {Project, Session} from "@/api/client";
 import {PageScaffold, SurfaceState} from "@/arkcase";
-import {reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
+import {navigateReview, reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
 import {MembersScreen} from "./members-screen.tsx";
@@ -52,6 +52,8 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
         <ProjectSettings
           canManage
           gitHistory={session.capabilities.gitHistory}
+          // One project's estimate, dialogs and pages never carry over to another.
+          key={view.projectId}
           onProjectsChanged={onProjectsChanged}
           projectId={view.projectId}
           projects={projects}
@@ -75,7 +77,7 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
  */
 function SettingsRedirect({href}: {readonly href: string}) {
   useEffect(() => {
-    window.location.replace(href);
+    navigateReview(href, {replace: true});
   }, [href]);
   return (
     <SurfaceState
@@ -106,7 +108,7 @@ function SettingsState({
         emptyIcon={icon}
         emptyTitle={title}
         noun="settings"
-        onAction={() => window.location.assign(reviewQueueHref())}
+        onAction={() => navigateReview(reviewQueueHref())}
         phase="ready"
         titleLevel={3}
         variant="dashed"

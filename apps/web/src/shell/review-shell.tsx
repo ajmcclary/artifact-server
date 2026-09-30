@@ -1,4 +1,4 @@
-import {type CSSProperties, type ReactNode, useState} from "react";
+import {type CSSProperties, type ReactNode, useEffect, useRef, useState} from "react";
 
 import type {Project, Session} from "@/api/client";
 import {
@@ -11,6 +11,8 @@ import {
   type NavItem,
 } from "@/arkcase";
 import {
+  inAppLinkTarget,
+  navigateReview,
   projectWorkspaceHref,
   REVIEW_RETURN_URL_KEY,
   reviewReturnHref,
@@ -97,13 +99,16 @@ function ReviewShellFrame({
   const expanded = layout.navExpandable && navPinned && (display.profile === "laptop" || display.profile === "desktop");
   const navTitle = mode === "admin" ? "Administration" : "Review and projects";
   const expandedWidth = Math.min(navigationWidth.maximum, Math.max(navigationWidth.minimum, navWidth ?? navigationWidth.defaultWidth));
+  const screenTitle = routeTitle(route, projects);
+  useInAppLinks();
+  useScreenChange(screenTitle, announce);
 
   const selectItem = (item: NavItem): void => {
     if (item.id === NEW_PROJECT_NAV_ID) {
       setCreateOpen(true);
       return;
     }
-    if (item.link !== undefined) window.location.assign(item.link);
+    if (item.link !== undefined) navigateReview(item.link);
   };
   const changePin = (next: boolean): void => {
     setNavPinned(next);
@@ -199,7 +204,10 @@ function ReviewShellFrame({
         <CreateProjectModal
           onClose={() => setCreateOpen(false)}
           onCreate={onCreateProject}
-          onCreated={(project) => window.location.assign(projectWorkspaceHref(project.id))}
+          onCreated={(project) => {
+            setCreateOpen(false);
+            navigateReview(projectWorkspaceHref(project.id));
+          }}
           open={createOpen}
         />
       </AppShell>
@@ -207,4 +215,77 @@ function ReviewShellFrame({
       <ReviewPaletteHost projects={projects} />
     </ShellNavigationProvider>
   );
+}
+
+/**
+ * Open plain clicks on application links in place. Links rendered by the
+ * design system and the screens stay real anchors, so a modified click, a new
+ * tab, and copying the address all keep working.
+ */
+function useInAppLinks(): void {
+  useEffect(() => {
+    const openInPlace = (event: MouseEvent): void => {
+      const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      const href = inAppLinkTarget(event, anchor);
+      if (href === null) return;
+      event.preventDefault();
+      navigateReview(href);
+    };
+    document.addEventListener("click", openInPlace);
+    return () => document.removeEventListener("click", openInPlace);
+  }, []);
+}
+
+/**
+ * Name the document for history and tabs. After a navigation (a link, the
+ * palette, or back and forward) lands on another screen, start that screen at
+ * its top and announce it; a URL the current screen rewrites for itself, such
+ * as the workspace naming its first artifact, is not a new screen.
+ */
+function useScreenChange(title: string, announce: (message: string) => void): void {
+  const navigated = useRef(false);
+  const previousTitle = useRef(title);
+  useEffect(() => {
+    const noteNavigation = (): void => {
+      navigated.current = true;
+    };
+    window.addEventListener("popstate", noteNavigation);
+    return () => window.removeEventListener("popstate", noteNavigation);
+  }, []);
+  useEffect(() => {
+    document.title = `${title} · Artifact Server`;
+    if (navigated.current && previousTitle.current !== title) {
+      document.querySelector("main")?.scrollTo({top: 0});
+      announce(title);
+    }
+    previousTitle.current = title;
+  }, [announce, title]);
+  // A navigation that re-renders without changing screens is spent here.
+  useEffect(() => {
+    navigated.current = false;
+  });
+}
+
+const settingsTitles = {
+  apiKeys: "API keys",
+  mcp: "MCP & WebMCP",
+  members: "Members",
+  notFound: "Page not found",
+  project: "Project settings",
+  projects: "Review queue",
+  publicLinks: "Public links",
+  webmcp: "MCP & WebMCP",
+} as const;
+
+function routeTitle(route: ReviewRoute, projects: readonly Project[]): string {
+  const projectName = (projectId: string | null): string | null =>
+    projects.find((project) => project.id === projectId)?.name ?? null;
+  if (route.kind === "queue") return "Review queue";
+  if (route.kind === "settings") return settingsTitles[route.settings.kind];
+  if (route.kind === "library") {
+    const name = projectName(route.projectId);
+    return name === null ? "Design library" : `Design library · ${name}`;
+  }
+  return projectName(route.location.projectId) ?? "Review";
 }

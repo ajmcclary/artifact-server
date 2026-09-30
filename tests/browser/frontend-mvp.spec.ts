@@ -1460,16 +1460,24 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
-  test("local-owner session expiry with a modal open signs in again and leaves no portal, scroll lock or inert sibling", async ({browser}) => {
+  test("local-owner session expiry with a modal open signs in again in place, keeps the modal's input, and leaves no portal, scroll lock or inert sibling", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await localLogin(fixture);
       const page = fixture.page;
       await page.getByRole("button", {name: "New project"}).click();
-      await expect(page.getByRole("dialog", {name: "New project"})).toBeVisible();
+      const dialog = page.getByRole("dialog", {name: "New project"});
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("textbox").fill("Half-typed project");
+      const renewed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/session");
       await page.evaluate(() => window.dispatchEvent(new Event("artifact-session-expired")));
+      expect((await renewed).status()).toBe(200);
+      // Renewal keeps the screen mounted: no loading gate, and the reviewer's input survives.
+      await expect(page.getByText("Loading Artifact Server")).toHaveCount(0);
+      await expect(dialog.getByRole("textbox")).toHaveValue("Half-typed project");
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
       await expect(page.getByRole("link", {name: "Artifact Server"})).toBeVisible();
-      await expect(page.getByRole("dialog", {name: "New project"})).toHaveCount(0);
       expect(await page.evaluate(() => ({
         inert: document.querySelectorAll("body > [inert]").length,
         overflow: document.body.style.overflow,

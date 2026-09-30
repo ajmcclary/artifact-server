@@ -31,13 +31,19 @@ export type LibraryState =
 // Kept for the session so browser Back returns to the same moving view without refetching.
 const loadedLibraries = new Map<string, LoadedLibrary>();
 
-async function loadLibrary(projectId: string): Promise<LoadedLibrary> {
+/**
+ * Read one project's galleries; null once `wanted` turns false. The screen can
+ * be left in place now, so an abandoned read stops issuing requests instead of
+ * finishing hundreds nobody will see.
+ */
+async function loadLibrary(projectId: string, wanted: () => boolean): Promise<LoadedLibrary | null> {
   const artifacts: {readonly id: string; readonly name: string}[] = [];
   let cursor: string | null = null;
   let pages = 0;
   do {
     // eslint-disable-next-line no-await-in-loop -- each page names the next cursor
     const page = await api.artifacts(projectId, cursor, []);
+    if (!wanted()) return null;
     artifacts.push(...page.artifacts.map(({artifact}) => ({id: artifact.id, name: artifact.name})));
     cursor = page.nextCursor;
     pages += 1;
@@ -45,6 +51,7 @@ async function loadLibrary(projectId: string): Promise<LoadedLibrary> {
   const limit = createRequestLimiter(concurrentReads);
   const failures: string[] = [];
   const read = await Promise.all(artifacts.map((artifact) => limit(async (): Promise<LibrarySource | null> => {
+    if (!wanted()) return null;
     try {
       const details = await api.artifact(projectId, artifact.id);
       const entry = previewIndexEntry(details.current.manifest);
@@ -68,6 +75,7 @@ async function loadLibrary(projectId: string): Promise<LoadedLibrary> {
       return null;
     }
   })));
+  if (!wanted()) return null;
   return {
     failures: failures.toSorted((left, right) => left.localeCompare(right)),
     loadedAt: new Date(),
@@ -102,9 +110,10 @@ export function useDesignLibrary(projectId: string | null): DesignLibraryHandle 
     setState({status: "loading"});
     void (async () => {
       try {
-        const library = await loadLibrary(projectId);
+        const library = await loadLibrary(projectId, () => current);
+        if (library === null) return;
         loadedLibraries.set(projectId, library);
-        if (current) setState({status: "ready", library});
+        setState({status: "ready", library});
       } catch (caught) {
         if (current) setState({status: "failed", message: caught instanceof Error ? caught.message : "The design library could not be read."});
       }

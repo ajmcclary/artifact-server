@@ -171,11 +171,49 @@ function parsePathSegment(segment: string | undefined): string | null {
 }
 
 /**
- * Move to another review location without a document load. The workspace and
- * the application route both re-read `window.location` on popstate, which is
- * the same path the browser's own back and forward take.
+ * Move to another application screen without a document load. The workspace
+ * and the application route both re-read `window.location` on popstate, which
+ * is the same path the browser's own back and forward take. Moving to the URL
+ * already shown adds no history entry.
  */
-export function navigateReview(href: string): void {
-  window.history.pushState(null, "", href);
+export function navigateReview(
+  href: string,
+  options: {readonly replace?: boolean} = {},
+): void {
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (options.replace === true || href === current) {
+    window.history.replaceState(null, "", href);
+  } else {
+    window.history.pushState(null, "", href);
+  }
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/** Whether one same-origin pathname is a screen of this application rather than a document or API URL. */
+export function isApplicationPath(pathname: string): boolean {
+  return pathname === "/review" || pathname.startsWith("/review/");
+}
+
+/**
+ * The in-application href a plain primary click on `anchor` should open in
+ * place, or null when the browser must handle it: modified or non-primary
+ * clicks, new-tab or download links, other origins, and non-application paths
+ * (sign-in, APIs, artifact content) keep their native document navigation.
+ */
+export function inAppLinkTarget(event: MouseEvent, anchor: HTMLAnchorElement): string | null {
+  if (
+    event.defaultPrevented
+    || event.button !== 0
+    || event.metaKey
+    || event.ctrlKey
+    || event.shiftKey
+    || event.altKey
+    || anchor.hasAttribute("download")
+    || (anchor.target !== "" && anchor.target !== "_self")
+  ) {
+    return null;
+  }
+  const url = new URL(anchor.href, window.location.href);
+  if (url.origin !== window.location.origin || !isApplicationPath(url.pathname)) return null;
+  return `${url.pathname}${url.search}`;
 }
