@@ -7,6 +7,8 @@
  * document and the sandbox below it follow the shell's theme.
  */
 @import "@plannotator/ui/styles.css";
+/* ArkCase faces for the viewer chrome; same-origin woff2, allowed by font-src 'self'. */
+@import "../arkcase/tokens/fonts.css";
 
 html,
 body,

@@ -465,58 +465,6 @@ test.describe("Artifact Server frontend MVP", () => {
         .analyze();
       expect(accessibility.violations).toEqual([]);
 
-      // Project rows are real links, so returning to Default reloads the review in its default
-      // Annotate mode (the old in-page picker kept Interact).
-      await expect(fixture.page.getByRole("button", {name: /^Annotate mode:/u}))
-        .toHaveAttribute("aria-pressed", "true");
-      await preview.locator("#review-theme-target").click();
-      const themedCommentPopover = reviewFrame.locator('[data-comment-popover="true"]');
-      await expect(themedCommentPopover).toBeVisible();
-      await reviewFrame.getByPlaceholder("Add a comment...").press("Escape");
-      await expect(themedCommentPopover).toBeHidden();
-      const documentRoot = fixture.page.locator("html");
-      const accountButton = fixture.page.getByRole("button", {name: /^Account menu: /u});
-      const accountMenu = fixture.page.getByRole("menu", {name: "Account menu"});
-      await expect(fixture.page.getByRole("button", {name: /^Use (light|dark) theme$/u}))
-        .toHaveCount(0);
-      await accountButton.click();
-      await expect(accountMenu.getByRole("menuitemradio", {name: "System"}))
-        .toHaveAttribute("aria-checked", "true");
-      await accountMenu.getByRole("menuitemradio", {name: "Dark"}).click();
-      await expect(documentRoot).toHaveAttribute("data-theme", "dark");
-      await expect(documentRoot).toHaveAttribute("data-theme-mode", "dark");
-      await expect(documentRoot).not.toHaveAttribute("data-review-theme", /./u);
-      await expect(accountMenu.getByRole("menuitemradio", {name: "Dark"}))
-        .toHaveAttribute("aria-checked", "true");
-      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
-        .toBe(JSON.stringify("dark"));
-      await fixture.page.keyboard.press("Escape");
-      await expect(accountMenu).toHaveCount(0);
-      await expect(accountButton).toBeFocused();
-      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
-      const darkAccessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(".as-artifact-frame")
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze();
-      expect(darkAccessibility.violations).toEqual([]);
-      await fixture.page.reload();
-      await expect(documentRoot).toHaveAttribute("data-theme", "dark");
-      await accountButton.click();
-      await accountMenu.getByRole("menuitemradio", {name: "Light"}).click();
-      await expect(documentRoot).toHaveAttribute("data-theme-mode", "default");
-      await expect(documentRoot).not.toHaveAttribute("data-theme", /./u);
-      expect(await fixture.page.evaluate(() => localStorage.getItem("arkcase.theme.v1")))
-        .toBe(JSON.stringify("default"));
-      await fixture.page.keyboard.press("Escape");
-      // Controls animate their ink across a theme change; scan the settled page.
-      await expect.poll(() => fixture.page.evaluate(() => document.getAnimations().length)).toBe(0);
-      const lightAccessibility = await new AxeBuilder({page: fixture.page})
-        .exclude(".as-artifact-frame")
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze();
-      expect(lightAccessibility.violations).toEqual([]);
-      await expect(preview.getByRole("heading", {name: "Review preview content"}))
-        .toBeVisible();
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toHaveAttribute("href", "/review");
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))

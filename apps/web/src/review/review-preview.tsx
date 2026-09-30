@@ -7,7 +7,9 @@ import {
   type ArtifactVersion,
 } from "@/api/client";
 import {maximumReviewHtmlBytes} from "@/api/bounded-text";
+import {onThemeChange} from "@/arkcase";
 import {formatBytes} from "@/lib/presentation";
+import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 import {
   frameMessageSchema,
   reviewProtocolVersion,
@@ -44,7 +46,6 @@ export function ReviewPreview({
   annotations,
   artifactId,
   artifactName,
-  isLight,
   isCurrentVersion,
   onOpenRawArtifact,
   onAnnotateModeChange,
@@ -64,7 +65,6 @@ export function ReviewPreview({
   readonly annotations: readonly ReviewAnnotation[];
   readonly artifactId: string;
   readonly artifactName: string;
-  readonly isLight: boolean;
   readonly isCurrentVersion: boolean;
   readonly onOpenRawArtifact: () => void;
   readonly onAnnotateModeChange: (active: boolean) => void;
@@ -137,7 +137,6 @@ export function ReviewPreview({
         annotations={annotations}
         artifactId={artifactId}
         entry={entry}
-        isLight={isLight}
         isCurrentVersion={isCurrentVersion}
         key={identity}
         onAnnotateModeChange={onAnnotateModeChange}
@@ -217,7 +216,6 @@ function HtmlPreview({
   annotations,
   artifactId,
   entry,
-  isLight,
   isCurrentVersion,
   onAnnotateModeChange,
   onSelectAnnotation,
@@ -235,7 +233,6 @@ function HtmlPreview({
   readonly annotations: readonly ReviewAnnotation[];
   readonly artifactId: string;
   readonly entry: PreviewEntry;
-  readonly isLight: boolean;
   readonly isCurrentVersion: boolean;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
@@ -258,6 +255,8 @@ function HtmlPreview({
   const [error, setError] = useState<Error | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const initialisedRef = useRef(false);
+  const [themeRevision, setThemeRevision] = useState(0);
+  useEffect(() => onThemeChange(() => setThemeRevision((revision) => revision + 1)), []);
 
   const postToFrame = useCallback((message: HostMessage): void => {
     const frame = frameRef.current?.contentWindow;
@@ -378,13 +377,13 @@ function HtmlPreview({
       baseHref: previewDocument.baseHref,
       entryPath: previewDocument.entryPath,
       html: previewDocument.html,
-      isLight,
+      isLight: frameIsLight(),
       readOnly,
-      themeTokens: reviewThemeTokens(),
+      themeTokens: arkcaseFrameTokens(),
       type: "as-review-init",
       v: reviewProtocolVersion,
     });
-  }, [annotateModeActive, annotations, frameReady, isLight, mode, postToFrame, previewDocument, readOnly]);
+  }, [annotateModeActive, annotations, frameReady, mode, postToFrame, previewDocument, readOnly]);
 
   useEffect(() => {
     if (!initialisedRef.current) return;
@@ -397,16 +396,17 @@ function HtmlPreview({
 
   useEffect(() => {
     if (!initialisedRef.current) return undefined;
+    // Wait one frame so the shell's new data-theme has restyled :root.
     const frame = window.requestAnimationFrame(() => {
       postToFrame({
-        isLight,
-        themeTokens: reviewThemeTokens(),
+        isLight: frameIsLight(),
+        themeTokens: arkcaseFrameTokens(),
         type: "as-review-theme",
         v: reviewProtocolVersion,
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [isLight, postToFrame]);
+  }, [postToFrame, themeRevision]);
 
   useEffect(() => {
     if (!initialisedRef.current) return;
@@ -628,41 +628,6 @@ function NativeMediaPreview({
 
 function mediaTypeEssence(mediaType: string): string {
   return mediaType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-}
-
-function reviewThemeTokens() {
-  const style = getComputedStyle(document.documentElement);
-  const value = (name: string): string => style.getPropertyValue(name).trim();
-  return {
-    "--accent": value("--as-surface-raised"),
-    "--accent-foreground": value("--as-text"),
-    "--background": value("--as-surface"),
-    "--border": value("--as-border"),
-    "--card": value("--as-surface"),
-    "--card-foreground": value("--as-text"),
-    "--code-bg": value("--as-canvas"),
-    "--destructive": value("--as-love"),
-    "--destructive-foreground": value("--as-canvas"),
-    "--focus-highlight": value("--as-iris-soft"),
-    "--font-mono": '"Atkinson Hyperlegible Mono", ui-monospace, monospace',
-    "--font-sans": '"Atkinson Hyperlegible Next", ui-sans-serif, sans-serif',
-    "--foreground": value("--as-text"),
-    "--input": value("--as-border"),
-    "--muted": value("--as-surface-raised"),
-    "--muted-foreground": value("--as-subtle"),
-    "--popover": value("--as-surface-raised"),
-    "--popover-foreground": value("--as-text"),
-    "--primary": value("--as-action"),
-    "--primary-foreground": value("--as-on-action"),
-    "--radius": "0.75rem",
-    "--ring": value("--as-iris"),
-    "--secondary": value("--as-foam"),
-    "--secondary-foreground": value("--as-canvas"),
-    "--success": value("--as-pine"),
-    "--success-foreground": value("--as-canvas"),
-    "--warning": value("--as-gold"),
-    "--warning-foreground": value("--as-canvas"),
-  };
 }
 
 function TerminalPreviewState({

@@ -64,7 +64,6 @@ import type {
 } from "./workspace/workspace-types.ts";
 import {useShellLayout} from "@/shell/shell-layout-context";
 import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
-import {useThemeMode} from "@/theme/use-theme-mode";
 import {
   useReviewComments,
   ReviewCommentsInspector,
@@ -279,7 +278,6 @@ function ArtifactReview({
   readonly projects: readonly Project[];
   readonly session: Session;
 }) {
-  const {theme: appearance} = useThemeMode();
   const initialLocation = useMemo(currentReviewLocation, []);
   const initialProjectId = initialLocation.projectId
     ?? projects.find((project) => project.archivedAt === null)?.id
@@ -1321,7 +1319,6 @@ function ArtifactReview({
                 annotations={comments.annotations}
                 artifactId={selectedArtifactId}
                 artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
-                isLight={appearance !== "dark"}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 onOpenRawArtifact={() => void openRawArtifact()}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}

@@ -41,6 +41,11 @@ export function isolatedReviewFrame(page: Page): FrameLocator {
   return page.frameLocator(".as-artifact-frame");
 }
 
+/** The `/review-frame` document itself: the annotation viewer around the artifact. */
+export function annotationFrame(page: Page): FrameLocator {
+  return isolatedReviewFrame(page);
+}
+
 /** The artifact's own document, inside the isolated review frame. */
 export function previewFrame(page: Page): FrameLocator {
   return isolatedReviewFrame(page).frameLocator("iframe");
