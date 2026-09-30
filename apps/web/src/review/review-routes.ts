@@ -9,6 +9,27 @@ export type SettingsRoute =
   | {readonly kind: "publicLinks"}
   | {readonly kind: "notFound"};
 
+/** The project, artifact, version, file, and view a review URL names; null means not named. */
+export interface ReviewLocation {
+  readonly artifactId: string | null;
+  readonly path: string | null;
+  readonly projectId: string | null;
+  readonly versionId: string | null;
+  readonly view: "focus" | null;
+}
+
+/** The screen one application URL resolves to. */
+export type ReviewRoute =
+  | {readonly kind: "queue"}
+  | {readonly kind: "settings"; readonly settings: SettingsRoute}
+  | {readonly kind: "workspace"; readonly location: ReviewLocation};
+
+/** Session-storage key holding the last review workspace URL that "Back to review" returns to. */
+export const REVIEW_RETURN_URL_KEY = "artifact-review-return-url";
+
+/** Window event fired after the application rewrites the review URL without a document load. */
+export const REVIEW_LOCATION_EVENT = "artifact-review-location-changed";
+
 /** Return whether the current document path belongs to the settings mode. */
 export function isSettingsPath(pathname: string): boolean {
   return pathname === "/review/settings"
@@ -49,6 +70,75 @@ export function parseSettingsRoute(pathname: string): SettingsRoute {
       : {kind: "project", projectId};
   }
   return {kind: "notFound"};
+}
+
+/** Resolve one application URL to its screen. Bare `/review` is the review queue. */
+export function parseReviewRoute(url: URL): ReviewRoute {
+  if (isSettingsPath(url.pathname)) {
+    return {kind: "settings", settings: parseSettingsRoute(url.pathname)};
+  }
+  const location = readReviewLocation(url.searchParams);
+  return location.projectId === null && location.artifactId === null
+    ? {kind: "queue"}
+    : {kind: "workspace", location};
+}
+
+/** Read the review location one query string names. */
+export function readReviewLocation(search: URLSearchParams): ReviewLocation {
+  return {
+    artifactId: search.get("artifact"),
+    path: search.get("path"),
+    projectId: search.get("project"),
+    versionId: search.get("version"),
+    view: search.get("view") === "focus" ? "focus" : null,
+  };
+}
+
+/** The review queue's canonical URL. */
+export function reviewQueueHref(): string {
+  return "/review";
+}
+
+/** Build the canonical review URL for one location, in project, artifact, version, path, view order. */
+export function workspaceHref(location: ReviewLocation): string {
+  const search = new URLSearchParams();
+  if (location.projectId !== null && location.projectId !== "") {
+    search.set("project", location.projectId);
+  }
+  if (location.artifactId !== null) search.set("artifact", location.artifactId);
+  if (location.versionId !== null) search.set("version", location.versionId);
+  if (location.path !== null) search.set("path", location.path);
+  if (location.view !== null) search.set("view", location.view);
+  return search.size === 0 ? reviewQueueHref() : `/review?${search}`;
+}
+
+/** The URL that opens one project's workspace on its first artifact. */
+export function projectWorkspaceHref(projectId: string): string {
+  return workspaceHref({
+    artifactId: null,
+    path: null,
+    projectId,
+    versionId: null,
+    view: null,
+  });
+}
+
+/** The stored review URL when it names a review workspace, otherwise the queue. */
+export function reviewReturnHref(stored: string | null): string {
+  if (stored !== null && (stored === "/review" || stored.startsWith("/review?"))) {
+    return stored;
+  }
+  return reviewQueueHref();
+}
+
+/** Rewrite the review URL in place and tell the shell the location changed. */
+export function writeReviewHistory(href: string, entry: "push" | "replace"): void {
+  if (entry === "push") {
+    window.history.pushState(null, "", href);
+  } else {
+    window.history.replaceState(null, "", href);
+  }
+  window.dispatchEvent(new Event(REVIEW_LOCATION_EVENT));
 }
 
 /** Build the canonical settings URL for one project. */
