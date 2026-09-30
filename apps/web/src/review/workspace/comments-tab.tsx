@@ -274,10 +274,7 @@ export function CommentsTab({
   }
 
   return (
-    // Interim: the old .as-comments rule keeps the not-yet-restyled send buttons in sentence case
-    // until Task 15 moves the dispatch controls onto the DS.
-    <div className="as-comments" style={tabStyle}>
-      {dispatchUndo.element}
+    <div style={tabStyle}>
       <section aria-label="Agents" style={agentsStyle}>
         <div style={agentsSummaryStyle}>
           <strong>Agents</strong>
@@ -293,7 +290,7 @@ export function CommentsTab({
           <SendToAgentControl
             agents={agents}
             buttonSize="xs"
-            buttonVariant="default"
+            buttonVariant="primary"
             feedback={dispatchUndo.feedback}
             label={`Send all open (${openThreads.length})…`}
             onSent={onSent}

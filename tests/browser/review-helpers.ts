@@ -143,3 +143,12 @@ export async function openComparison(page: Page, tab: "Compare" | "Activity"): P
   await control.click();
   await expect(control).toHaveAttribute("aria-selected", "true");
 }
+
+/**
+ * One toast in the DS ToastRegion. Scoped to the drawn toast so the region's
+ * visually hidden live-region copy of the same sentence never makes the
+ * locator ambiguous.
+ */
+export function toast(page: Page, text: string | RegExp): Locator {
+  return page.locator("[data-ak-toast-region] [data-ak-toast-motion]").filter({hasText: text});
+}

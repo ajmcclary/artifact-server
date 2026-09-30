@@ -1,5 +1,5 @@
 import type {AgentDispatchState} from "@/api/client";
-import {StatusBadge} from "@/components/product";
+import {StatusPill} from "@/arkcase";
 
 const stateLabels = {
   addressed: "Addressed",
@@ -18,14 +18,13 @@ export function dispatchIsCancelable(state: AgentDispatchState): boolean {
 /** Delivery state of the send that carried one annotation away. */
 export function DispatchStateChip({state}: {readonly state: AgentDispatchState}) {
   return (
-    <StatusBadge
+    <StatusPill
+      label={stateLabels[state]}
       tone={state === "failed" || state === "canceled"
         ? "danger"
         : state === "addressed"
           ? "neutral"
           : "primary"}
-    >
-      {stateLabels[state]}
-    </StatusBadge>
+    />
   );
 }

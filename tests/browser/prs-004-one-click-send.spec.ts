@@ -15,7 +15,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview} from "./review-helpers.js";
+import {openInspectorTab, openReview, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml =
@@ -102,7 +102,7 @@ test.describe("PRS-004 one-click send and undo", () => {
       // One click, no dialog: the primary button names its destination and
       // sends every open comment on the exact version.
       await page.getByRole("button", {name: "Send all open (2) to solo"}).click();
-      await expect(page.getByText("Sent 2 threads to solo")).toBeVisible();
+      await expect(toast(page, "Sent 2 threads to solo")).toBeVisible();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(cards).toHaveCount(0);
 
@@ -116,9 +116,9 @@ test.describe("PRS-004 one-click send and undo", () => {
       expect(queued?.state).toBe("queued");
 
       // Undo while the send is still queued: the annotation comes back.
-      await page.getByRole("button", {name: "Undo"}).click();
+      await toast(page, "Sent 2 threads to solo").getByRole("button", {name: "Undo"}).click();
       await expect(
-        page.getByText("Send canceled — the annotations are back."),
+        toast(page, "Send canceled — the annotations are back."),
       ).toBeVisible();
       await expect(cards).toHaveCount(2);
       // The undo really canceled the dispatch on the server.
@@ -134,7 +134,7 @@ test.describe("PRS-004 one-click send and undo", () => {
       // delivered refuses the undo, and says so.
       await cards.filter({hasText: bodies.second})
         .getByRole("button", {name: "Send to solo"}).click();
-      await expect(page.getByText("Sent 1 thread to solo")).toBeVisible();
+      await expect(toast(page, "Sent 1 thread to solo")).toBeVisible();
       const claimed = await agent.client.claim(agent.agentId, 2);
       expect(claimed.status).toBe(200);
       const delivered =
@@ -142,8 +142,8 @@ test.describe("PRS-004 one-click send and undo", () => {
       expect(
         (await agent.client.reportDelivered(delivered.id, agent.agentId)).status,
       ).toBe(200);
-      await page.getByRole("button", {name: "Undo"}).click();
-      await expect(page.getByText(/Too late to undo/)).toBeVisible();
+      await toast(page, "Sent 1 thread to solo").getByRole("button", {name: "Undo"}).click();
+      await expect(toast(page, /Too late to undo/)).toBeVisible();
       // The conflict is honest: the delivered dispatch was not re-canceled.
       const conflicted = dispatchEnvelopeSchema.parse(
         await (await owner.getDispatch(delivered.id, "prj_default")).json(),

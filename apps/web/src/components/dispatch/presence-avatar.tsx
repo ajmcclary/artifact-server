@@ -1,18 +1,12 @@
-import { useState, type CSSProperties } from "react";
+import {useState, type CSSProperties} from "react";
 
-import type { AgentPresence } from "@/api/client";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { formatRelativeTime } from "@/lib/presentation";
+import type {AgentPresence} from "@/api/client";
+import {Avatar, FieldGrid, Popover} from "@/arkcase";
+import {formatRelativeTime} from "@/lib/presentation";
 import opencodeGlyphUrl from "@/review/assets/agents/opencode-dark.svg";
 import piGlyphUrl from "@/review/assets/agents/pi.svg";
+
+import "./presence.css";
 
 /**
  * What the avatar's ring says about the agent right now.
@@ -42,7 +36,7 @@ const brandByKind = new Map<string, AgentBrand>([
   [
     "pi",
     {
-      accent: "var(--foreground)",
+      accent: "var(--text-body)",
       glyphUrl: piGlyphUrl,
       tile: "oklch(0.205 0 0)",
     },
@@ -50,7 +44,7 @@ const brandByKind = new Map<string, AgentBrand>([
   [
     "opencode",
     {
-      accent: "var(--foreground)",
+      accent: "var(--text-body)",
       glyphUrl: opencodeGlyphUrl,
       tile: "oklch(0.205 0 0)",
     },
@@ -58,9 +52,9 @@ const brandByKind = new Map<string, AgentBrand>([
 ]);
 
 const neutralBrand: AgentBrand = {
-  accent: "var(--muted-foreground)",
+  accent: "var(--text-secondary)",
   glyphUrl: null,
-  tile: "var(--muted-foreground)",
+  tile: "var(--text-secondary)",
 };
 
 function agentBrand(kind: string): AgentBrand {
@@ -110,15 +104,17 @@ function ringHandled(value: never): never {
   throw new Error(`Unhandled presence ring: ${String(value)}`);
 }
 
-const avatarSizes = {
-  md: "size-8",
-  sm: "size-5",
-} as const;
+const glyphPixels = {md: 32, sm: 20} as const;
 
-const glyphSizes = {
-  md: "size-4",
-  sm: "size-2.5",
-} as const;
+const avatarButtonStyle = {
+  background: "transparent",
+  border: 0,
+  borderRadius: "50%",
+  cursor: "default",
+  display: "inline-flex",
+  padding: 0,
+} satisfies CSSProperties;
+const sentenceStyle = {color: "var(--text-secondary)", fontSize: "var(--font-size-xs, 12px)", margin: 0} satisfies CSSProperties;
 
 /**
  * The bare presence circle: the agent's brand mark ringed by its state.
@@ -126,80 +122,40 @@ const glyphSizes = {
  * `PresenceAvatar`, which adds the explaining popover.
  */
 export function PresenceGlyph({
-  className,
   kind,
   ring,
   size = "sm",
 }: {
-  readonly className?: string;
   readonly kind: string;
   readonly ring: PresenceRing;
-  readonly size?: keyof typeof avatarSizes;
+  readonly size?: keyof typeof glyphPixels;
 }) {
   const brand = agentBrand(kind);
-  const accentStyle: CSSProperties & Record<"--presence-accent", string> = {
+  const pixels = glyphPixels[size];
+  const glyphStyle: CSSProperties & Record<"--presence-accent", string> = {
     "--presence-accent": brand.accent,
+    height: pixels,
+    width: pixels,
   };
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "relative inline-flex shrink-0 rounded-full",
-        avatarSizes[size],
-        className,
-      )}
-      data-presence-ring={ring}
-      style={accentStyle}
-    >
-      <span className={cn("presence-ring", `presence-ring-${ring}`)} />
-      <span
-        className={cn(
-          "absolute inset-[3px] flex items-center justify-center overflow-hidden rounded-full",
-          ring === "disconnected" && "opacity-50 grayscale",
+    <span aria-hidden="true" className="presence-glyph" data-presence-ring={ring} style={glyphStyle}>
+      <span className={`presence-ring presence-ring-${ring}`} />
+      <span className="presence-tile" style={{background: brand.tile}}>
+        {brand.glyphUrl === null ? (
+          <Avatar color={brand.tile} initials={kind.slice(0, 1).toUpperCase()} name={kind} size={pixels - 6} />
+        ) : (
+          <img alt="" src={brand.glyphUrl} style={{height: pixels / 2, width: pixels / 2}} />
         )}
-        style={{ background: brand.tile }}
-      >
-        {brand.glyphUrl === null
-          ? (
-            <span className="text-[0.5rem] leading-none font-semibold text-background">
-              {kind.slice(0, 1).toUpperCase()}
-            </span>
-          )
-          : <img alt="" className={glyphSizes[size]} src={brand.glyphUrl} />}
       </span>
     </span>
   );
 }
 
 /**
- * The live line under a Sent thread's state pill: the agent's avatar plus
- * "working…" or "replying…". Rendered only while the agent is actually on a
- * live state; when the reply lands, the poll replaces this line with it.
- */
-export function AgentActivityLine({
-  agent,
-  now,
-}: {
-  readonly agent: AgentPresence;
-  readonly now: number;
-}) {
-  const ring = presenceRing(agent);
-  if (ring !== "replying" && ring !== "working") return null;
-  return (
-    <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-      <PresenceAvatar agent={agent} now={now} />
-      <span>
-        {`${agent.displayName} is ${ring === "replying" ? "replying…" : "working…"}`}
-      </span>
-    </p>
-  );
-}
-
-/**
- * One agent's presence as an avatar whose ring is the state signal: solid
- * when idle, pulsing while working, spinning while replying, hollow and grey
- * when disconnected. Hovering or keyboard-focusing it opens a popover that
- * says the state in words, so color and motion never carry the meaning alone.
+ * One agent's presence as an avatar whose ring is the state signal. Hovering
+ * or keyboard-focusing it opens a popover that says the state in words, so
+ * color and motion never carry the meaning alone. The popover never takes
+ * focus, so a returned focus cannot reopen what the pointer just left.
  */
 export function PresenceAvatar({
   agent,
@@ -208,63 +164,42 @@ export function PresenceAvatar({
 }: {
   readonly agent: AgentPresence;
   readonly now: number;
-  readonly size?: keyof typeof avatarSizes;
+  readonly size?: keyof typeof glyphPixels;
 }) {
   const [open, setOpen] = useState(false);
   const ring = presenceRing(agent);
   return (
-    <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger
-        aria-label={`${agent.displayName} — ${ringHeadings[ring]}`}
-        className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        onBlur={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        type="button"
-      >
-        <PresenceGlyph kind={agent.kind} ring={ring} size={size} />
-      </PopoverTrigger>
-      {/*
-        The popover is an explanation, not a destination: it must never steal
-        focus on open nor push focus back on close — a returned focus would
-        refire the trigger's onFocus and reopen what the pointer just left.
-      */}
-      <PopoverContent
-        align="start"
-        className="w-80 gap-2"
-        finalFocus={false}
-        initialFocus={false}
-      >
-        <PopoverHeader>
-          <PopoverTitle>{agent.displayName}</PopoverTitle>
-          <PopoverDescription>
-            {presenceSentence(agent, ring, now)}
-          </PopoverDescription>
-        </PopoverHeader>
-        <dl className="grid gap-1 text-xs text-muted-foreground">
-          <div className="flex justify-between gap-3">
-            <dt className="shrink-0 font-semibold tracking-wide uppercase">
-              Agent
-            </dt>
-            <dd>{agent.kind}</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="shrink-0 font-semibold tracking-wide uppercase">
-              Last seen
-            </dt>
-            <dd>{formatRelativeTime(agent.lastSeenAt, now)}</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="shrink-0 font-semibold tracking-wide uppercase">
-              Working directory
-            </dt>
-            <dd className="min-w-0 font-mono break-all">
-              {agent.workingDirectory}
-            </dd>
-          </div>
-        </dl>
-      </PopoverContent>
+    <Popover
+      contentStyle={{gap: 8, padding: 12}}
+      label={`${agent.displayName} presence`}
+      onOpenChange={setOpen}
+      open={open}
+      trigger={(
+        <button
+          aria-label={`${agent.displayName} — ${ringHeadings[ring]}`}
+          onBlur={() => setOpen(false)}
+          onFocus={() => setOpen(true)}
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          style={avatarButtonStyle}
+          type="button"
+        >
+          <PresenceGlyph kind={agent.kind} ring={ring} size={size} />
+        </button>
+      )}
+      width={320}
+    >
+      <strong>{agent.displayName}</strong>
+      <p style={sentenceStyle}>{presenceSentence(agent, ring, now)}</p>
+      <FieldGrid
+        columns={1}
+        fields={[
+          {label: "Agent", value: agent.kind},
+          {label: "Last seen", value: formatRelativeTime(agent.lastSeenAt, now)},
+          {label: "Working directory", mono: true, value: agent.workingDirectory},
+        ]}
+        layout="inline"
+      />
     </Popover>
   );
 }

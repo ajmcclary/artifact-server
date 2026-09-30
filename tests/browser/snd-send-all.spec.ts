@@ -21,7 +21,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, previewFrame} from "./review-helpers.js";
+import {openInspectorTab, openReview, previewFrame, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -127,7 +127,7 @@ test.describe("Review send-all", () => {
       await expect(preview.locator("button[data-plannotator-marker]")).toHaveCount(1);
 
       await page.getByRole("button", {name: "Send all open (101) to builder"}).click();
-      await expect(page.getByText("Sent 101 threads to builder")).toBeVisible();
+      await expect(toast(page, "Sent 101 threads to builder")).toBeVisible();
       await expect(page.getByRole("article", {name: /^Comment by /u})).toHaveCount(0);
       await expect(preview.locator("button[data-plannotator-marker]")).toHaveCount(0);
 
@@ -216,9 +216,7 @@ test.describe("Review send-all", () => {
         name: "Choose agent or send with a note",
       }).first().click();
       await page.getByRole("button", {name: "mailbox /work/mailbox"}).click();
-      await expect(page.getByText(
-        "Queued for mailbox — it picks this up when it next checks in.",
-      )).toBeVisible();
+      await expect(toast(page, "Queued for mailbox — it picks this up when it next checks in.")).toBeVisible();
 
       await createThreadOverApi(fixture, {
         artifactId: published.artifact.id,
@@ -264,7 +262,7 @@ test.describe("Review send-all", () => {
         name: "Choose agent or send with a note",
       }).first().click();
       await page.getByRole("button", {name: "replacement /work/replacement"}).click();
-      await expect(page.getByText("Sent 1 thread to replacement")).toBeVisible();
+      await expect(toast(page, "Sent 1 thread to replacement")).toBeVisible();
 
       // A clean disconnect deletes the registration. The dead id is not a
       // disconnected default: it is forgotten, so the same bridge name under

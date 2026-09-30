@@ -1,13 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-
-import {
-  api,
-  ApiError,
-  type AgentDispatch,
-  type AgentPresence,
-} from "@/api/client";
-import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/presentation";
+import {api, ApiError, type AgentDispatch, type AgentPresence} from "@/api/client";
+import {errorMessage} from "@/lib/presentation";
+import {useToasts} from "@/ui/toasts";
 
 /** One send that just left, with everything the undo toast needs to name it. */
 export interface SentDispatch {
@@ -23,9 +16,8 @@ export interface DispatchFeedback {
   readonly sent: (sent: SentDispatch) => void;
 }
 
-/** The surface's undo toast: the element it renders and the reporting hooks. */
+/** The surface's undo toast reporting hooks; the application's ToastRegion draws it. */
 export interface DispatchUndo {
-  readonly element: ReactNode;
   readonly feedback: DispatchFeedback;
 }
 
@@ -33,12 +25,18 @@ export interface DispatchUndo {
 const sentToastMilliseconds = 8_000;
 const noticeToastMilliseconds = 6_000;
 
-type Toast =
-  | { readonly kind: "notice"; readonly text: string }
-  | { readonly kind: "sent"; readonly sent: SentDispatch };
-
 function threadsWord(count: number): string {
   return count === 1 ? "1 thread" : `${count} threads`;
+}
+
+function sentMessage(sent: SentDispatch): string {
+  const count = sent.dispatches.reduce((total, dispatch) => total + dispatch.threadIds.length, 0);
+  if (sent.incompleteCount !== undefined) {
+    return `Sent ${threadsWord(count)} to ${sent.agent.displayName}; ${threadsWord(sent.incompleteCount)} could not be sent.`;
+  }
+  return sent.agent.capabilities?.evidence === "mailbox"
+    ? `Queued for ${sent.agent.displayName} — it picks this up when it next checks in.`
+    : `Sent ${threadsWord(count)} to ${sent.agent.displayName}`;
 }
 
 /**
@@ -51,115 +49,54 @@ export function useDispatchUndo(
   projectId: string,
   onUndone: () => Promise<void>,
 ): DispatchUndo {
-  const [toast, setToast] = useState<Toast | null>(null);
-  const [undoPending, setUndoPending] = useState(false);
-  const timer = useRef<number | null>(null);
+  const toasts = useToasts();
 
-  const show = (next: Toast, lifetime: number) => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    setToast(next);
-    timer.current = window.setTimeout(() => setToast(null), lifetime);
-  };
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) window.clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const feedback: DispatchFeedback = {
-    sendFailed: (error) => {
-      show(
-        { kind: "notice", text: errorMessage(error) },
-        noticeToastMilliseconds,
-      );
-    },
-    sent: (sent) => {
-      show({ kind: "sent", sent }, sentToastMilliseconds);
-    },
-  };
-
-  const undo = async (sent: SentDispatch) => {
-    setUndoPending(true);
+  const undo = async (sent: SentDispatch): Promise<void> => {
     const results = await Promise.allSettled(
-      sent.dispatches.map((dispatch) =>
-        api.cancelAgentDispatch(projectId, dispatch.id)
-      ),
+      sent.dispatches.map((dispatch) => api.cancelAgentDispatch(projectId, dispatch.id)),
     );
-    const failures = results.flatMap((result) =>
-      result.status === "rejected" ? [result.reason] : []
-    );
+    const failures = results.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
     if (failures.length === 0) {
-      show(
-        { kind: "notice", text: "Send canceled — the annotations are back." },
-        noticeToastMilliseconds,
-      );
+      toasts.push({
+        durationMs: noticeToastMilliseconds,
+        message: "Send canceled — the annotations are back.",
+        variant: "success",
+      });
     } else {
       const conflict = failures.some((failure) =>
         failure instanceof ApiError && failure.code === "DISPATCH_STATE_CONFLICT"
       );
       const firstFailure = failures[0];
-      show(
-        {
-          kind: "notice",
-          text: conflict
-            ? `Too late to undo — ${sent.agent.displayName} already carried this send past the point of cancelling.`
-            : errorMessage(
-              firstFailure instanceof Error
-                ? firstFailure
-                : new Error("Undo failed."),
-            ),
-        },
-        noticeToastMilliseconds,
-      );
+      toasts.push({
+        durationMs: noticeToastMilliseconds,
+        message: conflict
+          ? `Too late to undo — ${sent.agent.displayName} already carried this send past the point of cancelling.`
+          : errorMessage(firstFailure instanceof Error ? firstFailure : new Error("Undo failed.")),
+        variant: "warning",
+      });
     }
-    setUndoPending(false);
     await onUndone();
   };
 
-  const element = toast === null
-    ? null
-    : (
-      <section
-        className="fixed bottom-4 left-1/2 z-50 flex w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 items-center justify-between gap-4 border bg-popover p-3 text-sm text-popover-foreground shadow-xl"
-        role="status"
-      >
-        {toast.kind === "sent"
-          ? (
-            <>
-              <p className="min-w-0 leading-5">
-                {toast.sent.incompleteCount === undefined
-                  ? toast.sent.agent.capabilities?.evidence === "mailbox"
-                    ? `Queued for ${toast.sent.agent.displayName} — it picks this up when it next checks in.`
-                    : `Sent ${threadsWord(
-                      toast.sent.dispatches.reduce(
-                        (count, dispatch) => count + dispatch.threadIds.length,
-                        0,
-                      ),
-                    )} to ${toast.sent.agent.displayName}`
-                  : `Sent ${threadsWord(
-                    toast.sent.dispatches.reduce(
-                      (count, dispatch) => count + dispatch.threadIds.length,
-                      0,
-                    ),
-                  )} to ${toast.sent.agent.displayName}; ${threadsWord(toast.sent.incompleteCount)} could not be sent.`}
-              </p>
-              <Button
-                className="shrink-0"
-                disabled={undoPending}
-                onClick={() => void undo(toast.sent)}
-                size="xs"
-                type="button"
-                variant="outline"
-              >
-                {undoPending ? "Undoing…" : "Undo"}
-              </Button>
-            </>
-          )
-          : <p className="min-w-0 leading-5">{toast.text}</p>}
-      </section>
-    );
+  const feedback: DispatchFeedback = {
+    sendFailed: (error) => {
+      toasts.push({durationMs: noticeToastMilliseconds, message: errorMessage(error), variant: "danger"});
+    },
+    sent: (sent) => {
+      const id = crypto.randomUUID();
+      toasts.push({
+        actionLabel: "Undo",
+        durationMs: sentToastMilliseconds,
+        id,
+        message: sentMessage(sent),
+        onAction: () => {
+          toasts.dismiss(id);
+          void undo(sent);
+        },
+        variant: "success",
+      });
+    },
+  };
 
-  return { element, feedback };
+  return {feedback};
 }
