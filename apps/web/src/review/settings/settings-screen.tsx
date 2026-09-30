@@ -5,7 +5,7 @@ import {PageScaffold, SurfaceState} from "@/arkcase";
 import {reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "../settings-api-keys.tsx";
 import {McpScreen} from "../settings-mcp.tsx";
-import {MembersScreen} from "../settings-members.tsx";
+import {MembersScreen} from "./members-screen.tsx";
 import {ProjectSettings} from "./project-settings.tsx";
 import {PublicLinksScreen} from "../settings-public-links.tsx";
 import {WebmcpScreen} from "../settings-webmcp.tsx";
@@ -59,7 +59,7 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
         />
       );
     case "members":
-      return <LegacySettingsFrame><MembersScreen /></LegacySettingsFrame>;
+      return <MembersScreen />;
     case "apiKeys":
       return <LegacySettingsFrame><ApiKeysScreen /></LegacySettingsFrame>;
     case "publicLinks":

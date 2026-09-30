@@ -18,7 +18,6 @@ import {
 } from "../support/publishing.js";
 import {
   browserStorage,
-  closeTopDialog,
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
@@ -1153,12 +1152,12 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByLabel("Display name").fill("Frontend member");
       await fixture.page.getByLabel("Email").fill("frontend-member@example.test");
       await fixture.page.getByRole("button", {name: "Admit member", exact: true}).last().click();
-      await closeTopDialog(fixture.page);
+      await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
       const memberRow = fixture.page.getByRole("row").filter({hasText: "Frontend member"});
       await expect(memberRow).toBeVisible();
       await memberRow.getByRole("button", {name: "Deactivate"}).click();
       await fixture.page.getByRole("button", {name: "Deactivate member"}).click();
-      await closeTopDialog(fixture.page);
+      await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
       await expect(memberRow.getByText("inactive", {exact: true})).toBeVisible();
 
       await fixture.page.getByRole("link", {name: "API keys"}).click();
