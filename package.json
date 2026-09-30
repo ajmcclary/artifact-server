@@ -38,7 +38,7 @@
     "build": "pnpm --filter @artifact-server/web build && tsc -p tsconfig.build.json",
     "build:site": "pnpm --filter @artifact-server/site build",
     "capture:web": "pnpm build && tsx tests/browser/capture-frontend-mvp.ts",
-    "check": "pnpm check:release-version && pnpm check:arkcase-ds && pnpm lint && pnpm typecheck && pnpm build && pnpm verify:site && pnpm test && pnpm conformance:validate && pnpm conformance:tests && pnpm check:cloudflare",
+    "check": "pnpm check:release-version && pnpm check:arkcase-ds && pnpm lint && pnpm typecheck && pnpm build && pnpm verify:site && pnpm test && pnpm --filter @artifact-server/web test && pnpm conformance:validate && pnpm conformance:tests && pnpm check:cloudflare",
     "check:ci": "node scripts/check-ci-full-gate.mjs",
     "check:arkcase-ds": "node scripts/sync-arkcase-ds.mjs --check",
     "sync:arkcase-ds": "node scripts/sync-arkcase-ds.mjs",
