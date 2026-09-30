@@ -7,8 +7,6 @@ import {
   filterQueue,
   groupQueue,
   isActiveDispatch,
-  mapWithConcurrency,
-  QUEUE_REQUEST_CONCURRENCY,
   queueCounts,
   queueKey,
   type QueueArtifact,
@@ -313,23 +311,5 @@ describe("review queue grouping", () => {
     for (const copy of [agentRow, conversationRow]) {
       expect(JSON.stringify(copy)).not.toMatch(/unresolved|needs you/iu);
     }
-  });
-});
-
-describe("mapWithConcurrency", () => {
-  test("never runs more than the limit at once and keeps the input order", async () => {
-    let inFlight = 0;
-    let peak = 0;
-    const results = await mapWithConcurrency(Array.from({length: 10}, (_, index) => index), 4, async (item) => {
-      inFlight += 1;
-      peak = Math.max(peak, inFlight);
-      // Later items finish first, so order preservation is actually exercised.
-      await new Promise((resolve) => setTimeout(resolve, 3 * (10 - item)));
-      inFlight -= 1;
-      return item * 2;
-    });
-    expect(results).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
-    expect(peak).toBe(4);
-    expect(QUEUE_REQUEST_CONCURRENCY).toBe(4);
   });
 });

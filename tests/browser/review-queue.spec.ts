@@ -70,8 +70,10 @@ async function sendToAgent(
   return created.dispatch.id;
 }
 
-function catalogRequest(request: Request): boolean {
-  return request.url().includes("/api/v1/artifacts?");
+/** Every listing the queue sends: catalogs, send listings and per-artifact thread listings. */
+function queueRequest(request: Request): boolean {
+  const url = request.url();
+  return url.includes("/api/v1/artifacts?") || url.includes("/api/v1/agent-dispatches?") || url.includes("/comments?");
 }
 
 async function createQueueProject(fixture: BrowserFixture, name: string, index: number): Promise<string> {
@@ -217,6 +219,41 @@ test.describe("Review queue", () => {
       await stopBrowserFixture(fixture);
     }
   });
+  test("one unreadable project leaves every other project's artifacts in the queue and names what is missing", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const owner = new ApiClient(fixture.server, fixture.installation.apiToken);
+      const brokenProject = await owner.createProject("Queue unreadable project", specKey("unreadable-project"));
+      const readable = await publishQueueFixture(fixture, "Queue readable fixture", "partial-readable");
+      await openThread(fixture, readable, "Readable conversation.", "partial-readable-thread");
+      const unreadable = await publishQueueFixture(fixture, "Queue unreadable fixture", "partial-unreadable", brokenProject);
+      await openThread(fixture, unreadable, "Unreadable conversation.", "partial-unreadable-thread");
+      await localLogin(fixture);
+      const page = fixture.page;
+      const brokenCatalog = (url: URL): boolean =>
+        url.pathname === "/api/v1/artifacts" && url.searchParams.get("projectId") === brokenProject;
+      await page.route(brokenCatalog, async (route) => {
+        await route.fulfill({
+          body: JSON.stringify({error: {code: "INTERNAL_ERROR", message: "Catalog storage is unavailable."}}),
+          contentType: "application/json",
+          status: 500,
+        });
+      });
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.getByRole("button", {name: /Queue readable fixture/u})).toBeVisible();
+      await expect(page.getByRole("button", {name: /Queue unreadable fixture/u})).toHaveCount(0);
+      const missing = page.getByRole("status").filter({hasText: "Queue unreadable project"});
+      await expect(missing).toContainText("could not read");
+
+      await page.unroute(brokenCatalog);
+      await missing.getByRole("button", {name: "Retry"}).click();
+      await expect(page.getByRole("button", {name: /Queue unreadable fixture/u})).toBeVisible();
+      await expect(page.getByText("could not read")).toHaveCount(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("stays bounded with sixty projects, keeps long titles inside a phone, and lists archived projects", async ({browser}) => {
     test.setTimeout(120_000);
     const fixture = await startBrowserFixture(browser);
@@ -242,12 +279,12 @@ test.describe("Review queue", () => {
       let inFlight = 0;
       let peak = 0;
       page.on("request", (request) => {
-        if (!catalogRequest(request)) return;
+        if (!queueRequest(request)) return;
         inFlight += 1;
         peak = Math.max(peak, inFlight);
       });
       const settle = (request: Request): void => {
-        if (catalogRequest(request)) inFlight -= 1;
+        if (queueRequest(request)) inFlight -= 1;
       };
       page.on("requestfinished", settle);
       page.on("requestfailed", settle);

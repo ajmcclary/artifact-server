@@ -223,25 +223,5 @@ export function describeQueueEntry(entry: QueueEntry): QueueRowCopy {
   };
 }
 
-/** Run `task` over `items` with at most `limit` in flight, preserving order. */
-export async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  task: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  let next = 0;
-  // Each worker takes the next index when its previous task settles.
-  const worker = async (): Promise<void> => {
-    const index = next;
-    next += 1;
-    const item = items[index];
-    if (index >= items.length || item === undefined) return;
-    results[index] = await task(item);
-    await worker();
-  };
-  await Promise.all(Array.from({length: Math.min(limit, items.length)}, () => worker()));
-  return results;
-}
-
+/** Listings one queue load keeps in flight across every project and request kind. */
 export const QUEUE_REQUEST_CONCURRENCY = 4;

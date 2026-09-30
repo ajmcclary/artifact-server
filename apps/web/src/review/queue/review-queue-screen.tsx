@@ -2,6 +2,7 @@ import {type CSSProperties, type ReactElement, useMemo, useState} from "react";
 
 import type {Project} from "@/api/client";
 import {
+  Alert,
   Button,
   GroupBand,
   Input,
@@ -170,6 +171,12 @@ export function ReviewQueueScreen({projects}: {readonly projects: readonly Proje
         )}
         <span style={orderNoteStyle}>Latest send first, then most conversations</span>
       </div>
+      {queue.phase === "ready" && queue.unreadable.length > 0 ? (
+        <Alert action={{label: "Retry", onClick: queue.refresh}} variant="warning">
+          {`Artifact Server could not read ${queue.unreadable.map((project) => project.name).join(", ")}. `}
+          {queue.unreadable.length === 1 ? "Its artifacts are" : "Their artifacts are"} missing from the queue.
+        </Alert>
+      ) : null}
       {queue.phase === "ready" && visible.length > 0 ? (
         <div style={groupsStyle}>
           {groupBands.map((band) => {

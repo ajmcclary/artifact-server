@@ -7,11 +7,12 @@ import {
   type Project,
 } from "@/api/client";
 
+import {createRequestLimiter, type RequestLimiter} from "@/lib/request-limiter";
+
 import {
   dispatchesByArtifact,
   groupQueue,
   isActiveDispatch,
-  mapWithConcurrency,
   QUEUE_REQUEST_CONCURRENCY,
   type CarriedThreads,
   type QueueEntry,
@@ -31,12 +32,17 @@ export interface ReviewQueue {
   readonly refresh: () => void;
   /** True when some project held more artifacts or sends than its first pages. */
   readonly truncated: boolean;
+  /** Projects whose listings failed; their artifacts are missing from `entries`. */
+  readonly unreadable: readonly Project[];
 }
 
 interface LoadedQueue {
   readonly entries: readonly QueueEntry[];
   readonly truncated: boolean;
+  readonly unreadable: readonly Project[];
 }
+
+class AbandonedQueueLoad extends Error {}
 
 interface ProjectQueueData {
   readonly carried: readonly CarriedThreads[];
@@ -46,21 +52,21 @@ interface ProjectQueueData {
   readonly truncated: boolean;
 }
 
-async function loadProjectQueue(project: Project): Promise<ProjectQueueData> {
+async function loadProjectQueue(project: Project, ask: RequestLimiter): Promise<ProjectQueueData> {
   const [page, sends] = await Promise.all([
-    api.artifacts(project.id, null, [], "", {comments: "with", sort: "comments"}),
-    api.agentDispatches(project.id, {
+    ask(() => api.artifacts(project.id, null, [], "", {comments: "with", sort: "comments"})),
+    ask(() => api.agentDispatches(project.id, {
       agentId: null,
       cursor: null,
       limit: queueDispatchPageSize,
       state: null,
-    }),
+    })),
   ]);
   // A send names threads, not artifacts. Only an artifact on this page can
   // hold a carried thread, and the per-artifact listing runs only when the
   // project has a send in flight.
   const carried = sends.items.some(isActiveDispatch)
-    ? await mapWithConcurrency(page.artifacts, QUEUE_REQUEST_CONCURRENCY, async ({artifact}) => {
+    ? await Promise.all(page.artifacts.map(({artifact}) => ask(async () => {
       const threads = await api.comments(project.id, artifact.id, {
         cursor: null,
         dispatched: "only",
@@ -75,7 +81,7 @@ async function loadProjectQueue(project: Project): Promise<ProjectQueueData> {
         projectId: project.id,
         threadIds: threads.items.map((thread) => thread.id),
       };
-    })
+    })))
     : [];
   return {
     carried,
@@ -86,9 +92,21 @@ async function loadProjectQueue(project: Project): Promise<ProjectQueueData> {
   };
 }
 
-async function loadReviewQueue(projects: readonly Project[]): Promise<LoadedQueue> {
-  // Bounded fan-out: a large installation never opens dozens of catalog requests at once.
-  const loaded = await mapWithConcurrency(projects, QUEUE_REQUEST_CONCURRENCY, loadProjectQueue);
+/**
+ * Every listing of one load shares a single bound, whatever its kind, and a
+ * load that is no longer current stops before its next request. A project
+ * whose listings fail is reported instead of failing the whole queue.
+ */
+async function loadReviewQueue(projects: readonly Project[], isCurrent: () => boolean): Promise<LoadedQueue> {
+  const limit = createRequestLimiter(QUEUE_REQUEST_CONCURRENCY);
+  const ask: RequestLimiter = (task) => limit(async () => {
+    if (!isCurrent()) throw new AbandonedQueueLoad();
+    return task();
+  });
+  const settled = await Promise.allSettled(projects.map((project) => loadProjectQueue(project, ask)));
+  const loaded = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  const unreadable = projects.filter((_, index) => settled[index]?.status === "rejected");
+  if (projects.length > 0 && loaded.length === 0) throw new Error("No project's queue could be read.");
   return {
     entries: groupQueue({
       dispatches: dispatchesByArtifact(
@@ -96,16 +114,17 @@ async function loadReviewQueue(projects: readonly Project[]): Promise<LoadedQueu
         loaded.flatMap((data) => data.carried),
       ),
       pages: new Map(loaded.map((data) => [data.project.id, data.page] as const)),
-      projects,
+      projects: loaded.map((data) => data.project),
     }),
     truncated: loaded.some((data) => data.truncated),
+    unreadable,
   };
 }
 
 /** Load the queue for every readable project; `refresh` reloads it. */
 export function useReviewQueue(projects: readonly Project[]): ReviewQueue {
   const [generation, setGeneration] = useState(0);
-  const [loaded, setLoaded] = useState<LoadedQueue>({entries: [], truncated: false});
+  const [loaded, setLoaded] = useState<LoadedQueue>({entries: [], truncated: false, unreadable: []});
   const [phase, setPhase] = useState<ReviewQueuePhase>("loading");
 
   useEffect(() => {
@@ -113,7 +132,7 @@ export function useReviewQueue(projects: readonly Project[]): ReviewQueue {
     setPhase("loading");
     void (async () => {
       try {
-        const next = await loadReviewQueue(projects);
+        const next = await loadReviewQueue(projects, () => current);
         if (!current) return;
         setLoaded(next);
         setPhase("ready");
@@ -127,5 +146,11 @@ export function useReviewQueue(projects: readonly Project[]): ReviewQueue {
   }, [generation, projects]);
 
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
-  return {entries: loaded.entries, phase, refresh, truncated: loaded.truncated};
+  return {
+    entries: loaded.entries,
+    phase,
+    refresh,
+    truncated: loaded.truncated,
+    unreadable: loaded.unreadable,
+  };
 }
