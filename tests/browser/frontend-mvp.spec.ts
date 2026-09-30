@@ -1265,17 +1265,18 @@ test.describe("Artifact Server frontend MVP", () => {
       await pageBody.evaluate((element) => element.scrollTo(0, 0));
       await fixture.page.setViewportSize({height: 600, width: 1024});
 
+      // The ledger picks its layout from a ResizeObserver, so poll for the settled layout.
       const inventory = fixture.page.getByRole("table", {name: "Public links inventory"});
-      expect(await inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
+      await expect.poll(() => inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBe(0);
       const compactRowBox = await firstRow.boundingBox();
       expect(compactRowBox?.height).toBeLessThan(96);
 
       await fixture.page.setViewportSize({height: 720, width: 390});
-      expect(await fixture.page.evaluate(() =>
+      await expect.poll(() => fixture.page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth
       )).toBe(0);
-      expect(await inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
+      await expect.poll(() => inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBe(0);
       await expect(firstRow.getByRole("link", {name: "Open"})).toBeVisible();
       await expect(firstRow.getByRole("button", {name: "Make private"})).toBeVisible();
