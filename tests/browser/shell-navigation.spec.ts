@@ -56,7 +56,7 @@ function artifactTitle(page: Page) {
 }
 
 test.describe("Shell navigation", () => {
-  test("left navigation, the account menu, the brand and history change screens without a document load", async ({browser}) => {
+  test("NAV-001-B: left navigation, the account menu, the brand and history change screens without a document load", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await publishNavigationFixture(fixture, "Navigation home fixture", "navigation-home");
@@ -114,7 +114,7 @@ test.describe("Shell navigation", () => {
     }
   });
 
-  test("switching artifacts never shows the previous artifact's record while the next one loads", async ({browser}) => {
+  test("NAV-001-F: switching artifacts never shows the previous artifact's record while the next one loads", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const first = await publishNavigationFixture(fixture, "Navigation first artifact", "navigation-first");
@@ -145,7 +145,7 @@ test.describe("Shell navigation", () => {
     }
   });
 
-  test("a failed or empty activity history is requested once, not in a loop", async ({browser}) => {
+  test("NAV-001-F: a failed or empty activity history is requested once, not in a loop", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await publishNavigationFixture(fixture, "Navigation activity fixture", "navigation-activity");

@@ -1,0 +1,13 @@
+/*
+ * Native controls (scrollbars, date pickers, form widgets) follow the chosen
+ * theme, not the operating system: review.html declares both schemes so the
+ * first paint never flashes, and the resolved `data-theme` settles which.
+ * Default and high contrast are light themes.
+ */
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

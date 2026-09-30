@@ -1,6 +1,6 @@
 import {useState} from "react";
 
-import {api, type Principal, type Session} from "@/api/client";
+import {api, ApiError, type Principal, type Session} from "@/api/client";
 import {
   AccountButton,
   IdentityBlock,
@@ -17,6 +17,7 @@ import {
 import {readStored} from "@/lib/safe-storage";
 import {useThemeMode} from "@/theme/use-theme-mode";
 import {type Density, useDensity, useSetDensity} from "@/ui/density";
+import {type Toasts, useToasts} from "@/ui/toasts";
 
 import {administrationHref, isInstallationAdministrator, type ShellMode} from "./nav-model.ts";
 
@@ -58,6 +59,7 @@ export function AccountMenu({mode, rail, session}: AccountMenuProps) {
   const appearance = useThemeMode();
   const density = useDensity();
   const setDensity = useSetDensity();
+  const toasts = useToasts();
   const principal = session.principal;
   const name = accountName(principal);
   const role = principal.membershipRole === "administrator" ? "Administrator" : "Member";
@@ -109,7 +111,7 @@ export function AccountMenu({mode, rail, session}: AccountMenuProps) {
       },
     },
     {divider: true},
-    {icon: "bi-box-arrow-right", label: "Sign out", onClick: signOut},
+    {icon: "bi-box-arrow-right", label: "Sign out", onClick: () => signOut(toasts)},
   ];
 
   return (
@@ -149,7 +151,29 @@ function accountName(principal: Principal): string {
   return principal.kind === "service" ? "Service account" : "Signed-in member";
 }
 
-function signOut(): void {
-  // api.logout dispatches artifact-session-logout, which purges this principal's drafts.
-  void api.logout().finally(() => window.location.assign(reviewQueueHref()));
+/**
+ * Sign out with a document load, which also drops every in-memory screen.
+ * A refused sign-out keeps the reviewer where they are and says so, rather
+ * than reloading into a session that is still signed in.
+ */
+function signOut(toasts: Toasts): void {
+  void (async () => {
+    try {
+      // api.logout dispatches artifact-session-logout, which purges this principal's drafts.
+      await api.logout();
+    } catch (caught) {
+      // An already-ended session has nothing left to sign out of.
+      if (!(caught instanceof ApiError && caught.status === 401)) {
+        toasts.push({
+          durationMs: null,
+          id: "sign-out-failed",
+          message: `${caught instanceof Error ? caught.message : "The server did not answer."} You are still signed in.`,
+          title: "Sign-out failed",
+          variant: "danger",
+        });
+        return;
+      }
+    }
+    window.location.assign(reviewQueueHref());
+  })();
 }

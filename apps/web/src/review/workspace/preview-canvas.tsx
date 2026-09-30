@@ -71,6 +71,8 @@ export interface PreviewCanvasProps {
   readonly commentsLoading: boolean;
   readonly detailError: Error | null;
   readonly detailLoading: boolean;
+  /** No artifact is named yet and the catalog's first page is still being read. */
+  readonly awaitingCatalog: boolean;
   /** Shown instead of "Select an artifact" when the project has nothing published yet. */
   readonly emptyProject: ReactNode;
   /** A native design gallery that replaces the generated catalog entry, or null. */
@@ -176,6 +178,7 @@ export function PreviewCanvas({
   commentsLoading,
   detailError,
   detailLoading,
+  awaitingCatalog,
   emptyProject,
   gallery,
   galleryNotice,
@@ -222,6 +225,16 @@ export function PreviewCanvas({
       >
         {artifactId === null && emptyProject !== null ? (
           <div style={stateStyle}>{emptyProject}</div>
+        ) : artifactId === null && awaitingCatalog ? (
+          <div style={stateStyle}>
+            <SurfaceState
+              loadingBody="Reading this project's artifacts."
+              loadingStyle="spinner"
+              loadingTitle="Opening project"
+              noun="artifacts"
+              phase="loading"
+            />
+          </div>
         ) : artifactId === null ? (
           <div style={stateStyle}>
             <SurfaceState
@@ -615,6 +628,8 @@ function HtmlPreview({
           throw new Error("Interactive preview requires a separate version content origin.");
         }
         if (current) {
+          // A re-read after an access or current-version change replaces an earlier failure.
+          setError(null);
           setPreviewDocument({
             baseHref: documentBaseUrl(lease.baseUrl, entry.path),
             entryPath: entry.path,

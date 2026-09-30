@@ -1,5 +1,7 @@
 import {PanelStore, type DisplayLadder} from "@/arkcase";
 
+import {REVIEW_PANEL_STORAGE_KEY} from "./shell-layout-keys.ts";
+
 /** Artifact Server's display ladder: mobile < 768, tablet < 1024, laptop < 1440, desktop ≥ 1440. */
 export const REVIEW_DISPLAY_LADDER: DisplayLadder = {
   compact: 1024,
@@ -8,14 +10,7 @@ export const REVIEW_DISPLAY_LADDER: DisplayLadder = {
   mobile: 768,
 };
 
-/** The one localStorage key under which the review panes remember pins and widths. */
-export const REVIEW_PANEL_STORAGE_KEY = "artifact-review-panels";
-
-/** The navigation column's pin, stored under `REVIEW_PANEL_STORAGE_KEY`. */
-export const NAV_PANEL_ID = "navMenu";
-
-/** Matches the prototype's menu seam; both the header and rows share this width. */
-export const navigationWidth = {defaultWidth: 232, minimum: 200, maximum: 380} as const;
+export {NAV_PANEL_ID, navigationWidth, REVIEW_PANEL_STORAGE_KEY} from "./shell-layout-keys.ts";
 
 /** Pins and widths of the navigation and review panes; it writes only when the reader changes one. */
 export const reviewPanelStore = PanelStore({key: REVIEW_PANEL_STORAGE_KEY});

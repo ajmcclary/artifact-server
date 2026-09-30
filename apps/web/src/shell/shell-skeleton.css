@@ -1,0 +1,103 @@
+/*
+ * The loading skeleton: the shell's own frame (navigation column and canvas)
+ * with a quiet status in the middle. It paints from review.html before any
+ * script runs and again from React while the session loads, so startup looks
+ * like the application arriving rather than a sign-in page. Classes only: the
+ * application policy is style-src 'self'.
+ */
+.as-boot {
+  background: var(--surface-canvas);
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.as-boot__nav {
+  background: var(--surface-card);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--navigator-rail-width, 52px);
+}
+
+.as-boot__brand {
+  background: var(--surface-header);
+  flex: none;
+  /* The navigation's brand header: taller on the rail, where the mark stacks above search. */
+  height: 64px;
+}
+
+.as-boot__main {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* Fast starts never show the status; slow ones get it after a beat. */
+.as-boot__status {
+  align-items: center;
+  animation: as-boot-reveal 160ms ease-out 400ms forwards;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0;
+}
+
+.as-boot__spinner {
+  animation: as-boot-spin 800ms linear infinite;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  border-top-color: var(--bs-primary);
+  height: 24px;
+  width: 24px;
+}
+
+.as-boot__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+@media (min-width: 1024px) {
+  :root[data-nav-pinned="true"] .as-boot__nav {
+    width: var(--boot-nav-width, 232px);
+  }
+
+  :root[data-nav-pinned="true"] .as-boot__brand {
+    height: 56px;
+  }
+}
+
+/* Phones use the menu drawer, not a column. */
+@media (max-width: 767.98px) {
+  .as-boot__nav {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .as-boot__status {
+    animation: none;
+    opacity: 1;
+  }
+
+  .as-boot__spinner {
+    animation: none;
+  }
+}
+
+@keyframes as-boot-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes as-boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

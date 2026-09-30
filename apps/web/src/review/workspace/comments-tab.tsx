@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
   type ComponentProps,
   type CSSProperties,
@@ -101,28 +102,46 @@ export function CommentsTab({
     }
   }, []);
 
+  // The tab stays mounted across artifacts, so each read of the Sent listing is
+  // tied to the version it was asked for and a late answer for another is dropped.
+  const sentOpen = view === "sent";
+  const sentOpenRef = useRef(sentOpen);
+  sentOpenRef.current = sentOpen;
+  const sentRequestRef = useRef(0);
+  const sentVersionRef = useRef<string | null>(null);
   const loadSent = useCallback(async (): Promise<void> => {
-    if (session.artifactId === null || session.projectId === "" || versionId === null) {
+    const request = ++sentRequestRef.current;
+    const sentVersion = session.artifactId === null || versionId === null
+      ? null
+      : `${session.projectId}\n${session.artifactId}\n${versionId}`;
+    if (sentVersion !== sentVersionRef.current) {
+      sentVersionRef.current = sentVersion;
       setSentThreads([]);
       setSentReplies(new Map());
       setDispatchByThread(new Map());
-      return;
     }
+    if (session.artifactId === null || session.projectId === "" || versionId === null) return;
     setSentLoading(true);
     setSentError(null);
     try {
       const listed = await loadAllThreads(session.projectId, session.artifactId, versionId, "only");
+      if (request !== sentRequestRef.current) return;
+      setSentThreads(listed.threads);
+      // The count needs only the listing; replies and send states load when Sent is open.
+      if (!sentOpenRef.current) return;
       const [conversations, index] = await Promise.all([
         loadConversations(session.projectId, session.artifactId, listed.threads),
         loadDispatchIndex(session.projectId, listed.threads.map((thread) => thread.id)),
       ]);
+      if (request !== sentRequestRef.current) return;
       setSentThreads(conversations.map(({thread}) => thread));
       setSentReplies(new Map(conversations.map(({replies, thread}) => [thread.id, replies])));
       setDispatchByThread(index);
     } catch (caught) {
+      if (request !== sentRequestRef.current) return;
       setSentError(caught instanceof Error ? caught : new Error("Sent comments failed."));
     } finally {
-      setSentLoading(false);
+      if (request === sentRequestRef.current) setSentLoading(false);
     }
   }, [session.artifactId, session.projectId, versionId]);
 
@@ -133,10 +152,13 @@ export function CommentsTab({
   const dispatchUndo = useDispatchUndo(session.projectId, reloadDispatchSurface);
 
   useEffect(() => {
-    void Promise.all([loadAgents(), loadSent()]);
-  }, [loadAgents, loadSent]);
+    void loadAgents();
+  }, [loadAgents]);
+  useEffect(() => {
+    void loadSent();
+  }, [loadSent, sentOpen]);
   useCommentPoll(loadAgents, session.projectId !== "");
-  useCommentPoll(loadSent, view === "sent" && session.artifactId !== null && versionId !== null);
+  useCommentPoll(loadSent, sentOpen && session.artifactId !== null && versionId !== null);
 
   const openThreads = session.threads.filter((thread) => thread.state === "open");
   const resolvedThreads = session.threads.filter((thread) => thread.state === "resolved");

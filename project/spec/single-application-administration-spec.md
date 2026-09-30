@@ -183,6 +183,31 @@ state. The application does not redirect that user to a misleading empty page.
 Service principals may use project settings only with `project:manage`; they do
 not receive installation-administration access through that capability.
 
+## Screen transitions
+
+The review queue, the design library, a project's Review workspace and every
+settings page are screens of one application. Moving between them — the
+navigation, the account menu, the brand mark, in-application links, the
+command palette, and browser back and forward — changes the screen in place.
+It does not load a new document, repeat startup, or show a sign-in or loading
+layout between screens. A modified click on an in-application link still opens
+a new tab. Sign-in and sign-out remain document loads.
+
+Startup paints the application's own frame (the navigation column at the width
+the reviewer pinned, and the canvas) before any script runs, and shows a quiet
+loading status only when startup is slow. A signed-in start reads the session
+and the project list together; a start that does not answer within a bounded
+time shows the unavailable state with Try again.
+
+A screen that is re-read keeps what it already shows until the new answer
+lands: the queue and the design library on Refresh or on return, the artifact
+catalog on a new search, filter or sort. A project, artifact or version never
+shows another one's record, catalog, filters, comments or activity while it
+loads, and an answer that arrives after the reviewer has moved on is dropped.
+An empty or failed read is reported once and offered for retry; it is never
+re-requested in a loop. A refused sign-out says so and leaves the reviewer
+signed in where they were.
+
 ## Route migration
 
 The server stops serving the old application. These compatibility redirects

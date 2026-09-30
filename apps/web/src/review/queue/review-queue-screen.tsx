@@ -1,4 +1,4 @@
-import {type CSSProperties, type ReactElement, useMemo, useState} from "react";
+import {type CSSProperties, type ReactElement, type SyntheticEvent, useEffect, useMemo, useRef, useState} from "react";
 
 import type {Project} from "@/api/client";
 import {
@@ -87,14 +87,21 @@ const noteStyle = {
 const comfortableRow = {cursor: "pointer", paddingRight: 48} satisfies CSSProperties;
 const compactRow = {cursor: "pointer", padding: "7px 48px 7px 16px"} satisfies CSSProperties;
 
-function openEntry(entry: QueueEntry): void {
-  navigateReview(workspaceHref({
+/** Open one row in place, or in a new tab for a modified click as a link would. */
+function openEntry(entry: QueueEntry, event: SyntheticEvent): void {
+  const href = workspaceHref({
     artifactId: entry.artifact.artifact.id,
     path: null,
     projectId: entry.project.id,
     versionId: null,
     view: null,
-  }));
+  });
+  const native = event.nativeEvent;
+  if (native instanceof MouseEvent && (native.metaKey || native.ctrlKey || native.shiftKey)) {
+    window.open(href, "_blank", "noopener");
+    return;
+  }
+  navigateReview(href);
 }
 
 /** The landing screen: artifacts with a send in flight or with conversations, across projects. */
@@ -114,7 +121,20 @@ export function ReviewQueueScreen({projects}: {readonly projects: readonly Proje
     : filtered
       ? `${visible.length} of ${pluralize(queue.entries.length, "artifact", "artifacts")}`
       : `${pluralize(queue.entries.length, "artifact", "artifacts")} · ${pluralize(projectCount, "project", "projects")}`;
+  // The button stays enabled (a disabled button would drop focus); the count line says a re-read is running.
+  const metaLine = queue.refreshing ? `${countLine} · refreshing` : countLine;
   const rowStyle = density === "compact" ? compactRow : comfortableRow;
+  // The rows update in place, so say when a refresh the reviewer asked for lands.
+  const refreshRequested = useRef(false);
+  const refresh = (): void => {
+    refreshRequested.current = true;
+    queue.refresh();
+  };
+  useEffect(() => {
+    if (!refreshRequested.current || queue.refreshing) return;
+    refreshRequested.current = false;
+    if (!queue.refreshFailed) announce("Review queue refreshed.");
+  }, [announce, queue.refreshFailed, queue.refreshing]);
 
   const selectFilter = (id: string): void => {
     const next = queueFilters.find((candidate) => candidate === id);
@@ -131,13 +151,13 @@ export function ReviewQueueScreen({projects}: {readonly projects: readonly Proje
   return (
     <PageScaffold
       actions={(
-        <Button icon="bi-arrow-clockwise" onClick={queue.refresh} outline size="sm" variant="secondary">
+        <Button icon="bi-arrow-clockwise" onClick={refresh} outline size="sm" variant="secondary">
           Refresh queue
         </Button>
       )}
       bodyPadding="16px 20px 24px"
       maxWidth="none"
-      meta={countLine}
+      meta={metaLine}
       title="Review queue"
     >
       <div style={toolbarStyle}>
@@ -171,6 +191,11 @@ export function ReviewQueueScreen({projects}: {readonly projects: readonly Proje
         )}
         <span style={orderNoteStyle}>Latest send first, then most conversations</span>
       </div>
+      {queue.refreshFailed ? (
+        <Alert action={{label: "Retry", onClick: queue.refresh}} variant="warning">
+          Artifact Server did not answer, so this is the queue as last read. Nothing was changed.
+        </Alert>
+      ) : null}
       {queue.phase === "ready" && queue.unreadable.length > 0 ? (
         <Alert action={{label: "Retry", onClick: queue.refresh}} variant="warning">
           {`Artifact Server could not read ${queue.unreadable.map((project) => project.name).join(", ")}. `}
@@ -193,7 +218,7 @@ export function ReviewQueueScreen({projects}: {readonly projects: readonly Proje
                       <StateRow
                         id={shortArtifactId(artifactId)}
                         meta={[...copy.meta]}
-                        onClick={() => openEntry(entry)}
+                        onClick={(event) => openEntry(entry, event)}
                         sentence={(
                           <>
                             <strong style={nameStyle}>{entry.artifact.artifact.name}</strong>

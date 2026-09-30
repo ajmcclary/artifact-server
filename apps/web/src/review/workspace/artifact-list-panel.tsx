@@ -36,6 +36,8 @@ export interface ArtifactListPanelProps {
   readonly knownTags: readonly string[];
   readonly listError: Error | null;
   readonly listLoading: boolean;
+  /** The first page is being re-read for a new search, filter or sort. */
+  readonly listRereading: boolean;
   readonly nextCursor: string | null;
   readonly onAnnounce: (message: string) => void;
   readonly onCommentFilterChange: (filter: CatalogCommentFilter) => void;
@@ -74,6 +76,8 @@ const commentFilterOptions = [
 ] as const satisfies readonly {readonly label: string; readonly value: CatalogCommentFilter}[];
 
 const listStyle = {listStyle: "none", margin: 0, padding: 0} satisfies CSSProperties;
+// Rows from the previous search or filter stay, dimmed, until the new page lands.
+const staleListStyle = {...listStyle, opacity: 0.55, transition: "opacity 120ms ease-out"} satisfies CSSProperties;
 const filterStackStyle = {display: "flex", flexDirection: "column", gap: 10} satisfies CSSProperties;
 const fieldsetStyle = {
   border: 0,
@@ -150,6 +154,7 @@ export function ArtifactListPanel({
   knownTags,
   listError,
   listLoading,
+  listRereading,
   nextCursor,
   onAnnounce,
   onCommentFilterChange,
@@ -384,7 +389,7 @@ export function ArtifactListPanel({
               phase="ready"
             />
           ) : null}
-          <ul aria-label="Artifacts" style={listStyle}>
+          <ul aria-busy={listRereading || undefined} aria-label="Artifacts" style={listRereading ? staleListStyle : listStyle}>
             {items.map(({artifact, commentCount, versionCount}) => {
               const selected = artifact.id === selectedArtifactId;
               const comments = selected && selectedCommentCount !== null

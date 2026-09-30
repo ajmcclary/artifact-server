@@ -117,9 +117,15 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
               <span style={metaStyle}>
                 {library.sources.length} {library.sources.length === 1 ? "gallery" : "galleries"} · current versions as of {timeFormat.format(library.loadedAt)}
                 {library.truncated ? ` · first ${library.scanned} artifacts` : ""}
+                {state.refresh === "running" ? " · refreshing" : ""}
               </span>
               <Button icon="bi-arrow-clockwise" onClick={refresh} outline size="sm" variant="secondary">Refresh</Button>
             </div>
+            {state.refresh === "failed" ? (
+              <Alert variant="warning">
+                The design library could not be re-read, so these are the galleries as last read. Nothing was changed.
+              </Alert>
+            ) : null}
             {library.failures.length === 0 ? null : (
               <Alert variant="warning">
                 {`These galleries could not be read and are not shown: ${library.failures.join(", ")}.`}

@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" href="/src/arkcase/brand/favicon.svg" type="image/svg+xml" />
+    <!-- Public Sans, Latin subset: one variable file serves every weight the first screen draws. -->
+    <link rel="preload" href="/src/arkcase/tokens/fonts/5ed4d31c988e73b25889.woff2" as="font" type="font/woff2" crossorigin />
     <title>Artifact Server</title>
   </head>
   <body>
-    <div id="review-root"></div>
+    <div id="review-root">
+      <!-- The loading skeleton (src/shell/gates.tsx LoadingGate), painted before any script. -->
+      <div class="as-boot">
+        <div aria-hidden="true" class="as-boot__nav"><div class="as-boot__brand"></div></div>
+        <main class="as-boot__main">
+          <div class="as-boot__status" role="status">
+            <div aria-hidden="true" class="as-boot__spinner"></div>
+            <h1 class="as-boot__title">Loading Artifact Server</h1>
+          </div>
+        </main>
+      </div>
+    </div>
     <script type="module" src="/src/review/main.tsx"></script>
   </body>
 </html>

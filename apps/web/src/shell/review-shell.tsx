@@ -18,7 +18,7 @@ import {
   reviewReturnHref,
   type ReviewRoute,
 } from "@/review/review-routes";
-import {readStored} from "@/lib/safe-storage";
+import {readStored, removeStored, writeStored} from "@/lib/safe-storage";
 import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 
 import {AccountMenu} from "./account-menu.tsx";
@@ -34,6 +34,7 @@ import {
   type ShellNavInput,
 } from "./nav-model.ts";
 import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, navigationWidth, reviewPanelStore} from "./shell-layout.ts";
+import {NAV_BOOT_WIDTH_KEY} from "./shell-layout-keys.ts";
 import {ShellLayoutProvider, ShellNavigationProvider, useShellLayoutState} from "./shell-layout-context.tsx";
 
 /** Room kept clear on phones for the drawer's fixed 40 px launcher. */
@@ -99,6 +100,11 @@ function ReviewShellFrame({
   const expanded = layout.navExpandable && navPinned && (display.profile === "laptop" || display.profile === "desktop");
   const navTitle = mode === "admin" ? "Administration" : "Review and projects";
   const expandedWidth = Math.min(navigationWidth.maximum, Math.max(navigationWidth.minimum, navWidth ?? navigationWidth.defaultWidth));
+  useEffect(() => {
+    // The next document's loading skeleton opens its column at this width.
+    if (navPinned) writeStored("local", NAV_BOOT_WIDTH_KEY, String(Math.round(expandedWidth)));
+    else removeStored("local", NAV_BOOT_WIDTH_KEY);
+  }, [expandedWidth, navPinned]);
   const screenTitle = routeTitle(route, projects);
   useInAppLinks();
   useScreenChange(screenTitle, announce);

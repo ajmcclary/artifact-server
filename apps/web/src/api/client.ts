@@ -800,8 +800,10 @@ async function request<T>(
       response.status,
     );
   }
-  const parsed = schema.safeParse(await response.json());
-  if (!parsed.success) {
+  // A proxy's HTML error page or a truncated body is a contract failure, not a SyntaxError.
+  const body: unknown = await response.json().catch(() => undefined);
+  const parsed = schema.safeParse(body);
+  if (body === undefined || !parsed.success) {
     throw new ApiError(
       "INVALID_SUCCESS_RESPONSE",
       "Artifact Server returned data that does not match the expected contract.",

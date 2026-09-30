@@ -26,7 +26,12 @@ export interface LoadedLibrary {
 export type LibraryState =
   | {readonly status: "loading"}
   | {readonly status: "failed"; readonly message: string}
-  | {readonly status: "ready"; readonly library: LoadedLibrary};
+  | {
+    readonly status: "ready";
+    readonly library: LoadedLibrary;
+    /** A re-read running, or failed, while this library stays on screen. */
+    readonly refresh?: "failed" | "running";
+  };
 
 // Kept for the session so browser Back returns to the same moving view without refetching.
 const loadedLibraries = new Map<string, LoadedLibrary>();
@@ -107,7 +112,8 @@ export function useDesignLibrary(projectId: string | null): DesignLibraryHandle 
       return undefined;
     }
     let current = true;
-    setState({status: "loading"});
+    // Refresh keeps the galleries on screen and swaps them when the re-read lands.
+    setState((shown) => shown.status === "ready" ? {...shown, refresh: "running"} : {status: "loading"});
     void (async () => {
       try {
         const library = await loadLibrary(projectId, () => current);
@@ -115,7 +121,9 @@ export function useDesignLibrary(projectId: string | null): DesignLibraryHandle 
         loadedLibraries.set(projectId, library);
         setState({status: "ready", library});
       } catch (caught) {
-        if (current) setState({status: "failed", message: caught instanceof Error ? caught.message : "The design library could not be read."});
+        if (!current) return;
+        const message = caught instanceof Error ? caught.message : "The design library could not be read.";
+        setState((shown) => shown.status === "ready" ? {...shown, refresh: "failed"} : {status: "failed", message});
       }
     })();
     return () => {

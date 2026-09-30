@@ -39,19 +39,14 @@ export function ToastProvider(props: {readonly children: ReactNode}): JSX.Elemen
   const paused = useRef(false);
   const sequence = useRef(0);
 
-  useEffect(() => {
-    queueRef.current = queue;
-  }, [queue]);
-
   const stopLifetime = useCallback((id: string) => {
     const timer = lifetimes.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
     lifetimes.current.delete(id);
   }, []);
 
-  const dismiss = useCallback((id: string) => {
+  const scheduleRemoval = useCallback((id: string) => {
     stopLifetime(id);
-    setQueue((current) => markToastLeaving(current, id));
     const pending = exits.current.get(id);
     if (pending !== undefined) clearTimeout(pending);
     exits.current.set(id, setTimeout(() => {
@@ -59,6 +54,20 @@ export function ToastProvider(props: {readonly children: ReactNode}): JSX.Elemen
       setQueue((current) => removeToast(current, id));
     }, prefersReducedMotion() ? 0 : toastExitMilliseconds));
   }, [stopLifetime]);
+
+  useEffect(() => {
+    queueRef.current = queue;
+    // A toast pushed out by a newer one leaves too, even while the region is
+    // paused under the pointer or when it had no lifetime of its own.
+    for (const entry of queue) {
+      if (entry.leaving && !exits.current.has(entry.id)) scheduleRemoval(entry.id);
+    }
+  }, [queue, scheduleRemoval]);
+
+  const dismiss = useCallback((id: string) => {
+    setQueue((current) => markToastLeaving(current, id));
+    scheduleRemoval(id);
+  }, [scheduleRemoval]);
 
   const startLifetime = useCallback((id: string, toast: AppToast) => {
     stopLifetime(id);

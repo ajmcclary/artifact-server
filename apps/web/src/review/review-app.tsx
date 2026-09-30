@@ -1,7 +1,6 @@
 import {
   type CSSProperties,
   useCallback,
-  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -10,14 +9,11 @@ import {
 } from "react";
 
 import {setDraftPrincipal, writeDraft} from "@/components/comments/comment-drafts";
-import {useCommentPoll} from "@/components/comments/comment-poll";
 import {
   type AccessContext,
   type AccessSetting,
   api,
   ApiError,
-  type ArtifactAction,
-  type ArtifactComparison,
   type ArtifactDetails,
   type ArtifactPage,
   type ArtifactVersion,
@@ -44,17 +40,16 @@ import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {SharePopover} from "./workspace/share-popover.tsx";
 import {VersionsTab} from "./workspace/versions-tab.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
+import {useArtifactCatalog} from "./workspace/use-artifact-catalog.ts";
+import {useArtifactActivity, useVersionComparison} from "./workspace/use-artifact-history.ts";
+import {useArtifactRecord} from "./workspace/use-artifact-record.ts";
 import {useViewportHeight, useViewportWidth} from "./workspace/use-viewport-size.ts";
 import {catalogWidth, dockingFor, inspectorDefaultWidth, isPhoneWidth, workspaceBudget} from "./workspace/workspace-layout.ts";
 import {
-  type CatalogCommentFilter,
-  type CatalogRefreshState,
-  type CatalogSort,
   type ComparisonTab,
   type InspectorTab,
   inspectorTabs,
   type ReviewDownload,
-  type VersionListItem,
 } from "./workspace/workspace-types.ts";
 import {useShellLayout} from "@/shell/shell-layout-context";
 import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
@@ -76,8 +71,6 @@ import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
-
-type ArtifactListLoadResult = "failed" | "loaded" | "skipped";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -105,8 +98,67 @@ const inspectorTitles = {
   files: "Files",
   versions: "Versions",
 } satisfies Record<InspectorTab, string>;
-const catalogRefreshConfirmationMilliseconds = 1_600;
-const noVersions: readonly VersionListItem[] = [];
+
+/** A startup that has not answered by then shows the unavailable state and its Try again. */
+const startupDeadlineMilliseconds = 20_000;
+
+interface Startup {
+  readonly accessContext: AccessContext;
+  readonly projects: readonly Project[];
+  readonly session: Session;
+}
+
+type Settled<T> =
+  | {readonly kind: "failed"; readonly cause: unknown}
+  | {readonly kind: "ok"; readonly value: T};
+
+function settle<T>(work: Promise<T>): Promise<Settled<T>> {
+  return work.then(
+    (value) => ({kind: "ok", value}),
+    (cause: unknown) => ({cause, kind: "failed"}),
+  );
+}
+
+/**
+ * Read what every screen needs. A signed-in start is one round trip: the
+ * project list is read beside the session probe rather than after it. A
+ * local-owner start signs in, then reads both together.
+ */
+async function loadStartup(): Promise<Startup> {
+  const [accessContext, session, projects] = await Promise.all([
+    api.accessContext(),
+    settle(api.session()),
+    settle(api.projects()),
+  ]);
+  if (session.kind === "ok") {
+    if (projects.kind === "failed") throw projects.cause;
+    return {accessContext, projects: projects.value, session: session.value};
+  }
+  if (
+    accessContext.accessMode === "local_owner"
+    && session.cause instanceof ApiError
+    && session.cause.status === 401
+  ) {
+    await api.localOwnerSession();
+    const [signedIn, signedInProjects] = await Promise.all([api.session(), api.projects()]);
+    return {accessContext, projects: signedInProjects, session: signedIn};
+  }
+  throw session.cause;
+}
+
+async function withinStartupDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Artifact Server did not answer in time. Check the connection, then try again."));
+    }, startupDeadlineMilliseconds);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function reviewShortcutBlocked(event: KeyboardEvent): boolean {
   if (
@@ -176,30 +228,10 @@ export function ReviewApp() {
     if (mode === "start") setSessionState("loading");
     setError(null);
     try {
-      const [loadedAccessContext, initialSession] = await Promise.all([
-        api.accessContext(),
-        api.session().then(
-          (value) => ({kind: "authenticated" as const, value}),
-          (cause: unknown) => ({cause, kind: "failed" as const}),
-        ),
-      ]);
-      accessContextRef.current = loadedAccessContext;
-      let loadedSession: Session;
-      if (initialSession.kind === "authenticated") {
-        loadedSession = initialSession.value;
-      } else if (
-        loadedAccessContext.accessMode === "local_owner"
-        && initialSession.cause instanceof ApiError
-        && initialSession.cause.status === 401
-      ) {
-        await api.localOwnerSession();
-        loadedSession = await api.session();
-      } else {
-        throw initialSession.cause;
-      }
-      const loadedProjects = await api.projects();
-      setSession(loadedSession);
-      setProjects(loadedProjects);
+      const startup = await withinStartupDeadline(loadStartup());
+      accessContextRef.current = startup.accessContext;
+      setSession(startup.session);
+      setProjects(startup.projects);
       setSessionState("ready");
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
@@ -331,8 +363,6 @@ function ProjectReview({
   readonly session: Session;
 }) {
   const initialLocation = useMemo(currentReviewLocation, []);
-  const [items, setItems] = useState<ArtifactPage["artifacts"]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     initialLocation.artifactId,
   );
@@ -342,46 +372,41 @@ function ProjectReview({
   const [selectedPath, setSelectedPath] = useState<string | null>(
     initialLocation.path,
   );
-  const [query, setQuery] = useState("");
-  const searchQuery = useDeferredValue(query.trim());
-  const [catalogCommentFilter, setCatalogCommentFilter] = useState<CatalogCommentFilter>("all");
-  const [catalogTagFilters, setCatalogTagFilters] = useState<readonly string[]>([]);
-  const [catalogKnownTags, setCatalogKnownTags] = useState<readonly string[]>([]);
-  const [catalogSort, setCatalogSort] = useState<CatalogSort>("newest");
-  const [listLoading, setListLoading] = useState(true);
-  const [listError, setListError] = useState<Error | null>(null);
-  const [catalogRefreshState, setCatalogRefreshState] = useState<CatalogRefreshState>(
-    "idle",
-  );
-  const [fetchedDetails, setDetails] = useState<ArtifactDetails | null>(null);
-  const [fetchedVersions, setVersions] = useState<readonly VersionListItem[]>([]);
-  // The record on screen is only ever the selected artifact's: while the next
-  // artifact loads, the previous one's details and versions are not shown.
-  const details = fetchedDetails?.artifact.id === selectedArtifactId ? fetchedDetails : null;
-  const versions = details === null ? noVersions : fetchedVersions;
   const selectedArtifactRef = useRef(selectedArtifactId);
   selectedArtifactRef.current = selectedArtifactId;
-  const [actions, setActions] = useState<readonly ArtifactAction[]>([]);
-  const [actionNextCursor, setActionNextCursor] = useState<string | null>(null);
-  const [activityLoading, setActivityLoading] = useState(false);
-  const [activityError, setActivityError] = useState<Error | null>(null);
-  // Opening Activity loads it once per artifact; an empty or failed history is not re-requested.
-  const [activityRequested, setActivityRequested] = useState(false);
-  const [comparison, setComparison] = useState<ArtifactComparison | null>(null);
-  const [comparisonLoading, setComparisonLoading] = useState(false);
-  const [comparisonError, setComparisonError] = useState<Error | null>(null);
+  const record = useArtifactRecord({
+    artifactId: selectedArtifactId,
+    followLinkedSource: session.capabilities.linkedArtifacts,
+    onCurrentVersion: useCallback((currentVersionId: string) => {
+      setSelectedVersionId((selected) => selected ?? currentVersionId);
+    }, []),
+    projectId,
+    versionId: selectedVersionId,
+  });
+  const {
+    details,
+    error: detailError,
+    loading: detailLoading,
+    setError: setDetailError,
+    setLoading: setDetailLoading,
+    version: selectedVersion,
+    versions,
+  } = record;
   const [comparisonView, setComparisonView] = useState<ComparisonTab | null>(null);
-  const [fetchedVersion, setSelectedVersion] = useState<ArtifactVersion | null>(null);
-  const selectedVersion = details !== null && fetchedVersion?.version.id === selectedVersionId
-    ? fetchedVersion
-    : null;
-  const fetchedVersionRef = useRef(fetchedVersion);
-  fetchedVersionRef.current = fetchedVersion;
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<Error | null>(null);
+  const activity = useArtifactActivity(projectId, selectedArtifactId, comparisonView === "activity");
+  const versionComparison = useVersionComparison(projectId, selectedArtifactId);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
   const [inspectorOpen, setInspectorOpen] = useState(readInitialInspectorOpen);
   const announce = useAnnounce();
+  // The first page of a project opens its first artifact, at its current
+  // version, so comments and the preview load beside the record.
+  const openFirstArtifact = useCallback((artifacts: ArtifactPage["artifacts"]): void => {
+    const first = artifacts[0]?.artifact;
+    if (first === undefined || selectedArtifactRef.current !== null) return;
+    setSelectedArtifactId(first.id);
+    setSelectedVersionId(first.currentVersionId);
+  }, []);
+  const catalog = useArtifactCatalog(projectId, {announce, onFirstPage: openFirstArtifact});
   const viewportWidth = useViewportWidth();
   const phone = isPhoneWidth(viewportWidth);
   const viewportHeight = useViewportHeight();
@@ -421,8 +446,6 @@ function ProjectReview({
   useFocusContainment(workspaceRef, focusMode);
   const commentsInspectorRef = useRef<CommentsTabHandle | null>(null);
   const [previewModeTarget, setPreviewModeTarget] = useState<HTMLDivElement | null>(null);
-  const catalogRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const catalogRequestGenerationRef = useRef(0);
   const followCommentVersion = useCallback((versionId: string): void => {
     setDetailError(null);
     setSelectedVersionId(versionId);
@@ -434,12 +457,10 @@ function ProjectReview({
     projectId,
     versionId: selectedVersionId,
   });
+  const {learnTags} = catalog;
   useEffect(() => {
-    if (details === null || details.artifact.tags.length === 0) return;
-    setCatalogKnownTags((current) => [
-      ...new Set([...current, ...details.artifact.tags]),
-    ].toSorted());
-  }, [details]);
+    if (details !== null) learnTags(details.artifact.tags);
+  }, [details, learnTags]);
   const openCommentCount = comments.threads.filter(
     (thread) => thread.state === "open",
   ).length;
@@ -481,247 +502,35 @@ function ProjectReview({
   useWebmcp(webmcpRef);
 
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
+  // An artifact opened by URL beyond the first page still gets its row.
   const catalogItems = useMemo<ArtifactPage["artifacts"]>(() => {
     if (
       details === null
-      || searchQuery !== ""
-      || catalogCommentFilter !== "all"
-      || catalogTagFilters.length > 0
-      || items.some(({artifact}) => artifact.id === details.artifact.id)
-    ) return items;
+      || catalog.filtered
+      || catalog.items.some(({artifact}) => artifact.id === details.artifact.id)
+    ) return catalog.items;
     return [{
       artifact: details.artifact,
       commentCount: comments.threads.length,
       links: details.links,
       versionCount: versions.length,
-    }, ...items];
-  }, [
-    catalogCommentFilter,
-    catalogTagFilters.length,
-    comments.threads.length,
-    details,
-    items,
-    searchQuery,
-    versions.length,
-  ]);
+    }, ...catalog.items];
+  }, [catalog.filtered, catalog.items, comments.threads.length, details, versions.length]);
   const catalogItemsRef = useRef(catalogItems);
   catalogItemsRef.current = catalogItems;
   const selectedIndex = catalogItems.findIndex(
     ({artifact}) => artifact.id === selectedArtifactId,
   );
   const selectedItem = selectedIndex < 0 ? null : catalogItems[selectedIndex] ?? null;
-  const loadArtifacts = useCallback(async (
-    cursor: string | null,
-    replace: boolean,
-  ): Promise<ArtifactListLoadResult> => {
-    if (projectId === "") return "skipped";
-    const requestGeneration = ++catalogRequestGenerationRef.current;
-    setListLoading(true);
-    setListError(null);
-    try {
-      const page = await api.artifacts(projectId, cursor, catalogTagFilters, searchQuery, {
-        comments: catalogCommentFilter,
-        sort: catalogSort,
-      });
-      if (requestGeneration !== catalogRequestGenerationRef.current) return "skipped";
-      setCatalogKnownTags((current) => {
-        const next = new Set(current);
-        for (const {artifact} of page.artifacts) {
-          for (const tag of artifact.tags) next.add(tag);
-        }
-        return [...next].toSorted();
-      });
-      setItems((current) => replace ? page.artifacts : [...current, ...page.artifacts]);
-      setNextCursor(page.nextCursor);
-      if (replace) {
-        setSelectedArtifactId((current) => {
-          return current ?? page.artifacts[0]?.artifact.id ?? null;
-        });
-      }
-      return "loaded";
-    } catch (caught) {
-      if (requestGeneration === catalogRequestGenerationRef.current) {
-        setListError(
-          caught instanceof Error ? caught : new Error("Artifact list failed."),
-        );
-      }
-      return "failed";
-    } finally {
-      if (requestGeneration === catalogRequestGenerationRef.current) {
-        setListLoading(false);
-      }
-    }
-  }, [catalogCommentFilter, catalogSort, catalogTagFilters, projectId, searchQuery]);
 
-  const refreshArtifacts = useCallback(async (): Promise<void> => {
-    if (listLoading) return;
-    if (catalogRefreshTimerRef.current !== null) {
-      clearTimeout(catalogRefreshTimerRef.current);
-      catalogRefreshTimerRef.current = null;
-    }
-    setCatalogRefreshState("loading");
-    announce("Refreshing artifact catalog.");
-    const result = await loadArtifacts(null, true);
-    if (result !== "loaded") {
-      setCatalogRefreshState("idle");
-      return;
-    }
-    setCatalogRefreshState("complete");
-    announce("Artifact catalog refreshed.");
-    catalogRefreshTimerRef.current = setTimeout(() => {
-      catalogRefreshTimerRef.current = null;
-      setCatalogRefreshState("idle");
-    }, catalogRefreshConfirmationMilliseconds);
-  }, [announce, listLoading, loadArtifacts]);
 
-  useEffect(() => () => {
-    if (catalogRefreshTimerRef.current !== null) {
-      clearTimeout(catalogRefreshTimerRef.current);
-    }
-  }, []);
+
+
 
   useEffect(() => {
-    if (catalogRefreshTimerRef.current !== null) {
-      clearTimeout(catalogRefreshTimerRef.current);
-      catalogRefreshTimerRef.current = null;
-    }
-    setCatalogRefreshState("idle");
-    setItems([]);
-    void loadArtifacts(null, true);
-  }, [loadArtifacts]);
-
-  useEffect(() => {
+    // Comparison and history belong to one artifact.
     setComparisonView(null);
-    if (selectedArtifactId === null || projectId === "") {
-      setDetails(null);
-      setVersions([]);
-      setActions([]);
-      setActionNextCursor(null);
-      setComparison(null);
-      setSelectedVersion(null);
-      return undefined;
-    }
-    let current = true;
-    setActions([]);
-    setActionNextCursor(null);
-    setActivityRequested(false);
-    setActivityError(null);
-    setComparison(null);
-    setDetailLoading(true);
-    setDetailError(null);
-    void (async () => {
-      try {
-        const [loadedDetails, loadedVersions] = await Promise.all([
-          api.artifact(projectId, selectedArtifactId),
-          api.versions(projectId, selectedArtifactId),
-        ]);
-        if (!current) return;
-        setDetails(loadedDetails);
-        setVersions(loadedVersions);
-        setSelectedVersionId((selected) => {
-          return selected ?? loadedDetails.current.version.id;
-        });
-      } catch (caught) {
-        if (!current) return;
-        setDetails(null);
-        setVersions([]);
-        setSelectedVersion(null);
-        setDetailError(
-          caught instanceof Error ? caught : new Error("Artifact details failed."),
-        );
-      } finally {
-        if (current) setDetailLoading(false);
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, [projectId, selectedArtifactId]);
-
-  const refreshLinkedDetails = useCallback(async (): Promise<void> => {
-    if (selectedArtifactId === null || projectId === "") return;
-    try {
-      const refreshed = await api.artifact(projectId, selectedArtifactId);
-      if (selectedArtifactRef.current === selectedArtifactId) setDetails(refreshed);
-    } catch {
-      // Ambient freshness never replaces the last readable artifact state.
-    }
-  }, [projectId, selectedArtifactId]);
-
-  useCommentPoll(
-    refreshLinkedDetails,
-    session.capabilities.linkedArtifacts && details?.sourceBinding !== undefined,
-  );
-
-  const loadActions = useCallback(async (cursor: string | null): Promise<void> => {
-    if (selectedArtifactId === null || projectId === "") return;
-    const artifactId = selectedArtifactId;
-    setActivityLoading(true);
-    setActivityError(null);
-    try {
-      const page = await api.actions(projectId, artifactId, cursor);
-      if (selectedArtifactRef.current !== artifactId) return;
-      setActions((current) => cursor === null ? page.actions : [...current, ...page.actions]);
-      setActionNextCursor(page.nextCursor);
-    } catch (caught) {
-      if (selectedArtifactRef.current !== artifactId) return;
-      setActivityError(caught instanceof Error ? caught : new Error("Activity loading failed."));
-    } finally {
-      setActivityLoading(false);
-    }
-  }, [projectId, selectedArtifactId]);
-
-  useEffect(() => {
-    if (comparisonView === "activity" && !activityRequested) {
-      setActivityRequested(true);
-      void loadActions(null);
-    }
-  }, [activityRequested, comparisonView, loadActions]);
-
-  // Versions are immutable, so a refreshed record (the linked-source poll, a
-  // tag or access edit) keeps the version on screen; only a different version
-  // or a new current version re-resolves it.
-  const recordLoaded = details !== null;
-  const recordCurrent = details?.current ?? null;
-  const recordCurrentRef = useRef(recordCurrent);
-  recordCurrentRef.current = recordCurrent;
-  const recordCurrentVersionId = recordCurrent?.version.id ?? null;
-  useEffect(() => {
-    if (
-      !recordLoaded
-      || selectedArtifactId === null
-      || selectedVersionId === null
-    ) {
-      setSelectedVersion(null);
-      return undefined;
-    }
-    const currentVersion = recordCurrentRef.current;
-    if (currentVersion !== null && selectedVersionId === currentVersion.version.id) {
-      setSelectedVersion(currentVersion);
-      return undefined;
-    }
-    if (fetchedVersionRef.current?.version.id === selectedVersionId) return undefined;
-    let current = true;
-    setSelectedVersion(null);
-    void (async () => {
-      try {
-        const loaded = await api.version(
-          projectId,
-          selectedArtifactId,
-          selectedVersionId,
-        );
-        if (current) setSelectedVersion(loaded);
-      } catch (caught) {
-        if (!current) return;
-        setDetailError(
-          caught instanceof Error ? caught : new Error("Version loading failed."),
-        );
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, [projectId, recordCurrentVersionId, recordLoaded, selectedArtifactId, selectedVersionId]);
+  }, [selectedArtifactId]);
 
   useEffect(() => {
     const href = workspaceHref({
@@ -846,23 +655,9 @@ function ProjectReview({
     updateArtifact(changed.artifact);
   };
   const updateArtifact = (artifact: ArtifactDetails["artifact"]): void => {
-    setCatalogKnownTags((current) => [...new Set([...current, ...artifact.tags])].toSorted());
-    setDetails((current) => current?.artifact.id === artifact.id
-      ? {...current, artifact}
-      : current);
-    setItems((current) => current.map((item) => item.artifact.id === artifact.id
-      ? {...item, artifact}
-      : item));
-  };
-  /** Show a record re-read after a mutation, unless the reviewer has moved to another artifact since. */
-  const showReloadedRecord = (
-    reloaded: ArtifactDetails,
-    reloadedVersions: readonly VersionListItem[],
-  ): boolean => {
-    if (selectedArtifactRef.current !== reloaded.artifact.id) return false;
-    setDetails(reloaded);
-    setVersions(reloadedVersions);
-    return true;
+    catalog.learnTags(artifact.tags);
+    record.patchArtifact(artifact);
+    catalog.replaceArtifact(artifact);
   };
   const makeVersionCurrent = async (
     versionId: string,
@@ -879,21 +674,13 @@ function ProjectReview({
         crypto.randomUUID(),
       );
       updateArtifact(restored.artifact);
-      const [loadedDetails, loadedVersions] = await Promise.all([
-        api.artifact(details.artifact.projectId, details.artifact.id),
-        api.versions(details.artifact.projectId, details.artifact.id),
-      ]);
-      showReloadedRecord(loadedDetails, loadedVersions);
+      await record.reload();
       return true;
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
         try {
-          const [loadedDetails, loadedVersions] = await Promise.all([
-            api.artifact(details.artifact.projectId, details.artifact.id),
-            api.versions(details.artifact.projectId, details.artifact.id),
-          ]);
-          showReloadedRecord(loadedDetails, loadedVersions);
-          updateArtifact(loadedDetails.artifact);
+          const reloaded = await record.reload();
+          if (reloaded !== null) updateArtifact(reloaded.details.artifact);
         } catch {
           // Keep the original conflict visible when refreshing pointer state fails.
         }
@@ -908,23 +695,6 @@ function ProjectReview({
       return false;
     }
   };
-  const compareVersions = async (fromVersionId: string, toVersionId: string): Promise<void> => {
-    if (details === null || fromVersionId === toVersionId) return;
-    setComparisonLoading(true);
-    setComparisonError(null);
-    try {
-      setComparison(await api.comparison(
-        details.artifact.projectId,
-        details.artifact.id,
-        fromVersionId,
-        toVersionId,
-      ));
-    } catch (caught) {
-      setComparisonError(caught instanceof Error ? caught : new Error("Version comparison failed."));
-    } finally {
-      setComparisonLoading(false);
-    }
-  };
   const captureLinkedArtifact = async (): Promise<void> => {
     if (details === null) return;
     setDetailLoading(true);
@@ -936,12 +706,9 @@ function ProjectReview({
         details.artifact.currentVersionId,
         crypto.randomUUID(),
       );
-      const [loadedDetails, loadedVersions] = await Promise.all([
-        api.artifact(details.artifact.projectId, details.artifact.id),
-        api.versions(details.artifact.projectId, details.artifact.id),
-      ]);
-      if (showReloadedRecord(loadedDetails, loadedVersions)) setSelectedVersionId(captured.version.id);
-      updateArtifact(loadedDetails.artifact);
+      const reloaded = await record.reload();
+      if (reloaded?.shown === true) setSelectedVersionId(captured.version.id);
+      if (reloaded !== null) updateArtifact(reloaded.details.artifact);
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught : new Error("Linked artifact capture failed."));
     } finally {
@@ -974,13 +741,11 @@ function ProjectReview({
         details.artifact.currentVersionId,
         crypto.randomUUID(),
       );
-      setItems((current) => current.filter(({artifact}) => artifact.id !== details.artifact.id));
+      catalog.removeArtifact(details.artifact.id);
       setSelectedArtifactId(null);
       setSelectedVersionId(null);
       setSelectedPath(null);
-      setDetails(null);
-      setVersions([]);
-      void loadArtifacts(null, true);
+      catalog.reload();
       return true;
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught : new Error("Artifact deletion failed."));
@@ -1208,12 +973,11 @@ function ProjectReview({
   ];
 
   const projectEmpty = selectedProject !== null
-    && !listLoading
-    && listError === null
+    && !catalog.loading
+    && catalog.error === null
     && catalogItems.length === 0
-    && query === ""
-    && catalogCommentFilter === "all"
-    && catalogTagFilters.length === 0;
+    && catalog.query === ""
+    && !catalog.filtered;
   const annotateToggle = {
     active: htmlAnnotateModeActive,
     available: previewKind === "html" && galleryCanvas.gallery === null && canComment && htmlViewerMode === "annotate",
@@ -1242,14 +1006,31 @@ function ProjectReview({
       />
     </>
   );
-  const inspectorBody = details === null || selectedVersion === null ? (
-    <SurfaceState
-      count={0}
-      emptyBody="Select an artifact to inspect its immutable record."
-      emptyTitle="Nothing selected"
-      noun="artifacts"
-      phase="ready"
-    />
+  // Something is on its way: a named artifact's record, or the first page that names one.
+  const awaitingRecord = selectedArtifactId === null
+    ? catalog.loading && catalog.items.length === 0
+    : detailError === null;
+  // Comments stay mounted while the next artifact loads, keeping the chosen view and its listing.
+  const inspectorBody = inspectorTab === "comments" && selectedArtifactId !== null ? (
+    commentsTab
+  ) : details === null || selectedVersion === null ? (
+    awaitingRecord ? (
+      <SurfaceState
+        loadingBody="Loading artifact metadata and immutable history."
+        loadingStyle="spinner"
+        loadingTitle="Reading artifact"
+        noun="artifacts"
+        phase="loading"
+      />
+    ) : (
+      <SurfaceState
+        count={0}
+        emptyBody="Select an artifact to inspect its immutable record."
+        emptyTitle="Nothing selected"
+        noun="artifacts"
+        phase="ready"
+      />
+    )
   ) : inspectorTab === "details" ? (
     <DetailsTab
       canManage={canManageArtifacts}
@@ -1261,8 +1042,6 @@ function ProjectReview({
       onTagsChange={changeTags}
       version={selectedVersion}
     />
-  ) : inspectorTab === "comments" ? (
-    commentsTab
   ) : inspectorTab === "files" ? (
     <FilesTab
       onSelect={selectManifestPath}
@@ -1291,43 +1070,44 @@ function ProjectReview({
         <aside aria-label="Artifact catalog" style={catalogLandmarkStyle}>
           <ArtifactListPanel
             canPin={docking.listDocked}
-            commentFilter={catalogCommentFilter}
+            commentFilter={catalog.commentFilter}
             filtersOpen={catalogFiltersOpen}
             items={catalogItems}
-            knownTags={catalogKnownTags}
-            listError={listError}
-            listLoading={listLoading}
-            nextCursor={nextCursor}
+            knownTags={catalog.knownTags}
+            listError={catalog.error}
+            listLoading={catalog.loading}
+            listRereading={catalog.rereading}
+            nextCursor={catalog.nextCursor}
             onAnnounce={announce}
-            onCommentFilterChange={setCatalogCommentFilter}
+            onCommentFilterChange={catalog.setCommentFilter}
             onFiltersOpenChange={setCatalogFiltersOpen}
-            onLoadMore={() => void loadArtifacts(nextCursor, false)}
+            onLoadMore={catalog.loadMore}
             onPeekChange={setCatalogPeeking}
             onPinChange={(pinned) => {
               setCatalogPinned(pinned);
               setCatalogPeeking(false);
             }}
-            onQueryChange={setQuery}
-            onRefresh={() => void refreshArtifacts()}
+            onQueryChange={catalog.setQuery}
+            onRefresh={catalog.refresh}
             onSelect={(artifactId, versionId) => {
               setCatalogSheetOpen(false);
               selectArtifact(artifactId, versionId);
             }}
             onSheetClose={() => setCatalogSheetOpen(false)}
-            onSortChange={setCatalogSort}
-            onTagFiltersChange={setCatalogTagFilters}
+            onSortChange={catalog.setSort}
+            onTagFiltersChange={catalog.setTagFilters}
             onWidthChange={catalogPreference.setWidth}
             peeking={catalogPeeking}
             pinned={catalogPreference.pinned}
             projectName={selectedProject?.name ?? "this project"}
-            query={query}
-            refreshState={catalogRefreshState}
+            query={catalog.query}
+            refreshState={catalog.refreshState}
             selectedArtifactId={selectedArtifactId}
             selectedCommentCount={comments.loading ? null : comments.threads.length}
             settingsHref={selectedProject === null ? null : projectSettingsHref(selectedProject.id)}
             sheet={phone}
-            sort={catalogSort}
-            tagFilters={catalogTagFilters}
+            sort={catalog.sort}
+            tagFilters={catalog.tagFilters}
             width={catalogPreference.width ?? catalogWidth.defaultWidth}
           />
         </aside>
@@ -1372,19 +1152,19 @@ function ProjectReview({
           <div style={canvasColumnStyle}>
             {!comparisonOpen || details === null || comparisonView === null ? null : (
               <ComparisonView
-                actions={actions}
-                activityError={activityError}
-                activityLoading={activityLoading}
-                activityNextCursor={actionNextCursor}
+                actions={activity.actions}
+                activityError={activity.error}
+                activityLoading={activity.loading}
+                activityNextCursor={activity.nextCursor}
                 artifactName={details.artifact.name}
-                comparison={comparison}
-                comparisonError={comparisonError}
-                comparisonLoading={comparisonLoading}
+                comparison={versionComparison.comparison}
+                comparisonError={versionComparison.error}
+                comparisonLoading={versionComparison.loading}
                 currentVersionId={details.artifact.currentVersionId}
                 key={details.artifact.id}
                 onBack={() => setComparisonView(null)}
-                onCompare={compareVersions}
-                onLoadMoreActivity={() => void loadActions(actionNextCursor)}
+                onCompare={versionComparison.compare}
+                onLoadMoreActivity={activity.loadMore}
                 onTabChange={setComparisonView}
                 tab={comparisonView}
                 versions={versions}
@@ -1400,6 +1180,7 @@ function ProjectReview({
                 chrome={focusMode ? "focus" : "workspace"}
                 commentsLoading={comments.loading}
                 detailError={detailError}
+                awaitingCatalog={catalog.loading && catalog.items.length === 0}
                 detailLoading={detailLoading}
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
                 gallery={galleryCanvas.gallery}

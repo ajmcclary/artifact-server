@@ -1,12 +1,13 @@
 import type {ReactNode} from "react";
 
+import "./shell-skeleton.css";
+
 import {
   Alert,
   AuthCard,
   AuthLayout,
   BrandLock,
   Button,
-  Spinner,
   type AuthLayoutPoint,
 } from "@/arkcase";
 
@@ -34,22 +35,24 @@ function GateFrame({children}: {readonly children: ReactNode}) {
   );
 }
 
-/** Shown while the session, access mode, and projects load. */
+/**
+ * Shown while the session, access mode, and projects load: the shell's own
+ * frame, identical to the copy in review.html that paints before any script,
+ * so startup reads as the application arriving rather than a sign-in page.
+ */
 export function LoadingGate() {
   return (
-    <GateFrame>
-      <AuthCard
-        flush
-        subtitle="Opening the review workspace."
-        title="Loading Artifact Server"
-        titleSize="lg"
-        width={440}
-      >
-        <div style={{display: "flex", justifyContent: "center", padding: "12px 0"}}>
-          <Spinner size={28} />
+    <div className="as-boot">
+      <div aria-hidden="true" className="as-boot__nav">
+        <div className="as-boot__brand" />
+      </div>
+      <main className="as-boot__main">
+        <div className="as-boot__status" role="status">
+          <div aria-hidden="true" className="as-boot__spinner" />
+          <h1 className="as-boot__title">Loading Artifact Server</h1>
         </div>
-      </AuthCard>
-    </GateFrame>
+      </main>
+    </div>
   );
 }
 

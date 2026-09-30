@@ -30,6 +30,10 @@ export interface ReviewQueue {
   readonly entries: readonly QueueEntry[];
   readonly phase: ReviewQueuePhase;
   readonly refresh: () => void;
+  /** The last read failed while an earlier queue stays on screen. */
+  readonly refreshFailed: boolean;
+  /** A re-read is running while the earlier queue stays on screen. */
+  readonly refreshing: boolean;
   /** True when some project held more artifacts or sends than its first pages. */
   readonly truncated: boolean;
   /** Projects whose listings failed; their artifacts are missing from `entries`. */
@@ -121,23 +125,41 @@ async function loadReviewQueue(projects: readonly Project[], isCurrent: () => bo
   };
 }
 
-/** Load the queue for every readable project; `refresh` reloads it. */
+/**
+ * The queue last read for one set of projects. Returning to the queue shows
+ * it at once and re-reads underneath, instead of starting from a spinner.
+ * Sign-out loads a new document, so it never outlives the signed-in person.
+ */
+let lastQueue: {readonly key: string; readonly queue: LoadedQueue} | null = null;
+
+function projectsKey(projects: readonly Project[]): string {
+  return projects.map((project) => project.id).join("\n");
+}
+
+/** Load the queue for every readable project; `refresh` re-reads it with the earlier queue still shown. */
 export function useReviewQueue(projects: readonly Project[]): ReviewQueue {
+  const key = projectsKey(projects);
   const [generation, setGeneration] = useState(0);
-  const [loaded, setLoaded] = useState<LoadedQueue>({entries: [], truncated: false, unreadable: []});
-  const [phase, setPhase] = useState<ReviewQueuePhase>("loading");
+  const [loaded, setLoaded] = useState<LoadedQueue | null>(
+    () => lastQueue?.key === key ? lastQueue.queue : null,
+  );
+  const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let current = true;
-    setPhase("loading");
+    setRefreshing(true);
     void (async () => {
       try {
         const next = await loadReviewQueue(projects, () => current);
         if (!current) return;
+        lastQueue = {key: projectsKey(projects), queue: next};
         setLoaded(next);
-        setPhase("ready");
+        setFailed(false);
       } catch {
-        if (current) setPhase("failed");
+        if (current) setFailed(true);
+      } finally {
+        if (current) setRefreshing(false);
       }
     })();
     return () => {
@@ -146,11 +168,14 @@ export function useReviewQueue(projects: readonly Project[]): ReviewQueue {
   }, [generation, projects]);
 
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
+  const phase: ReviewQueuePhase = loaded !== null ? "ready" : failed ? "failed" : "loading";
   return {
-    entries: loaded.entries,
+    entries: loaded?.entries ?? [],
     phase,
     refresh,
-    truncated: loaded.truncated,
-    unreadable: loaded.unreadable,
+    refreshFailed: loaded !== null && failed,
+    refreshing: loaded !== null && refreshing,
+    truncated: loaded?.truncated ?? false,
+    unreadable: loaded?.unreadable ?? [],
   };
 }

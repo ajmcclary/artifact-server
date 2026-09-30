@@ -3140,6 +3140,25 @@ requirements:
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
 
+  - id: NAV-001
+    kind: behavior
+    behavior: Moving between application screens by navigation, account menu, in-application links, the palette, or browser history changes the screen in place without a document load or startup gate; startup paints the application's own frame; a re-read screen keeps what it shows; and no project, artifact, or version shows another one's state or a late answer for it.
+    owner: web-application
+    source: {file: single-application-administration-spec.md, anchor: screen-transitions}
+    acceptance:
+      behavior: {id: NAV-001-B, description: "Move between the queue, a project's workspace, another project, the design library, and settings by navigation, account menu, brand mark, and history within one document and without the startup gate; startup paints the shell frame at the pinned navigation width; the catalog, queue, and Comments view keep their content and choices across re-reads and artifact switches; native controls follow the chosen theme."}
+      failure: {id: NAV-001-F, description: "While another artifact loads its record, the previous artifact's name, versions, Share, and Delete never show; a failed or empty activity history is requested once, not in a loop; a refused sign-out reports the failure and keeps the reviewer signed in on the same screen."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local Chromium browser evidence proves in-place navigation, the startup frame, re-read continuity, stale-record isolation, bounded activity reads, and refused sign-out. Firefox and WebKit, narrow viewports, the startup deadline, and team deployments are not yet recorded.
+    depends_on: [CMT-015, CMT-016, ADM-006]
+    evidence:
+      - deployment: local
+        tests: [NAV-001-B, NAV-001-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-09-30T23:17:43.314Z"
+
   - id: ADM-007
     kind: behavior
     behavior: Before the legacy application is removed, canonical Review provides the existing browser operations for version comparison, action history, artifact tombstoning, linked-source freshness and capture, eligible live view, and comment dispatch with agent presence by reusing their established product contracts.
