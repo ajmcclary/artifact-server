@@ -807,7 +807,7 @@
       "source": "arkcase/project/tokens/fonts/publicsans-OFL.txt"
     },
     "tokens/fonts/sourcecodepro-OFL.txt": {
-      "sha256": "cb30d3086a8b3ce0b9e3690bf48d6620402b61160bc658076f95180ccd9e9dae",
+      "sha256": "4a4a4179a96b5ef6786186d199f0d049b151352f460b8d2f3c00083792f37dd9",
       "source": "arkcase/project/tokens/fonts/sourcecodepro-OFL.txt"
     },
     "tokens/fonts/sourceserif4-OFL.txt": {
@@ -815,7 +815,7 @@
       "source": "arkcase/project/tokens/fonts/sourceserif4-OFL.txt"
     },
     "tokens/icons.css": {
-      "sha256": "6346ca884142b6b05f328f8a36bb6149eb8d78cb703e44684fced0c2936e9c66",
+      "sha256": "09913a82b0f4cb321bb0dcd562fce7333510ef12b6c3675e034e87731e3656c3",
       "source": "arkcase/project/tokens/icons.css"
     },
     "tokens/spacing.css": {
@@ -885,15 +885,16 @@
       "bi-folder",
       "bi-folder-plus",
       "bi-folder2",
+      "bi-folder2-open",
       "bi-fullscreen",
       "bi-funnel",
+      "bi-gear",
       "bi-geo-alt-fill",
       "bi-git",
       "bi-github",
       "bi-grid-1x2",
       "bi-grid-3x3-gap",
       "bi-image",
-      "bi-inbox",
       "bi-info-circle",
       "bi-info-circle-fill",
       "bi-journal-text",
