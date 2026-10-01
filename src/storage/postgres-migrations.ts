@@ -949,6 +949,23 @@ const addInstallationActivityLog = Effect.gen(function*() {
   }
 });
 
+const addMemberAdmissionAndActivity = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    `ALTER TABLE installation_members
+      ADD COLUMN IF NOT EXISTS last_active_at TEXT,
+      ADD COLUMN IF NOT EXISTS admitted_by_principal_id TEXT,
+      ADD COLUMN IF NOT EXISTS admission_method TEXT
+        CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner'))`,
+    `ALTER TABLE managed_api_keys
+      ADD COLUMN IF NOT EXISTS last_used_at TEXT`,
+    `CREATE INDEX IF NOT EXISTS actions_subject
+      ON actions (installation_id, subject_id, created_at DESC, id DESC)
+      WHERE subject_id IS NOT NULL`,
+  ] as const;
+  for (const statement of statements) yield* sql.unsafe(statement);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -968,10 +985,11 @@ const migrationLoader = Migrator.fromRecord({
   "0016_prepared_manifest_entries": addPreparedManifestEntries,
   "0017_staged_upload_cleanup_claim": addStagedUploadCleanupClaim,
   "0018_installation_activity_log": addInstallationActivityLog,
+  "0019_member_admission_and_activity": addMemberAdmissionAndActivity,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 18;
+export const requiredPostgresSchemaVersion = 19;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1080,6 +1098,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 18,
     name: "installation_activity_log",
+  }, {
+    migration_id: 19,
+    name: "member_admission_and_activity",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

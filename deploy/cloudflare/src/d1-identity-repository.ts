@@ -1,6 +1,7 @@
 import {z} from "zod";
 
 import type {ActionAttribution} from "../../../src/core/action-attribution.js";
+import {memberAdmissions} from "../../../src/core/identity-ports.js";
 import {
   type ActionInsert,
   attributedInsert,
@@ -23,6 +24,7 @@ import type {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
   memberStatuses,
@@ -65,6 +67,15 @@ const memberRowSchema = z.object({
   role: membershipRoleSchema,
   status: memberStatusSchema,
   updatedAt: z.string(),
+});
+const listedMemberRowSchema = memberRowSchema.extend({
+  admittedHow: z.enum([
+    memberAdmissions.automatic,
+    memberAdmissions.manual,
+    memberAdmissions.owner,
+  ]).nullable(),
+  admittedByName: z.string().nullable(),
+  lastActiveAt: z.string().nullable(),
 });
 const sessionRowSchema = z.object({
   createdAt: z.string(),
@@ -208,8 +219,8 @@ export function createD1IdentityRepository(
           database.prepare(`
             INSERT INTO installation_members (
               id, installation_id, email, display_name, role, status,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              created_at, updated_at, admitted_by_principal_id, admission_method
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             command.id,
             command.installationId,
@@ -219,6 +230,8 @@ export function createD1IdentityRepository(
             memberStatuses.active,
             command.createdAt,
             command.createdAt,
+            command.attribution.principalId,
+            command.admittedHow,
           ),
           actionStatement(attributedInsert(command.attribution, {
             action: "member_admit",
@@ -501,11 +514,22 @@ export function createD1IdentityRepository(
       return result.results.map((row) => withoutSecretDigest(parseApiKey(row)));
     },
 
-    listMembers: async (installationId) => {
-      const result = await database.prepare(`${memberSelect}
-        WHERE installation_id = ? ORDER BY created_at ASC, id ASC
-      `).bind(installationId).all<z.input<typeof memberRowSchema>>();
-      return result.results.map((row) => memberRowSchema.parse(row));
+    listMembers: async (installationId): Promise<readonly ListedMember[]> => {
+      const result = await database.prepare(`
+        SELECT member.id, member.installation_id AS installationId, member.email,
+          member.display_name AS displayName, member.role, member.status,
+          member.created_at AS createdAt, member.updated_at AS updatedAt,
+          member.last_active_at AS lastActiveAt,
+          member.admission_method AS admittedHow,
+          admitter.display_name AS admittedByName
+        FROM installation_members AS member
+        LEFT JOIN installation_members AS admitter
+          ON admitter.installation_id = member.installation_id
+          AND admitter.id = member.admitted_by_principal_id
+        WHERE member.installation_id = ?
+        ORDER BY member.created_at ASC, member.id ASC
+      `).bind(installationId).all<z.input<typeof listedMemberRowSchema>>();
+      return result.results.map((row) => listedMemberRowSchema.parse(row));
     },
 
     revokeApiKey: async (installationId, keyId, revokedAt, attribution) => {

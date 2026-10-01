@@ -2,6 +2,7 @@ import type {ActionAttribution} from "./action-attribution.js";
 import type {
   ApplicationSession,
   InstallationMember,
+  ListedMember,
   LoginAttempt,
   ManagedApiKey,
   StoredManagedApiKey,
@@ -94,7 +95,7 @@ export interface IdentityRepository {
   ): Promise<InstallationMember | null>;
   hasMembers(installationId: string): Promise<boolean>;
   listApiKeys(installationId: string): Promise<readonly ManagedApiKey[]>;
-  listMembers(installationId: string): Promise<readonly InstallationMember[]>;
+  listMembers(installationId: string): Promise<readonly ListedMember[]>;
   revokeApiKey(
     installationId: string,
     keyId: string,

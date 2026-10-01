@@ -12,7 +12,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 16;
+export const requiredD1SchemaVersion = 17;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -187,6 +187,10 @@ const schemaSql = `
     status TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    last_active_at TEXT,
+    admitted_by_principal_id TEXT,
+    admission_method TEXT
+      CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner')),
     UNIQUE (installation_id, email)
   );
 
@@ -320,6 +324,7 @@ const schemaSql = `
     expires_at TEXT NOT NULL,
     revoked_at TEXT,
     rotated_from_id TEXT REFERENCES managed_api_keys(id),
+    last_used_at TEXT,
     UNIQUE (installation_id, prefix)
   );
 
@@ -653,6 +658,7 @@ export async function migrateD1(
     await addPreparedManifestEntriesTableIfMissing(database);
   }
   await addInstallationActivityLogIfMissing(database);
+  await addAdmissionAndActivityColumnsIfMissing(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -693,6 +699,38 @@ async function addInstallationActivityLogIfMissing(
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new Error(`D1 migration installation_activity_log failed: ${detail}`, {cause});
   }
+}
+
+/**
+ * Add admission and activity facts to identity tables created before this
+ * revision. `CREATE TABLE IF NOT EXISTS` leaves an existing table unchanged.
+ */
+async function addAdmissionAndActivityColumnsIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const members = await database.prepare("PRAGMA table_info(installation_members)")
+    .all<{name: string}>();
+  const memberColumns = new Set(members.results.map((column) => column.name));
+  const statements: string[] = [];
+  if (!memberColumns.has("last_active_at")) {
+    statements.push("ALTER TABLE installation_members ADD COLUMN last_active_at TEXT");
+  }
+  if (!memberColumns.has("admitted_by_principal_id")) {
+    statements.push("ALTER TABLE installation_members ADD COLUMN admitted_by_principal_id TEXT");
+  }
+  if (!memberColumns.has("admission_method")) {
+    statements.push(`ALTER TABLE installation_members ADD COLUMN admission_method TEXT
+      CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner'))`);
+  }
+  const keys = await database.prepare("PRAGMA table_info(managed_api_keys)")
+    .all<{name: string}>();
+  if (!keys.results.some((column) => column.name === "last_used_at")) {
+    statements.push("ALTER TABLE managed_api_keys ADD COLUMN last_used_at TEXT");
+  }
+  statements.push(`CREATE INDEX IF NOT EXISTS actions_subject
+    ON actions (subject_id, created_at DESC, id DESC)
+    WHERE subject_id IS NOT NULL`);
+  await database.batch(statements.map((statement) => database.prepare(statement)));
 }
 
 async function addArtifactSearchNameIfMissing(

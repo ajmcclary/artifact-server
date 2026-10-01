@@ -5699,6 +5699,11 @@ export class SqliteArtifactRepository implements
         ON projects (archived_at, created_at, id);
     `);
     this.#addInstallationActivityLogIfMissing();
+    this.#database.exec(`
+      CREATE INDEX IF NOT EXISTS actions_subject
+        ON actions (subject_id, created_at DESC, id DESC)
+        WHERE subject_id IS NOT NULL;
+    `);
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
 

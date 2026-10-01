@@ -10,6 +10,7 @@ import {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
   memberStatuses,
@@ -24,6 +25,7 @@ import {
   type ActionAttribution,
   systemAttribution,
 } from "../core/action-attribution.js";
+import {memberAdmissions} from "../core/identity-ports.js";
 import {
   type ActionInsert,
   attributedInsert,
@@ -69,6 +71,15 @@ const memberRowSchema = z.object({
   role: membershipRoleSchema,
   status: memberStatusSchema,
   updatedAt: z.string(),
+});
+const listedMemberRowSchema = memberRowSchema.extend({
+  admittedHow: z.enum([
+    memberAdmissions.automatic,
+    memberAdmissions.manual,
+    memberAdmissions.owner,
+  ]).nullable(),
+  admittedByName: z.string().nullable(),
+  lastActiveAt: z.string().nullable(),
 });
 const sessionRowSchema = z.object({
   createdAt: z.string(),
@@ -148,8 +159,8 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         this.#database.prepare(`
           INSERT INTO installation_members (
             id, installation_id, email, display_name, role, status,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, admitted_by_principal_id, admission_method
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           command.id,
           command.installationId,
@@ -159,6 +170,8 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
           memberStatuses.active,
           command.createdAt,
           command.createdAt,
+          command.attribution.principalId,
+          command.admittedHow,
         );
         this.#insertAction(attributedInsert(command.attribution, {
           action: "member_admit",
@@ -199,22 +212,28 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     }
   }
 
-  async listMembers(installationId: string): Promise<readonly InstallationMember[]> {
+  async listMembers(installationId: string): Promise<readonly ListedMember[]> {
     const rows = this.#database.prepare(`
       SELECT
-        id,
-        installation_id AS installationId,
-        email,
-        display_name AS displayName,
-        role,
-        status,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM installation_members
-      WHERE installation_id = ?
-      ORDER BY created_at ASC, id ASC
+        member.id,
+        member.installation_id AS installationId,
+        member.email,
+        member.display_name AS displayName,
+        member.role,
+        member.status,
+        member.created_at AS createdAt,
+        member.updated_at AS updatedAt,
+        member.last_active_at AS lastActiveAt,
+        member.admission_method AS admittedHow,
+        admitter.display_name AS admittedByName
+      FROM installation_members AS member
+      LEFT JOIN installation_members AS admitter
+        ON admitter.installation_id = member.installation_id
+        AND admitter.id = member.admitted_by_principal_id
+      WHERE member.installation_id = ?
+      ORDER BY member.created_at ASC, member.id ASC
     `).all(installationId);
-    return rows.map((row) => memberRowSchema.parse(row));
+    return rows.map((row) => listedMemberRowSchema.parse(row));
   }
 
   async findMember(
@@ -769,6 +788,10 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         status TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        last_active_at TEXT,
+        admitted_by_principal_id TEXT,
+        admission_method TEXT
+          CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner')),
         UNIQUE (installation_id, email)
       );
 
@@ -809,6 +832,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         expires_at TEXT NOT NULL,
         revoked_at TEXT,
         rotated_from_id TEXT REFERENCES managed_api_keys(id),
+        last_used_at TEXT,
         UNIQUE (installation_id, prefix)
       );
 
@@ -841,6 +865,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
       ) STRICT;
     `);
     this.#addLoginAttemptNonceIfMissing();
+    this.#addAdmissionAndActivityColumnsIfMissing();
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
 
@@ -849,11 +874,33 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     this.#database.exec("ALTER TABLE login_attempts ADD COLUMN nonce TEXT");
   }
 
-  #tableColumns(table: "login_attempts"): readonly string[] {
+  #addAdmissionAndActivityColumnsIfMissing(): void {
+    const memberColumns = this.#tableColumns("installation_members");
+    if (!memberColumns.includes("last_active_at")) {
+      this.#database.exec("ALTER TABLE installation_members ADD COLUMN last_active_at TEXT");
+    }
+    if (!memberColumns.includes("admitted_by_principal_id")) {
+      this.#database.exec(
+        "ALTER TABLE installation_members ADD COLUMN admitted_by_principal_id TEXT",
+      );
+    }
+    if (!memberColumns.includes("admission_method")) {
+      this.#database.exec(`ALTER TABLE installation_members ADD COLUMN admission_method TEXT
+        CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner'))`);
+    }
+    if (!this.#tableColumns("managed_api_keys").includes("last_used_at")) {
+      this.#database.exec("ALTER TABLE managed_api_keys ADD COLUMN last_used_at TEXT");
+    }
+  }
+
+  #tableColumns(
+    table: "installation_members" | "login_attempts" | "managed_api_keys",
+  ): readonly string[] {
     const rows = this.#database.prepare(`PRAGMA table_info(${table})`).all();
     const columns = z.array(z.object({name: z.string()})).parse(rows);
     return columns.map((column) => column.name);
   }
+
 }
 
 function parseApiKey(

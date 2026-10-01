@@ -13,7 +13,7 @@ import {
 } from "../../../tests/support/activity-history-fixture.js";
 import {createD1ArtifactRepository} from "../src/d1-artifact-repository.js";
 import {createD1IdentityRepository} from "../src/d1-identity-repository.js";
-import {migrateD1} from "../src/d1-migrations.js";
+import {migrateD1, requiredD1SchemaVersion} from "../src/d1-migrations.js";
 
 const openLocalD1 = () => getPlatformProxy<{
   ARTIFACT_SERVER_D1_DATABASE: D1Database;
@@ -85,7 +85,7 @@ describe("D1 activity log migration", () => {
       expectRecoveredActivity(rows, fixture);
       expect(await binding.prepare(
         "SELECT version FROM artifact_server_schema WHERE component = 'runtime'",
-      ).first<number>("version")).toBe(16);
+      ).first<number>("version")).toBe(requiredD1SchemaVersion);
 
       // A repeated migration changes nothing.
       const before = (await binding.prepare("SELECT * FROM actions ORDER BY id").all()).results;

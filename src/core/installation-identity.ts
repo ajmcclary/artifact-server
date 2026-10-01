@@ -1,3 +1,5 @@
+import type {MemberAdmission} from "./identity-ports.js";
+
 import type {
   MembershipRole,
   PrincipalCapability,
@@ -28,6 +30,14 @@ export interface InstallationMember {
   readonly role: MembershipRole;
   readonly status: MemberStatus;
   readonly updatedAt: string;
+}
+
+/** Administrator-facing member record with admission and activity facts. */
+export interface ListedMember extends InstallationMember {
+  /** Null for members admitted before admission was recorded. */
+  readonly admittedHow: MemberAdmission | null;
+  readonly admittedByName: string | null;
+  readonly lastActiveAt: string | null;
 }
 
 /** Identity information returned by a configured interactive-login provider. */

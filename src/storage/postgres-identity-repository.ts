@@ -17,6 +17,7 @@ import type {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
   memberStatuses,
@@ -31,6 +32,7 @@ import {
   type ActionAttribution,
   systemAttribution,
 } from "../core/action-attribution.js";
+import {memberAdmissions} from "../core/identity-ports.js";
 import {attributedInsert} from "./action-insert.js";
 import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
@@ -66,6 +68,15 @@ const memberRowSchema = z.object({
   role: membershipRoleSchema,
   status: memberStatusSchema,
   updatedAt: z.string(),
+});
+const listedMemberRowSchema = memberRowSchema.extend({
+  admittedHow: z.enum([
+    memberAdmissions.automatic,
+    memberAdmissions.manual,
+    memberAdmissions.owner,
+  ]).nullable(),
+  admittedByName: z.string().nullable(),
+  lastActiveAt: z.string().nullable(),
 });
 const sessionRowSchema = z.object({
   createdAt: z.string(),
@@ -141,11 +152,12 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
         yield* sql.withTransaction(Effect.gen(function*() {
           yield* sql`INSERT INTO installation_members (
             installation_id, id, email, display_name, role, status,
-            created_at, updated_at
+            created_at, updated_at, admitted_by_principal_id, admission_method
           ) VALUES (
             ${command.installationId}, ${command.id}, ${command.email},
             ${command.displayName}, ${command.role}, ${memberStatuses.active},
-            ${command.createdAt}, ${command.createdAt}
+            ${command.createdAt}, ${command.createdAt},
+            ${command.attribution.principalId}, ${command.admittedHow}
           )`;
           yield* insertPostgresAction(command.installationId, attributedInsert(command.attribution, {
             action: "member_admit",
@@ -170,16 +182,29 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     return member;
   }
 
-  async listMembers(installationId: string): Promise<readonly InstallationMember[]> {
+  async listMembers(installationId: string): Promise<readonly ListedMember[]> {
     this.#assertInstallationScope(installationId);
     return this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
-      const rows = yield* sql.unsafe<object>(memberSelect(
-        "WHERE installation_id = $1 ORDER BY created_at ASC, id ASC",
-      ), [installationId]);
-      return z.array(memberRowSchema).parse(rows);
+      const rows = yield* sql.unsafe<object>(
+        `SELECT member.id, member.installation_id AS "installationId", member.email,
+          member.display_name AS "displayName", member.role, member.status,
+          member.created_at AS "createdAt", member.updated_at AS "updatedAt",
+          member.last_active_at AS "lastActiveAt",
+          member.admission_method AS "admittedHow",
+          admitter.display_name AS "admittedByName"
+        FROM installation_members AS member
+        LEFT JOIN installation_members AS admitter
+          ON admitter.installation_id = member.installation_id
+          AND admitter.id = member.admitted_by_principal_id
+        WHERE member.installation_id = $1
+        ORDER BY member.created_at ASC, member.id ASC`,
+        [installationId],
+      );
+      return z.array(listedMemberRowSchema).parse(rows);
     }));
   }
+
 
   async findMember(
     installationId: string,

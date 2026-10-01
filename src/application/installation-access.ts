@@ -29,6 +29,7 @@ import {
   type ApplicationSession,
   type ExternalIdentity,
   type InstallationMember,
+  type ListedMember,
   type IssuedApplicationSession,
   type IssuedManagedApiKey,
   type LoginAttempt,
@@ -137,7 +138,7 @@ export interface InstallationIdentityRepository {
   ) => Effect.Effect<readonly ManagedApiKey[], IdentityRepositoryFailure>;
   readonly listMembers: (
     installationId: string,
-  ) => Effect.Effect<readonly InstallationMember[], IdentityRepositoryFailure>;
+  ) => Effect.Effect<readonly ListedMember[], IdentityRepositoryFailure>;
   readonly revokeApiKey: (
     installationId: string,
     keyId: string,
@@ -278,7 +279,7 @@ export interface InstallationAccessOperations {
   readonly listMembers: (
     principal: Principal,
   ) => Effect.Effect<
-    readonly InstallationMember[],
+    readonly ListedMember[],
     AuthorizationDenied | IdentityRepositoryFailure
   >;
   readonly issueLocalBrowserLogin: (
