@@ -21,6 +21,7 @@ import type {
   ActivityPage,
   ActivityQuery,
   ActivitySegment,
+  ActivitySummary,
   ActivityType,
 } from "../core/ports.js";
 import {maximumActivitySearchCharacters} from "../core/publishing-limits.js";
@@ -30,6 +31,9 @@ export interface ActivityPersistence {
   readonly listActivity: (
     query: ActivityQuery,
   ) => Effect.Effect<ActivityPage, ArtifactRepositoryFailure>;
+  readonly summarizeActivity: (
+    projectIds: readonly string[],
+  ) => Effect.Effect<ActivitySummary, ArtifactRepositoryFailure>;
 }
 
 /** Member and key names, read only for administrators. */
@@ -77,6 +81,10 @@ interface ActivityOperations {
     principal: Principal,
     request: ActivityRequest,
   ) => Effect.Effect<ActivityResponse, ActivityFailure>;
+  readonly summary: (
+    principal: Principal,
+    projectIds: readonly string[],
+  ) => Effect.Effect<ActivitySummary, ActivityFailure>;
 }
 
 /** Reads the installation activity log under membership visibility rules. */
@@ -151,5 +159,13 @@ function makeActivityService(
     } satisfies ActivityResponse;
   });
 
-  return {list};
+  const summary = Effect.fn("ActivityService.summary")(function*(
+    principal: Principal,
+    projectIds: readonly string[],
+  ) {
+    yield* authorization.requireArtifactListing(principal);
+    return yield* dependencies.persistence.summarizeActivity(projectIds);
+  });
+
+  return {list, summary};
 }

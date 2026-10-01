@@ -306,9 +306,27 @@ export interface ActivityPage {
   readonly nextCursor: PageCursor | null;
 }
 
+/** Per-project counts shown in the Projects list. */
+export interface ActivityProjectSummary {
+  readonly artifactCount: number;
+  readonly id: string;
+  readonly lastActivityAt: string | null;
+  readonly unresolved: number;
+}
+
+/** Counts behind the nav badge, metric cards and Projects rows. */
+export interface ActivitySummary {
+  readonly artifactsInReview: number;
+  readonly needsYou: number;
+  readonly openConversations: number;
+  readonly projects: readonly ActivityProjectSummary[];
+  readonly withAgent: number;
+}
+
 /** Read side of the installation activity log. */
 export interface ActivityLog {
   listActivity(query: ActivityQuery): Promise<ActivityPage>;
+  summarizeActivity(projectIds: readonly string[]): Promise<ActivitySummary>;
 }
 
 /** Values used to create one comment thread on one exact saved version. */

@@ -85,6 +85,7 @@ import type {
   ActivityLog,
   ActivityPage,
   ActivityQuery,
+  ActivitySummary,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -156,6 +157,9 @@ import {
 } from "../../../src/storage/action-insert.js";
 import {artifactHistoryActionKindSql} from "../../../src/storage/activity-log-schema.js";
 import {
+  activityProjectSummarySchema,
+  activitySummaryTotalsSchema,
+  buildSummaryStatements,
   activitySqlRowSchema,
   assembleActivityPage,
   buildListActivityStatement,
@@ -3333,6 +3337,17 @@ export function createD1ArtifactRepository(
       const replies = replyResult.results
         .map((row) => commentReplyFromRow(commentReplyRowSchema.parse(row)));
       return assembleActivityPage(rows, threads, replies, query.limit);
+    },
+    summarizeActivity: async (projectIds: readonly string[]): Promise<ActivitySummary> => {
+      const {projects, totals} = buildSummaryStatements("sqlite", projectIds, installationId);
+      const [totalResult, projectResult] = await database.batch([
+        database.prepare(totals.text).bind(...totals.values),
+        database.prepare(projects.text).bind(...projects.values),
+      ]);
+      return {
+        ...activitySummaryTotalsSchema.parse(totalResult?.results[0]),
+        projects: z.array(activityProjectSummarySchema).parse(projectResult?.results ?? []),
+      };
     },
     listArtifactActions: async (command: ListArtifactActions): Promise<ArtifactActionPage> => {
       const result = await database.prepare(`

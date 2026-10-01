@@ -420,3 +420,81 @@ export function assembleActivityPage(
       : null,
   };
 }
+
+/** The two statements behind one activity summary. */
+export interface ActivitySummaryStatements {
+  readonly projects: ActivityStatement;
+  readonly totals: ActivityStatement;
+}
+
+/** Totals and per-project counts over live open threads. */
+export function buildSummaryStatements(
+  dialect: ActivitySqlDialect,
+  projectIds: readonly string[],
+  installationId: string,
+): ActivitySummaryStatements {
+  const totalValues = new StatementValues(dialect);
+  const totalWhere = ["t.state = 'open'"];
+  if (dialect === "postgres") {
+    totalWhere.push(`t.installation_id = ${totalValues.bind(installationId)}`);
+  }
+  if (projectIds.length > 0) {
+    totalWhere.push(`t.project_id IN ${totalValues.bindList(projectIds)}`);
+  }
+  const totals = {
+    text: `SELECT
+        COALESCE(SUM(CASE WHEN held.id IS NULL THEN 1 ELSE 0 END), 0) AS "needsYou",
+        COALESCE(SUM(CASE WHEN held.id IS NULL THEN 0 ELSE 1 END), 0) AS "withAgent",
+        COUNT(t.id) AS "openConversations",
+        COUNT(DISTINCT t.artifact_id) AS "artifactsInReview"
+      FROM comment_threads t
+      JOIN artifacts a ON a.id = t.artifact_id${scope(dialect, "a", "t")}
+        AND a.deleted_at IS NULL
+      LEFT JOIN agent_dispatches held ON held.id = t.dispatch_id${scope(dialect, "held", "t")}
+        AND held.state IN ${activeDispatchStates}
+      WHERE ${totalWhere.join(" AND ")}`,
+    values: totalValues.values,
+  };
+  const projectValues = new StatementValues(dialect);
+  const projectWhere: string[] = [];
+  if (dialect === "postgres") {
+    projectWhere.push(`p.installation_id = ${projectValues.bind(installationId)}`);
+  }
+  if (projectIds.length > 0) {
+    projectWhere.push(`p.id IN ${projectValues.bindList(projectIds)}`);
+  }
+  const projects = {
+    text: `SELECT
+        p.id AS "id",
+        (SELECT COUNT(*) FROM artifacts pa
+          WHERE pa.project_id = p.id${scope(dialect, "pa", "p")}
+            AND pa.deleted_at IS NULL) AS "artifactCount",
+        (SELECT COUNT(*) FROM comment_threads pt
+          JOIN artifacts pta ON pta.id = pt.artifact_id${scope(dialect, "pta", "pt")}
+            AND pta.deleted_at IS NULL
+          WHERE pt.project_id = p.id${scope(dialect, "pt", "p")}
+            AND pt.state = 'open') AS "unresolved",
+        (SELECT MAX(px.created_at) FROM actions px
+          WHERE px.project_id = p.id${scope(dialect, "px", "p")}) AS "lastActivityAt"
+      FROM projects p
+      ${projectWhere.length === 0 ? "" : `WHERE ${projectWhere.join(" AND ")}`}
+      ORDER BY p.created_at, p.id`,
+    values: projectValues.values,
+  };
+  return {projects, totals};
+}
+
+/** Postgres returns COUNT and SUM as bigint strings; SQLite as numbers. */
+export const activitySummaryTotalsSchema = z.object({
+  artifactsInReview: z.coerce.number().int().nonnegative(),
+  needsYou: z.coerce.number().int().nonnegative(),
+  openConversations: z.coerce.number().int().nonnegative(),
+  withAgent: z.coerce.number().int().nonnegative(),
+});
+
+export const activityProjectSummarySchema = z.object({
+  artifactCount: z.coerce.number().int().nonnegative(),
+  id: z.string(),
+  lastActivityAt: z.string().nullable(),
+  unresolved: z.coerce.number().int().nonnegative(),
+});

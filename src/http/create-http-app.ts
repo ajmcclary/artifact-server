@@ -1406,6 +1406,19 @@ export function createHttpApp(
     });
   });
 
+  app.get("/api/v1/activity/summary", async (context) => {
+    const projectIds = z.array(projectIdSchema).max(maximumActivityProjectFilters)
+      .parse(context.req.queries("project") ?? []);
+    const summary = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ActivityService.use((activity) =>
+        activity.summary(context.get("principal"), projectIds)
+      ),
+    );
+    return context.json(summary);
+  });
+
   app.post(
     "/api/v1/agent-dispatches/:dispatchId/delivered",
     boundedJsonBody,

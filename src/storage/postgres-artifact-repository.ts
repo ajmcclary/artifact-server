@@ -78,6 +78,7 @@ import type {
   ActivityLog,
   ActivityPage,
   ActivityQuery,
+  ActivitySummary,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -141,6 +142,9 @@ import {
 } from "./action-insert.js";
 import {artifactHistoryActionKindSql} from "./activity-log-schema.js";
 import {
+  activityProjectSummarySchema,
+  activitySummaryTotalsSchema,
+  buildSummaryStatements,
   activitySqlRowSchema,
   assembleActivityPage,
   buildListActivityStatement,
@@ -2199,6 +2203,24 @@ export class PostgresArtifactRepository implements
       return assembleActivityPage(rows, threads, replies, query.limit);
     }));
   }
+  async summarizeActivity(projectIds: readonly string[]): Promise<ActivitySummary> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const {projects, totals} = buildSummaryStatements(
+        "postgres",
+        projectIds,
+        installationId,
+      );
+      const totalRows = yield* sql.unsafe<object>(totals.text, [...totals.values]);
+      const projectRows = yield* sql.unsafe<object>(projects.text, [...projects.values]);
+      return {
+        ...activitySummaryTotalsSchema.parse(totalRows[0]),
+        projects: z.array(activityProjectSummarySchema).parse(projectRows),
+      };
+    }));
+  }
+
 
 
   async restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState> {

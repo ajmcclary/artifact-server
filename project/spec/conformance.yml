@@ -1164,6 +1164,20 @@ requirements:
     proof_gap: The SQLite feed tests are being written; Postgres and D1 parity, the summary endpoint, and evidence are not attached.
     depends_on: [ACT-001, AUD-001, PRJ-002, CMT-011]
     evidence: []
+
+  - id: ACT-004
+    kind: behavior
+    behavior: The activity summary counts conversations that need a person and those with an agent per open thread, open conversations, artifacts in review, and each project's artifacts, open conversations, and latest activity.
+    owner: http-api
+    source: {file: artifact-server-product-spec.html, anchor: activity}
+    acceptance:
+      behavior: {id: ACT-004-B, description: "Open, dispatch, and resolve threads across two artifacts and read summary totals and per-project counts that equal the feed's segment entry counts."}
+      failure: {id: ACT-004-F, description: "Resolved threads, threads on deleted artifacts, deleted threads, and threads whose dispatch was canceled are never counted as with an agent; unknown project filters return zero counts and no projects."}
+    deployments: *all
+    status: specified
+    proof_gap: The SQLite summary tests are being written; Postgres and D1 parity and evidence are not attached.
+    depends_on: [ACT-003]
+    evidence: []
   - id: CNT-001
     kind: behavior
     behavior: HTML and complete client-side directories open in the browser without rebuilding their files.

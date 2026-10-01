@@ -1193,6 +1193,11 @@ export function createApplicationLayer(
           try: () => adapters.repository.listActivity(query),
           catch: (cause) => repositoryFailure("listActivity", cause),
         }),
+      summarizeActivity: (projectIds) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.summarizeActivity(projectIds),
+          catch: (cause) => repositoryFailure("summarizeActivity", cause),
+        }),
     },
   }).pipe(Layer.provideMerge(authorizationLayer));
   const projectLayer = ProjectManagementService.layer(projectDependencies).pipe(

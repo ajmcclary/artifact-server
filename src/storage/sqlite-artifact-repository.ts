@@ -84,6 +84,7 @@ import type {
   ActivityLog,
   ActivityPage,
   ActivityQuery,
+  ActivitySummary,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -154,6 +155,9 @@ import {
   sqliteActivityRecoveryStatements,
 } from "./activity-log-schema.js";
 import {
+  activityProjectSummarySchema,
+  activitySummaryTotalsSchema,
+  buildSummaryStatements,
   activitySqlRowSchema,
   assembleActivityPage,
   buildListActivityStatement,
@@ -2373,6 +2377,25 @@ export class SqliteArtifactRepository implements
       return assembleActivityPage(rows, threads, replies, query.limit);
     });
   }
+  summarizeActivity(projectIds: readonly string[]): Promise<ActivitySummary> {
+    return Promise.resolve().then(() => {
+      const {projects, totals} = buildSummaryStatements(
+        "sqlite",
+        projectIds,
+        this.#installationId,
+      );
+      const total = activitySummaryTotalsSchema.parse(
+        this.#database.prepare(totals.text).get(...totals.values),
+      );
+      return {
+        ...total,
+        projects: z.array(activityProjectSummarySchema).parse(
+          this.#database.prepare(projects.text).all(...projects.values),
+        ),
+      };
+    });
+  }
+
 
 
   restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState> {
