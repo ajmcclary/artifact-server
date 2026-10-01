@@ -389,11 +389,13 @@ const artifactPageQuerySchema = pageQuerySchema.extend({
   tags: z.array(z.string().max(200)).max(20).default([]),
 });
 const publicLinksPageQuerySchema = pageQuerySchema.omit({search: true});
+/** Activity filters name projects by identifier only; path-shaped values are refused. */
+const activityProjectFilterSchema = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const activityQuerySchema = z.object({
   cursor: z.string().max(1_024).optional(),
   limit: z.coerce.number().int().min(1).max(maximumActivityPageSize)
     .default(defaultActivityPageSize),
-  project: z.array(projectIdSchema).max(maximumActivityProjectFilters)
+  project: z.array(activityProjectFilterSchema).max(maximumActivityProjectFilters)
     .default([]),
   q: z.string().max(maximumActivitySearchCharacters).optional(),
   segment: z.enum(["all", "needs_you", "with_agent"]).default("all"),
@@ -1407,7 +1409,7 @@ export function createHttpApp(
   });
 
   app.get("/api/v1/activity/summary", async (context) => {
-    const projectIds = z.array(projectIdSchema).max(maximumActivityProjectFilters)
+    const projectIds = z.array(activityProjectFilterSchema).max(maximumActivityProjectFilters)
       .parse(context.req.queries("project") ?? []);
     const summary = await runHttpApplicationEffect(
       context,

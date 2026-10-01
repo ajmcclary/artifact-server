@@ -341,6 +341,86 @@ describe("installation activity feed", () => {
   }
 });
 
+describe("hostile activity requests", () => {
+  let installation: TestInstallation;
+  let server: RunningTestServer;
+  let reader: ApiClient;
+
+  beforeEach(async () => {
+    installation = await createTestInstallation();
+    server = await startTestServer(installation);
+    reader = new ApiClient(server, installation.apiToken);
+    await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<p>hostile</p>",
+      idempotencyKey: "feed-hostile-seed",
+      name: "Hostile seed",
+    });
+  });
+
+  afterEach(async () => {
+    await server.stop();
+    await removeTestInstallation(installation);
+  });
+
+  const failureSchema = z.object({
+    error: z.object({code: z.string(), message: z.string()}).strict(),
+  }).strict();
+
+  test.each([
+    ["a malformed cursor", "?cursor=not*base64"],
+    ["a cursor with extra fields", `?cursor=${Buffer.from(JSON.stringify({createdAt: "2026-01-01T00:00:00.000Z", id: "x", role: "admin"})).toString("base64url")}`],
+    ["a limit above the maximum", "?limit=101"],
+    ["a zero limit", "?limit=0"],
+    ["a non-numeric limit", "?limit=ten"],
+    ["an overlong search", `?q=${"a".repeat(101)}`],
+    ["an unknown type", "?type=secrets"],
+    ["an unknown segment", "?segment=everyone"],
+    ["a path-shaped project", `?project=${encodeURIComponent("../../etc")}`],
+    ["too many projects", `?${Array.from({length: 51}, (_, i) => `project=prj_${i}`).join("&")}`],
+  ])("ACT-003: the feed refuses %s with INVALID_INPUT", async (_label, query) => {
+    expect.hasAssertions();
+    const response = await reader.fetch(`/api/v1/activity${query}`);
+    expect(response.status).toBe(422);
+    expect(failureSchema.parse(await response.json()).error.code).toBe("INVALID_INPUT");
+  });
+
+  test("ACT-003: a well-formed forged cursor pages safely and cannot inject SQL", async () => {
+    expect.hasAssertions();
+    const forged = Buffer.from(JSON.stringify({
+      createdAt: "9999-12-31T00:00:00.000Z' OR '1'='1",
+      id: "zzzz\"; DROP TABLE actions; --",
+    })).toString("base64url");
+    const response = await reader.fetch(`/api/v1/activity?cursor=${forged}`);
+    expect(response.status).toBe(200);
+    expect(activityPageSchema.parse(await response.json()).items.length).toBeGreaterThan(0);
+    expect((await readFeed(reader, "")).items.length).toBeGreaterThan(0);
+  });
+
+  test("ACT-003: unknown projects disclose nothing", async () => {
+    expect.hasAssertions();
+    expect(await readFeed(reader, "?project=prj_never_created")).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    const summary = await reader.fetch("/api/v1/activity/summary?project=prj_never_created");
+    expect(summary.status).toBe(200);
+  });
+
+  test("ACT-003: anonymous and capability-less callers are refused", async () => {
+    expect.hasAssertions();
+    expect((await fetch(`${server.baseUrl}/api/v1/activity`)).status).toBe(401);
+    expect((await fetch(`${server.baseUrl}/api/v1/activity/summary`)).status).toBe(401);
+    const administrator = await signInAdministrator(server, installation);
+    const connectOnly = new ApiClient(
+      server,
+      await issueApiKey(server, administrator, ["agent:connect"], "Connect only"),
+    );
+    expect((await connectOnly.fetch("/api/v1/activity")).status).toBe(403);
+    expect((await connectOnly.fetch("/api/v1/activity/summary")).status).toBe(403);
+  });
+});
+
 /** Run `step` for each item strictly in order: feed timestamps depend on it. */
 async function inSequence<Item>(
   items: readonly Item[],
