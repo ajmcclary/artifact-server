@@ -9,6 +9,7 @@ import {
 } from "../support/agent-dispatch.js";
 import {publishNew, type PublishResponse} from "../support/publishing.js";
 import {
+  apiHeaders,
   createTestInstallation,
   removeTestInstallation,
   type RunningTestServer,
@@ -108,12 +109,22 @@ describe("activity summary", () => {
     )).status).toBe(204);
     expect((await reader.setThreadState(published, resolved.id, "resolved")).status).toBe(200);
 
+    // An open conversation on a deleted artifact is neither counted nor listed as waiting.
+    const removed = await publish("summary-f-removed", "Removed artifact");
+    await reader.openThread(removed, "Open on a deleted artifact", "summary-f-removed-thread");
+    expect((await fetch(`${server.baseUrl}/api/v1/artifacts/${removed.artifact.id}`, {
+      body: JSON.stringify({expectedCurrentVersionId: removed.version.id}),
+      headers: apiHeaders(installation, "summary-f-removed-delete"),
+      method: "DELETE",
+    })).status).toBe(200);
+
     const summary = await readSummary(`?project=${published.artifact.projectId}`);
     expect(summary).toMatchObject({
       needsYou: 1,
       openConversations: 1,
       withAgent: 0,
     });
+    expect((await readFeed(`?segment=needs_you&limit=100`)).length).toBe(summary.needsYou);
     expect(summary.projects.map((project) => project.id))
       .toEqual([published.artifact.projectId]);
 

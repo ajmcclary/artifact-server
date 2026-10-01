@@ -127,7 +127,8 @@ function visibleKinds(query: ActivityQuery): readonly ActionKind[] {
 
 function segmentPredicate(segment: ActivitySegment, heads: string): string | null {
   if (segment === "all") return null;
-  const openHead = `(x.action IN (${heads}) AND t.state = 'open')`;
+  // The same open-thread rule the summary counts: conversations on deleted artifacts never wait.
+  const openHead = `(x.action IN (${heads}) AND t.state = 'open' AND a.deleted_at IS NULL)`;
   if (segment === "needs_you") return `(${openHead} AND held.id IS NULL)`;
   return `((${openHead} AND held.id IS NOT NULL)
       OR (x.action IN (${kindLiterals(feedKindsByType.agents)})
