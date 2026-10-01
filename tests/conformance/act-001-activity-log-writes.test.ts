@@ -107,6 +107,48 @@ describe("the installation activity log records every mutation", () => {
     for (const row of commentRows) {
       expect(row).toMatchObject({actorKind: "service", actorName: "Local"});
     }
+
+    // Access changes record direction; a public-link companion appears only
+    // when the artifact moves into or out of public-link access.
+    await expectJson(await client.fetch(
+      `/api/v1/artifacts/${published.artifact.id}/access${scope(published)}`,
+      {
+        body: JSON.stringify({
+          accessSetting: "public_link",
+          expectedCurrentVersionId: published.version.id,
+        }),
+        idempotencyKey: "act-001-make-public",
+        method: "PATCH",
+      },
+    ), 200, z.object({}).loose());
+    await expectJson(await client.fetch(
+      `/api/v1/artifacts/${published.artifact.id}/access${scope(published)}`,
+      {
+        body: JSON.stringify({
+          accessSetting: "account_required",
+          expectedCurrentVersionId: published.version.id,
+        }),
+        idempotencyKey: "act-001-make-private",
+        method: "PATCH",
+      },
+    ), 200, z.object({}).loose());
+    const accessRows = rowsFor(published.artifact.id).filter((row) =>
+      row.action === "change_access" || row.action.startsWith("public_link_")
+    );
+    expect(accessRows.map((row) => [row.action, row.accessFrom, row.accessTo, row.idempotencyKey]))
+      .toEqual([
+        ["change_access", "account_required", "public_link", "act-001-make-public"],
+        ["public_link_enable", "account_required", "public_link", "act-001-make-public:public_link"],
+        ["change_access", "public_link", "account_required", "act-001-make-private"],
+        ["public_link_disable", "public_link", "account_required", "act-001-make-private:public_link"],
+      ]);
+
+    const publicFromStart = await publish("act-001-public-publish", "public_link");
+    expect(rowsFor(publicFromStart.artifact.id).map((row) => [row.action, row.accessFrom, row.accessTo]))
+      .toEqual([
+        ["publish", null, null],
+        ["public_link_enable", null, "public_link"],
+      ]);
   });
 
   function rowsFor(artifactId: string): ActivityRow[] {

@@ -136,8 +136,10 @@ import { createManifest } from "../manifest/create-manifest.js";
 import {actorSnapshotOfAuthor} from "../core/action-attribution.js";
 import {
   type ActionInsert,
+  companionIdempotencyKey,
   positionalActionInsertSql,
   positionalActionValues,
+  publicLinkTransition,
 } from "./action-insert.js";
 import {
   artifactHistoryActionKindSql,
@@ -1497,6 +1499,21 @@ export class SqliteArtifactRepository implements
       projectId: command.projectId,
       versionId: command.versionId,
     });
+    if (publicLinkTransition(null, command.accessSetting) !== null) {
+      this.#insertAction({
+        accessFrom: null,
+        accessTo: command.accessSetting,
+        action: artifactActionKinds.publicLinkEnable,
+        actor: command.actor,
+        artifactId: command.artifactId,
+        authorizedByPrincipalId: command.authorizedByPrincipalId,
+        createdAt: command.createdAt,
+        idempotencyKey: companionIdempotencyKey(command.idempotencyKey),
+        principalId: command.principalId,
+        projectId: command.projectId,
+        versionId: command.versionId,
+      });
+    }
     this.#insertIdempotency(
       command.projectId,
       command.idempotencyKey,
@@ -1751,6 +1768,25 @@ export class SqliteArtifactRepository implements
           projectId: command.projectId,
           versionId: command.expectedCurrentVersionId,
         });
+        const transition = publicLinkTransition(
+          artifact.accessSetting,
+          command.accessSetting,
+        );
+        if (transition !== null) {
+          this.#insertAction({
+            accessFrom: artifact.accessSetting,
+            accessTo: command.accessSetting,
+            action: transition,
+            actor: command.actor,
+            artifactId: command.artifactId,
+            authorizedByPrincipalId: command.authorizedByPrincipalId,
+            createdAt: command.createdAt,
+            idempotencyKey: companionIdempotencyKey(command.idempotencyKey),
+            principalId: command.principalId,
+            projectId: command.projectId,
+            versionId: command.expectedCurrentVersionId,
+          });
+        }
         this.#insertIdempotency(
           command.projectId,
           command.idempotencyKey,
