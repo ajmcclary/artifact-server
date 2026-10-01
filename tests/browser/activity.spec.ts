@@ -234,6 +234,40 @@ test.describe("Activity thumbnails", () => {
     }
   });
 
+  test("ACT-005-F: returning to the window re-reads the feed without re-leasing thumbnails or re-fetching replies", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publish(fixture, "Activity focus fixture", "focus");
+      const threadId = (await createThreadOverApi(fixture, {anchor: anchorFor("#title"), artifactId: published.artifact.id, body: "Focus pin",
+        idempotencyKey: key("focus-thread"), path: "index.html", projectId: "prj_default", versionId: published.version.id})).id;
+      await [1, 2, 3, 4].reduce(async (previous, n) => {
+        await previous;
+        await createReplyOverApi(fixture, {artifactId: published.artifact.id, body: `Focus reply ${n}.`, idempotencyKey: key(`focus-reply-${n}`), projectId: "prj_default", threadId});
+      }, Promise.resolve());
+      // Count from the sign-in onward, landing straight on Activity: the workspace reads and leases on its own.
+      const page = fixture.page;
+      let leases = 0;
+      let replyReads = 0;
+      page.on("request", (request) => {
+        const url = new URL(request.url());
+        if (url.pathname.endsWith("/preview-leases")) leases += 1;
+        if (url.pathname.endsWith(`/comments/${threadId}`) && request.method() === "GET") replyReads += 1;
+      });
+      await localLogin(fixture, false);
+      await expect(page.frameLocator("[data-thumbnail='frame']").first().frameLocator("iframe").getByRole("heading", {name: "Activity focus fixture"})).toBeVisible();
+      await expect.poll(() => replyReads).toBe(1);
+      const settled = {leases, replyReads};
+      expect(settled.leases).toBe(1);
+      const feedRead = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/activity");
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await feedRead;
+      await page.waitForTimeout(1_000);
+      expect({leases, replyReads}).toEqual(settled);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("ACT-005-F: an anchor the page does not contain, and a non-HTML entry, show the file tile instead of a misplaced pin", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {

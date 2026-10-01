@@ -16,6 +16,27 @@ const tileStyle = {alignItems: "center", background: "var(--surface-muted, #f1f5
   display: "flex", fontSize: 160, height: 500, justifyContent: "center", width: 800} satisfies CSSProperties;
 
 type Loaded = {readonly baseHref: string; readonly entryPath: string; readonly html: string};
+type ScreenState = {readonly kind: "idle" | "tile"; readonly reason: string} | {readonly kind: "frame"; readonly loaded: Loaded};
+
+const rememberedScreens = 200;
+const leaseMarginMilliseconds = 60_000;
+/**
+ * Screens already read in this tab, until their lease nears expiry. The feed's conversation
+ * header re-mounts as it docks and undocks, and a re-mounted thumbnail must not lease again.
+ */
+const loadedScreens = new Map<string, {readonly state: ScreenState; readonly until: number}>();
+
+function rememberScreen(key: string, state: ScreenState, until: number): void {
+  loadedScreens.delete(key);
+  loadedScreens.set(key, {state, until});
+  const oldest = loadedScreens.keys().next().value;
+  if (loadedScreens.size > rememberedScreens && oldest !== undefined) loadedScreens.delete(oldest);
+}
+
+function knownScreen(key: string | null): ScreenState | null {
+  const known = key === null ? undefined : loadedScreens.get(key);
+  return known === undefined || known.until <= Date.now() ? null : known.state;
+}
 
 /** The file-type tile shown before loading, for non-HTML entries, unplaceable anchors and failures. */
 function FileTile({reason}: {readonly reason: string}) {
@@ -27,8 +48,11 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
   const thread = entry.thread;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const screenKey = thread === undefined || entry.artifact === null || entry.project === null
+    ? null
+    : JSON.stringify([entry.project.id, entry.artifact.id, thread.id, thread.versionId, thread.path, thread.anchor]);
   const [near, setNear] = useState(false);
-  const [state, setState] = useState<{kind: "idle" | "tile"; reason: string} | {kind: "frame"; loaded: Loaded}>({kind: "idle", reason: "waiting"});
+  const [state, setState] = useState<ScreenState>(() => knownScreen(screenKey) ?? {kind: "idle", reason: "waiting"});
 
   useEffect(() => {
     const root = rootRef.current;
@@ -40,37 +64,61 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
     return () => observer.disconnect();
   }, [near]);
 
+  // Load once per conversation screen: a refreshed or re-hydrated entry with the same version,
+  // page and anchor keeps its frame instead of leasing and fetching again.
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
   useEffect(() => {
-    if (!near || thread === undefined || entry.artifact === null || entry.project === null) return undefined;
-    let current = true;
-    const projectId = entry.project.id;
-    const artifactId = entry.artifact.id;
-    const versionId = thread.versionId;
+    const current = entryRef.current;
+    const screen = current.thread;
+    const known = knownScreen(screenKey);
+    if (known !== null) {
+      setState(known);
+      return undefined;
+    }
+    if (!near || screenKey === null || screen === undefined || current.artifact === null || current.project === null) return undefined;
+    let live = true;
+    // A cancelled load gives its slot back at once rather than holding it until the frame timeout.
+    const released = Promise.withResolvers<undefined>();
+    const projectId = current.project.id;
+    const artifactId = current.artifact.id;
+    const versionId = screen.versionId;
     void loadSlot(async () => {
-      const entryPath = thread.path ?? (await api.version(projectId, artifactId, versionId)).version.entryPath;
-      const plan = thumbnailPlan(entry, entryPath);
+      if (!live) return;
+      const entryPath = screen.path ?? (await api.version(projectId, artifactId, versionId)).version.entryPath;
+      if (!live) return;
+      const plan = thumbnailPlan(current, entryPath);
       if (plan.kind === "tile") {
-        if (current) setState({kind: "tile", reason: plan.reason});
+        const tile = {kind: "tile", reason: plan.reason} as const;
+        rememberScreen(screenKey, tile, Number.POSITIVE_INFINITY);
+        setState(tile);
         return;
       }
       const [html, lease] = await Promise.all([api.versionFile(projectId, artifactId, versionId, plan.path), api.previewLease(projectId, artifactId, versionId)]);
       // An exact-version lease only: any other version is never drawn as this conversation's screen.
       if (lease.versionId !== versionId) throw new Error("lease version mismatch");
+      if (!live) return;
       const base = new URL(plan.path.split("/").map(encodeURIComponent).join("/"), lease.baseUrl);
-      if (current) setState({kind: "frame", loaded: {baseHref: new URL(".", base).toString(), entryPath: plan.path, html}});
-      // Hold the slot until the frame has been initialised (or gives up).
-      await new Promise<void>((resolve) => {
-        const done = (): void => resolve();
-        setTimeout(done, frameReadyTimeoutMilliseconds);
-        frameRef.current?.addEventListener("load", () => setTimeout(done, 500), {once: true});
-      });
+      const frame = {kind: "frame", loaded: {baseHref: new URL(".", base).toString(), entryPath: plan.path, html}} as const;
+      rememberScreen(screenKey, frame, Date.parse(lease.expiresAt) - leaseMarginMilliseconds);
+      setState(frame);
+      // Hold the slot until the frame has been initialised, gives up, or this load is cancelled.
+      await Promise.race([
+        released.promise,
+        new Promise<void>((resolve) => {
+          const done = (): void => resolve();
+          setTimeout(done, frameReadyTimeoutMilliseconds);
+          frameRef.current?.addEventListener("load", () => setTimeout(done, 500), {once: true});
+        }),
+      ]);
     }).catch(() => {
-      if (current) setState({kind: "tile", reason: "failed"});
+      if (live) setState({kind: "tile", reason: "failed"});
     });
     return () => {
-      current = false;
+      live = false;
+      released.resolve(undefined);
     };
-  }, [entry, near, thread]);
+  }, [near, screenKey]);
 
   useEffect(() => {
     if (state.kind !== "frame" || thread === undefined) return undefined;
@@ -89,7 +137,11 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
         post({threadId: thread.id, type: "as-review-focus", v: reviewProtocolVersion});
       }
       // The frame could not place this thread's anchor on the page: never show a misplaced pin.
-      if (parsed.data.type === "as-review-unanchored" && parsed.data.threadIds.includes(thread.id)) setState({kind: "tile", reason: "unanchored"});
+      if (parsed.data.type === "as-review-unanchored" && parsed.data.threadIds.includes(thread.id)) {
+        const tile = {kind: "tile", reason: "unanchored"} as const;
+        if (screenKey !== null) rememberScreen(screenKey, tile, Number.POSITIVE_INFINITY);
+        setState(tile);
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

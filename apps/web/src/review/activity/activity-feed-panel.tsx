@@ -16,6 +16,8 @@ import type {ActivityFeedState} from "./use-activity-feed";
 
 const expandedKey = "activity-expanded-threads";
 
+type WireComment = NonNullable<ActivityEntry["thread"]>["opener"];
+
 /** A conversation entry with the artifact and project it needs for Reply, Resolve and fetching. */
 interface ThreadContext {
   readonly artifact: {readonly id: string; readonly name: string};
@@ -33,6 +35,9 @@ function threadContexts(entries: readonly ActivityEntry[]): Map<string, ThreadCo
   return contexts;
 }
 const hydrate = createRequestLimiter(4);
+// Each longer conversation's full replies, by the reply count the feed reported, for this tab.
+const hydratedReplies = new Map<string, {readonly replies: readonly WireComment[]; readonly replyCount: number}>();
+const hydratingThreads = new Set<string>();
 
 const expandedSchema = z.array(z.string());
 
@@ -87,27 +92,37 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
   const byThread = useMemo(() => threadContexts(feed.entries), [feed.entries]);
   const byEvent = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
 
-  // The snapshot holds the newest two replies; fetch the rest so "Show N earlier replies" can fold them.
+  // The snapshot holds the newest two replies, and the vendored fold counts only loaded replies,
+  // so each longer conversation's replies are read once per reply count and reused across refreshes.
+  const {replaceThread} = feed;
   useEffect(() => {
-    let current = true;
     for (const {artifact, projectId, thread} of byThread.values()) {
       if (thread.replyCount <= thread.replies.length) continue;
+      const known = hydratedReplies.get(thread.id);
+      if (known !== undefined && known.replyCount === thread.replyCount) {
+        replaceThread(thread.id, {...thread, replies: [...known.replies], replyCount: known.replies.length});
+        continue;
+      }
+      if (hydratingThreads.has(thread.id)) continue;
+      hydratingThreads.add(thread.id);
       void (async () => {
         try {
           const details = await hydrate(() => api.comment(projectId, artifact.id, thread.id));
-          if (!current) return;
-          feed.replaceThread(thread.id, {...thread, replies: details.replies.map((reply) => ({
+          const replies = details.replies.map((reply) => ({
             author: {kind: reply.author.principalKind, name: reply.author.displayName}, body: reply.body, createdAt: reply.createdAt, id: reply.id,
-          }))});
+          }));
+          // Keyed by the count the feed reported, so the same snapshot never triggers another read.
+          hydratedReplies.set(thread.id, {replies, replyCount: thread.replyCount});
+          // Applied by thread id, so a refresh that landed meanwhile still gets the full replies.
+          replaceThread(thread.id, {...thread, replies, replyCount: replies.length});
         } catch {
           // The two newest replies stay shown; the fold simply offers nothing earlier.
+        } finally {
+          hydratingThreads.delete(thread.id);
         }
       })();
     }
-    return () => {
-      current = false;
-    };
-  }, [byThread, feed]);
+  }, [byThread, replaceThread]);
 
   // The vendored feed hands back the events it was given; recover each one's API entry by id.
   const open = (event: ActivityEvent): void => {
