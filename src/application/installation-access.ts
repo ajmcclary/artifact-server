@@ -32,6 +32,8 @@ import type {
 import {
   type ApplicationSession,
   type ExternalIdentity,
+  type AdministeredApiKey,
+  apiKeyStatus,
   type InstallationMember,
   type ListedApiKey,
   type ListedMember,
@@ -282,7 +284,7 @@ export interface InstallationAccessOperations {
   >;
   readonly listApiKeys: (
     principal: Principal,
-  ) => Effect.Effect<readonly ManagedApiKey[], AuthorizationDenied | IdentityRepositoryFailure>;
+  ) => Effect.Effect<readonly AdministeredApiKey[], AuthorizationDenied | IdentityRepositoryFailure>;
   readonly listMembers: (
     principal: Principal,
   ) => Effect.Effect<
@@ -752,7 +754,9 @@ function makeInstallationAccessService(
     "InstallationAccessService.listApiKeys",
   )(function*(principal: Principal) {
     yield* requireAdministrator(principal, dependencies.installationId);
-    return yield* dependencies.repository.listApiKeys(dependencies.installationId);
+    const keys = yield* dependencies.repository.listApiKeys(dependencies.installationId);
+    const now = dependencies.clock.now();
+    return keys.map((key): AdministeredApiKey => Object.assign({}, key, {status: apiKeyStatus(key, now)}));
   });
 
   const revokeApiKey = Effect.fn(

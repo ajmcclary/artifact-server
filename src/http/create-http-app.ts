@@ -85,7 +85,11 @@ import {
   isArtifactServerFailure,
   VersionNotFound,
 } from "../core/errors.js";
-import type { IssuedApplicationSession } from "../core/installation-identity.js";
+import type {
+  AdministeredApiKey,
+  IssuedApplicationSession,
+  ListedMember,
+} from "../core/installation-identity.js";
 import {
   browserAccessModes,
   type BrowserAccess,
@@ -1068,7 +1072,7 @@ export function createHttpApp(
         access.listMembers(context.get("principal"))
       ),
     );
-    return context.json({members});
+    return context.json({members: members.map(administeredMemberResponse)});
   });
 
   app.post("/api/v1/members", boundedJsonBody, async (context) => {
@@ -1110,7 +1114,7 @@ export function createHttpApp(
         access.listApiKeys(context.get("principal"))
       ),
     );
-    return context.json({apiKeys});
+    return context.json({apiKeys: apiKeys.map(administeredApiKeyResponse)});
   });
 
   app.post("/api/v1/api-keys", boundedJsonBody, async (context) => {
@@ -3075,6 +3079,25 @@ function artifactPageResponse(
   };
 }
 
+/** A listed member with its admission facts in wire shape. */
+function administeredMemberResponse(member: ListedMember) {
+  const {admittedByName, ...record} = member;
+  return {
+    ...record,
+    admittedAt: member.createdAt,
+    admittedBy: admittedByName === null ? null : {name: admittedByName},
+  };
+}
+
+/** A listed key with who revoked it in wire shape. */
+function administeredApiKeyResponse(key: AdministeredApiKey) {
+  const {revokedByName, ...record} = key;
+  return {
+    ...record,
+    revokedBy: revokedByName === null ? null : {name: revokedByName},
+  };
+}
+
 function publicLinkInventoryPageResponse(
   requestUrl: URL,
   page: PublicLinkInventoryPage,
@@ -3087,6 +3110,8 @@ function publicLinkInventoryPageResponse(
       links: {
         public: artifactBrowserUrl(requestUrl, item.artifact.id),
       },
+      madePublicAt: item.madePublicAt,
+      madePublicBy: item.madePublicByName === null ? null : {name: item.madePublicByName},
       project: item.project,
     })),
   };

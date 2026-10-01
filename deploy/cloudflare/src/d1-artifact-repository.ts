@@ -3245,7 +3245,23 @@ export function createD1ArtifactRepository(
           version.routing_mode AS routingMode,
           version.content_token AS contentToken,
           version.publisher_principal_id AS publisherPrincipalId,
-          version.created_at AS versionCreatedAt
+          version.created_at AS versionCreatedAt,
+          (
+            SELECT entry.created_at FROM actions AS entry
+            WHERE entry.project_id = artifact.project_id
+              AND entry.artifact_id = artifact.id
+              AND entry.action = 'public_link_enable'
+            ORDER BY entry.created_at DESC, entry.id DESC
+            LIMIT 1
+          ) AS madePublicAt,
+          (
+            SELECT entry.actor_name FROM actions AS entry
+            WHERE entry.project_id = artifact.project_id
+              AND entry.artifact_id = artifact.id
+              AND entry.action = 'public_link_enable'
+            ORDER BY entry.created_at DESC, entry.id DESC
+            LIMIT 1
+          ) AS madePublicByName
         FROM artifacts artifact
         INNER JOIN projects project ON project.id = artifact.project_id
         INNER JOIN versions version

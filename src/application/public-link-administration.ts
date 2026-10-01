@@ -30,6 +30,9 @@ const maximumBulkSize = 100;
 export interface PublicLinkInventoryItem {
   readonly artifact: ArtifactRecord;
   readonly currentVersion: VersionRecord;
+  /** Newest recorded change to public-link access; null when never recorded. */
+  readonly madePublicAt: string | null;
+  readonly madePublicByName: string | null;
   readonly project: ProjectRecord;
 }
 

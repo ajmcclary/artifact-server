@@ -212,6 +212,8 @@ const publicLinkItemSchema = z.object({
   artifact: artifactSchema,
   currentVersion: versionSchema,
   links: z.object({ public: z.url() }),
+  madePublicAt: z.string().nullable(),
+  madePublicBy: z.object({ name: z.string() }).nullable(),
   project: projectSchema,
 });
 
@@ -707,6 +709,25 @@ const apiKeySchema = z.object({
   revokedAt: z.string().nullable(),
   rotatedFromId: z.string().nullable(),
 });
+
+const nameReferenceSchema = z.object({ name: z.string() }).nullable();
+
+const administeredMemberSchema = memberSchema.extend({
+  admittedAt: z.string(),
+  admittedBy: nameReferenceSchema,
+  admittedHow: z.enum(["manual", "automatic", "owner"]).nullable(),
+  lastActiveAt: z.string().nullable(),
+});
+
+const administeredApiKeySchema = apiKeySchema.extend({
+  lastUsedAt: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  revokedBy: nameReferenceSchema,
+  status: z.enum(["active", "revoked", "expired"]),
+});
+
+export type AdministeredMember = z.infer<typeof administeredMemberSchema>;
+export type AdministeredApiKey = z.infer<typeof administeredApiKeySchema>;
 
 export type InstallationMember = z.infer<typeof memberSchema>;
 export type ManagedApiKey = z.infer<typeof apiKeySchema>;
@@ -1314,7 +1335,7 @@ export const api = {
     { headers: mutationHeaders(), method: "POST" },
   ).then(({ dispatch }) => dispatch),
   members: () => request(
-    z.object({ members: z.array(memberSchema) }),
+    z.object({ members: z.array(administeredMemberSchema) }),
     "/api/v1/members",
   ).then(({ members }) => members),
   admitMember: (
@@ -1336,7 +1357,7 @@ export const api = {
     { headers: mutationHeaders(), method: "POST" },
   ).then(({ member }) => member),
   apiKeys: () => request(
-    z.object({ apiKeys: z.array(apiKeySchema) }),
+    z.object({ apiKeys: z.array(administeredApiKeySchema) }),
     "/api/v1/api-keys",
   ).then(({ apiKeys }) => apiKeys),
   issueApiKey: (

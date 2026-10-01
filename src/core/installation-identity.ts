@@ -104,6 +104,28 @@ export interface ListedApiKey extends ManagedApiKey {
   readonly revokedByName: string | null;
 }
 
+/** Lifecycle shown for one managed API key. */
+export const apiKeyStatuses = {
+  active: "active",
+  expired: "expired",
+  revoked: "revoked",
+} as const;
+
+export type ApiKeyStatus = (typeof apiKeyStatuses)[keyof typeof apiKeyStatuses];
+
+/** Administrator-facing key record with its status at one instant. */
+export interface AdministeredApiKey extends ListedApiKey {
+  readonly status: ApiKeyStatus;
+}
+
+/** Revocation wins over expiry; a key expires at its exact expiry instant. */
+export function apiKeyStatus(key: ManagedApiKey, now: Date): ApiKeyStatus {
+  if (key.revokedAt !== null) return apiKeyStatuses.revoked;
+  return Date.parse(key.expiresAt) <= now.getTime()
+    ? apiKeyStatuses.expired
+    : apiKeyStatuses.active;
+}
+
 /** An application session credential returned once to the browser adapter. */
 export interface IssuedApplicationSession {
   readonly csrfToken: string;

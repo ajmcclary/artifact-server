@@ -21,6 +21,8 @@ export const publicLinkInventoryRowSchema = z.object({
   currentVersionId: z.string(),
   entryPath: z.string(),
   installationId: z.string(),
+  madePublicAt: z.string().nullable(),
+  madePublicByName: z.string().nullable(),
   manifestDigest: z.string(),
   projectArchivedAt: z.string().nullable(),
   projectCreatedAt: z.string(),
@@ -60,6 +62,8 @@ export function publicLinkPageFromRows(
         publisherPrincipalId: row.publisherPrincipalId,
         routingMode: row.routingMode,
       },
+      madePublicAt: row.madePublicAt,
+      madePublicByName: row.madePublicByName,
       project: {
         archivedAt: row.projectArchivedAt,
         createdAt: row.projectCreatedAt,

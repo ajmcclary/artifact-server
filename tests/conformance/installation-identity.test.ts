@@ -894,6 +894,25 @@ describe("installation identity and access", () => {
     const colleague = await login();
     expect(colleague.status).toBe(303);
     expect(await sessionRole(colleague)).toBe("member");
+    const administrator = applicationCookies(first.headers.getSetCookie());
+    const listed = await fetch(`${server.baseUrl}/api/v1/members`, {
+      headers: {Cookie: administrator.header},
+    });
+    expect(listed.status).toBe(200);
+    expect(z.object({
+      members: z.array(z.object({
+        admittedBy: z.object({name: z.string()}).nullable(),
+        admittedHow: z.enum(["manual", "automatic", "owner"]).nullable(),
+        email: z.string(),
+      }).loose()),
+    }).parse(await listed.json()).members).toEqual(expect.arrayContaining([
+      expect.objectContaining({admittedBy: null, admittedHow: "owner", email: "ramos@plannotator.ai"}),
+      expect.objectContaining({
+        admittedBy: null,
+        admittedHow: "automatic",
+        email: "priya.natarajan@plannotator.ai",
+      }),
+    ]));
 
     // A verified identity outside the domain is still refused.
     provider.identity = {
