@@ -166,6 +166,26 @@
       "measuredAt": "2026-10-01T14:12:38.341Z",
       "node": "v24.15.0",
       "totalBytes": 2440578
+    },
+    {
+      "bytesByExtension": {
+        "css": 529613,
+        "html": 2045,
+        "js": 1312942,
+        "svg": 18058,
+        "woff2": 594468
+      },
+      "commit": "8ac10699c0fda654b8cd5ad24fb53a33a37a73d6",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 86946,
+        "html": 1034,
+        "js": 392411
+      },
+      "label": "after-slice-1",
+      "measuredAt": "2026-10-01T14:19:58.792Z",
+      "node": "v24.15.0",
+      "totalBytes": 2457126
     }
   ]
 }

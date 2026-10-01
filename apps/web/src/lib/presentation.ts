@@ -1,14 +1,9 @@
 import { ApiError, type ArtifactAction, type SourceFreshness } from "@/api/client";
+import {usDateTime} from "@/ui/activity-model";
 
-/** Formats a stored ISO timestamp for the current browser locale. */
+/** Formats a stored ISO timestamp as MM/DD/YYYY and a 12-hour clock, in local time. */
 export function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(date);
+  return usDateTime(Date.parse(value)) || value;
 }
 
 const relativeUnits: readonly (readonly [Intl.RelativeTimeFormatUnit, number])[] = [

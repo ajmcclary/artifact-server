@@ -2,6 +2,7 @@ import {useLayoutEffect, useState, type CSSProperties} from "react";
 
 import {api, type Project} from "@/api/client";
 import {Alert, Button, SurfaceState} from "@/arkcase";
+import {usTime} from "@/ui/activity-model";
 import {useAnnounce} from "@/ui/announcer";
 import {DesignGallery} from "@/ui/review-ui";
 
@@ -16,7 +17,6 @@ const screenStyle = {display: "flex", flexDirection: "column", height: "100%", m
 const stateStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"} satisfies CSSProperties;
 const noticeStyle = {alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16} satisfies CSSProperties;
 const metaStyle = {color: "var(--text-secondary)", fontSize: 12} satisfies CSSProperties;
-const timeFormat = new Intl.DateTimeFormat(undefined, {hour: "numeric", minute: "2-digit"});
 
 // Search, kind, layout, scroll and the tile left from survive the trip to a page and back.
 const viewStates = new Map<string, GalleryViewState>();
@@ -115,7 +115,7 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
           <>
             <div style={noticeStyle}>
               <span style={metaStyle}>
-                {library.sources.length} {library.sources.length === 1 ? "gallery" : "galleries"} · current versions as of {timeFormat.format(library.loadedAt)}
+                {library.sources.length} {library.sources.length === 1 ? "gallery" : "galleries"} · current versions as of {usTime(library.loadedAt.getTime())}
                 {library.truncated ? ` · first ${library.scanned} artifacts` : ""}
                 {state.refresh === "running" ? " · refreshing" : ""}
               </span>
