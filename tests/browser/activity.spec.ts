@@ -4,6 +4,7 @@ import {ApiClient, dispatchCreationSchema} from "../support/agent-dispatch.js";
 import {publishNew, publishVersion, type PublishResponse} from "../support/publishing.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
 import {createReplyOverApi, createThreadOverApi} from "./comment-api.js";
+import {inspectorTabButton} from "./review-helpers.js";
 
 const key = (name: string): string => `activity-spec-${name}-key`;
 
@@ -73,8 +74,20 @@ test.describe("Activity", () => {
       await conversation.getByRole("button", {name: "Resolve"}).first().click();
       await expect(page.getByText(/resolved a conversation on Activity conversation fixture/u)).toBeVisible();
 
+      // Record the address Open pushes; the workspace drops `thread=` as soon as it has selected the conversation.
+      await page.evaluate(() => {
+        const push = history.pushState.bind(history);
+        history.pushState = (...args: Parameters<History["pushState"]>) => {
+          document.documentElement.dataset["openedHref"] = String(args[2]);
+          push(...args);
+        };
+      });
       await page.getByRole("button", {name: "Open Activity conversation fixture in review"}).first().click();
       await expect(page).toHaveURL(new RegExp(`artifact=${talked.artifact.id}`, "u"));
+      expect(await page.evaluate(() => document.documentElement.dataset["openedHref"])).toContain(`thread=${threadId}`);
+      await expect(inspectorTabButton(page, "Comments")).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator("[aria-current='true']").filter({hasText: "Tighten the headline."}).first()).toBeVisible();
+      await expect(page).not.toHaveURL(/thread=/u);
     } finally {
       await stopBrowserFixture(fixture);
     }

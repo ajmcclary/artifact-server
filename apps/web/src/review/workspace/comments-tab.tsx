@@ -86,6 +86,13 @@ export function CommentsTab({
   const [agents, setAgents] = useState<readonly AgentPresence[] | null>(null);
   const [agentError, setAgentError] = useState<Error | null>(null);
   const [view, setView] = useState<CommentView>("open");
+  // A newly selected thread the current filter hides (a resolved one opened from Activity, say) widens the view to All once.
+  const [revealedFor, setRevealedFor] = useState<string | null>(null);
+  const selectedThread = session.threads.find((thread) => thread.id === session.selectedThreadId);
+  if ((selectedThread?.id ?? null) !== revealedFor) {
+    setRevealedFor(selectedThread?.id ?? null);
+    if ((view === "open" && selectedThread?.state === "resolved") || (view === "resolved" && selectedThread?.state === "open")) setView("all");
+  }
   const [sentThreads, setSentThreads] = useState<readonly ReviewThread[]>([]);
   const [sentReplies, setSentReplies] = useState<ReadonlyMap<string, readonly CommentReply[]>>(new Map());
   const [dispatchByThread, setDispatchByThread] = useState<ReadonlyMap<string, AgentDispatch>>(new Map());

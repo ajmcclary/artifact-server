@@ -931,6 +931,15 @@ function ProjectReview({
       setInspectorOpen(true);
     }
   };
+  // An Activity "Open" names one conversation: select it once this version's threads arrive, then drop it from the URL.
+  const requestedThreadRef = useRef(currentReviewLocation().threadId);
+  useEffect(() => {
+    const requested = requestedThreadRef.current;
+    if (requested === null || !comments.threads.some((thread) => thread.id === requested)) return;
+    requestedThreadRef.current = null;
+    selectAnnotation(requested);
+    writeReviewHistory(workspaceHref({...currentReviewLocation(), threadId: null}), "replace");
+  });
   const submitAnnotation = async (
     body: string,
     anchor: ReviewAnchor | null,
