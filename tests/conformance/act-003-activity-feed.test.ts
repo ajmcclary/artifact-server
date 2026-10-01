@@ -63,9 +63,11 @@ const entrySchema = z.object({
     id: z.string(),
     isResolved: z.boolean(),
     opener: wireCommentSchema,
+    path: z.string().nullable(),
     replies: z.array(wireCommentSchema),
     replyCount: z.number().int().nonnegative(),
     state: z.enum(["needs_you", "with_agent", "resolved"]),
+    versionId: z.string(),
   }).strict().optional(),
   threadId: z.string().optional(),
   verb: z.string(),
@@ -117,6 +119,8 @@ describe("installation activity feed", () => {
     expect(visible[0]?.actor).toEqual({kind: "service", name: "Local"});
     expect(visible[0]?.thread?.opener.body).toBe("The stage bar overlaps the header.");
     expect(visible[0]?.thread?.state).toBe("needs_you");
+    // The feed carries the conversation's exact version and page, for its thumbnail and Open.
+    expect(visible[0]?.thread).toMatchObject({path: "index.html", versionId: published.version.id});
     expect(visible[1]?.versionNumber).toBe(1);
     expect(visible[1]?.project).toEqual({
       id: published.artifact.projectId,

@@ -48,9 +48,13 @@ export interface ActivityEntry {
     readonly id: string;
     readonly isResolved: boolean;
     readonly opener: WireComment;
+    /** The page the conversation is on; null for an artifact-wide thread. */
+    readonly path: string | null;
     readonly replies: readonly WireComment[];
     readonly replyCount: number;
     readonly state: ActivityThreadState;
+    /** The exact version the conversation was opened on. */
+    readonly versionId: string;
   };
   readonly threadId?: string;
   readonly verb: string;
@@ -156,9 +160,11 @@ export function toActivityEntry(
             id: row.thread.id,
             isResolved: row.thread.isResolved,
             opener: wireComment(row.thread.opener),
+            path: row.thread.opener.path,
             replies: row.thread.replies.map(wireComment),
             replyCount: row.thread.replyCount,
             state: row.thread.state,
+            versionId: row.thread.opener.versionId,
           },
         };
     case "resolution":
