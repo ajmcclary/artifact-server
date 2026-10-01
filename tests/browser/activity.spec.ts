@@ -162,3 +162,60 @@ test.describe("Activity", () => {
     }
   });
 });
+
+const anchorFor = (selector: string) => ({htmlAnchor: {point: {x: 0.5, y: 0.5}, selector, tagName: "H1"}, originalText: "Title"});
+
+test.describe("Activity thumbnails", () => {
+  test("ACT-005-B: an anchored conversation draws its exact version in the review frame, lazily and at most four at a time", async ({browser}) => {
+    test.setTimeout(120_000);
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await Promise.all([1, 2, 3, 4, 5, 6].map(async (n) => {
+        const published = await publish(fixture, `Activity thumb ${n}`, `thumb-${n}`);
+        await createThreadOverApi(fixture, {anchor: anchorFor("#title"), artifactId: published.artifact.id, body: `Pin ${n}`,
+          idempotencyKey: key(`thumb-thread-${n}`), path: "index.html", projectId: "prj_default", versionId: published.version.id});
+      }));
+      await localLogin(fixture);
+      const page = fixture.page;
+      let inFlight = 0;
+      let peak = 0;
+      page.on("request", (request) => {
+        if (request.url().includes("/preview-leases")) peak = Math.max(peak, ++inFlight);
+      });
+      page.on("requestfinished", (request) => {
+        if (request.url().includes("/preview-leases")) inFlight -= 1;
+      });
+      await page.goto(`${fixture.server.baseUrl}/review?type=comments`);
+      await expect(page.locator("[data-thumbnail='frame']").first()).toBeVisible();
+      expect(peak).toBeLessThanOrEqual(4);
+      // The review frame draws the artifact in its own nested, sandboxed frame.
+      const frame = page.frameLocator("[data-thumbnail='frame']").first().frameLocator("iframe");
+      await expect(frame.getByRole("heading", {name: /Activity thumb/u})).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ACT-005-F: an anchor the page does not contain, and a non-HTML entry, show the file tile instead of a misplaced pin", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const html = await publish(fixture, "Activity lost anchor", "lost");
+      await createThreadOverApi(fixture, {anchor: anchorFor("#not-on-this-page"), artifactId: html.artifact.id, body: "Where did it go?",
+        idempotencyKey: key("lost-thread"), path: "index.html", projectId: "prj_default", versionId: html.version.id});
+      const text = (await publishNew(fixture.server, fixture.installation, {accessSetting: "account_required", content: "plain notes",
+        idempotencyKey: key("notes"), mediaType: "text/plain; charset=utf-8", name: "Activity notes", path: "notes.txt", projectId: "prj_default"})).body;
+      await createThreadOverApi(fixture, {anchor: anchorFor("#title"), artifactId: text.artifact.id, body: "On a text file.",
+        idempotencyKey: key("notes-thread"), path: "notes.txt", projectId: "prj_default", versionId: text.version.id});
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review?type=comments`);
+      const lost = page.locator(`[data-thumbnail-for] >> nth=0`);
+      await expect(page.locator("[data-thumbnail='tile'][data-thumbnail-reason='unanchored']")).toHaveCount(1);
+      await expect(page.locator("[data-thumbnail='tile'][data-thumbnail-reason='not-html']")).toHaveCount(1);
+      await expect(page.locator("[data-thumbnail='frame']")).toHaveCount(0);
+      await expect(lost).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+});

@@ -4,6 +4,7 @@ import {SurfaceState} from "@/arkcase";
 import {emptyActivityFilters, type ActivityFilters} from "@/review/review-routes";
 
 import {ActivityFeedPanel} from "./activity-feed-panel";
+import {ActivityThumbnail} from "./activity-thumbnail";
 import {type ActivityFeedState, useActivityFeed} from "./use-activity-feed";
 
 /** One feed's loading, failure, empty and loaded states. The empty state comes from the vendored feed. */
@@ -23,7 +24,7 @@ export function ActivityFeedBody({feed, filtered, label, onClearFilters, onRetry
   return (
     <ActivityFeedPanel
       feed={feed} filtered={filtered} label={label} onClearFilters={onClearFilters}
-      principalId={principalId} stickyTop={stickyTop}
+      principalId={principalId} renderThumbnail={(event) => <ActivityThumbnail event={event} />} stickyTop={stickyTop}
     />
   );
 }
