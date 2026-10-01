@@ -176,6 +176,7 @@ These fixes remove the obvious read-amplification and crash-durability problems 
 | Git work is not bounded by per-version file-copy limits alone | Enablement enumerates missing history in one foreground operation; claims can be out of version order; the Node provider clones accumulated history in memory. Preserve strict order before optimizing mirror throughput. | T03/T18 |
 | Cleanup bounds passes, files and wall-clock time | Bounded reclamation with durable continuation landed September 27, and a durable cleanup claim (September 28) excludes racing preparation claims before any object removal in all three stores. Successful staging remains retained, and general blob GC remains disabled. | T10/T25 |
 | Worker/D1 limits differ from Node/Postgres | Already-implemented R2/assets/Cron do not prove a free-tier many-file envelope. Qualify actual query, parameter, object-operation and CPU limits before chunked preparation. | T08/T09 |
+| SQLite activity-log migration copies `actions` once at startup | Measured 10/01/2026 on an Apple M1 Max, Node v24.15.0: one startup over a populated schema-17 file with 1,000,000 legacy actions took 12.62 s, against the spec's 30 s stop (`pnpm perf:activity-migration`, `project/evidence/activity-migration-baseline.json`). Within budget; the copy holds one IMMEDIATE transaction, so first startup after upgrade blocks writers for that time. | ACT-002 |
 
 Task definitions and gates are in [NEXT-STEPS.md](../../NEXT-STEPS.md). These are
 observations and hypotheses, not completed performance changes. A 201.571-second

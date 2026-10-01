@@ -1,0 +1,24 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-10-01T14:44:03.548Z",
+  "commit": "373434ec8b998573a9bb622cfcc89e05225b727f",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "8aff5a0b504e23ea2ae0b5959f7c382533402e54c616640b937f77edd2c91ec4",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-10-01T14:44:03.550Z",
+  "configuration": {
+    "actions": 1000000
+  },
+  "limitSeconds": 30,
+  "migrationSeconds": 12.615047166,
+  "note": "Wall time of one SqliteArtifactRepository startup over a populated schema-17 file: the verified actions copy, trigger and index creation, and recovery of recorded activity, plus the per-start migration helpers. Fixture population and bulk insertion are excluded.",
+  "startedAt": "2026-10-01T14:44:03.548Z",
+  "success": true,
+  "target": "local"
+}
