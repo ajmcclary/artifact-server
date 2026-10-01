@@ -14,6 +14,7 @@ import {
   ProjectNotFound,
   ProjectSelectionRequired,
 } from "../core/errors.js";
+import {attributionOf} from "../core/action-attribution.js";
 import type {Principal} from "../core/identity.js";
 import type {ProjectRecord} from "../core/model.js";
 import type {
@@ -197,6 +198,7 @@ function makeProjectManagementService(
       const name = yield* parseProjectName(command.name);
       const project = yield* dependencies.repository.createProject({
         archivedAt: null,
+        attribution: attributionOf(command.principal),
         createdAt: DateTime.formatIso(yield* dependencies.clock.now),
         id: dependencies.ids.projectId(),
         installationId: dependencies.installationId,
@@ -235,6 +237,8 @@ function makeProjectManagementService(
     if (alreadyInRequestedState) return project;
     return yield* dependencies.repository.setProjectArchive({
       archivedAt,
+      attribution: attributionOf(command.principal),
+      changedAt: archivedAt ?? DateTime.formatIso(yield* dependencies.clock.now),
       projectId: command.projectId,
     });
   });

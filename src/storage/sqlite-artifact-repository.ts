@@ -118,6 +118,7 @@ import type {
   UpdateCommentThread,
   PublicationSource,
   ProjectRepository,
+  CreateProject,
   RenameProject,
   RestoreArtifactVersion,
   SetProjectArchive,
@@ -136,6 +137,7 @@ import { createManifest } from "../manifest/create-manifest.js";
 import {actorSnapshotOfAuthor} from "../core/action-attribution.js";
 import {
   type ActionInsert,
+  attributedInsert,
   companionIdempotencyKey,
   positionalActionInsertSql,
   positionalActionValues,
@@ -599,19 +601,29 @@ export class SqliteArtifactRepository implements
     this.#migrate(installationId);
   }
 
-  createProject(command: ProjectRecord): Promise<ProjectRecord> {
+  createProject(command: CreateProject): Promise<ProjectRecord> {
     return Promise.resolve().then(() => {
       try {
-        this.#database.prepare(`
-          INSERT INTO projects (id, installation_id, name, created_at, archived_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(
-          command.id,
-          this.#installationId,
-          command.name,
-          command.createdAt,
-          command.archivedAt,
-        );
+        this.#transaction(() => {
+          this.#database.prepare(`
+            INSERT INTO projects (id, installation_id, name, created_at, archived_at)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(
+            command.id,
+            this.#installationId,
+            command.name,
+            command.createdAt,
+            command.archivedAt,
+          );
+          this.#insertAction(attributedInsert(command.attribution, {
+            action: "project_create",
+            createdAt: command.createdAt,
+            detail: {subjectName: command.name},
+            idempotencyKey: `project_create:${command.id}`,
+            projectId: command.id,
+            subjectId: command.id,
+          }));
+        });
       } catch (cause) {
         if (isSqliteConstraint(cause)) {
           throw new ProjectConflict({message: "The project identity is already in use."});
@@ -1299,15 +1311,34 @@ export class SqliteArtifactRepository implements
   }
 
   setProjectArchive(command: SetProjectArchive): Promise<ProjectRecord> {
-    return Promise.resolve().then(() => {
-      const result = this.#database.prepare(
-        "UPDATE projects SET archived_at = ? WHERE id = ?",
-      ).run(command.archivedAt, command.projectId);
-      if (result.changes !== 1) {
-        throw new ProjectNotFound({message: "The project does not exist."});
-      }
-      return this.#readProject(command.projectId);
-    });
+    return Promise.resolve().then(() =>
+      this.#transaction(() => {
+        // Only a real state change writes; repeating archive or unarchive is a no-op.
+        const result = command.archivedAt === null
+          ? this.#database.prepare(
+            "UPDATE projects SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL",
+          ).run(command.projectId)
+          : this.#database.prepare(
+            "UPDATE projects SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
+          ).run(command.archivedAt, command.projectId);
+        const project = this.#readProjectOrNull(command.projectId);
+        if (project === null) {
+          throw new ProjectNotFound({message: "The project does not exist."});
+        }
+        if (result.changes === 1) {
+          const action = command.archivedAt === null ? "project_unarchive" : "project_archive";
+          this.#insertAction(attributedInsert(command.attribution, {
+            action,
+            createdAt: command.changedAt,
+            detail: {subjectName: project.name},
+            idempotencyKey: `${action}:${command.projectId}:${command.changedAt}`,
+            projectId: command.projectId,
+            subjectId: command.projectId,
+          }));
+        }
+        return project;
+      }),
+    );
   }
 
   close(): void {

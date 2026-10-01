@@ -4,6 +4,12 @@ import { Context, Effect, Layer, Redacted, Schema } from "effect";
 
 import type { AuthenticatedApplicationSession } from "./authentication.js";
 import {
+  type ActionAttribution,
+  attributionOf,
+  systemAttribution,
+} from "../core/action-attribution.js";
+import { memberAdmissions, type MemberAdmission } from "../core/identity-ports.js";
+import {
   AuthenticationCache,
   type AuthenticationCachePolicy,
   defaultAuthenticationCachePolicy,
@@ -47,6 +53,8 @@ const localBrowserLoginProvider = "artifact-server-local";
 export interface InstallationIdentityRepository {
   readonly admitMember: (
     command: {
+      readonly admittedHow: MemberAdmission;
+      readonly attribution: ActionAttribution;
       readonly createdAt: string;
       readonly displayName: string;
       readonly email: string;
@@ -66,6 +74,7 @@ export interface InstallationIdentityRepository {
   ) => Effect.Effect<void, IdentityConflict | IdentityRepositoryFailure>;
   readonly createApiKey: (
     key: StoredManagedApiKey,
+    attribution: ActionAttribution,
   ) => Effect.Effect<ManagedApiKey, IdentityRepositoryFailure>;
   readonly createApplicationSession: (
     command: {
@@ -93,6 +102,7 @@ export interface InstallationIdentityRepository {
     installationId: string,
     memberId: string,
     updatedAt: string,
+    attribution: ActionAttribution,
   ) => Effect.Effect<
     InstallationMember,
     IdentityConflict | IdentityNotFound | IdentityRepositoryFailure
@@ -132,6 +142,7 @@ export interface InstallationIdentityRepository {
     installationId: string,
     keyId: string,
     revokedAt: string,
+    attribution: ActionAttribution,
   ) => Effect.Effect<ManagedApiKey, IdentityNotFound | IdentityRepositoryFailure>;
   readonly revokeApplicationSession: (
     installationId: string,
@@ -143,6 +154,7 @@ export interface InstallationIdentityRepository {
     previousKeyId: string,
     replacement: StoredManagedApiKey,
     revokedAt: string,
+    attribution: ActionAttribution,
   ) => Effect.Effect<
     ManagedApiKey,
     IdentityConflict | IdentityNotFound | IdentityRepositoryFailure
@@ -411,6 +423,8 @@ function makeInstallationAccessService(
         }));
       }
       member = yield* dependencies.repository.admitMember({
+        admittedHow: memberAdmissions.owner,
+        attribution: systemAttribution,
         createdAt: dependencies.clock.now().toISOString(),
         displayName: "Local administrator",
         email,
@@ -485,6 +499,8 @@ function makeInstallationAccessService(
         }));
       }
       member = yield* dependencies.repository.admitMember({
+        admittedHow: isBootstrapAdministrator ? memberAdmissions.owner : memberAdmissions.automatic,
+        attribution: systemAttribution,
         createdAt: dependencies.clock.now().toISOString(),
         displayName: identity.displayName,
         email,
@@ -604,6 +620,8 @@ function makeInstallationAccessService(
     const displayName = yield* requireText(command.displayName, "display name");
     const email = yield* normalizeEmail(command.email);
     return yield* dependencies.repository.admitMember({
+      admittedHow: memberAdmissions.manual,
+      attribution: attributionOf(command.principal),
       createdAt: dependencies.clock.now().toISOString(),
       displayName,
       email,
@@ -647,6 +665,7 @@ function makeInstallationAccessService(
       dependencies.installationId,
       memberId,
       dependencies.clock.now().toISOString(),
+      attributionOf(principal),
     );
     // Session entries are keyed by token digest, not member, so this rare
     // administrative mutation clears the whole cache instead of indexing it.
@@ -694,7 +713,7 @@ function makeInstallationAccessService(
       rotatedFromId: null,
       secretDigest: dependencies.secrets.digest(token),
     };
-    const apiKey = yield* dependencies.repository.createApiKey(key);
+    const apiKey = yield* dependencies.repository.createApiKey(key, attributionOf(command.principal));
     return {apiKey, token};
   });
 
@@ -713,6 +732,7 @@ function makeInstallationAccessService(
       dependencies.installationId,
       keyId,
       dependencies.clock.now().toISOString(),
+      attributionOf(principal),
     );
     // Key entries are keyed by presented-credential digest, not key id, so
     // this rare administrative mutation clears the cache instead of indexing.
@@ -756,6 +776,7 @@ function makeInstallationAccessService(
       previous.id,
       replacement,
       now.toISOString(),
+      attributionOf(principal),
     );
     apiKeyCache?.clear();
     return {apiKey, token};

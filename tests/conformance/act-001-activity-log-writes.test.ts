@@ -12,7 +12,7 @@ import {
   type TestInstallation,
 } from "../support/runtime-harness.js";
 import {publishNew, type PublishResponse} from "../support/publishing.js";
-import {ApiClient} from "../support/agent-dispatch.js";
+import {ApiClient, signInAdministrator} from "../support/agent-dispatch.js";
 
 const activityRowSchema = z.object({
   accessFrom: z.string().nullable(),
@@ -40,6 +40,9 @@ const threadCreationSchema = z.object({
 const replyCreationSchema = z.object({
   reply: z.object({id: z.string()}).loose(),
 }).loose();
+
+/** The administrator request bodies this test sends: strings and string lists. */
+type AdminRequestBody = Readonly<Record<string, string | readonly string[]>>;
 
 describe("the installation activity log records every mutation", () => {
   let installation: TestInstallation;
@@ -149,7 +152,151 @@ describe("the installation activity log records every mutation", () => {
         ["publish", null, null],
         ["public_link_enable", null, "public_link"],
       ]);
+
+    // Administration: a human administrator admits, issues, rotates and
+    // revokes; the rows carry that administrator and name their subject.
+    const cookies = await signInAdministrator(server, installation);
+    const administratorId = await sessionPrincipalId(cookies.header);
+    const admitted = (await expectJson(
+      await adminFetch(cookies, "/api/v1/members", "POST", {displayName: "Dana Okonkwo", email: "dana@example.test"}),
+      201,
+      z.object({member: z.object({id: z.string()})}),
+    )).member;
+    const issued = (await expectJson(
+      await adminFetch(cookies, "/api/v1/api-keys", "POST", {
+        capabilities: ["artifact:read"],
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        name: "Release key",
+      }),
+      201,
+      z.object({apiKey: z.object({id: z.string()})}),
+    )).apiKey;
+    const rotated = (await expectJson(
+      await adminFetch(cookies, `/api/v1/api-keys/${issued.id}/rotate`, "POST"),
+      201,
+      z.object({apiKey: z.object({id: z.string()})}),
+    )).apiKey;
+    await expectJson(await adminFetch(cookies, `/api/v1/api-keys/${rotated.id}/revoke`, "POST"), 200, z.object({}).loose());
+    await expectJson(await adminFetch(cookies, `/api/v1/members/${admitted.id}/deactivate`, "POST"), 200, z.object({}).loose());
+    const projectId = await client.createProject("Claims workstation", "act-001-claims-project");
+    await expectJson(await client.fetch(`/api/v1/projects/${projectId}/archive`, {method: "POST"}), 200, z.object({}).loose());
+    await expectJson(await client.fetch(`/api/v1/projects/${projectId}/unarchive`, {method: "POST"}), 200, z.object({}).loose());
+
+    const administration = readRows(
+      "WHERE action LIKE 'member\\_%' ESCAPE '\\' OR action LIKE 'key\\_%' ESCAPE '\\' OR action LIKE 'project\\_%' ESCAPE '\\' ORDER BY created_at, rowid",
+      [],
+    );
+    // The local owner admitted themself at sign-in: an "owner" row with no actor.
+    expect(administration[0]).toMatchObject({
+      action: "member_admit",
+      actorName: null,
+      principalId: null,
+      subjectId: administratorId,
+    });
+    expect(JSON.parse(administration[0]?.detailJson ?? "null")).toMatchObject({how: "owner"});
+    expect(administration.slice(1).map((row) => [row.action, row.subjectId, row.principalId, row.projectId]))
+      .toEqual([
+        ["member_admit", admitted.id, administratorId, null],
+        ["key_issue", issued.id, administratorId, null],
+        ["key_rotate", rotated.id, administratorId, null],
+        ["key_revoke", rotated.id, administratorId, null],
+        ["member_deactivate", admitted.id, administratorId, null],
+        ["project_create", projectId, "local-api-token", projectId],
+        ["project_archive", projectId, "local-api-token", projectId],
+        ["project_unarchive", projectId, "local-api-token", projectId],
+      ]);
+    expect(JSON.parse(administration[1]?.detailJson ?? "null"))
+      .toEqual({how: "manual", role: "member", subjectName: "Dana Okonkwo"});
+    expect(JSON.parse(administration[2]?.detailJson ?? "null")).toMatchObject({
+      capabilities: ["artifact:read"],
+      how: "administrator",
+      subjectName: "Release key",
+    });
+    expect(JSON.parse(administration[6]?.detailJson ?? "null"))
+      .toEqual({subjectName: "Claims workstation"});
   });
+
+  test("ACT-001-F: replays and no-op administration write nothing, and a refused action rolls its mutation back", async () => {
+    expect.hasAssertions();
+    const published = await publish("act-001-f-publish-artifact", "account_required");
+    await publish("act-001-f-publish-artifact", "account_required");
+    expect(readRows("WHERE idempotency_key LIKE 'act-001-f-publish-artifact%'", [])).toHaveLength(1);
+
+    const cookies = await signInAdministrator(server, installation);
+    const issued = (await expectJson(
+      await adminFetch(cookies, "/api/v1/api-keys", "POST", {
+        capabilities: ["artifact:read"],
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        name: "Short-lived key",
+      }),
+      201,
+      z.object({apiKey: z.object({id: z.string()})}),
+    )).apiKey;
+    await expectJson(await adminFetch(cookies, `/api/v1/api-keys/${issued.id}/revoke`, "POST"), 200, z.object({}).loose());
+    await expectJson(await adminFetch(cookies, `/api/v1/api-keys/${issued.id}/revoke`, "POST"), 200, z.object({}).loose());
+    expect(readRows("WHERE action = 'key_revoke' AND subject_id = ?", [issued.id])).toHaveLength(1);
+
+    const projectId = await client.createProject("Archive twice", "act-001-f-archive-project");
+    await expectJson(await client.fetch(`/api/v1/projects/${projectId}/archive`, {method: "POST"}), 200, z.object({}).loose());
+    await expectJson(await client.fetch(`/api/v1/projects/${projectId}/archive`, {method: "POST"}), 200, z.object({}).loose());
+    expect(readRows("WHERE action = 'project_archive' AND subject_id = ?", [projectId])).toHaveLength(1);
+
+    // A refused action leaves no member and no partial row.
+    withWritableDatabase((database) => database.exec(`
+      CREATE TRIGGER member_action_outage BEFORE INSERT ON actions
+      WHEN NEW.action = 'member_admit'
+      BEGIN SELECT RAISE(ABORT, 'the activity log refused the write'); END;
+    `));
+    const refused = await adminFetch(cookies, "/api/v1/members", "POST", {
+      displayName: "Refused Member",
+      email: "refused@example.test",
+    });
+    expect(refused.status).toBeGreaterThanOrEqual(500);
+    withWritableDatabase((database) => database.exec("DROP TRIGGER member_action_outage;"));
+    const members = (await expectJson(
+      await adminFetch(cookies, "/api/v1/members", "GET"),
+      200,
+      z.object({members: z.array(z.object({email: z.string()}).loose())}),
+    )).members;
+    expect(members.map((member) => member.email)).not.toContain("refused@example.test");
+    expect(published.artifact.id).toEqual(expect.any(String));
+  });
+
+  function withWritableDatabase(operation: (database: DatabaseSync) => void): void {
+    const database = new DatabaseSync(
+      path.join(installation.dataDirectory, "artifact-server.db"),
+      {timeout: 5_000},
+    );
+    try {
+      operation(database);
+    } finally {
+      database.close();
+    }
+  }
+
+  function adminFetch(
+    cookies: {readonly csrf: string; readonly header: string},
+    pathname: string,
+    method: string,
+    body?: AdminRequestBody,
+  ): Promise<Response> {
+    const headers = new Headers({
+      "Content-Type": "application/json",
+      Cookie: cookies.header,
+      Origin: server.baseUrl,
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "X-CSRF-Token": cookies.csrf,
+    });
+    return fetch(`${server.baseUrl}${pathname}`, body === undefined
+      ? {headers, method}
+      : {body: JSON.stringify(body), headers, method});
+  }
+
+  async function sessionPrincipalId(cookie: string): Promise<string> {
+    const response = await fetch(`${server.baseUrl}/api/v1/session`, {headers: {Cookie: cookie}});
+    return z.object({principal: z.object({id: z.string()})}).parse(await response.json()).principal.id;
+  }
 
   function rowsFor(artifactId: string): ActivityRow[] {
     return readRows("WHERE artifact_id = ? ORDER BY created_at, rowid", [artifactId]);

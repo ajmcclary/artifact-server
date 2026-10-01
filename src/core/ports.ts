@@ -1,3 +1,4 @@
+import type {ActionAttribution} from "./action-attribution.js";
 import type {
   AccessSetting,
   ActorSnapshot,
@@ -658,7 +659,10 @@ export interface StagedUploadFileSlot {
 }
 
 /** Values persisted when creating one project. */
-export type CreateProject = ProjectRecord;
+/** Values used to create one project, with who created it (ACT-001). */
+export interface CreateProject extends ProjectRecord {
+  readonly attribution: ActionAttribution;
+}
 
 /** Values used to change one project's label. */
 export interface RenameProject {
@@ -669,6 +673,9 @@ export interface RenameProject {
 /** Values used to archive or unarchive one project. */
 export interface SetProjectArchive {
   readonly archivedAt: string | null;
+  readonly attribution: ActionAttribution;
+  /** When the change happened; equals archivedAt when archiving. */
+  readonly changedAt: string;
   readonly projectId: string;
 }
 

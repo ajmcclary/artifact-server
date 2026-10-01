@@ -1,3 +1,4 @@
+import type {ActionAttribution} from "./action-attribution.js";
 import type {
   ApplicationSession,
   InstallationMember,
@@ -6,8 +7,21 @@ import type {
   StoredManagedApiKey,
 } from "./installation-identity.js";
 
+/** How a member entered the installation (spec §3 "Admitted by"). */
+export const memberAdmissions = {
+  automatic: "automatic",
+  manual: "manual",
+  owner: "owner",
+} as const;
+
+/** One recorded admission path. */
+export type MemberAdmission = (typeof memberAdmissions)[keyof typeof memberAdmissions];
+
 /** Values persisted when admitting one installation member. */
 export interface AdmitMemberRecord {
+  readonly admittedHow: MemberAdmission;
+  /** The administrator for manual admission; system attribution otherwise. */
+  readonly attribution: ActionAttribution;
   readonly createdAt: string;
   readonly displayName: string;
   readonly email: string;
@@ -45,7 +59,7 @@ export interface IdentityRepository {
     provider: string,
     consumedAt: string,
   ): Promise<LoginAttempt>;
-  createApiKey(key: StoredManagedApiKey): Promise<ManagedApiKey>;
+  createApiKey(key: StoredManagedApiKey, attribution: ActionAttribution): Promise<ManagedApiKey>;
   createApplicationSession(
     command: CreateApplicationSessionRecord,
   ): Promise<ApplicationSession>;
@@ -54,6 +68,7 @@ export interface IdentityRepository {
     installationId: string,
     memberId: string,
     updatedAt: string,
+    attribution: ActionAttribution,
   ): Promise<InstallationMember>;
   findActiveMemberByEmail(
     installationId: string,
@@ -84,6 +99,7 @@ export interface IdentityRepository {
     installationId: string,
     keyId: string,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey>;
   revokeApplicationSession(
     installationId: string,
@@ -95,6 +111,7 @@ export interface IdentityRepository {
     previousKeyId: string,
     replacement: StoredManagedApiKey,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey>;
 }
 

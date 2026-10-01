@@ -207,7 +207,7 @@ export interface PrincipalActivityRecorder {
 
 - `principal_id` is null only on recovered rows. The ID prefix `recovered:` is reserved for those rows.
 - `dispatch_*` rows carry the dispatch ID in `subject_id`.
-- A `key_rotate` row's `subject_id` is the old key.
+- A `key_rotate` row's `subject_id` is the new (replacement) key; `detail.replacedKeyId` names the old one.
 
 ### `src/application/activity.ts`
 

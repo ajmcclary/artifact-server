@@ -3,8 +3,9 @@ import {createHash} from "node:crypto";
 import {expect} from "vitest";
 import {z} from "zod";
 
+import {type ActionAttribution, systemAttribution} from "../../src/core/action-attribution.js";
 import {principalCapabilities} from "../../src/core/identity.js";
-import type {IdentityRepository} from "../../src/core/identity-ports.js";
+import {type IdentityRepository, memberAdmissions} from "../../src/core/identity-ports.js";
 import {type CommentAuthor, defaultProjectId} from "../../src/core/model.js";
 import type {
   AgentDispatchRepository,
@@ -40,6 +41,11 @@ const dana: CommentAuthor = {
   displayName: "Dana Okonkwo",
   principalId: "member_dana",
   principalKind: "human",
+};
+const danaAttribution: ActionAttribution = {
+  actor: {displayName: dana.displayName, kind: dana.principalKind},
+  authorizedByPrincipalId: null,
+  principalId: dana.principalId,
 };
 const rosa: CommentAuthor = {
   authorizedByPrincipalId: null,
@@ -83,12 +89,15 @@ export async function populateActivityHistory(
   const projectId = "prj_activity_fixture";
   await artifacts.createProject({
     archivedAt: null,
+    attribution: danaAttribution,
     createdAt: t.projectCreated,
     id: projectId,
     installationId,
     name: "Claims workstation",
   });
   await identity.admitMember({
+    admittedHow: memberAdmissions.owner,
+    attribution: systemAttribution,
     createdAt: t.danaAdmitted,
     displayName: "Dana Okonkwo",
     email: "dana@example.test",
@@ -97,6 +106,8 @@ export async function populateActivityHistory(
     role: "administrator",
   });
   await identity.admitMember({
+    admittedHow: memberAdmissions.manual,
+    attribution: danaAttribution,
     createdAt: t.rosaAdmitted,
     displayName: "Rosa Santoro",
     email: "rosa@example.test",
@@ -118,7 +129,7 @@ export async function populateActivityHistory(
     revokedAt: null,
     rotatedFromId: null,
     secretDigest: "digest-activity-fixture",
-  });
+  }, danaAttribution);
 
   const bytes = new TextEncoder().encode("<!doctype html><title>Activity fixture</title>");
   const manifest = createManifest({
@@ -253,8 +264,13 @@ export async function populateActivityHistory(
     principalId: dana.principalId,
     projectId: defaultProjectId,
   });
-  await identity.revokeApiKey(installationId, "key_ci", t.keyRevoked);
-  await artifacts.setProjectArchive({archivedAt: t.projectArchived, projectId});
+  await identity.revokeApiKey(installationId, "key_ci", t.keyRevoked, danaAttribution);
+  await artifacts.setProjectArchive({
+    archivedAt: t.projectArchived,
+    attribution: danaAttribution,
+    changedAt: t.projectArchived,
+    projectId,
+  });
 
   return {
     artifactId,

@@ -240,6 +240,8 @@ function readCompactCatalog(databasePath: string): IntegrityCatalog {
         SELECT 'action' AS kind, id, project_id AS projectId,
           artifact_id AS artifactId, version_id AS versionId
         FROM actions
+        -- Installation-level activity (members, keys) references no project.
+        WHERE project_id IS NOT NULL
         UNION ALL
         SELECT 'idempotency', idempotency_key, project_id,
           artifact_id, version_id
@@ -318,7 +320,8 @@ function readExternalCatalog(installationId: string) {
       sql<ProjectReferenceRow>`
         SELECT 'action' AS kind, id, project_id AS "projectId",
           artifact_id AS "artifactId", version_id AS "versionId"
-        FROM actions WHERE installation_id = ${installationId}
+        FROM actions
+        WHERE installation_id = ${installationId} AND project_id IS NOT NULL
         UNION ALL
         SELECT 'idempotency', idempotency_key, project_id,
           artifact_id, version_id

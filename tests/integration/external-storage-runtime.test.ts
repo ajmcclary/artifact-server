@@ -53,6 +53,8 @@ import {
   startStubOidcProvider,
   type RunningStubOidcProvider,
 } from "../support/stub-oidc-provider.js";
+import {systemAttribution} from "../../src/core/action-attribution.js";
+import {memberAdmissions} from "../../src/core/identity-ports.js";
 import {revertInstallationActivityLogStatements} from "../support/postgres-activity-log.js";
 import {RecordingGitHistoryProvider} from "../support/git-history-provider.js";
 
@@ -1160,6 +1162,8 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
       const createdAt = "2026-08-13T15:00:00.000Z";
       await Promise.all([
         repository.admitMember({
+          admittedHow: memberAdmissions.owner,
+          attribution: systemAttribution,
           createdAt,
           displayName: "Administrator A",
           email: "administrator-a@example.test",
@@ -1168,6 +1172,8 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
           role: "administrator",
         }),
         repository.admitMember({
+          admittedHow: memberAdmissions.owner,
+          attribution: systemAttribution,
           createdAt,
           displayName: "Administrator B",
           email: "administrator-b@example.test",

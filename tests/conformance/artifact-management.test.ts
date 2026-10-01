@@ -372,11 +372,14 @@ describe("artifact and version management", () => {
          WHERE artifact_id = ?
          ORDER BY created_at, rowid`,
       ).all(first.body.artifact.id));
+      // Moving into or out of public-link access also records its direction (ACT-001).
       expect(actions.map(({action}) => action)).toEqual([
         "publish",
+        "public_link_enable",
         "publish",
         "restore",
         "change_access",
+        "public_link_disable",
       ]);
       expect(actions.every(({principalId}) => principalId === "local-api-token"))
         .toBe(true);

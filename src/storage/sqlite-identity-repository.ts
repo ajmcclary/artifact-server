@@ -20,6 +20,16 @@ import {
   principalCapabilities,
   principalKinds,
 } from "../core/identity.js";
+import {
+  type ActionAttribution,
+  systemAttribution,
+} from "../core/action-attribution.js";
+import {
+  type ActionInsert,
+  attributedInsert,
+  positionalActionInsertSql,
+  positionalActionValues,
+} from "./action-insert.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
   AdmitMemberRecord,
@@ -134,21 +144,31 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
 
   async admitMember(command: AdmitMemberRecord): Promise<InstallationMember> {
     try {
-      this.#database.prepare(`
-        INSERT INTO installation_members (
-          id, installation_id, email, display_name, role, status,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        command.id,
-        command.installationId,
-        command.email,
-        command.displayName,
-        command.role,
-        memberStatuses.active,
-        command.createdAt,
-        command.createdAt,
-      );
+      this.#inTransaction(() => {
+        this.#database.prepare(`
+          INSERT INTO installation_members (
+            id, installation_id, email, display_name, role, status,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          command.id,
+          command.installationId,
+          command.email,
+          command.displayName,
+          command.role,
+          memberStatuses.active,
+          command.createdAt,
+          command.createdAt,
+        );
+        this.#insertAction(attributedInsert(command.attribution, {
+          action: "member_admit",
+          createdAt: command.createdAt,
+          detail: {how: command.admittedHow, role: command.role, subjectName: command.displayName},
+          idempotencyKey: `member_admit:${command.id}`,
+          projectId: null,
+          subjectId: command.id,
+        }));
+      });
     } catch (cause) {
       if (isSqliteConstraint(cause)) {
         throw new IdentityConflict({
@@ -160,6 +180,23 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     const member = await this.findMember(command.installationId, command.id);
     if (member === null) throw new Error("The admitted member was not persisted.");
     return member;
+  }
+
+  #insertAction(insert: ActionInsert): void {
+    this.#database.prepare(positionalActionInsertSql).run(...positionalActionValues(insert));
+  }
+
+  /** Run one identity mutation and its action in a single SQLite transaction. */
+  #inTransaction<Result>(operation: () => Result): Result {
+    this.#database.exec("BEGIN IMMEDIATE;");
+    try {
+      const result = operation();
+      this.#database.exec("COMMIT;");
+      return result;
+    } catch (cause) {
+      this.#database.exec("ROLLBACK;");
+      throw cause;
+    }
   }
 
   async listMembers(installationId: string): Promise<readonly InstallationMember[]> {
@@ -287,6 +324,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     installationId: string,
     memberId: string,
     updatedAt: string,
+    attribution: ActionAttribution,
   ): Promise<InstallationMember> {
     this.#database.exec("BEGIN IMMEDIATE;");
     try {
@@ -331,6 +369,16 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         WHERE
           installation_id = ? AND principal_kind = ? AND principal_id = ?
       `).run(updatedAt, installationId, principalKinds.human, memberId);
+      if (existing.status === memberStatuses.active) {
+        this.#insertAction(attributedInsert(attribution, {
+          action: "member_deactivate",
+          createdAt: updatedAt,
+          detail: {subjectName: existing.displayName},
+          idempotencyKey: `member_deactivate:${memberId}:${updatedAt}`,
+          projectId: null,
+          subjectId: memberId,
+        }));
+      }
       this.#database.exec("COMMIT;");
       return {...existing, status: memberStatuses.inactive, updatedAt};
     } catch (cause) {
@@ -433,9 +481,35 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     `).run(revokedAt, installationId, tokenDigest);
   }
 
-  async createApiKey(key: StoredManagedApiKey): Promise<ManagedApiKey> {
-    this.#insertApiKey(key);
+  async createApiKey(
+    key: StoredManagedApiKey,
+    attribution: ActionAttribution,
+  ): Promise<ManagedApiKey> {
+    this.#inTransaction(() => {
+      this.#insertApiKey(key);
+      this.#insertKeyIssue(key, attribution, "administrator");
+    });
     return withoutSecretDigest(key);
+  }
+
+  #insertKeyIssue(
+    key: StoredManagedApiKey,
+    attribution: ActionAttribution,
+    how: "administrator" | "bootstrap",
+  ): void {
+    this.#insertAction(attributedInsert(attribution, {
+      action: "key_issue",
+      createdAt: key.createdAt,
+      detail: {
+        capabilities: key.capabilities,
+        how,
+        ownerPrincipalId: key.principalId,
+        subjectName: key.name,
+      },
+      idempotencyKey: `key_issue:${key.id}`,
+      projectId: null,
+      subjectId: key.id,
+    }));
   }
 
   async initializeBootstrapApiKey(
@@ -461,6 +535,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         });
       }
       this.#insertApiKey(key);
+      this.#insertKeyIssue(key, systemAttribution, "bootstrap");
       this.#database.exec("COMMIT;");
       return key;
     } catch (cause) {
@@ -528,15 +603,27 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     installationId: string,
     keyId: string,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey> {
-    const result = this.#database.prepare(`
-      UPDATE managed_api_keys
-      SET revoked_at = COALESCE(revoked_at, ?)
-      WHERE installation_id = ? AND id = ?
-    `).run(revokedAt, installationId, keyId);
-    if (result.changes !== 1) {
-      throw new IdentityNotFound({message: "The API key does not exist."});
-    }
+    this.#inTransaction(() => {
+      const existing = this.#findApiKey(installationId, keyId);
+      if (existing === null) {
+        throw new IdentityNotFound({message: "The API key does not exist."});
+      }
+      if (existing.revokedAt !== null) return;
+      this.#database.prepare(`
+        UPDATE managed_api_keys SET revoked_at = ?
+        WHERE installation_id = ? AND id = ? AND revoked_at IS NULL
+      `).run(revokedAt, installationId, keyId);
+      this.#insertAction(attributedInsert(attribution, {
+        action: "key_revoke",
+        createdAt: revokedAt,
+        detail: {subjectName: existing.name},
+        idempotencyKey: `key_revoke:${keyId}`,
+        projectId: null,
+        subjectId: keyId,
+      }));
+    });
     const key = await this.findApiKey(installationId, keyId);
     if (key === null) throw new Error("The revoked API key disappeared.");
     return withoutSecretDigest(key);
@@ -547,6 +634,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     previousKeyId: string,
     replacement: StoredManagedApiKey,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey> {
     this.#database.exec("BEGIN IMMEDIATE;");
     try {
@@ -565,6 +653,14 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         });
       }
       this.#insertApiKey(replacement);
+      this.#insertAction(attributedInsert(attribution, {
+        action: "key_rotate",
+        createdAt: revokedAt,
+        detail: {replacedKeyId: previousKeyId, subjectName: replacement.name},
+        idempotencyKey: `key_rotate:${replacement.id}`,
+        projectId: null,
+        subjectId: replacement.id,
+      }));
       this.#database.exec("COMMIT;");
       return withoutSecretDigest(replacement);
     } catch (cause) {

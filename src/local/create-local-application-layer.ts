@@ -948,9 +948,9 @@ export function createApplicationLayer(
         "bindExternalIdentity",
         () => identityRepository.bindExternalIdentity(command),
       ),
-      createApiKey: (key) => identityEffect(
+      createApiKey: (key, attribution) => identityEffect(
         "createApiKey",
-        () => identityRepository.createApiKey(key),
+        () => identityRepository.createApiKey(key, attribution),
       ),
       createApplicationSession: (command) => identityEffect(
         "createApplicationSession",
@@ -969,13 +969,14 @@ export function createApplicationLayer(
         "createLoginAttempt",
         () => identityRepository.createLoginAttempt(attempt),
       ),
-      deactivateMember: (installationId, memberId, updatedAt) =>
+      deactivateMember: (installationId, memberId, updatedAt, attribution) =>
         identityEffectWithConflictOrNotFound(
           "deactivateMember",
           () => identityRepository.deactivateMember(
             installationId,
             memberId,
             updatedAt,
+            attribution,
           ),
         ),
       findActiveMemberByEmail: (installationId, email) => identityEffect(
@@ -1023,9 +1024,9 @@ export function createApplicationLayer(
         "listMembers",
         () => identityRepository.listMembers(installationId),
       ),
-      revokeApiKey: (installationId, keyId, revokedAt) => identityEffectWithNotFound(
+      revokeApiKey: (installationId, keyId, revokedAt, attribution) => identityEffectWithNotFound(
         "revokeApiKey",
-        () => identityRepository.revokeApiKey(installationId, keyId, revokedAt),
+        () => identityRepository.revokeApiKey(installationId, keyId, revokedAt, attribution),
       ),
       revokeApplicationSession: (installationId, tokenDigest, revokedAt) =>
         identityEffect(
@@ -1036,7 +1037,7 @@ export function createApplicationLayer(
             revokedAt,
           ),
         ),
-      rotateApiKey: (installationId, previousKeyId, replacement, revokedAt) =>
+      rotateApiKey: (installationId, previousKeyId, replacement, revokedAt, attribution) =>
         identityEffectWithConflictOrNotFound(
           "rotateApiKey",
           () => identityRepository.rotateApiKey(
@@ -1044,6 +1045,7 @@ export function createApplicationLayer(
             previousKeyId,
             replacement,
             revokedAt,
+            attribution,
           ),
         ),
     },
