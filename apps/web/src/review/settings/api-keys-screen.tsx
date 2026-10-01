@@ -2,9 +2,9 @@ import {useEffect, useId, useState, type CSSProperties} from "react";
 
 import {
   api,
+  type AdministeredApiKey,
   type InstallationMember,
   type IssuedApiKey,
-  type ManagedApiKey,
   type PrincipalCapability,
 } from "@/api/client";
 import {
@@ -12,27 +12,37 @@ import {
   AutoGrid,
   Button,
   Checkbox,
+  DataGrid,
   Eyebrow,
+  FieldGrid,
   Input,
   Modal,
-  PageScaffold,
+  RecordPanel,
   Select,
+  SlideOver,
   StatusPill,
   SurfaceState,
   Tag,
+  type GridColumn,
 } from "@/arkcase";
-import {formatTimestamp} from "@/lib/presentation";
 import {CopyableCode} from "@/ui/copyable-code";
-import {
-  AdminActions,
-  AdminPanel,
-  AdminStack,
-  IdentityCell,
-  Ledger,
-  nativeInputAttributes,
-  RequestFailure,
-  type LedgerColumn,
-} from "./admin-parts.tsx";
+import {AdminConsole, useAdminInspectorFullscreen} from "./admin-console.tsx";
+import {dateOrDash, dateTimeOrDash, keyStatusLabel, keyStatusTone, type KeyStatus} from "./admin-areas.ts";
+import {AddRecordButton, AdminStack, nativeInputAttributes, RequestFailure} from "./admin-parts.tsx";
+import {useSelectedRecord} from "./use-selected-record.ts";
+
+interface KeyRow {
+  readonly apiKey: AdministeredApiKey;
+  readonly capabilityCount: number;
+  readonly expires: string;
+  readonly id: string;
+  readonly lastUsed: string;
+  readonly name: string;
+  readonly owner: string;
+  readonly status: KeyStatus;
+}
+
+const statusPill = (status: KeyStatus) => <StatusPill label={keyStatusLabel(status)} tone={keyStatusTone(status)} />;
 
 const capabilities: readonly {
   readonly description: string;
@@ -58,7 +68,7 @@ export function formatDatetimeLocalMinimum(now: Date): string {
 /** Administrator-only managed API key issuance and lifecycle surface. */
 export function ApiKeysScreen() {
   const capabilitiesHeadingId = useId();
-  const [apiKeys, setApiKeys] = useState<readonly ManagedApiKey[]>([]);
+  const [apiKeys, setApiKeys] = useState<readonly AdministeredApiKey[]>([]);
   const [members, setMembers] = useState<readonly InstallationMember[]>([]);
   const [issued, setIssued] = useState<IssuedApiKey | null>(null);
   const [issueOpen, setIssueOpen] = useState(false);
@@ -71,7 +81,7 @@ export function ApiKeysScreen() {
   const [selectedCapabilities, setSelectedCapabilities] = useState<
     readonly PrincipalCapability[]
   >([]);
-  const [revoking, setRevoking] = useState<ManagedApiKey | null>(null);
+  const [revoking, setRevoking] = useState<AdministeredApiKey | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -159,123 +169,118 @@ export function ApiKeysScreen() {
       value: member.id,
     })),
   ];
-  const columns: readonly LedgerColumn<ManagedApiKey>[] = [
+  const [selectedId, selectRecord] = useSelectedRecord();
+  const fullscreen = useAdminInspectorFullscreen();
+  const capabilityLabel = new Map(capabilities.map((capability) => [capability.value, capability.label]));
+  const rows: KeyRow[] = apiKeys.map((apiKey) => ({
+    apiKey,
+    capabilityCount: apiKey.capabilities.length,
+    expires: dateOrDash(apiKey.expiresAt),
+    id: apiKey.id,
+    lastUsed: dateOrDash(apiKey.lastUsedAt),
+    name: apiKey.name,
+    owner: apiKey.ownerName ?? "—",
+    status: apiKey.status,
+  }));
+  const columns: GridColumn<KeyRow>[] = [
     {
-      align: "left",
-      cell: (apiKey) => ({
-        value: (
-          <IdentityCell
-            badge={(
-              <StatusPill
-                label={apiKey.revokedAt === null ? "Active" : "Revoked"}
-                tone={apiKey.revokedAt === null ? "success" : "danger"}
-              />
-            )}
-            detail={apiKey.prefix}
-            detailMono
-            primary={apiKey.name}
-          />
-        ),
-      }),
-      key: "key",
-      kind: "field",
-      label: "Key",
-      width: "minmax(0, 1.2fr)",
+      cellRenderer: (_value: string, row: KeyRow) => (
+        <span style={keyCellStyle}>
+          <span>{row.name}</span>
+          <span style={prefixStyle}>{row.apiKey.prefix}</span>
+        </span>
+      ),
+      field: "name",
+      headerName: "Key",
+      onCellClick: (row) => selectRecord(row.id),
+      width: 240,
     },
-    {
-      align: "left",
-      cell: (apiKey) => ({
-        value: (
-          <span style={tagListStyle}>
-            {apiKey.capabilities.map((capability) => <Tag key={capability}>{capability}</Tag>)}
-          </span>
-        ),
-      }),
-      key: "capabilities",
-      kind: "field",
-      label: "Capabilities",
-      width: "minmax(0, 1.5fr)",
-    },
-    {
-      align: "left",
-      cell: (apiKey) => ({mono: true, muted: true, value: formatTimestamp(apiKey.expiresAt)}),
-      key: "expires",
-      kind: "field",
-      label: "Expires",
-      width: "170px",
-    },
-    {
-      align: "right",
-      cell: (apiKey) => ({
-        value: apiKey.revokedAt === null ? (
-          <AdminActions>
-            <Button
-              disabled={pending}
-              icon="bi-arrow-repeat"
-              onClick={() => void rotate(apiKey.id)}
-              outline
-              size="sm"
-              variant="secondary"
-            >
-              Rotate
-            </Button>
-            <Button
-              danger
-              disabled={pending}
-              onClick={() => setRevoking(apiKey)}
-              size="sm"
-              variant="ghost"
-            >
-              Revoke
-            </Button>
-          </AdminActions>
-        ) : "",
-      }),
-      key: "actions",
-      kind: "action",
-      label: "",
-      width: "200px",
-    },
+    {field: "owner", headerName: "Owner", width: 170},
+    {field: "capabilityCount", headerName: "Capabilities", type: "count", width: 120},
+    {field: "lastUsed", headerName: "Last used", type: "date", width: 120},
+    {field: "expires", headerName: "Expires", type: "date", width: 120},
+    {cellRenderer: (value: KeyStatus) => statusPill(value), field: "status", headerName: "Status", width: 110},
   ];
-  const activeCount = apiKeys.filter((apiKey) => apiKey.revokedAt === null).length;
+  const selected = apiKeys.find((apiKey) => apiKey.id === selectedId) ?? null;
+  const inspector = selected === null ? null : (
+    <SlideOver
+      footer={selected.status === "active" ? (
+        <Button danger icon="bi-x-circle" onClick={() => setRevoking(selected)} outline size="sm" variant="secondary">
+          Revoke
+        </Button>
+      ) : null}
+      fullscreen={fullscreen}
+      onClose={() => selectRecord(null)}
+      subtitle={selected.ownerName ?? undefined}
+      title={selected.name}
+      titleMeta={statusPill(selected.status)}
+      width={360}
+    >
+      <div style={detailStackStyle}>
+        <FieldGrid
+          columns={1}
+          fields={[
+            {label: "Prefix", mono: true, value: selected.prefix},
+            {label: "Created", mono: true, value: dateTimeOrDash(selected.createdAt)},
+            {label: "Last used", mono: true, value: dateTimeOrDash(selected.lastUsedAt)},
+            {label: "Expires", mono: true, value: dateTimeOrDash(selected.expiresAt)},
+            ...(selected.revokedAt === null ? [] : [{
+              label: "Revoked",
+              value: `${dateTimeOrDash(selected.revokedAt)} by ${selected.revokedBy?.name ?? "Unknown"}`,
+            }]),
+          ]}
+        />
+        <div aria-label="Capabilities" role="list" style={tagListStyle}>
+          {selected.capabilities.map((capability) => (
+            <span key={capability} role="listitem"><Tag>{capabilityLabel.get(capability) ?? capability}</Tag></span>
+          ))}
+        </div>
+      </div>
+    </SlideOver>
+  );
+  const activeCount = apiKeys.filter((apiKey) => apiKey.status === "active").length;
 
   return (
-    <PageScaffold
-      actions={(
-        <Button icon="bi-key" onClick={() => setIssueOpen(true)} size="sm">
-          Issue API key
-        </Button>
-      )}
-      count={loading && apiKeys.length === 0 ? null : `${activeCount} active`}
-      meta="Managed API keys have explicit capabilities, a required expiration, and revocation. Secrets are never shown again."
-      title="API keys"
-    >
+    <AdminConsole administrator area="apiKeys" inspector={inspector}>
       {error === null || issueOpen || revoking !== null
         ? null
         : <RequestFailure error={error} onRetry={() => void load()} />}
       {loading && apiKeys.length === 0 ? (
         <SurfaceState loadingTitle="Loading API keys" noun="API keys" phase="loading" skeleton={3} />
-      ) : apiKeys.length === 0 ? (
-        <SurfaceState
-          count={0}
-          emptyBody="Issue a scoped key for automation or a compatible self-hosted MCP client."
-          emptyIcon="bi-key"
-          emptyTitle="No managed API keys"
-          noun="API keys"
-          phase="ready"
-          titleLevel={3}
-        />
       ) : (
-        <AdminPanel label="Managed keys" padded={false} subtitle={`${activeCount} active`}>
-          <Ledger
-            ariaLabel="Managed API keys"
+        <RecordPanel
+          actions={<AddRecordButton label="Issue API key" onClick={() => setIssueOpen(true)} />}
+          capAlign="center"
+          label="API keys"
+          metaWrap
+          subtitle={`${apiKeys.length} keys · ${activeCount} active`}
+        >
+          <DataGrid
+            ariaLabel="API keys"
             columns={columns}
-            rowKey={(apiKey) => apiKey.id}
-            rows={apiKeys}
+            empty={(
+              <SurfaceState
+                count={0}
+                density="inline"
+                emptyBody="Issue a scoped key for automation or a compatible self-hosted MCP client."
+                emptyIcon="bi-key"
+                emptyTitle="No API keys"
+                noun="API keys"
+                phase="ready"
+              />
+            )}
+            quickFilter
+            rowActions={(row: KeyRow) => row.status === "active" ? [
+              {icon: "bi-arrow-repeat", label: "Rotate", onClick: () => void rotate(row.id)},
+              {danger: true, icon: "bi-x-circle", label: "Revoke", onClick: () => setRevoking(row.apiKey)},
+            ] : null}
+            rowActionsLabel={(row: KeyRow) => `Actions for ${row.name}`}
+            rows={rows}
+            selectable={false}
+            statusBar={false}
           />
-        </AdminPanel>
+        </RecordPanel>
       )}
-
       <Modal
         fullscreenBelow={768}
         icon="bi-key"
@@ -362,7 +367,7 @@ export function ApiKeysScreen() {
       >
         {error === null ? null : <RequestFailure error={error} />}
       </Modal>
-    </PageScaffold>
+    </AdminConsole>
   );
 }
 
@@ -406,3 +411,6 @@ function SecretModal({
 
 const tagListStyle: CSSProperties = {display: "flex", flexWrap: "wrap", gap: 6};
 const capabilityGroupStyle: CSSProperties = {display: "flex", flexDirection: "column", gap: 8};
+const keyCellStyle: CSSProperties = {display: "inline-flex", flexDirection: "column", lineHeight: 1.3, minWidth: 0};
+const prefixStyle: CSSProperties = {color: "var(--text-secondary, #5a6268)", fontFamily: "var(--font-data, monospace)", fontSize: 12};
+const detailStackStyle: CSSProperties = {display: "flex", flexDirection: "column", gap: 14};
