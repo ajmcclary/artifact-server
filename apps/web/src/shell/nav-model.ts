@@ -7,9 +7,6 @@ import {
   type SettingsRoute,
 } from "@/review/review-routes";
 
-/** Which item set the application navigation shows. */
-export type ShellMode = "admin" | "review";
-
 /** The `id` of the link-less navigation row that opens the New project dialog. */
 export const NEW_PROJECT_NAV_ID = "new-project";
 
@@ -21,11 +18,9 @@ export interface ShellNavInput {
   readonly isAdministrator: boolean;
   /** The design library is open. */
   readonly libraryActive: boolean;
-  readonly mode: ShellMode;
   readonly projects: readonly Project[];
   readonly activityActive: boolean;
   readonly projectsActive: boolean;
-  readonly returnHref: string;
 }
 
 const administrationHrefs = {
@@ -51,30 +46,16 @@ export function administrationHref(isAdministrator: boolean): string {
   return isAdministrator ? administrationHrefs.members : administrationHrefs.mcp;
 }
 
-/** The navigation rows for the current mode; `link` values are real hrefs. */
+/** The navigation rows; `link` values are real hrefs. The item set never changes with the screen. */
 export function shellNavItems(input: ShellNavInput): NavItem[] {
-  return input.mode === "admin"
-    ? administrationItems(input.isAdministrator, input.returnHref)
-    : reviewItems(input);
+  return reviewItems(input);
 }
 
 /** The `link` of the current row, or "" when no row is current. */
 export function shellActiveLink(input: ShellNavInput): string {
-  if (input.mode === "admin") {
-    switch (input.activeSettings) {
-      case "apiKeys":
-        return administrationHrefs.apiKeys;
-      case "mcp":
-        return administrationHrefs.mcp;
-      case "members":
-        return administrationHrefs.members;
-      case "publicLinks":
-        return administrationHrefs.publicLinks;
-      case "webmcp":
-        return administrationHrefs.mcp;
-      default:
-        return "";
-    }
+  if (input.activeSettings !== null && input.activeSettings !== "projects" && input.activeSettings !== "project") {
+    // Every administration area lives under the one Tools item.
+    return administrationHref(input.isAdministrator);
   }
   if (input.activityActive) return activityHref();
   if (input.libraryActive) return libraryHref();
@@ -122,32 +103,4 @@ function orderedProjects(projects: readonly Project[]): Project[] {
     if (leftActive !== rightActive) return leftActive ? -1 : 1;
     return left.name.localeCompare(right.name);
   });
-}
-
-function administrationItems(isAdministrator: boolean, returnHref: string): NavItem[] {
-  const items: NavItem[] = [];
-  if (isAdministrator) {
-    items.push(
-      {icon: "bi-people", id: "members", label: "Members", link: administrationHrefs.members},
-      {icon: "bi-key", id: "api-keys", label: "API keys", link: administrationHrefs.apiKeys},
-      {
-        icon: "bi-link-45deg",
-        id: "public-links",
-        label: "Public links",
-        link: administrationHrefs.publicLinks,
-      },
-    );
-  }
-  // Both MCP routes render one MCP & WebMCP screen.
-  items.push({icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: administrationHrefs.mcp});
-  const [first] = items;
-  if (first !== undefined) first.group = "Administration";
-  items.push({
-    group: "Review",
-    icon: "bi-arrow-left",
-    id: "back-to-review",
-    label: "Back to review",
-    link: returnHref,
-  });
-  return items;
 }

@@ -39,7 +39,6 @@ const reviewInput: ShellNavInput = {
   canCreateProjects: true,
   isAdministrator: true,
   libraryActive: false,
-  mode: "review",
   projects: [
     project("prj_old", "Zeta", "2026-09-02T00:00:00.000Z"),
     project("prj_default", "Default"),
@@ -47,7 +46,6 @@ const reviewInput: ShellNavInput = {
   ],
   activityActive: false,
   projectsActive: false,
-  returnHref: "/review?project=prj_b&artifact=art_c",
 };
 
 describe("shellNavItems in review mode", () => {
@@ -78,36 +76,6 @@ describe("shellNavItems in review mode", () => {
   });
 });
 
-describe("shellNavItems in administration mode", () => {
-  it("gives an administrator every administration screen and a way back", () => {
-    expect(shellNavItems({...reviewInput, mode: "admin"})).toEqual([
-      {
-        group: "Administration",
-        icon: "bi-people",
-        id: "members",
-        label: "Members",
-        link: "/review/settings/members",
-      },
-      {icon: "bi-key", id: "api-keys", label: "API keys", link: "/review/settings/api-keys"},
-      {icon: "bi-link-45deg", id: "public-links", label: "Public links", link: "/review/settings/public-links"},
-      {icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"},
-      {
-        group: "Review",
-        icon: "bi-arrow-left",
-        id: "back-to-review",
-        label: "Back to review",
-        link: "/review?project=prj_b&artifact=art_c",
-      },
-    ]);
-  });
-
-  it("keeps Members, API keys, and Public links administrator-only", () => {
-    const items = shellNavItems({...reviewInput, isAdministrator: false, mode: "admin"});
-    expect(items.map((item) => item.label)).toEqual(["MCP & WebMCP", "Back to review"]);
-    expect(items[0]?.group).toBe("Administration");
-  });
-});
-
 describe("shellActiveLink", () => {
   it("marks Activity, the active project, the library, or the active administration screen", () => {
     expect(shellActiveLink({...reviewInput, activityActive: true})).toBe("/review");
@@ -121,12 +89,6 @@ describe("shellActiveLink", () => {
     expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
       .toBe("/review/library");
     expect(shellActiveLink(reviewInput)).toBe("");
-    expect(shellActiveLink({...reviewInput, activeSettings: "apiKeys", mode: "admin"}))
-      .toBe("/review/settings/api-keys");
-    // Both MCP routes render the one MCP & WebMCP screen, so both mark its row.
-    expect(shellActiveLink({...reviewInput, activeSettings: "webmcp", mode: "admin"}))
-      .toBe("/review/settings/mcp");
-    expect(shellActiveLink({...reviewInput, activeSettings: "project", mode: "admin"})).toBe("");
   });
 });
 
@@ -147,5 +109,20 @@ describe("principal permissions", () => {
   it("opens administration on Members for administrators and on MCP otherwise", () => {
     expect(administrationHref(true)).toBe("/review/settings/members");
     expect(administrationHref(false)).toBe("/review/settings/mcp");
+  });
+});
+
+describe("settings routes keep the review navigation", () => {
+  it("never swaps item sets, and marks the Tools item current on settings screens", () => {
+    const onKeys = {...reviewInput, activeSettings: "apiKeys" as const};
+    expect(shellNavItems(onKeys)).toEqual(shellNavItems(reviewInput));
+    expect(shellActiveLink(onKeys)).toBe("/review/settings/members");
+    expect(shellActiveLink({...reviewInput, activeSettings: "webmcp" as const})).toBe("/review/settings/members");
+  });
+
+  it("marks MCP & WebMCP current for a non-administrator on the MCP screen", () => {
+    const member = {...reviewInput, activeSettings: "mcp" as const, canCreateProjects: false, isAdministrator: false};
+    expect(shellNavItems(member).at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
+    expect(shellActiveLink(member)).toBe("/review/settings/mcp");
   });
 });

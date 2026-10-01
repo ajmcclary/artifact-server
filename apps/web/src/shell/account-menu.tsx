@@ -8,18 +8,12 @@ import {
   type MenuItem,
   type ThemeMode,
 } from "@/arkcase";
-import {
-  navigateReview,
-  REVIEW_RETURN_URL_KEY,
-  activityHref,
-  reviewReturnHref,
-} from "@/review/review-routes";
-import {readStored} from "@/lib/safe-storage";
+import {navigateReview, activityHref} from "@/review/review-routes";
 import {useThemeMode} from "@/theme/use-theme-mode";
 import {type Density, useDensity, useSetDensity} from "@/ui/density";
 import {type Toasts, useToasts} from "@/ui/toasts";
 
-import {administrationHref, isInstallationAdministrator, type ShellMode} from "./nav-model.ts";
+import {administrationHref, isInstallationAdministrator} from "./nav-model.ts";
 
 /** Where "Source on GitHub" leads. */
 export const SOURCE_REPOSITORY_HREF = "https://github.com/ajmcclary/artifact-server";
@@ -47,13 +41,12 @@ const densityOptions: readonly DensityOption[] = [
 ];
 
 interface AccountMenuProps {
-  readonly mode: ShellMode;
   readonly rail: boolean;
   readonly session: Session;
 }
 
 /** The signed-in person at the foot of the navigation and the menu it opens. */
-export function AccountMenu({mode, rail, session}: AccountMenuProps) {
+export function AccountMenu({rail, session}: AccountMenuProps) {
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const appearance = useThemeMode();
@@ -69,18 +62,10 @@ export function AccountMenu({mode, rail, session}: AccountMenuProps) {
     anchor?.focus();
   };
   const items: MenuItem[] = [
-    mode === "admin"
-      ? {
-        icon: "bi-arrow-left",
-        label: "Back to review",
-        onClick: () => navigateReview(
-          reviewReturnHref(readStored("session", REVIEW_RETURN_URL_KEY)),
-        ),
-      }
-      : isInstallationAdministrator(principal)
-        ? {icon: "bi-gear", label: "Administration", onClick: () => navigateReview(administrationHref(true))}
-        // Non-administrators keep their only route to the MCP & WebMCP setup screen.
-        : {icon: "bi-plug", label: "MCP & WebMCP", onClick: () => navigateReview(administrationHref(false))},
+    isInstallationAdministrator(principal)
+      ? {icon: "bi-gear", label: "Administration", onClick: () => navigateReview(administrationHref(true))}
+      // Non-administrators keep their only route to the MCP & WebMCP setup screen.
+      : {icon: "bi-plug", label: "MCP & WebMCP", onClick: () => navigateReview(administrationHref(false))},
     {divider: true},
     {heading: "Appearance"},
     ...appearanceOptions.map((option): MenuItem => ({

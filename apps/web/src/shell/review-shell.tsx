@@ -15,11 +15,9 @@ import {
   inAppLinkTarget,
   navigateReview,
   projectsHref,
-  REVIEW_RETURN_URL_KEY,
-  reviewReturnHref,
   type ReviewRoute,
 } from "@/review/review-routes";
-import {readStored, removeStored, writeStored} from "@/lib/safe-storage";
+import {removeStored, writeStored} from "@/lib/safe-storage";
 import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 
 import {AccountMenu} from "./account-menu.tsx";
@@ -80,7 +78,6 @@ function ReviewShellFrame({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const mode = route.kind === "settings" ? "admin" : "review";
   const navInput: ShellNavInput = {
     activityActive: route.kind === "activity",
     activeProjectId: route.kind === "workspace"
@@ -90,17 +87,15 @@ function ReviewShellFrame({
     canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
     libraryActive: route.kind === "library",
-    mode,
     projects,
     projectsActive: route.kind === "projects",
-    returnHref: reviewReturnHref(readStored("session", REVIEW_RETURN_URL_KEY)),
   };
   const items = shellNavItems(navInput);
   const activeLink = shellActiveLink(navInput);
   const focus = route.kind === "workspace" && route.location.view === "focus";
   const phone = display.profile === "mobile";
   const expanded = layout.navExpandable && navPinned && (display.profile === "laptop" || display.profile === "desktop");
-  const navTitle = mode === "admin" ? "Administration" : "Review and projects";
+  const navTitle = "Review and projects";
   const expandedWidth = Math.min(navigationWidth.maximum, Math.max(navigationWidth.minimum, navWidth ?? navigationWidth.defaultWidth));
   useEffect(() => {
     // The next document's loading skeleton opens its column at this width.
@@ -138,12 +133,12 @@ function ReviewShellFrame({
   const nav = focus ? null : (
     <div inert={layout.chromeHidden} style={{display: "contents"}}>
     <LeftNav
-      account={<AccountMenu mode={mode} rail={false} session={session} />}
+      account={<AccountMenu rail={false} session={session} />}
       activeLink={activeLink}
       brand={<ArtifactServerBrand showProduct={false} />}
       brandRail={<ArtifactServerBrand compact />}
       currentLabel="Current"
-      footerRail={<AccountMenu mode={mode} rail session={session} />}
+      footerRail={<AccountMenu rail session={session} />}
       header={false}
       items={items}
       mode={expanded ? "expanded" : "rail"}
@@ -184,7 +179,7 @@ function ReviewShellFrame({
     <MobileNavDrawer
       activeLink={activeLink}
       brand={<ArtifactServerBrand showProduct={false} />}
-      footer={<AccountMenu mode={mode} rail={false} session={session} />}
+      footer={<AccountMenu rail={false} session={session} />}
       items={items}
       label={navTitle}
       launcher={phone ? {label: "Open menu"} : false}
@@ -196,7 +191,7 @@ function ReviewShellFrame({
       returnFocusSelector={phone
         ? "[data-ac-mnav-launcher]"
         : '[aria-label="Open navigation menu"], [aria-label="Show the artifact catalog"]'}
-      title={mode === "admin" ? "Administration" : "Review"}
+      title="Review"
     />
   );
 

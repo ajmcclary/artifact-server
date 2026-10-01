@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import {ApiError} from "@/api/client";
-import {Alert, RecordPanel, RecordTable} from "@/arkcase";
+import {Alert, IconButton, Menu, RecordPanel, RecordTable, Tooltip, type MenuItem} from "@/arkcase";
 import {errorMessage} from "@/lib/presentation";
 import {useDensity} from "@/ui/density";
 
@@ -341,3 +341,33 @@ const stackedEmptyStyle: CSSProperties = {
   fontSize: "var(--font-size-dense, 13px)",
   padding: "14px 12px",
 };
+
+/** The "+" in a list panel's cap that starts the area's create flow. */
+export function AddRecordButton({label, onClick}: {readonly label: string; readonly onClick: () => void}) {
+  return (
+    <Tooltip label={label} placement="bottom">
+      <IconButton ariaLabel={label} icon="bi-plus-lg" onClick={onClick} size="sm" variant="primary" />
+    </Tooltip>
+  );
+}
+
+/** A row's kebab and its verbs; destructive verbs still confirm in their own dialog. */
+export function RowActionsMenu({items, label}: {readonly items: readonly MenuItem[]; readonly label: string}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={rowMenuAnchorStyle}>
+      <IconButton
+        ariaLabel={label}
+        expanded={open}
+        hasPopup="menu"
+        icon="bi-three-dots-vertical"
+        onClick={() => setOpen((current) => !current)}
+        size="sm"
+        variant="ghost"
+      />
+      <Menu align="end" items={[...items]} label={label} onClose={() => setOpen(false)} open={open} width={200} />
+    </span>
+  );
+}
+
+const rowMenuAnchorStyle: CSSProperties = {display: "inline-flex", position: "relative"};

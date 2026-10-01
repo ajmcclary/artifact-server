@@ -30,9 +30,6 @@ export type ReviewRoute =
   | {readonly kind: "workspace"; readonly location: ReviewLocation}
   | {readonly kind: "library"};
 
-/** Session-storage key holding the last review workspace URL that "Back to review" returns to. */
-export const REVIEW_RETURN_URL_KEY = "artifact-review-return-url";
-
 /** Window event fired after the application rewrites the review URL without a document load. */
 export const REVIEW_LOCATION_EVENT = "artifact-review-location-changed";
 
@@ -190,14 +187,6 @@ export function projectWorkspaceHref(projectId: string): string {
     versionId: null,
     view: null,
   });
-}
-
-/** The stored review URL when it names a review workspace, otherwise Activity. */
-export function reviewReturnHref(stored: string | null): string {
-  if (stored !== null && (stored === "/review" || stored.startsWith("/review?"))) {
-    return stored;
-  }
-  return activityHref();
 }
 
 /** Rewrite the review URL in place and tell the shell the location changed. */

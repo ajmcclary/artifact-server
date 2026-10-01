@@ -10,7 +10,6 @@ import {
   projectWorkspaceHref,
   readActivityFilters,
   readReviewLocation,
-  reviewReturnHref,
   workspaceHref,
   type ReviewLocation,
 } from "@/review/review-routes";
@@ -162,17 +161,6 @@ describe("review hrefs", () => {
     };
     expect(readReviewLocation(new URL(workspaceHref(location), origin).searchParams))
       .toEqual(location);
-  });
-
-  it("returns to a stored URL only when it is a review workspace URL", () => {
-    expect(reviewReturnHref(null)).toBe("/review");
-    expect(reviewReturnHref("/review")).toBe("/review");
-    expect(reviewReturnHref("/review?project=prj_a&artifact=art_b"))
-      .toBe("/review?project=prj_a&artifact=art_b");
-    expect(reviewReturnHref("/review/settings/mcp")).toBe("/review");
-    expect(reviewReturnHref("https://example.test/review?project=prj_a")).toBe("/review");
-    expect(reviewReturnHref("//example.test/review")).toBe("/review");
-    expect(reviewReturnHref("/reviewer?project=prj_a")).toBe("/review");
   });
 });
 

@@ -59,7 +59,6 @@ import {
   projectsHref,
   readReviewLocation,
   REVIEW_LOCATION_EVENT,
-  REVIEW_RETURN_URL_KEY,
   type ReviewLocation,
   workspaceHref,
   writeReviewHistory,
@@ -71,7 +70,6 @@ import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
-import {writeStored} from "@/lib/safe-storage";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -315,12 +313,7 @@ export function ReviewApp() {
       session={session}
     >
       {route.kind === "settings" ? (
-        <SettingsScreen
-          onProjectsChanged={loadProjects}
-          projects={projects}
-          route={route.settings}
-          session={session}
-        />
+        <SettingsScreen route={route.settings} session={session} />
       ) : route.kind === "activity" ? (
         <ActivityScreen filters={route.filters} projects={projects} session={session} />
       ) : route.kind === "projects" ? (
@@ -553,7 +546,6 @@ function ProjectReview({
       view: focusMode ? "focus" : null,
     });
     writeReviewHistory(href, "replace");
-    writeStored("session", REVIEW_RETURN_URL_KEY, href);
   }, [focusMode, projectId, selectedArtifactId, selectedPath, selectedVersionId]);
 
   useEffect(() => {
