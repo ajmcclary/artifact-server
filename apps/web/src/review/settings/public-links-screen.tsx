@@ -330,10 +330,11 @@ export function PublicLinksScreen() {
       cell: (item) => ({
         value: (
           <span style={linkCellStyle}>
+            {/* Copy leads: its tooltip, mounted while hidden, then extends over the URL instead of past the column. */}
+            <CopyAction label={`Copy link to ${item.artifact.name}`} text={item.links.public} />
             <Button flush href={item.links.public} size="sm" style={publicUrlStyle} target="_blank" title={item.links.public} variant="link">
               {item.links.public}
             </Button>
-            <CopyAction label={`Copy link to ${item.artifact.name}`} text={item.links.public} />
           </span>
         ),
       }),
@@ -553,7 +554,8 @@ function resultKey(result: PublicLinkMutationResult): string {
   return `${result.projectId}\0${result.artifactId}`;
 }
 
-const linkCellStyle: CSSProperties = {alignItems: "center", display: "inline-flex", gap: 6, minWidth: 0};
+// A bounded flex row, so a long URL ellipsizes inside its column instead of widening the table.
+const linkCellStyle: CSSProperties = {alignItems: "center", display: "flex", gap: 6, maxWidth: "100%", minWidth: 0};
 const publicUrlStyle: CSSProperties = {
   display: "inline-block",
   fontWeight: 400,

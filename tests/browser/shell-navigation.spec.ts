@@ -108,14 +108,13 @@ test.describe("Shell navigation", () => {
       await page.getByRole("button", {name: /^Account menu/u}).first().click();
       await page.getByRole("menuitem", {name: "Administration"}).click();
       await expect(page).toHaveURL(/\/review\/settings\/members$/u);
-      await expect(page.getByRole("heading", {name: "Members"}).first()).toBeVisible();
-      const adminNav = page.getByRole("navigation", {name: "Administration"});
+      await expect(page.getByRole("heading", {level: 1, name: "Members"})).toBeVisible();
+      await expect(page.getByRole("navigation", {name: "Administration areas"})).toBeVisible();
       await expectSameDocument(page);
 
-      // Back to review returns to the last artifact reviewed; folders now open Projects, so that is still Default's.
-      await adminNav.getByRole("link", {name: "Back to review"}).click();
-      await expect(page).toHaveURL(/project=prj_default&artifact=/u);
-      await expect(artifactTitle(page)).toHaveText("Navigation home fixture");
+      // The review navigation stays on settings screens; its Activity link leaves in place.
+      await nav.getByRole("link", {exact: true, name: "Activity"}).click();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await expectSameDocument(page);
 
       await page.goBack();

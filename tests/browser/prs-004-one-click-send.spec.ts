@@ -181,7 +181,7 @@ test.describe("PRS-004 one-click send and undo", () => {
       expect(await browserStorage(page)).toEqual({
         indexedDatabaseNames: [],
         localStorageKeys: [expect.stringMatching(/^dispatch-default:/u)],
-        sessionStorageKeys: ["artifact-review-return-url"],
+        sessionStorageKeys: [],
       });
     } finally {
       await stopBrowserFixture(fixture);

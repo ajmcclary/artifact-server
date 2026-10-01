@@ -121,6 +121,27 @@ page. Projects use installation membership.
 
 ## Installation settings
 
+### Administration console {#administration-console}
+
+Installation settings share one console. An area menu groups **People and
+access** (Members, API keys), **Sharing** (Public links) and **Integrations**
+(MCP & WebMCP); it can be pinned to the side or unpinned to a rail, and resized.
+Below 768 px it becomes an area selector in the page head. The head names the
+area under an `Administration` breadcrumb with a one-line description.
+
+Members and API keys list in a sortable, filterable grid. Selecting a record's
+name opens a detail pane beside the grid (it stacks over the grid below 900 px)
+and writes `?selected=` so a refresh or a shared link reopens it. Every row verb
+lives in that row's actions menu; destructive verbs — deactivate, revoke, make
+private — always confirm in a danger dialog.
+
+Members show role, status, admission date, who admitted them ("Automatic",
+"Installation owner", or a name) and when they were last active. API keys show
+owner, capability count and tags, prefix, created, last used, expiry, status
+(active, revoked, expired) and who revoked them. Public links show when and by
+whom each artifact was made public. A non-administrator sees only MCP & WebMCP,
+and no administration entry in navigation or the account menu.
+
 ### Members
 
 This page uses the product's closed admission model. It does not claim to send

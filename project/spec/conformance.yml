@@ -3161,7 +3161,7 @@ requirements:
 
   - id: ADM-003
     kind: security
-    behavior: Canonical member settings let an installation administrator list, admit, and deactivate members through the closed admission model while preserving the existing self, last-administrator, local-owner, session, key, and attribution protections.
+    behavior: Canonical member settings let an installation administrator list, admit, and deactivate members through the closed admission model while preserving the existing self, last-administrator, local-owner, session, key, and attribution protections, showing each member's admitter and last activity.
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: members}
     acceptance:
@@ -3185,7 +3185,7 @@ requirements:
 
   - id: ADM-004
     kind: security
-    behavior: Canonical API-key settings let an installation administrator list, issue, rotate, and revoke scoped expiring keys, and expose a newly issued or rotated secret exactly once before discarding it from frontend state.
+    behavior: Canonical API-key settings let an installation administrator list, issue, rotate, and revoke scoped expiring keys, and expose a newly issued or rotated secret exactly once before discarding it from frontend state, showing each key's owner, last use, status, and revoker.
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: api-keys}
     acceptance:
@@ -3209,7 +3209,7 @@ requirements:
 
   - id: ADM-005
     kind: security
-    behavior: Canonical public-link settings let an installation administrator page across projects, inspect active public destinations, and make a bounded selection account-required with explicit partial-success retry and cache-recall copy; public-link creation remains on the artifact Share surface.
+    behavior: Canonical public-link settings let an installation administrator page across projects, inspect active public destinations, and make a bounded selection account-required with explicit partial-success retry and cache-recall copy, showing when and by whom each link was made public; public-link creation remains on the artifact Share surface.
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: public-links}
     acceptance:
@@ -3308,6 +3308,20 @@ requirements:
         recorded_at: "2026-09-30T15:39:53.728Z"
 
 
+
+  - id: ADM-008
+    kind: security
+    behavior: Installation administration is one console with a pinnable, resizable grouped area menu, breadcrumb headings, filterable grids whose records open deep-linked detail panes, row-menu verbs, and danger confirmation for every destructive action, offered only to administrators.
+    owner: web-application
+    source: {file: single-application-administration-spec.md, anchor: administration-console}
+    acceptance:
+      behavior: {id: ADM-008-B, description: "As an administrator, open the console from the account menu, move between grouped areas, admit and deactivate a member through the grid, detail pane, and row menu, reopen a detail from its URL, issue, use, inspect, and revoke an API key and see its last use and revoker, make a public link private from its row menu after seeing when it was made public, see the browser's WebMCP tool names, keep the menu's pin across a reload, and choose areas from the head on a phone."}
+      failure: {id: ADM-008-F, description: "A non-administrator sees no administration entry and a forbidden state on direct member, key, and public-link URLs, the server refuses those reads to a non-administrator key, a cancelled destructive confirmation changes nothing, and an unknown deep-linked record opens no pane."}
+    deployments: *all
+    status: implementing
+    proof_gap: Local browser evidence is attached by the final slice; team deployments remain unrecorded.
+    depends_on: [ADM-003, ADM-004, ADM-005, ADM-006, ACT-007]
+    evidence: []
   - id: ACT-007
     kind: behavior
     behavior: Administrators see when each member was last active and when each API key was last used, advanced at most once per principal every five minutes, without failing or holding the request that used the credential.

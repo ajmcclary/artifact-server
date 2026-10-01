@@ -279,10 +279,11 @@ test.describe("CSP-clean administration", () => {
         await expect(page.getByRole("heading", {name: "Nothing is published here yet"})).toBeVisible();
 
         await visit("/review/settings/members");
-        await expect(page.getByRole("heading", {level: 2, name: "Members"})).toBeVisible();
+        await expect(page.getByRole("heading", {level: 1, name: "Members"})).toBeVisible();
         await page.getByRole("button", {name: "Admit member"}).click();
         await cancelDialog("Admit member");
-        await page.getByRole("row").nth(1).getByRole("button", {name: "Deactivate"}).click();
+        await page.getByRole("button", {name: /^Actions for /u}).first().click();
+        await page.getByRole("menuitem", {name: "Deactivate"}).click();
         await cancelDialog("Deactivate member");
 
         await visit("/review/settings/api-keys");
@@ -294,19 +295,20 @@ test.describe("CSP-clean administration", () => {
         await issue.getByRole("button", {name: "Issue API key", exact: true}).click();
         await expect(page.getByRole("region", {name: "API key secret"})).toBeVisible();
         await page.getByRole("button", {name: "I stored it"}).click();
-        await page.getByRole("row").filter({hasText: "CSP key"}).getByRole("button", {name: "Revoke"}).click();
+        await page.getByRole("button", {name: "Actions for CSP key"}).click();
+        await page.getByRole("menuitem", {name: "Revoke"}).click();
         await cancelDialog("Revoke API key");
 
         await visit("/review/settings/public-links");
-        await page.getByRole("row").filter({hasText: "CSP public link"})
-          .getByRole("button", {name: "Make private"}).click();
+        await page.getByRole("button", {name: "Actions for CSP public link"}).click();
+        await page.getByRole("menuitem", {name: "Make private"}).click();
         await cancelDialog("Make 1 public link private?");
 
         await visit("/review/settings/mcp");
-        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+        await expect(page.getByRole("heading", {level: 1, name: "MCP & WebMCP"})).toBeVisible();
         await page.getByRole("checkbox", {name: /Browser agent tools/u}).click();
         await visit("/review/settings/webmcp");
-        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+        await expect(page.getByRole("heading", {level: 1, name: "MCP & WebMCP"})).toBeVisible();
 
         await visit("/review/settings/not-a-screen");
         await expect(page.getByRole("heading", {name: "Page not found"})).toBeVisible();

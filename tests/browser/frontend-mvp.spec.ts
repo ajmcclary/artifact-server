@@ -510,10 +510,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await accountButton.click();
       await accountMenu.getByRole("menuitem", {name: "Administration"}).click();
       await expect(page).toHaveURL(`${fixture.server.baseUrl}/review/settings/members`);
-      await expect(page.getByRole("navigation", {name: "Administration"})).toBeVisible();
-      await page.getByRole("button", {name: /^Account menu: /u}).click();
-      await accountMenu.getByRole("menuitem", {name: "Back to review"}).click();
-      await expect(page).toHaveURL(/\/review\?project=prj_default/u);
+      await expect(page.getByRole("navigation", {name: "Administration areas"})).toBeVisible();
+      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Activity"}).click();
+      await expect(page).toHaveURL(`${fixture.server.baseUrl}/review`);
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -1159,10 +1158,11 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
       const memberRow = fixture.page.getByRole("row").filter({hasText: "Frontend member"});
       await expect(memberRow).toBeVisible();
-      await memberRow.getByRole("button", {name: "Deactivate"}).click();
+      await fixture.page.getByRole("button", {name: "Actions for Frontend member"}).click();
+      await fixture.page.getByRole("menuitem", {name: "Deactivate"}).click();
       await fixture.page.getByRole("button", {name: "Deactivate member"}).click();
       await expect(fixture.page.getByRole("dialog")).toHaveCount(0);
-      await expect(memberRow.getByText("inactive", {exact: true})).toBeVisible();
+      await expect(memberRow.getByText("Inactive", {exact: true})).toBeVisible();
 
       await fixture.page.getByRole("link", {name: "API keys"}).click();
       await fixture.page.getByRole("button", {name: "Issue API key"}).click();
@@ -1188,12 +1188,15 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(await browserStorage(fixture.page)).toEqual({
         indexedDatabaseNames: [],
         localStorageKeys: [],
-        sessionStorageKeys: ["artifact-review-return-url"],
+        sessionStorageKeys: [],
       });
 
       const keyRow = fixture.page.getByRole("row").filter({hasText: "Browser workflow key"});
-      await expect(keyRow.getByText("comment:write", {exact: true})).toBeVisible();
-      await keyRow.getByRole("button", {name: "Rotate"}).click();
+      // The key cell names the key and its prefix.
+      await keyRow.getByRole("button", {name: /^Browser workflow key/u}).click();
+      await expect(fixture.page.getByRole("list", {name: "Capabilities"}).getByText("Manage comments")).toBeVisible();
+      await fixture.page.getByRole("button", {name: "Actions for Browser workflow key"}).first().click();
+      await fixture.page.getByRole("menuitem", {name: "Rotate"}).click();
       await expect(fixture.page.getByRole("region", {name: "API key secret"})).toHaveText(/^as_key_/u);
       await fixture.page.getByRole("button", {name: "I stored it"}).click();
       await expect(keyRow.getByText("Revoked", {exact: true})).toBeVisible();
@@ -1235,7 +1238,7 @@ test.describe("Artifact Server frontend MVP", () => {
 
       await localLogin(fixture);
       await openSettings(fixture.page, "public-links");
-      await expect(fixture.page.getByRole("heading", {name: "Public links"})).toBeVisible();
+      await expect(fixture.page.getByRole("heading", {level: 1, name: "Public links"})).toBeVisible();
       const firstRow = fixture.page.getByRole("row").filter({hasText: "First public link"});
       await expect(firstRow.getByText("Default", {exact: true})).toBeVisible();
       const crossProjectRow = fixture.page.getByRole("row").filter({
@@ -1245,18 +1248,19 @@ test.describe("Artifact Server frontend MVP", () => {
         crossProjectRow.getByText("Public links project", {exact: true}),
       ).toBeVisible();
       await expect(fixture.page.getByRole("button", {name: "Select all (3)"})).toBeVisible();
-      await expect(fixture.page.getByText("Version 1", {exact: true})).toHaveCount(3);
+      await expect(fixture.page.getByRole("table", {name: "Public links inventory"}).getByText("v1", {exact: true})).toHaveCount(3);
       await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})
         .withTags(["wcag2a", "wcag2aa"])
         .analyze();
       expect(accessibility.violations).toEqual([]);
+      await expect(firstRow).toContainText(/\d{2}\/\d{2}\/\d{4}/u);
 
       // A short viewport guarantees the three rows overflow the scrolling page body.
       await fixture.page.setViewportSize({height: 400, width: 1024});
       const pageBody = fixture.page
         .getByRole("region", {exact: true, name: "Public links"})
-        .locator("[data-page-body]");
+        .and(fixture.page.locator("[data-admin-content]"));
       const bodyScrollRange = await pageBody.evaluate((element) => ({
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
@@ -1280,13 +1284,13 @@ test.describe("Artifact Server frontend MVP", () => {
       )).toBe(0);
       await expect.poll(() => inventory.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBe(0);
-      await expect(firstRow.getByRole("link", {name: "Open"})).toBeVisible();
-      await expect(firstRow.getByRole("button", {name: "Make private"})).toBeVisible();
+      await expect(firstRow.getByRole("button", {name: "Actions for First public link"})).toBeVisible();
 
       const otherRow = fixture.page.getByRole("row").filter({
         hasText: "Cross-project public link",
       });
-      await otherRow.getByRole("button", {name: "Make private"}).click();
+      await otherRow.getByRole("button", {name: "Actions for Cross-project public link"}).click();
+      await fixture.page.getByRole("menuitem", {name: "Make private"}).click();
       await fixture.page.getByRole("button", {name: "Make private", exact: true}).last().click();
       await expect(otherRow).toHaveCount(0);
 
