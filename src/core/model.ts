@@ -22,6 +22,8 @@ export const artifactActionKinds = {
   commentUpdate: "comment_update",
   delete: "delete",
   link: "link",
+  publicLinkDisable: "public_link_disable",
+  publicLinkEnable: "public_link_enable",
   publish: "publish",
   relink: "relink",
   restore: "restore",
@@ -30,6 +32,48 @@ export const artifactActionKinds = {
 /** One persisted artifact mutation kind. */
 export type ArtifactActionKind =
   (typeof artifactActionKinds)[keyof typeof artifactActionKinds];
+
+/**
+ * Kinds the per-artifact action history has always returned. The public-link
+ * kinds duplicate `change_access` for the activity feed and stay out of it.
+ */
+export const artifactHistoryActionKinds: readonly ArtifactActionKind[] = [
+  artifactActionKinds.capture,
+  artifactActionKinds.changeAccess,
+  artifactActionKinds.changeTags,
+  artifactActionKinds.commentCreate,
+  artifactActionKinds.commentDelete,
+  artifactActionKinds.commentReopen,
+  artifactActionKinds.commentReply,
+  artifactActionKinds.commentResolve,
+  artifactActionKinds.commentUpdate,
+  artifactActionKinds.delete,
+  artifactActionKinds.link,
+  artifactActionKinds.publish,
+  artifactActionKinds.relink,
+  artifactActionKinds.restore,
+];
+
+/** Installation-scoped kinds: artifact_id and version_id are null. */
+export const installationActionKinds = {
+  dispatchAddressed: "dispatch_addressed",
+  dispatchCreate: "dispatch_create",
+  keyIssue: "key_issue",
+  keyRevoke: "key_revoke",
+  keyRotate: "key_rotate",
+  memberAdmit: "member_admit",
+  memberDeactivate: "member_deactivate",
+  projectArchive: "project_archive",
+  projectCreate: "project_create",
+  projectUnarchive: "project_unarchive",
+} as const;
+
+/** One installation-scoped activity kind. */
+export type InstallationActionKind =
+  (typeof installationActionKinds)[keyof typeof installationActionKinds];
+
+/** Every kind the installation activity log accepts. */
+export type ActionKind = ArtifactActionKind | InstallationActionKind;
 
 export const routingModes = {
   spa: "spa",
@@ -137,6 +181,44 @@ export interface ArtifactActionRecord {
   readonly principalId: string;
   readonly projectId: string;
   readonly versionId: string;
+}
+
+/** Who performed an action, snapshotted at write time. */
+export interface ActorSnapshot {
+  readonly displayName: string;
+  readonly kind: PrincipalKind;
+}
+
+/** Bounded per-kind facts stored in `detail_json`; every field is optional by kind. */
+export interface ActivityDetail {
+  readonly agentDisplayName?: string;
+  readonly agentId?: string;
+  readonly capabilities?: readonly string[];
+  readonly how?: string;
+  readonly name?: string;
+  readonly replacedKeyId?: string;
+  readonly role?: string;
+  readonly subjectName?: string;
+  readonly threadIds?: readonly string[];
+}
+
+/** One row of the installation activity log, as the activity read model sees it. */
+export interface ActivityActionRow {
+  readonly accessFrom: AccessSetting | null;
+  readonly accessTo: AccessSetting | null;
+  readonly action: ActionKind;
+  /** Null when the actor was never recorded (rows recovered from older records). */
+  readonly actor: ActorSnapshot | null;
+  readonly artifactId: string | null;
+  readonly createdAt: string;
+  readonly detail: ActivityDetail | null;
+  readonly id: string;
+  readonly principalId: string | null;
+  readonly projectId: string | null;
+  readonly replyId: string | null;
+  readonly subjectId: string | null;
+  readonly threadId: string | null;
+  readonly versionId: string | null;
 }
 
 /** One active artifact with exact aggregate data needed by list surfaces. */
