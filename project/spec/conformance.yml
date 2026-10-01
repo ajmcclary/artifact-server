@@ -1106,6 +1106,20 @@ requirements:
     depends_on: []
     evidence: []
 
+  - id: ACT-002
+    kind: release_gate
+    behavior: Existing installations upgrade their action history into the installation activity log without changing any action identity, idempotency key, timestamp, or attribution, and recover only activity the installation already recorded.
+    owner: database-adapters
+    source: {file: artifact-server-product-spec.html, anchor: artifact}
+    acceptance:
+      behavior: {id: ACT-002-B, description: "Populated SQLite, Postgres and D1 installations migrate with IDs, keys and timestamps preserved, and recoverable fields recovered."}
+      failure: {id: ACT-002-F, description: "An interrupted or repeated migration cannot duplicate, drop or alter rows, or invent actors."}
+    deployments: *all
+    status: implementing
+    proof_gap: The SQLite acceptance tests are being written; Postgres and D1 parity tests and deployment evidence are not attached.
+    depends_on: [PRJ-004]
+    evidence: []
+
   - id: CNT-001
     kind: behavior
     behavior: HTML and complete client-side directories open in the browser without rebuilding their files.

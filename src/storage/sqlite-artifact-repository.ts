@@ -133,6 +133,11 @@ import {
   registeredAgentRetentionMilliseconds,
 } from "../core/publishing-limits.js";
 import { createManifest } from "../manifest/create-manifest.js";
+import {
+  artifactHistoryActionKindSql,
+  sqliteActionsRebuildStatements,
+  sqliteActivityRecoveryStatements,
+} from "./activity-log-schema.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
   ListPublicLinks,
@@ -2202,6 +2207,7 @@ export class SqliteArtifactRepository implements
             created_at AS createdAt
            FROM actions
            WHERE project_id = ? AND artifact_id = ?
+             AND action IN (${artifactHistoryActionKindSql})
              AND (
                ? IS NULL
                OR created_at < ?
@@ -5564,6 +5570,7 @@ export class SqliteArtifactRepository implements
       CREATE INDEX IF NOT EXISTS projects_active_created
         ON projects (archived_at, created_at, id);
     `);
+    this.#addInstallationActivityLogIfMissing();
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
 
@@ -6181,6 +6188,38 @@ export class SqliteArtifactRepository implements
     );
   }
 
+  /**
+   * Copy `actions` into the activity-log shape and recover recorded activity
+   * in one IMMEDIATE transaction. The copy-check table aborts the transaction
+   * unless every legacy row arrived unchanged; a crash before COMMIT leaves
+   * the legacy table untouched, and the column guard retries next start.
+   */
+  #addInstallationActivityLogIfMissing(): void {
+    if (this.#tableColumns("actions").includes("subject_id")) return;
+    const identity = this.#tableExists("installation_members") &&
+      this.#tableExists("managed_api_keys");
+    try {
+      this.#transaction(() => {
+        for (const statement of [
+          ...sqliteActionsRebuildStatements({strict: true}),
+          ...sqliteActionTriggerStatements,
+          ...sqliteActivityRecoveryStatements({identity}),
+        ]) {
+          this.#database.exec(statement);
+        }
+      });
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`SQLite migration installation_activity_log failed: ${detail}`, {cause});
+    }
+  }
+
+  #tableExists(table: string): boolean {
+    return this.#database
+      .prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?")
+      .get(table) !== undefined;
+  }
+
   #tableColumns(
     table:
       | "actions"
@@ -6548,6 +6587,29 @@ function serializeCommentAnchor(carrier: {readonly anchor: unknown}): string | n
 // Derived keys must also stay unique when two mutations on one thread land in
 // the same millisecond, so the key carries the action row id rather than the
 // changed-at timestamp.
+const sqliteActionTriggerStatements = [
+  `CREATE TRIGGER IF NOT EXISTS actions_project_insert
+   BEFORE INSERT ON actions
+   WHEN NEW.artifact_id IS NOT NULL AND (
+     NOT EXISTS (
+       SELECT 1 FROM artifacts
+       WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+     ) OR NOT EXISTS (
+       SELECT 1 FROM versions
+       WHERE id = NEW.version_id AND project_id = NEW.project_id
+     )
+   )
+   BEGIN
+     SELECT RAISE(ABORT, 'action project mismatch');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS actions_project_update
+   BEFORE UPDATE OF project_id ON actions
+   WHEN NEW.project_id IS NOT OLD.project_id
+   BEGIN
+     SELECT RAISE(ABORT, 'action project cannot change');
+   END`,
+] as const;
+
 function commentActionIdentity(threadId: string) {
   const actionId = crypto.randomUUID();
   return {actionId, idempotencyKey: `comment:${threadId}:${actionId}`};
