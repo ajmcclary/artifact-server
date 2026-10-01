@@ -557,7 +557,9 @@ describe("Artifact Server lifecycle CLI", () => {
         database.exec("DROP TRIGGER actions_project_update");
         database.prepare(`
           UPDATE actions SET project_id = 'prj_missing'
-          WHERE id = (SELECT id FROM actions ORDER BY id LIMIT 1)
+          WHERE id = (
+            SELECT id FROM actions WHERE project_id IS NOT NULL ORDER BY id LIMIT 1
+          )
         `).run();
       } finally {
         database.close();
