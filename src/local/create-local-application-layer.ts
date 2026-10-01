@@ -16,6 +16,10 @@ import {
   InteractiveLoginService,
 } from "../application/interactive-login.js";
 import {
+  makePrincipalActivity,
+  PrincipalActivityService,
+} from "../application/principal-activity.js";
+import {
   type AgentDispatchDependencies,
   type AgentDispatchRepositoryFailure,
   AgentDispatchService,
@@ -229,6 +233,7 @@ export function createApplicationLayer(
   | GitHistoryAccessService
   | InstallationAccessService
   | InteractiveLoginService
+  | PrincipalActivityService
   | LinkedArtifactService
   | PublishArtifactService
   | ProjectGitHistoryService
@@ -926,6 +931,10 @@ export function createApplicationLayer(
     membershipRole: membershipRoles.member,
   };
   const identityRepository = adapters.identityRepository;
+  const principalActivity = makePrincipalActivity({
+    clock: adapters.clock,
+    recorder: identityRepository,
+  });
   const identityLayer = InstallationAccessService.layer({
     autoAdmitEmailDomains: adapters.autoAdmitEmailDomains,
     bootstrapAdministratorEmail: adapters.bootstrapAdministratorEmail,
@@ -938,6 +947,7 @@ export function createApplicationLayer(
     installationId: adapters.installationId,
     localBootstrapCredential: adapters.localBootstrapCredential,
     localLoginAttemptLifetimeMilliseconds: 60 * 1_000,
+    principalActivity,
     protectBootstrapAdministrator: adapters.protectBootstrapAdministrator,
     repository: {
       admitMember: (command) => identityEffectWithConflict(
@@ -1309,6 +1319,7 @@ export function createApplicationLayer(
     gitHistoryAccessLayer,
     projectGitHistoryLayer,
     projectLayer,
+    PrincipalActivityService.layer(principalActivity),
   );
 }
 

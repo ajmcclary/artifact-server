@@ -3,6 +3,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 
 import type { AuthenticatedApplicationSession } from "./authentication.js";
+import type {
+  PrincipalActivityOperations,
+  PrincipalActivitySubject,
+} from "./principal-activity.js";
 import {
   type ActionAttribution,
   attributionOf,
@@ -175,6 +179,8 @@ export interface IdentityIdProvider {
 }
 
 export interface InstallationAccessDependencies {
+  /** Records successful credential use; absent, nothing is recorded. */
+  readonly principalActivity?: Pick<PrincipalActivityOperations, "note">;
   /**
    * Bounded-staleness cache policy for successful session and managed-key
    * authentication, keyed by installation and credential digest. Omit it to
@@ -347,6 +353,17 @@ function makeInstallationAccessService(
     : new AuthenticationCache<Principal>(cachePolicy);
   const cacheKey = (digest: string): string =>
     `${dependencies.installationId}:${digest}`;
+  const noteActivity = (subject: PrincipalActivitySubject) =>
+    dependencies.principalActivity === undefined
+      ? Effect.void
+      : dependencies.principalActivity.note(subject);
+  const noteKeyUse = (keyId: string, principal: Principal) =>
+    Effect.andThen(
+      noteActivity({id: keyId, kind: "api_key"}),
+      principal.kind === principalKinds.human
+        ? noteActivity({id: principal.id, kind: "member"})
+        : Effect.void,
+    );
 
   const issueSession = Effect.fn(
     "InstallationAccessService.issueSession",
@@ -526,7 +543,9 @@ function makeInstallationAccessService(
   const authenticateExternalIdentity = Effect.fn(
     "InstallationAccessService.authenticateExternalIdentity",
   )(function*(identity: ExternalIdentity) {
-    return humanPrincipal(yield* resolveExternalMember(identity));
+    const member = yield* resolveExternalMember(identity);
+    yield* noteActivity({id: member.id, kind: "member"});
+    return humanPrincipal(member);
   });
 
   const authenticateExternalSubject = Effect.fn(
@@ -537,7 +556,9 @@ function makeInstallationAccessService(
       provider,
       subject,
     );
-    return member === null ? null : humanPrincipal(member);
+    if (member === null) return null;
+    yield* noteActivity({id: member.id, kind: "member"});
+    return humanPrincipal(member);
   });
 
   const authenticateSession = Effect.fn(
@@ -546,7 +567,10 @@ function makeInstallationAccessService(
     const now = dependencies.clock.now();
     const tokenDigest = dependencies.secrets.digest(Redacted.value(credential));
     const cached = sessionCache?.get(cacheKey(tokenDigest), now.getTime());
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      yield* noteActivity({id: cached.principal.id, kind: "member"});
+      return cached;
+    }
     const session = yield* dependencies.repository.findApplicationSession(
       dependencies.installationId,
       tokenDigest,
@@ -568,6 +592,7 @@ function makeInstallationAccessService(
       now.getTime(),
       new Date(session.expiresAt).getTime(),
     );
+    yield* noteActivity({id: session.member.id, kind: "member"});
     return authenticated;
   });
 
@@ -585,7 +610,10 @@ function makeInstallationAccessService(
       cacheKey(presentedDigest),
       requestTime.getTime(),
     );
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      yield* noteKeyUse(parsed[1], cached);
+      return cached;
+    }
     const key = yield* dependencies.repository.findApiKey(
       dependencies.installationId,
       parsed[1],
@@ -612,6 +640,7 @@ function makeInstallationAccessService(
       requestTime.getTime(),
       new Date(key.expiresAt).getTime(),
     );
+    yield* noteKeyUse(key.id, principal);
     return principal;
   });
 

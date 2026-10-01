@@ -16,6 +16,7 @@ import {
   type ApplicationRuntime,
   runApplicationEffect,
 } from "../application/application-runtime.js";
+import {PrincipalActivityService} from "../application/principal-activity.js";
 import {
   type CreateStagedUploadCommand,
   type CommitStagedUploadResult,
@@ -832,7 +833,9 @@ export function createHttpApp(
       context.set("principal", principal);
       context.set("sessionCsrfDigest", null);
       context.set("sessionToken", null);
-      return next();
+      await next();
+      recordPrincipalActivityAfterResponse(context, dependencies);
+      return;
     }
 
     const cookieNames = applicationCookieNames(dependencies);
@@ -860,11 +863,15 @@ export function createHttpApp(
     if (isUnsafeMethod(context.req.method)) {
       requireBrowserMutationSecurity(context, dependencies);
     }
-    return next();
+    await next();
+    recordPrincipalActivityAfterResponse(context, dependencies);
   });
 
-  app.all("/mcp", boundedMcpBody, (context) =>
-    mcp.fetch(requestWithRequestId(context)));
+  app.all("/mcp", boundedMcpBody, async (context) => {
+    const response = await mcp.fetch(requestWithRequestId(context));
+    recordPrincipalActivityAfterResponse(context, dependencies);
+    return response;
+  });
 
   app.get("/health", (context) =>
     context.json({status: "ok" as const}),
@@ -2832,6 +2839,31 @@ function safeHttpMethod(method: string): string {
     default:
       return "OTHER";
   }
+}
+
+/**
+ * Persist due last-active and last-used facts without holding the response.
+ * Workers keep the flush alive with `waitUntil`; Node adapters have no
+ * execution context, and the detached promise completes on its own.
+ */
+function recordPrincipalActivityAfterResponse(
+  context: Context<HttpEnvironment>,
+  dependencies: Pick<HttpAppDependencies, "applicationRuntime">,
+): void {
+  const flushed = runApplicationEffect(
+    dependencies.applicationRuntime,
+    PrincipalActivityService.use((activity) => activity.flush()),
+  ).catch(() => {
+    // The flush logs each failed write itself. A runtime disposed during
+    // shutdown has nothing left to record.
+  });
+  let executionContext: {waitUntil(promise: Promise<unknown>): void} | null = null;
+  try {
+    executionContext = context.executionCtx;
+  } catch {
+    // Hono throws when the adapter supplied no execution context.
+  }
+  executionContext?.waitUntil(flushed);
 }
 
 function runHttpApplicationEffect<A, E>(
