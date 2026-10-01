@@ -128,6 +128,7 @@ export interface ActivityFeedProps {
   /** Reference time for the Today / Yesterday day labels. */
   now: number;
   hasMore: boolean;
+  /** Entries not yet shown. `0` means "unknown": a cursor-paged host prints plain "Show older". */
   remaining: number;
   onShowOlder: () => void;
   /** Thread keys whose folded replies are open. */

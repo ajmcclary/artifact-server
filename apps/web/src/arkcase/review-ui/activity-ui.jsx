@@ -111,7 +111,7 @@ export function createActivityUI(React, DS) {
         <Timeline as="ul" label={`${label} · ${g.label}`} items={items(g.events)} />
       </section>)}
       {hasMore && <Button variant="secondary" outline size="sm" icon="bi-chevron-down" onClick={onShowOlder} style={{ alignSelf: 'flex-start' }}>
-        Show older ({remaining})
+        {remaining > 0 ? `Show older (${remaining})` : 'Show older'}
       </Button>}
     </div>;
   }
