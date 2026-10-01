@@ -155,6 +155,31 @@ test.describe("Activity", () => {
     }
   });
 
+  test("ACT-005-F: a filter whose read failed never shows another filter's entries when the reviewer returns to it", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await publish(fixture, "Activity cache fixture", "cache");
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      const published = page.getByText(/published v1 of Activity cache fixture/u);
+      await expect(published).toBeVisible();
+      // Every Needs-you read fails.
+      await page.route(/\/api\/v1\/activity\?.*segment=needs_you/u, (route) => route.fulfill({
+        body: JSON.stringify({error: {code: "INTERNAL_ERROR", message: "Storage is unavailable."}}), contentType: "application/json", status: 500,
+      }));
+      await page.getByRole("radio", {name: /Needs you/u}).click();
+      await expect(page.getByText("Activity could not load")).toBeVisible();
+      await page.getByRole("radio", {name: /^All/u}).click();
+      await expect(published).toBeVisible();
+      await page.getByRole("radio", {name: /Needs you/u}).click();
+      await expect(page.getByText("Activity could not load")).toBeVisible();
+      await expect(published).toHaveCount(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("ACT-005-F: the agent segment shows only threads held by an active send", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {

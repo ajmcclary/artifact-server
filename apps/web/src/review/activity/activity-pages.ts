@@ -17,9 +17,26 @@ export function appendPage(loaded: readonly ActivityEntry[], next: readonly Acti
   return out;
 }
 
-/** Put a re-read first page on top; keep older loaded entries the new page does not supersede. */
-export function refreshFirstPage(loaded: readonly ActivityEntry[], first: readonly ActivityEntry[]): ActivityEntry[] {
-  const oldest = first.at(-1)?.at;
-  const older = oldest === undefined ? [] : loaded.filter((entry) => entry.at < oldest);
-  return appendPage(first, older);
+/** Loaded entries and the cursor that continues below them. */
+export interface FeedPages {
+  readonly cursor: string | null;
+  readonly entries: readonly ActivityEntry[];
+}
+
+/**
+ * Put a re-read first page on top. When it reaches the loaded entries, keep the older ones and
+ * their cursor; when more than a page happened since, start over from the new page and its
+ * cursor, so the events in between are paged to rather than silently skipped.
+ */
+export function refreshFirstPage(
+  loaded: FeedPages,
+  first: {readonly items: readonly ActivityEntry[]; readonly nextCursor: string | null},
+): FeedPages {
+  if (first.nextCursor === null) return {cursor: null, entries: [...first.items]};
+  const oldest = first.items.at(-1)?.at;
+  const newestLoaded = loaded.entries[0]?.at;
+  if (oldest === undefined || newestLoaded === undefined || oldest > newestLoaded) {
+    return {cursor: first.nextCursor, entries: [...first.items]};
+  }
+  return {cursor: loaded.cursor, entries: appendPage(first.items, loaded.entries.filter((entry) => entry.at < oldest))};
 }

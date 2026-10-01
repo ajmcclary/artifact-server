@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
 import {api, type ActivityEntry} from "@/api/client";
 import type {ActivityFilters} from "@/review/review-routes";
@@ -29,12 +29,25 @@ export interface ActivityFeedState {
   readonly replaceThread: (threadId: string, thread: NonNullable<ActivityEntry["thread"]>) => void;
 }
 
+/** One filter set's feed; `key` names the filters these entries and this cursor belong to. */
+interface FeedState {
+  readonly cursor: string | null;
+  readonly entries: readonly ActivityEntry[];
+  readonly key: string;
+  readonly phase: "loading" | "ready" | "failed";
+}
+
+function knownFeed(key: string): FeedState {
+  const known = lastFeeds.get(key);
+  return known === undefined
+    ? {cursor: null, entries: [], key, phase: "loading"}
+    : {cursor: known.cursor, entries: known.entries, key, phase: "ready"};
+}
+
 /** One filtered feed: first page, cursor paging, re-read on focus, own mutations shown at once. */
 export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
   const key = JSON.stringify(filters);
-  const [entries, setEntries] = useState<readonly ActivityEntry[]>(() => lastFeeds.get(key)?.entries ?? []);
-  const [cursor, setCursor] = useState<string | null>(() => lastFeeds.get(key)?.cursor ?? null);
-  const [phase, setPhase] = useState<"loading" | "ready" | "failed">(() => lastFeeds.has(key) ? "ready" : "loading");
+  const [state, setState] = useState<FeedState>(() => knownFeed(key));
   const generation = useRef(0);
   const request = useCallback((next: string | null) => api.listActivity({
     cursor: next, limit: pageSize, projects: [...filters.projects], q: filters.q, segment: filters.segment, types: [...filters.types],
@@ -43,42 +56,41 @@ export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
 
   const loadFirst = useCallback((mode: "replace" | "refresh") => {
     const mine = ++generation.current;
-    if (mode === "replace") setPhase("loading");
+    if (mode === "replace") setState((current) => ({...current, key, phase: "loading"}));
     void (async () => {
       try {
         const page = await request(null);
         if (generation.current !== mine) return;
-        setEntries((current) => mode === "replace" ? page.items : refreshFirstPage(current, page.items));
-        if (mode === "replace") setCursor(page.nextCursor);
-        setPhase("ready");
+        setState((current) => {
+          const pages = mode === "replace" || current.key !== key
+            ? {cursor: page.nextCursor, entries: page.items}
+            : refreshFirstPage(current, page);
+          return {...pages, key, phase: "ready"};
+        });
       } catch {
         // A failed background re-read keeps what is on screen.
-        if (generation.current === mine && mode === "replace") setPhase("failed");
+        if (generation.current === mine && mode === "replace") setState((current) => ({...current, key, phase: "failed"}));
       }
     })();
-  }, [request]);
+  }, [key, request]);
 
   // A filter set shown before in this tab appears at once and re-reads underneath; a new one loads.
   useEffect(() => {
-    const known = lastFeeds.get(key);
-    if (known === undefined) {
-      loadFirst("replace");
-      return;
-    }
-    setEntries(known.entries);
-    setCursor(known.cursor);
-    setPhase("ready");
-    loadFirst("refresh");
+    const known = knownFeed(key);
+    setState(known);
+    loadFirst(known.phase === "ready" ? "refresh" : "replace");
   }, [key, loadFirst]);
+  // Only entries read for these filters are remembered under their key.
   useEffect(() => {
-    if (phase === "ready") remember(key, cursor, entries);
-  }, [cursor, entries, key, phase]);
+    if (state.phase === "ready") remember(state.key, state.cursor, state.entries);
+  }, [state]);
   useEffect(() => {
     const refresh = (): void => loadFirst("refresh");
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [loadFirst]);
 
+  const {cursor} = state;
   const loadOlder = useCallback(() => {
     if (cursor === null) return;
     const mine = generation.current;
@@ -86,21 +98,34 @@ export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
       try {
         const page = await request(cursor);
         if (generation.current !== mine) return;
-        setEntries((current) => appendPage(current, page.items));
-        setCursor(page.nextCursor);
+        setState((current) => current.key === key
+          ? {...current, cursor: page.nextCursor, entries: appendPage(current.entries, page.items)}
+          : current);
       } catch {
         // "Show older" stays available; the next press retries.
       }
     })();
-  }, [cursor, request]);
+  }, [cursor, key, request]);
 
   const insertLocal = useCallback((entry: ActivityEntry) => {
-    setEntries((current) => appendPage([entry], current.filter((existing) =>
-      !(existing.kind === "thread" && entry.kind === "thread" && existing.thread?.id === entry.thread?.id))));
+    setState((current) => ({...current, entries: appendPage([entry], current.entries.filter((existing) =>
+      !(existing.kind === "thread" && entry.kind === "thread" && existing.thread?.id === entry.thread?.id)))}));
   }, []);
   const replaceThread = useCallback((threadId: string, thread: NonNullable<ActivityEntry["thread"]>) => {
-    setEntries((current) => current.map((entry) => entry.kind === "thread" && entry.thread?.id === threadId ? {...entry, thread} : entry));
+    setState((current) => ({...current, entries: current.entries.map((entry) =>
+      entry.kind === "thread" && entry.thread?.id === threadId ? {...entry, thread} : entry)}));
   }, []);
+  const reload = useCallback(() => loadFirst("refresh"), [loadFirst]);
 
-  return {entries, hasMore: cursor !== null, insertLocal, loadOlder, phase, reload: () => loadFirst("refresh"), replaceThread};
+  // Until the first read for new filters lands, show nothing from the previous filters.
+  const current = state.key === key;
+  return useMemo(() => ({
+    entries: current ? state.entries : [],
+    hasMore: current && state.cursor !== null,
+    insertLocal,
+    loadOlder,
+    phase: current ? state.phase : "loading",
+    reload,
+    replaceThread,
+  }), [current, insertLocal, loadOlder, reload, replaceThread, state]);
 }

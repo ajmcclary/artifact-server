@@ -18,9 +18,21 @@ describe("feed pages", () => {
     expect(appendPage(first, older).map((entry) => entry.id)).toEqual(["act_2", "act_0"]);
   });
 
-  it("ACT-005: a refreshed first page replaces what it covers and keeps loaded older entries", () => {
+  it("ACT-005: a refreshed first page replaces what it covers and keeps loaded older entries and their cursor", () => {
     const loaded = [thread("act_2", "thr_a", "2026-09-30T10:00:00.000Z"), thread("act_0", "thr_b", "2026-09-28T10:00:00.000Z")];
     const first = [thread("act_3", "thr_b", "2026-10-01T09:00:00.000Z"), thread("act_2", "thr_a", "2026-09-30T10:00:00.000Z")];
-    expect(refreshFirstPage(loaded, first).map((entry) => entry.id)).toEqual(["act_3", "act_2"]);
+    const refreshed = refreshFirstPage({cursor: "older", entries: loaded}, {items: first, nextCursor: "after-act_2"});
+    expect(refreshed.entries.map((entry) => entry.id)).toEqual(["act_3", "act_2"]);
+    expect(refreshed.cursor).toBe("older");
+  });
+
+  it("ACT-005: a refresh that does not reach the loaded entries starts over from its own cursor, leaving no silent gap", () => {
+    const loaded = [thread("act_2", "thr_a", "2026-09-30T10:00:00.000Z")];
+    const first = [thread("act_9", "thr_c", "2026-10-02T09:00:00.000Z"), thread("act_8", "thr_d", "2026-10-01T09:00:00.000Z")];
+    const refreshed = refreshFirstPage({cursor: "older", entries: loaded}, {items: first, nextCursor: "after-act_8"});
+    expect(refreshed.entries.map((entry) => entry.id)).toEqual(["act_9", "act_8"]);
+    expect(refreshed.cursor).toBe("after-act_8");
+    // A first page that is the whole feed needs no cursor at all.
+    expect(refreshFirstPage({cursor: "older", entries: loaded}, {items: first, nextCursor: null}).cursor).toBeNull();
   });
 });
