@@ -3,8 +3,13 @@ import * as Migrator from "effect/unstable/sql/Migrator";
 import {SqlClient} from "effect/unstable/sql/SqlClient";
 
 import {normalizeArtifactSearchText} from "../application/artifact-tags.js";
+import {defaultProjectId} from "../core/model.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../git-history/git-history-capability.js";
+import {
+  actionRowChecks,
+  activityDetailJsonMaxBytes,
+} from "./activity-log-schema.js";
 
 const initialSchema = Effect.gen(function*() {
   const sql = yield* SqlClient;
@@ -713,6 +718,238 @@ const addStagedUploadCleanupClaim = Effect.gen(function*() {
     ADD COLUMN IF NOT EXISTS cleanup_claimed_at TEXT`);
 });
 
+const commentKinds = `'comment_create', 'comment_delete', 'comment_reopen',
+  'comment_reply', 'comment_resolve', 'comment_update'`;
+const firstPublicationKinds = "'capture', 'link', 'publish'";
+const [
+  actionKindCheck,
+  scopeCheck,
+  principalCheck,
+  actorKindCheck,
+  accessFromCheck,
+  accessToCheck,
+] = actionRowChecks;
+
+const addInstallationActivityLog = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    `ALTER TABLE actions
+      ALTER COLUMN project_id DROP NOT NULL,
+      ALTER COLUMN artifact_id DROP NOT NULL,
+      ALTER COLUMN version_id DROP NOT NULL,
+      ALTER COLUMN principal_id DROP NOT NULL,
+      ADD COLUMN thread_id TEXT,
+      ADD COLUMN reply_id TEXT,
+      ADD COLUMN subject_id TEXT,
+      ADD COLUMN access_from TEXT,
+      ADD COLUMN access_to TEXT,
+      ADD COLUMN actor_name TEXT,
+      ADD COLUMN actor_kind TEXT,
+      ADD COLUMN detail_json TEXT,
+      DROP CONSTRAINT actions_action_check,
+      ADD CONSTRAINT actions_action_check CHECK (${actionKindCheck}),
+      ADD CONSTRAINT actions_scope_check CHECK (${scopeCheck}),
+      ADD CONSTRAINT actions_principal_check CHECK (${principalCheck}),
+      ADD CONSTRAINT actions_actor_kind_check CHECK (${actorKindCheck}),
+      ADD CONSTRAINT actions_access_from_check CHECK (${accessFromCheck}),
+      ADD CONSTRAINT actions_access_to_check CHECK (${accessToCheck}),
+      ADD CONSTRAINT actions_detail_check CHECK (
+        detail_json IS NULL OR octet_length(detail_json) <= ${activityDetailJsonMaxBytes}
+      )`,
+    `CREATE INDEX actions_installation_created
+      ON actions (installation_id, created_at DESC, id DESC)`,
+    `CREATE INDEX actions_installation_project_created
+      ON actions (installation_id, project_id, created_at DESC, id DESC)`,
+    `CREATE INDEX actions_installation_thread
+      ON actions (installation_id, thread_id) WHERE thread_id IS NOT NULL`,
+    `CREATE UNIQUE INDEX actions_installation_idempotency
+      ON actions (installation_id, idempotency_key) WHERE project_id IS NULL`,
+    // comment:<threadId>:<36-character uuid>
+    `UPDATE actions
+       SET thread_id = substr(idempotency_key, 9, length(idempotency_key) - 45)
+     WHERE action IN (${commentKinds})
+       AND thread_id IS NULL
+       AND idempotency_key LIKE 'comment:%'
+       AND length(idempotency_key) > 45
+       AND substr(idempotency_key, length(idempotency_key) - 36, 1) = ':'`,
+    `UPDATE actions a SET reply_id = r.id
+       FROM comment_replies r
+      WHERE a.action = 'comment_reply' AND a.reply_id IS NULL AND a.thread_id IS NOT NULL
+        AND r.installation_id = a.installation_id AND r.thread_id = a.thread_id
+        AND r.created_at = a.created_at AND r.author_principal_id = a.principal_id
+        AND (SELECT count(*) FROM comment_replies r2
+              WHERE r2.installation_id = a.installation_id AND r2.thread_id = a.thread_id
+                AND r2.created_at = a.created_at
+                AND r2.author_principal_id = a.principal_id) = 1`,
+    `UPDATE actions a SET access_to = i.access_setting
+       FROM idempotency_records i
+      WHERE a.action = 'change_access' AND a.access_to IS NULL
+        AND i.installation_id = a.installation_id AND i.project_id = a.project_id
+        AND i.idempotency_key = a.idempotency_key AND i.operation = 'change_access'`,
+    `UPDATE actions a SET access_from = (
+       SELECT i.access_setting
+         FROM actions p
+         JOIN idempotency_records i
+           ON i.installation_id = p.installation_id AND i.project_id = p.project_id
+          AND i.idempotency_key = p.idempotency_key
+        WHERE p.installation_id = a.installation_id AND p.project_id = a.project_id
+          AND p.artifact_id = a.artifact_id AND i.access_setting IS NOT NULL
+          AND (p.created_at < a.created_at OR (p.created_at = a.created_at AND p.id < a.id))
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT 1)
+      WHERE a.action = 'change_access' AND a.access_from IS NULL`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT d.installation_id, 'recovered:dispatch_create:' || d.id, d.project_id,
+       NULL, NULL, 'dispatch_create', d.sender_principal_id,
+       d.sender_authorized_by_principal_id, 'recovered:dispatch_create:' || d.id,
+       d.created_at, d.id, d.sender_display_name, d.sender_principal_kind,
+       json_build_object('agentDisplayName', d.agent_display_name,
+         'threadIds', d.thread_ids_json::json)::text
+       FROM agent_dispatches d
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT d.installation_id, 'recovered:dispatch_addressed:' || d.id, d.project_id,
+       NULL, NULL, 'dispatch_addressed',
+       (SELECT ra.principal_id FROM registered_agents ra
+         WHERE ra.installation_id = d.installation_id AND ra.id = d.agent_id),
+       NULL, 'recovered:dispatch_addressed:' || d.id, d.addressed_at, d.id,
+       d.agent_display_name, 'service',
+       json_build_object('agentDisplayName', d.agent_display_name)::text
+       FROM agent_dispatches d
+      WHERE d.addressed_at IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT p.installation_id, 'recovered:project_create:' || p.id, p.id, NULL, NULL,
+       'project_create', NULL, NULL, 'recovered:project_create:' || p.id,
+       p.created_at, p.id, NULL, NULL, json_build_object('name', p.name)::text
+       FROM projects p
+      WHERE p.id <> '${defaultProjectId}'
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT p.installation_id, 'recovered:project_archive:' || p.id, p.id, NULL, NULL,
+       'project_archive', NULL, NULL, 'recovered:project_archive:' || p.id,
+       p.archived_at, p.id, NULL, NULL, NULL
+       FROM projects p
+      WHERE p.archived_at IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT m.installation_id, 'recovered:member_admit:' || m.id, NULL, NULL, NULL,
+       'member_admit', NULL, NULL, 'recovered:member_admit:' || m.id,
+       m.created_at, m.id, NULL, NULL, NULL
+       FROM installation_members m
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT k.installation_id, 'recovered:' || k.kind || ':' || k.id, NULL, NULL, NULL,
+       k.kind, k.authorized_by_principal_id, NULL,
+       'recovered:' || k.kind || ':' || k.id, k.created_at, k.id, NULL, NULL,
+       json_build_object('capabilities', k.capabilities_json::json)::text
+       FROM (
+         SELECT managed_api_keys.*,
+           CASE WHEN rotated_from_id IS NULL THEN 'key_issue' ELSE 'key_rotate' END AS kind
+           FROM managed_api_keys
+       ) k
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       subject_id, actor_name, actor_kind, detail_json)
+     SELECT k.installation_id, 'recovered:key_revoke:' || k.id, NULL, NULL, NULL,
+       'key_revoke', NULL, NULL, 'recovered:key_revoke:' || k.id,
+       k.revoked_at, k.id, NULL, NULL, NULL
+       FROM managed_api_keys k
+      WHERE k.revoked_at IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+    `UPDATE actions a SET actor_name = t.author_display_name, actor_kind = t.author_principal_kind
+       FROM comment_threads t
+      WHERE a.actor_name IS NULL AND a.thread_id IS NOT NULL
+        AND t.installation_id = a.installation_id AND t.id = a.thread_id
+        AND t.author_principal_id = a.principal_id`,
+    `UPDATE actions a SET actor_name = r.author_display_name, actor_kind = r.author_principal_kind
+       FROM (
+         SELECT DISTINCT ON (installation_id, thread_id, author_principal_id)
+           installation_id, thread_id, author_principal_id,
+           author_display_name, author_principal_kind
+           FROM comment_replies
+          ORDER BY installation_id, thread_id, author_principal_id, created_at DESC, id DESC
+       ) r
+      WHERE a.actor_name IS NULL AND a.thread_id IS NOT NULL
+        AND r.installation_id = a.installation_id AND r.thread_id = a.thread_id
+        AND r.author_principal_id = a.principal_id`,
+    `UPDATE actions a SET actor_name = t.resolved_by_display_name,
+       actor_kind = t.resolved_by_principal_kind
+       FROM comment_threads t
+      WHERE a.actor_name IS NULL AND a.thread_id IS NOT NULL
+        AND t.installation_id = a.installation_id AND t.id = a.thread_id
+        AND t.resolved_by_principal_id = a.principal_id`,
+    `UPDATE actions a SET actor_name = m.display_name, actor_kind = 'human'
+       FROM installation_members m
+      WHERE a.actor_name IS NULL AND a.principal_id IS NOT NULL
+        AND m.installation_id = a.installation_id AND m.id = a.principal_id`,
+    `UPDATE actions a SET actor_name = k.name, actor_kind = 'service'
+       FROM managed_api_keys k
+      WHERE a.actor_name IS NULL AND a.principal_id LIKE 'service:%'
+        AND k.installation_id = a.installation_id AND k.id = substr(a.principal_id, 9)`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       access_from, access_to, actor_name, actor_kind)
+     SELECT a.installation_id, 'recovered:public_link_enable:' || a.id, a.project_id,
+       a.artifact_id, a.version_id, 'public_link_enable', a.principal_id,
+       a.authorized_by_principal_id, 'recovered:public_link_enable:' || a.id,
+       a.created_at, a.access_from, a.access_to, a.actor_name, a.actor_kind
+       FROM actions a
+      WHERE a.action = 'change_access'
+        AND a.access_from = 'account_required' AND a.access_to = 'public_link'
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       access_from, access_to, actor_name, actor_kind)
+     SELECT a.installation_id, 'recovered:public_link_disable:' || a.id, a.project_id,
+       a.artifact_id, a.version_id, 'public_link_disable', a.principal_id,
+       a.authorized_by_principal_id, 'recovered:public_link_disable:' || a.id,
+       a.created_at, a.access_from, a.access_to, a.actor_name, a.actor_kind
+       FROM actions a
+      WHERE a.action = 'change_access'
+        AND a.access_from = 'public_link' AND a.access_to = 'account_required'
+     ON CONFLICT DO NOTHING`,
+    `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,
+       action, principal_id, authorized_by_principal_id, idempotency_key, created_at,
+       access_from, access_to, actor_name, actor_kind)
+     SELECT p.installation_id, 'recovered:public_link_enable:' || p.id, p.project_id,
+       p.artifact_id, p.version_id, 'public_link_enable', p.principal_id,
+       p.authorized_by_principal_id, 'recovered:public_link_enable:' || p.id,
+       p.created_at, NULL, 'public_link', p.actor_name, p.actor_kind
+       FROM actions p
+       JOIN artifacts art ON art.installation_id = p.installation_id AND art.id = p.artifact_id
+      WHERE art.access_setting = 'public_link'
+        AND p.action IN (${firstPublicationKinds})
+        AND NOT EXISTS (SELECT 1 FROM actions c
+                         WHERE c.installation_id = p.installation_id
+                           AND c.artifact_id = p.artifact_id AND c.action = 'change_access')
+        AND NOT EXISTS (SELECT 1 FROM actions e
+                         WHERE e.installation_id = p.installation_id
+                           AND e.artifact_id = p.artifact_id
+                           AND e.action IN (${firstPublicationKinds})
+                           AND (e.created_at < p.created_at
+                             OR (e.created_at = p.created_at AND e.id < p.id)))
+     ON CONFLICT DO NOTHING`,
+  ] as const;
+
+  for (const statement of statements) {
+    yield* sql.unsafe(statement);
+  }
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -731,10 +968,11 @@ const migrationLoader = Migrator.fromRecord({
   "0015_staged_upload_preparation": addStagedUploadPreparation,
   "0016_prepared_manifest_entries": addPreparedManifestEntries,
   "0017_staged_upload_cleanup_claim": addStagedUploadCleanupClaim,
+  "0018_installation_activity_log": addInstallationActivityLog,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 17;
+export const requiredPostgresSchemaVersion = 18;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -840,6 +1078,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 17,
     name: "staged_upload_cleanup_claim",
+  }, {
+    migration_id: 18,
+    name: "installation_activity_log",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

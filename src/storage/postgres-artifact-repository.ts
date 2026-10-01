@@ -127,6 +127,7 @@ import {
   registeredAgentRetentionMilliseconds,
 } from "../core/publishing-limits.js";
 import {createManifest} from "../manifest/create-manifest.js";
+import {artifactHistoryActionKindSql} from "./activity-log-schema.js";
 import type {PostgresDatabase} from "./postgres-database.js";
 import type {
   ListPublicLinks,
@@ -2053,6 +2054,7 @@ export class PostgresArtifactRepository implements
           idempotency_key AS "idempotencyKey", created_at AS "createdAt"
          FROM actions
          WHERE installation_id = $1 AND project_id = $2 AND artifact_id = $3
+           AND action IN (${artifactHistoryActionKindSql})
            AND ($4::text IS NULL OR created_at < $4
              OR (created_at = $4 AND id < $5))
          ORDER BY created_at DESC, id DESC

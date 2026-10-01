@@ -9,6 +9,7 @@ import {UploadPreparationLeaseLost} from "../../src/core/upload-preparation.js";
 import {createManifest} from "../../src/manifest/create-manifest.js";
 import {PostgresArtifactRepository} from "../../src/storage/postgres-artifact-repository.js";
 import {PostgresDatabase} from "../../src/storage/postgres-database.js";
+import {activityLogPrerequisiteStubStatements} from "../support/postgres-activity-log.js";
 
 const principalId = "principal-preparation";
 const projectId = defaultProjectId;
@@ -374,6 +375,9 @@ describe("Postgres staged upload preparation", () => {
           FOREIGN KEY (installation_id, upload_id)
             REFERENCES staged_uploads(installation_id, id)
         )`);
+        for (const statement of activityLogPrerequisiteStubStatements) {
+          yield* sql.unsafe(statement);
+        }
         yield* sql.unsafe(`CREATE TABLE artifact_server_postgres_migrations (
           migration_id INTEGER PRIMARY KEY,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

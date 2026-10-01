@@ -53,6 +53,7 @@ import {
   startStubOidcProvider,
   type RunningStubOidcProvider,
 } from "../support/stub-oidc-provider.js";
+import {revertInstallationActivityLogStatements} from "../support/postgres-activity-log.js";
 import {RecordingGitHistoryProvider} from "../support/git-history-provider.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
@@ -527,7 +528,11 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     await expect.poll(() => provider.commitCalls, {timeout: 12_000}).toBe(4);
     expect(provider.commitRequests.map((commit) => commit.metadata.versionNumber))
       .toEqual([1, 2, 3, 4]);
-    expect(provider.commits.get(initial.body.artifact.id)?.size).toBe(4);
+    // A call is counted before its ownership check resolves; wait for the stored commit.
+    await expect.poll(
+      () => provider.commits.get(initial.body.artifact.id)?.size ?? 0,
+      {timeout: 5_000},
+    ).toBe(4);
     await first.stop();
     await second.stop();
   });
@@ -666,6 +671,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
       await database.run(Effect.gen(function*() {
         const sql = yield* SqlClient;
         const statements = [
+          ...revertInstallationActivityLogStatements,
           `ALTER TABLE actions
             DROP CONSTRAINT actions_action_check,
             ADD CONSTRAINT actions_action_check
