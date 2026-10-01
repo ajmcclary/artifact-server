@@ -1102,9 +1102,15 @@ requirements:
       behavior: {id: AUD-001-B, description: "Perform every mutation, including comment creates, replies, edits, resolves, reopens, and deletes, through human and agent principals and inspect complete immutable action records."}
       failure: {id: AUD-001-F, description: "A mutation cannot commit without a valid actor and action record."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: Local evidence proves human and agent attribution and atomic refusal for publish and access changes; CMT-011 proves the comment mutations. Connection changes and non-local deployments have no recorded AUD-001 evidence.
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUD-001-B, AUD-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:23:57Z"
 
   - id: ACT-001
     kind: security
@@ -1115,9 +1121,15 @@ requirements:
       behavior: {id: ACT-001-B, description: "Perform artifact, comment, access, member, key, project, and dispatch mutations through human and agent principals and inspect one action per mutation carrying its kind, actor snapshot, thread, reply, subject, access direction, and bounded detail."}
       failure: {id: ACT-001-F, description: "Replaying a mutation writes no further action, repeating a no-op administration change writes nothing, and a mutation whose action is refused does not commit."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: Local SQLite behavior and failure evidence is recorded. Postgres parity is proved by tests/integration/postgres-activity-log-writes.test.ts and D1 parity by deploy/cloudflare/tests/activity-log-runtime.test.ts, but no team, external-storage, or Cloudflare deployment evidence is recorded against ACT-001 yet.
     depends_on: [AUD-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [ACT-001-B, ACT-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:23:57Z"
 
   - id: ACT-002
     kind: release_gate

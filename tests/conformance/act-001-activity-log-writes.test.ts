@@ -319,6 +319,69 @@ describe("the installation activity log records every mutation", () => {
     expect(published.artifact.id).toEqual(expect.any(String));
   });
 
+  test("AUD-001-B: publish, access and delete through human and agent principals record the effective principal and its human authorizer", async () => {
+    expect.hasAssertions();
+    const cookies = await signInAdministrator(server, installation);
+    const administratorId = await sessionPrincipalId(cookies.header);
+    const issued = await expectJson(
+      await adminFetch(cookies, "/api/v1/api-keys", "POST", {
+        capabilities: ["artifact:create", "artifact:manage:any", "artifact:read"],
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        name: "Release agent",
+      }),
+      201,
+      z.object({token: z.string()}).loose(),
+    );
+    const agent = new ApiClient(server, issued.token);
+    const published = await publish("aud-001-publish-artifact", "account_required");
+    await expectJson(await agent.fetch(
+      `/api/v1/artifacts/${published.artifact.id}/access${scope(published)}`,
+      {
+        body: JSON.stringify({accessSetting: "public_link", expectedCurrentVersionId: published.version.id}),
+        idempotencyKey: "aud-001-agent-access",
+        method: "PATCH",
+      },
+    ), 200, z.object({}).loose());
+    const rows = rowsFor(published.artifact.id);
+    expect(rows.find((row) => row.idempotencyKey === "aud-001-publish-artifact")).toMatchObject({
+      authorizedByPrincipalId: null,
+      principalId: "local-api-token",
+    });
+    expect(rows.find((row) => row.idempotencyKey === "aud-001-agent-access")).toMatchObject({
+      actorKind: "service",
+      actorName: "Release agent",
+      authorizedByPrincipalId: administratorId,
+      principalId: expect.stringMatching(/^service:/u),
+    });
+  });
+
+  test("AUD-001-F: a publish or access change whose action record is refused does not commit", async () => {
+    expect.hasAssertions();
+    const published = await publish("aud-001-f-publish", "account_required");
+    withWritableDatabase((database) => database.exec(`
+      CREATE TRIGGER access_action_outage BEFORE INSERT ON actions
+      WHEN NEW.action = 'change_access'
+      BEGIN SELECT RAISE(ABORT, 'the activity log refused the write'); END;
+    `));
+    const refused = await client.fetch(
+      `/api/v1/artifacts/${published.artifact.id}/access${scope(published)}`,
+      {
+        body: JSON.stringify({accessSetting: "public_link", expectedCurrentVersionId: published.version.id}),
+        idempotencyKey: "aud-001-f-access",
+        method: "PATCH",
+      },
+    );
+    expect(refused.status).toBeGreaterThanOrEqual(500);
+    withWritableDatabase((database) => database.exec("DROP TRIGGER access_action_outage;"));
+    const artifact = await expectJson(
+      await client.fetch(`/api/v1/artifacts/${published.artifact.id}${scope(published)}`),
+      200,
+      z.object({artifact: z.object({accessSetting: z.string()}).loose()}).loose(),
+    );
+    expect(artifact.artifact.accessSetting).toBe("account_required");
+    expect(rowsFor(published.artifact.id).map((row) => row.action)).toEqual(["publish"]);
+  });
+
   function withWritableDatabase(operation: (database: DatabaseSync) => void): void {
     const database = new DatabaseSync(
       path.join(installation.dataDirectory, "artifact-server.db"),
