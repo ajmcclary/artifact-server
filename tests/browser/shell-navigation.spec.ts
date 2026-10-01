@@ -145,7 +145,8 @@ test.describe("Shell navigation", () => {
       await markDocument(page);
       await page.getByRole("radio", {name: /Needs you/u}).click();
       await nav.getByRole("link", {exact: true, name: "Projects"}).click();
-      await expect(page).toHaveURL(/\/review\/projects$/u);
+      // Projects opens on the first active project, replacing its own entry.
+      await expect(page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
       await page.goBack();
       await expect(page).toHaveURL(/segment=needs_you/u);
       await expect(page.getByRole("radio", {name: /Needs you/u})).toBeChecked();

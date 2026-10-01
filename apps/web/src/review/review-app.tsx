@@ -22,7 +22,6 @@ import {
 } from "@/api/client";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
-import {canManageProjects} from "@/shell/nav-model";
 import {ReviewShell} from "@/shell/review-shell";
 import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
@@ -67,12 +66,12 @@ import {
 } from "./review-routes.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
 import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
+import {ProjectsScreen} from "./projects/projects-screen.tsx";
 import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
-import {ProjectSettings} from "./settings/project-settings.tsx";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -306,7 +305,9 @@ export function ReviewApp() {
 
   return (
     <ReviewShell
-      mainStyle={route.kind === "workspace" || route.kind === "library" ? {overflow: "hidden"} : {overflowY: "auto"}}
+      mainStyle={route.kind === "workspace" || route.kind === "library" || route.kind === "projects"
+        ? {overflow: "hidden"}
+        : {overflowY: "auto"}}
       onCreateProject={createProject}
       onOpenPalette={openPalette}
       projects={projects}
@@ -323,7 +324,8 @@ export function ReviewApp() {
       ) : route.kind === "activity" ? (
         <ActivityScreen filters={route.filters} projects={projects} session={session} />
       ) : route.kind === "projects" ? (
-        <InterimProjectsScreen
+        <ProjectsScreen
+          onCreateProject={createProject}
           onProjectsChanged={loadProjects}
           projectId={route.projectId}
           projects={projects}
@@ -1330,30 +1332,4 @@ function reviewPreviewKind(
     return "media";
   }
   return "other";
-}
-
-/** Slice 5's Projects route: the selected (else first active) project's settings; slice 6 docks the list beside it. */
-function InterimProjectsScreen({onProjectsChanged, projectId, projects, session}: {
-  readonly onProjectsChanged: () => Promise<readonly Project[]>;
-  readonly projectId: string | null;
-  readonly projects: readonly Project[];
-  readonly session: Session;
-}) {
-  const selected = projectId ?? projects.find((project) => project.archivedAt === null)?.id ?? projects[0]?.id ?? null;
-  if (selected === null) {
-    return <SurfaceState count={0} emptyBody="Create a project to publish into." emptyIcon="bi-folder2-open"
-      emptyTitle="No projects yet" noun="projects" phase="ready" titleLevel={1} />;
-  }
-  return (
-    <ProjectSettings
-      artifactCount={null}
-      canManage={canManageProjects(session.principal)}
-      gitHistory={session.capabilities.gitHistory}
-      key={selected}
-      principalId={session.principal.id}
-      onProjectsChanged={onProjectsChanged}
-      projectId={selected}
-      projects={projects}
-    />
-  );
 }
