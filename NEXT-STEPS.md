@@ -1,6 +1,6 @@
 # Next steps
 
-Updated September 28, 2026. This is the implementation backlog resulting from
+Updated October 1, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -37,6 +37,7 @@ it does not authorize future live runs or paid-plan changes.
 | 8 | T08/T09 closed; T10 policy and provider follow-up | The bounded publication and uncommitted-cleanup work is done. T10 still needs a separate successful-staging retention decision and provider qualification when those deployments are exercised. | T24 for new retention policy; provider access for live proof. | Conditional follow-up |
 | 9 | T15/T16 MCP and identity qualification (T17 host qualification closed September 27) | Bound agent results and qualify current auth behavior at current client versions. | T07 evidence; actual client/account access. | 3–5 days reads; 3–5 auth |
 | 10 | Select T11, T12 or T13 from measurements (T12 and T13 closed September 26; T11 stays conditional) | Implement one justified transfer improvement with ≥10% target-workload evidence. | T01, T02, T05; T08 for Workers. | 5–10 days per selected experiment/change |
+| 11 | Activity, Projects and Admin console follow-ups | Record team-deployment browser evidence for ACT-005, ACT-006 and ADM-008; decide whether an MCP tool catalog endpoint should back a tool-group table. | Team deployment access; product decision for the catalog. | 1–3 days |
 
 Effort is an initial engineering estimate including focused tests, not a delivery
 promise or all-provider qualification budget. Plan ranks 1–7 first. Work on T19

@@ -128,3 +128,26 @@ collections remain in [T19](../NEXT-STEPS.md) and T24. They must
 preserve entry precedence and source bytes; changes to generated catalog content
 apply to new publications. A project overview that follows current versions is
 a moving view, not an immutable multi-artifact snapshot.
+
+## Activity, Projects and Administration
+
+The Activity feed, Projects screen and Admin console follow the ArkCase Artifacts
+prototype at Design `e087280` (`arkcase-artifacts/project/App.dc.html`,
+`workspace/projects/arkcase-artifacts/`). The vendored activity model and feed
+come through `scripts/sync-arkcase-ds.mjs`; the server supplies every entry from
+the action log (`GET /api/v1/activity`, `GET /api/v1/activity/summary`).
+
+Where the prototype shows something the server cannot back, the control is
+omitted rather than shown disabled:
+
+- Project "Publishing defaults" and "Access and membership" panels — no project
+  defaults or project membership exist; projects use installation membership.
+- The MCP tool-group table — MCP tools are registered at runtime and no endpoint
+  lists them. The WebMCP tool names are shown because the browser registers them.
+- Public-link view counts and expiry, member role changes, a member's recent
+  activity list, and the expiring-soon key pill.
+- Web upload publishing — "Publish artifact" shows the `artifactserver publish`
+  command.
+
+Public links keep their accessible per-row selection, paging and partial-success
+retry (ADM-005) inside the console instead of the prototype's single-row grid.
