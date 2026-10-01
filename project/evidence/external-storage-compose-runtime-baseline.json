@@ -1,16 +1,16 @@
 {
   "composeVersion": "5.5.1",
-  "imageRevision": "45ca288364aed9eb054c133ad781ce8dabda9a48",
-  "measuredAt": "2026-10-01T00:29:56.177Z",
+  "imageRevision": "9fc712599574bc1a22f7e1b0a9fa0e6b632cf1ff",
+  "measuredAt": "2026-10-01T19:44:29.029Z",
   "platform": "darwin",
-  "providerReadyMilliseconds": 2691,
+  "providerReadyMilliseconds": 2937,
   "readBaseline": {
     "completedRequests": 40,
-    "elapsedMilliseconds": 51.83879100000013,
-    "p95Milliseconds": 49.53462500000023,
-    "requestsPerSecond": 771.6229338759058
+    "elapsedMilliseconds": 48.70612500000061,
+    "p95Milliseconds": 45.82166599999982,
+    "requestsPerSecond": 821.251947265349
   },
-  "replacementMilliseconds": 5858.23875,
+  "replacementMilliseconds": 5839.716124999999,
   "replicas": 2,
-  "startupMilliseconds": 5388.553541
+  "startupMilliseconds": 5481.873292
 }
