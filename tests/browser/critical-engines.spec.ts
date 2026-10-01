@@ -246,4 +246,26 @@ test.describe("critical engine review paths @critical", () => {
       await rm(directory, {recursive: true, force: true});
     }
   });
+
+  test("ACT-005-B ACT-005-F: an Activity thumbnail draws the thread's exact private version inside the review frame @critical", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const first = (await publishNew(fixture.server, fixture.installation, {accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><title>Engine thumb</title><h1 id=\"title\">Engine thumb version one</h1></html>",
+        idempotencyKey: "critical-activity-thumb-v1", mediaType: "text/html; charset=utf-8", name: "Engine thumb", path: "index.html"})).body;
+      await createThreadOverApi(fixture, {anchor: {htmlAnchor: {point: {x: 0.5, y: 0.5}, selector: "#title", tagName: "H1"}, originalText: "Engine thumb"},
+        artifactId: first.artifact.id, body: "On version one.", idempotencyKey: "critical-activity-thumb-thread", path: "index.html", versionId: first.version.id});
+      await publishVersion(fixture.server, fixture.installation, {artifactId: first.artifact.id,
+        content: "<!doctype html><html lang=\"en\"><title>Engine thumb</title><h1 id=\"title\">Engine thumb version two</h1></html>",
+        expectedCurrentVersionId: first.version.id, idempotencyKey: "critical-activity-thumb-v2"});
+      await localLogin(fixture);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?type=comments`);
+      // The review frame draws the artifact in its own nested, sandboxed frame.
+      const frame = fixture.page.frameLocator("[data-thumbnail='frame']").first().frameLocator("iframe");
+      await expect(frame.getByRole("heading", {name: "Engine thumb version one"})).toBeVisible();
+      await expect(frame.getByRole("heading", {name: "Engine thumb version two"})).toHaveCount(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
 });

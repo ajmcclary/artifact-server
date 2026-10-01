@@ -208,6 +208,10 @@ An empty or failed read is reported once and offered for retry; it is never
 re-requested in a loop. A refused sign-out says so and leaves the reviewer
 signed in where they were.
 
+## Activity screen
+
+Bare `/review` is Activity: every recorded action across the installation, newest first, under sticky day headers. Its segment (All, Needs you, With an agent), project, type and search filters live in the URL, so links and history restore them. A conversation is one entry that moves to the top on each reply; more than three replies fold behind "Show N earlier replies". Reply and Resolve act in place; Open goes to the workspace with the conversation selected. Consecutive versions by one publisher on one artifact merge into one entry. Each conversation's header shows its exact version drawn in the review frame, loaded only near the viewport and at most four at a time; a page that is not HTML, or an anchor the page cannot place, shows a file tile. Project folders and old project settings URLs open `/review/projects`.
+
 ## Route migration
 
 The server stops serving the old application. These compatibility redirects

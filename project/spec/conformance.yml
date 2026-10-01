@@ -3242,18 +3242,37 @@ requirements:
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: screen-transitions}
     acceptance:
-      behavior: {id: NAV-001-B, description: "Move between the queue, a project's workspace, another project, the design library, and settings by navigation, account menu, brand mark, and history within one document and without the startup gate; startup paints the shell frame at the pinned navigation width; the catalog, queue, and Comments view keep their content and choices across re-reads and artifact switches; native controls follow the chosen theme."}
+      behavior: {id: NAV-001-B, description: "Move between Activity, Projects, a project folder, a project's workspace, another project, the design library, and settings by navigation, account menu, brand mark, and history within one document and without the startup gate; startup paints the shell frame at the pinned navigation width; the catalog, Activity, and Comments view keep their content and choices across re-reads and artifact switches; native controls follow the chosen theme."}
       failure: {id: NAV-001-F, description: "While another artifact loads its record, the previous artifact's name, versions, Share, and Delete never show; a failed or empty activity history is requested once, not in a loop; a refused sign-out reports the failure and keeps the reviewer signed in on the same screen."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local Chromium browser evidence proves in-place navigation at desktop and phone widths, the startup frame, the startup deadline, re-read continuity, stale-record isolation, bounded activity reads, and refused sign-out. Firefox and WebKit pass the same specs in local runs but are outside the recorded critical-engine matrix, and no team deployment is recorded.
+    proof_gap: Local Chromium browser evidence proves in-place navigation at desktop and phone widths, the startup frame, the startup deadline, re-read continuity, stale-record isolation, bounded activity reads, and refused sign-out. Firefox and WebKit pass the same specs in local runs but are outside the recorded critical-engine matrix, and no team deployment is recorded. Activity filters restore through history in place.
     depends_on: [CMT-015, CMT-016, ADM-006]
     evidence:
       - deployment: local
         tests: [NAV-001-B, NAV-001-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T00:12:27.582Z"
+        recorded_at: "2026-10-01T17:29:56.201Z"
+
+  - id: ACT-005
+    kind: behavior
+    behavior: The Activity screen replaces the review queue with the installation's reverse-chronological feed, filtered through the URL, with folded conversations, inline Reply and Resolve, merged version bursts, US dates and lazy sandboxed thumbnails of each conversation's exact version.
+    owner: web-application
+    source: {file: single-application-administration-spec.md, anchor: activity-screen}
+    acceptance:
+      behavior: {id: ACT-005-B, description: "Open bare /review and see versions, bursts and conversations under Today/Yesterday/date headers with 12-hour times; fold and expand a long thread; reply and resolve inline; switch segment, project, type and search and restore them through history; open a conversation in the workspace with it selected; see an anchored conversation's exact version drawn in the review frame, loading at most four at once."}
+      failure: {id: ACT-005-F, description: "A hostile comment body renders as inert text without overflow and stays searchable; unknown filters are dropped; a failed feed read offers Retry and a failed summary leaves the feed working; an unplaceable anchor or non-HTML entry shows a file tile; a thumbnail never draws another version or escapes the review frame or the application CSP; an older page never repeats a thread."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local Chromium evidence proves the feed, filters, inline actions, thumbnails and failure states; Firefox and WebKit prove the exact-version thumbnail in the critical-engine matrix. No team deployment is recorded.
+    depends_on: [ACT-003, ACT-004, NAV-001, CMT-014, CMT-016]
+    evidence:
+      - deployment: local
+        tests: [ACT-005-B, ACT-005-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-10-01T17:29:56.201Z"
 
   - id: ADM-007
     kind: behavior
