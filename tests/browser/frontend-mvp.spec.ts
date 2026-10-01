@@ -1197,6 +1197,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("list", {name: "Capabilities"}).getByText("Manage comments")).toBeVisible();
       await fixture.page.getByRole("button", {name: "Actions for Browser workflow key"}).first().click();
       await fixture.page.getByRole("menuitem", {name: "Rotate"}).click();
+      await fixture.page.getByRole("dialog", {name: "Rotate API key"}).getByRole("button", {name: "Rotate API key"}).click();
       await expect(fixture.page.getByRole("region", {name: "API key secret"})).toHaveText(/^as_key_/u);
       await fixture.page.getByRole("button", {name: "I stored it"}).click();
       await expect(keyRow.getByText("Revoked", {exact: true})).toBeVisible();

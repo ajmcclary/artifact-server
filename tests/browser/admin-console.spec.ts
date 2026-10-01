@@ -148,6 +148,16 @@ test.describe("Admin console", () => {
       // The server refuses member administration to a non-administrator key.
       const cookies = await signInAdministrator(fixture.server, fixture.installation);
       const reader = await issueApiKey(fixture.server, cookies, ["artifact:read"], "Console reader");
+      // Rotating revokes the current secret, so it confirms first; cancelling keeps the key working.
+      await page.goto(`${fixture.server.baseUrl}/review/settings/api-keys`);
+      const readerRow = page.getByRole("grid", {name: "API keys"}).getByRole("row").filter({hasText: "Console reader"});
+      await page.getByRole("button", {name: "Actions for Console reader"}).click();
+      await page.getByRole("menuitem", {name: "Rotate"}).click();
+      await page.getByRole("dialog", {name: "Rotate API key"}).getByRole("button", {name: "Cancel"}).click();
+      await expect(page.getByRole("region", {name: "API key secret"})).toHaveCount(0);
+      await expect(readerRow.getByText("Active", {exact: true})).toBeVisible();
+      expect((await fetch(`${fixture.server.baseUrl}/api/v1/projects`, {headers: {Authorization: `Bearer ${reader}`}})).status).toBe(200);
+
       const refused = await Promise.all(["/api/v1/members", "/api/v1/api-keys", "/api/v1/administration/public-links"].map(async (path) =>
         (await fetch(`${fixture.server.baseUrl}${path}`, {headers: {Authorization: `Bearer ${reader}`}})).status));
       expect(refused).toEqual([403, 403, 403]);

@@ -82,6 +82,7 @@ export function ApiKeysScreen() {
     readonly PrincipalCapability[]
   >([]);
   const [revoking, setRevoking] = useState<AdministeredApiKey | null>(null);
+  const [rotating, setRotating] = useState<AdministeredApiKey | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -140,6 +141,7 @@ export function ApiKeysScreen() {
     setError(null);
     try {
       setIssued(await api.rotateApiKey(keyId));
+      setRotating(null);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error("API key rotation failed."));
@@ -242,7 +244,7 @@ export function ApiKeysScreen() {
 
   return (
     <AdminConsole administrator area="apiKeys" inspector={inspector}>
-      {error === null || issueOpen || revoking !== null
+      {error === null || issueOpen || revoking !== null || rotating !== null
         ? null
         : <RequestFailure error={error} onRetry={() => void load()} />}
       {loading && apiKeys.length === 0 ? (
@@ -271,7 +273,7 @@ export function ApiKeysScreen() {
             )}
             quickFilter
             rowActions={(row: KeyRow) => row.status === "active" ? [
-              {icon: "bi-arrow-repeat", label: "Rotate", onClick: () => void rotate(row.id)},
+              {danger: true, icon: "bi-arrow-repeat", label: "Rotate", onClick: () => setRotating(row.apiKey)},
               {danger: true, icon: "bi-x-circle", label: "Revoke", onClick: () => setRevoking(row.apiKey)},
             ] : null}
             rowActionsLabel={(row: KeyRow) => `Actions for ${row.name}`}
@@ -344,6 +346,29 @@ export function ApiKeysScreen() {
       </Modal>
 
       <SecretModal issued={issued} onDiscard={() => setIssued(null)} />
+
+      <Modal
+        icon="bi-arrow-repeat"
+        inertSiblings
+        onClose={() => setRotating(null)}
+        open={rotating !== null}
+        portal
+        primaryAction={{
+          disabled: pending || rotating === null,
+          label: pending ? "Rotating…" : "Rotate API key",
+          onClick: () => {
+            if (rotating !== null) void rotate(rotating.id);
+          },
+          variant: "danger",
+        }}
+        size="sm"
+        subtitle={rotating === null
+          ? ""
+          : `${rotating.name} stops working immediately and a new secret with the same capabilities is shown once.`}
+        title="Rotate API key"
+      >
+        {error === null ? null : <RequestFailure error={error} />}
+      </Modal>
 
       <Modal
         icon="bi-x-circle"
