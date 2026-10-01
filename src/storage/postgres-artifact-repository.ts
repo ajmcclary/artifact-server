@@ -45,6 +45,9 @@ import {
   type ArtifactRecord,
   type ArtifactState,
   type ArtifactTombstone,
+  type AccessSetting,
+  type ActorSnapshot,
+  type ArtifactActionKind,
   type ArtifactVersion,
   type CommentAuthor,
   type CommentReplyCreation,
@@ -127,7 +130,14 @@ import {
   registeredAgentRetentionMilliseconds,
 } from "../core/publishing-limits.js";
 import {createManifest} from "../manifest/create-manifest.js";
+import {actorSnapshotOfAuthor} from "../core/action-attribution.js";
+import {
+  attributedInsert,
+  companionIdempotencyKey,
+  publicLinkTransition,
+} from "./action-insert.js";
 import {artifactHistoryActionKindSql} from "./activity-log-schema.js";
+import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
 import type {
   ListPublicLinks,
@@ -582,14 +592,27 @@ export class PostgresArtifactRepository implements
     const installationId = this.#installationId;
     const rows = await this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
-      return yield* sql`INSERT INTO projects (
-          installation_id, id, name, created_at, archived_at
-        ) VALUES (
-          ${installationId}, ${command.id}, ${command.name},
-          ${command.createdAt}, ${command.archivedAt}
-        ) ON CONFLICT (installation_id, id) DO NOTHING
-        RETURNING installation_id AS "installationId", id, name,
-          created_at AS "createdAt", archived_at AS "archivedAt"`;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        const inserted = yield* sql`INSERT INTO projects (
+            installation_id, id, name, created_at, archived_at
+          ) VALUES (
+            ${installationId}, ${command.id}, ${command.name},
+            ${command.createdAt}, ${command.archivedAt}
+          ) ON CONFLICT (installation_id, id) DO NOTHING
+          RETURNING installation_id AS "installationId", id, name,
+            created_at AS "createdAt", archived_at AS "archivedAt"`;
+        if (inserted.length === 1) {
+          yield* insertPostgresAction(installationId, attributedInsert(command.attribution, {
+            action: "project_create",
+            createdAt: command.createdAt,
+            detail: {subjectName: command.name},
+            idempotencyKey: `project_create:${command.id}`,
+            projectId: command.id,
+            subjectId: command.id,
+          }));
+        }
+        return inserted;
+      }));
     }));
     const project = projectRowSchema.nullable().parse(rows[0] ?? null);
     if (project === null) {
@@ -1364,14 +1387,36 @@ export class PostgresArtifactRepository implements
 
   async setProjectArchive(command: SetProjectArchive): Promise<ProjectRecord> {
     const installationId = this.#installationId;
-    const rows = await this.#database.run(Effect.gen(function*() {
+    const project = await this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
-      return yield* sql`UPDATE projects SET archived_at = ${command.archivedAt}
-        WHERE installation_id = ${installationId} AND id = ${command.projectId}
-        RETURNING installation_id AS "installationId", id, name,
-          created_at AS "createdAt", archived_at AS "archivedAt"`;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        const current = projectRowSchema.nullable().parse((yield* sql`
+          SELECT installation_id AS "installationId", id, name,
+            created_at AS "createdAt", archived_at AS "archivedAt"
+          FROM projects
+          WHERE installation_id = ${installationId} AND id = ${command.projectId}
+          FOR UPDATE`)[0] ?? null);
+        if (current === null) return null;
+        // Only a real state change writes; repeating archive or unarchive is a no-op.
+        const changes = (current.archivedAt === null) !== (command.archivedAt === null);
+        if (!changes) return current;
+        const updated = projectRowSchema.parse((yield* sql`
+          UPDATE projects SET archived_at = ${command.archivedAt}
+          WHERE installation_id = ${installationId} AND id = ${command.projectId}
+          RETURNING installation_id AS "installationId", id, name,
+            created_at AS "createdAt", archived_at AS "archivedAt"`)[0]);
+        const action = command.archivedAt === null ? "project_unarchive" : "project_archive";
+        yield* insertPostgresAction(installationId, attributedInsert(command.attribution, {
+          action,
+          createdAt: command.changedAt,
+          detail: {subjectName: updated.name},
+          idempotencyKey: `${action}:${command.projectId}:${command.changedAt}`,
+          projectId: command.projectId,
+          subjectId: command.projectId,
+        }));
+        return updated;
+      }));
     }));
-    const project = projectRowSchema.nullable().parse(rows[0] ?? null);
     if (project === null) {
       throw new ProjectNotFound({message: "The project does not exist."});
     }
@@ -1441,6 +1486,21 @@ export class PostgresArtifactRepository implements
             AND project_id = ${command.projectId}
             AND id = ${command.artifactId}`;
         yield* this.#insertAction(command, "publish", command.versionId);
+        if (publicLinkTransition(null, command.accessSetting) !== null) {
+          yield* insertPostgresAction(installationId, {
+            accessFrom: null,
+            accessTo: command.accessSetting,
+            action: "public_link_enable",
+            actor: command.actor,
+            artifactId: command.artifactId,
+            authorizedByPrincipalId: command.authorizedByPrincipalId,
+            createdAt: command.createdAt,
+            idempotencyKey: companionIdempotencyKey(command.idempotencyKey),
+            principalId: command.principalId,
+            projectId: command.projectId,
+            versionId: command.versionId,
+          });
+        }
         yield* this.#insertIdempotency({
           accessSetting: null,
           artifactId: command.artifactId,
@@ -2925,6 +2985,8 @@ export class PostgresArtifactRepository implements
         const createAction = commentActionIdentity(command.id);
         yield* this.#insertAction(
           {
+            actor: actorSnapshotOfAuthor(command.author),
+            threadId: command.id,
             actionId: createAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.author.authorizedByPrincipalId,
@@ -3078,6 +3140,8 @@ export class PostgresArtifactRepository implements
         const commentAction = commentActionIdentity(command.threadId);
         yield* this.#insertAction(
           {
+            actor: command.actor,
+            threadId: command.threadId,
             actionId: commentAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.authorizedByPrincipalId,
@@ -3142,6 +3206,8 @@ export class PostgresArtifactRepository implements
         const commentAction = commentActionIdentity(command.threadId);
         yield* this.#insertAction(
           {
+            actor: command.actor,
+            threadId: command.threadId,
             actionId: commentAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.authorizedByPrincipalId,
@@ -3209,6 +3275,8 @@ export class PostgresArtifactRepository implements
           const commentAction = commentActionIdentity(row.id);
           yield* this.#insertAction(
             {
+              actor: command.actor,
+              threadId: row.id,
               actionId: commentAction.actionId,
               artifactId: command.artifactId,
               authorizedByPrincipalId: command.authorizedByPrincipalId,
@@ -3301,6 +3369,9 @@ export class PostgresArtifactRepository implements
         const replyAction = commentActionIdentity(command.threadId);
         yield* this.#insertAction(
           {
+            actor: actorSnapshotOfAuthor(command.author),
+            replyId: command.id,
+            threadId: command.threadId,
             actionId: replyAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.author.authorizedByPrincipalId,
@@ -3312,6 +3383,39 @@ export class PostgresArtifactRepository implements
           artifactActionKinds.commentReply,
           thread.versionId,
         );
+        // The first reply by a dispatch's own agent on a thread it holds records the answer.
+        const answer = z.array(z.object({agentName: z.string(), dispatchId: z.string()})).parse(
+          yield* sql.unsafe<object>(
+            `SELECT d.id AS "dispatchId", d.agent_display_name AS "agentName"
+             FROM comment_threads t
+             JOIN agent_dispatches d
+               ON d.installation_id = t.installation_id AND d.id = t.dispatch_id
+             JOIN registered_agents a
+               ON a.installation_id = d.installation_id AND a.id = d.agent_id
+             WHERE t.installation_id = $1 AND t.project_id = $2 AND t.id = $3
+               AND d.state IN ('queued', 'claimed', 'delivered')
+               AND a.principal_id = $4`,
+            [installationId, command.projectId, command.threadId, command.author.principalId],
+          ),
+        )[0];
+        if (answer !== undefined) {
+          yield* insertPostgresAction(installationId, attributedInsert(
+            {
+              actor: actorSnapshotOfAuthor(command.author),
+              authorizedByPrincipalId: command.author.authorizedByPrincipalId,
+              principalId: command.author.principalId,
+            },
+            {
+              action: "dispatch_addressed",
+              createdAt: command.createdAt,
+              detail: {subjectName: answer.agentName},
+              idempotencyKey: `dispatch_addressed:${answer.dispatchId}`,
+              projectId: command.projectId,
+              subjectId: answer.dispatchId,
+              threadId: command.threadId,
+            },
+          ), {once: true});
+        }
         yield* this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
@@ -3359,6 +3463,9 @@ export class PostgresArtifactRepository implements
         const commentAction = commentActionIdentity(command.threadId);
         yield* this.#insertAction(
           {
+            actor: command.actor,
+            replyId: command.replyId,
+            threadId: command.threadId,
             actionId: commentAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.authorizedByPrincipalId,
@@ -3389,6 +3496,9 @@ export class PostgresArtifactRepository implements
         const commentAction = commentActionIdentity(command.threadId);
         yield* this.#insertAction(
           {
+            actor: command.actor,
+            replyId: command.replyId,
+            threadId: command.threadId,
             actionId: commentAction.actionId,
             artifactId: command.artifactId,
             authorizedByPrincipalId: command.authorizedByPrincipalId,
@@ -3703,6 +3813,22 @@ export class PostgresArtifactRepository implements
             );
           }
         }
+        yield* insertPostgresAction(installationId, attributedInsert(
+          {
+            actor: actorSnapshotOfAuthor(command.sender),
+            authorizedByPrincipalId: command.sender.authorizedByPrincipalId,
+            principalId: command.sender.principalId,
+          },
+          {
+            action: "dispatch_create",
+            createdAt: command.createdAt,
+            // Thread ids stay on the dispatch row: a 100-thread bundle exceeds the detail bound.
+            detail: {agentId: command.agentId, subjectName: command.agentDisplayName},
+            idempotencyKey: `dispatch_create:${command.id}`,
+            projectId: command.projectId,
+            subjectId: command.id,
+          },
+        ));
         if (command.threadIds.length > 0) {
           yield* this.#bumpCommentRevisionForThreads(
             command.threadIds,
@@ -3970,10 +4096,26 @@ export class PostgresArtifactRepository implements
         const updated = yield* mutate(sql);
         if (updated.length !== 1) return yield* changedDuringManagement();
         yield* this.#insertAction(
-          command,
+          {...command, accessFrom: artifact.accessSetting, accessTo: command.accessSetting},
           operation,
           command.expectedCurrentVersionId,
         );
+        const transition = publicLinkTransition(artifact.accessSetting, command.accessSetting);
+        if (transition !== null) {
+          yield* insertPostgresAction(installationId, {
+            accessFrom: artifact.accessSetting,
+            accessTo: command.accessSetting,
+            action: transition,
+            actor: command.actor,
+            artifactId: command.artifactId,
+            authorizedByPrincipalId: command.authorizedByPrincipalId,
+            createdAt: command.createdAt,
+            idempotencyKey: companionIdempotencyKey(command.idempotencyKey),
+            principalId: command.principalId,
+            projectId: command.projectId,
+            versionId: command.expectedCurrentVersionId,
+          });
+        }
         yield* this.#insertIdempotency({
           accessSetting,
           artifactId: command.artifactId,
@@ -4528,31 +4670,37 @@ export class PostgresArtifactRepository implements
 
   #insertAction(
     command: {
+      readonly accessFrom?: AccessSetting | null;
+      readonly accessTo?: AccessSetting | null;
       readonly actionId?: string | undefined;
+      readonly actor: ActorSnapshot;
       readonly artifactId: string;
       readonly authorizedByPrincipalId: string | null;
       readonly createdAt: string;
       readonly idempotencyKey: string;
       readonly principalId: string;
       readonly projectId: string;
+      readonly replyId?: string | null;
+      readonly threadId?: string | null;
     },
-    action: ArtifactActionRecord["action"],
+    action: ArtifactActionKind,
     versionId: string,
   ): Effect.Effect<void, unknown, SqlClient> {
-    const installationId = this.#installationId;
-    const actionId = command.actionId ?? null;
-    return Effect.gen({self: this}, function*() {
-      const sql = yield* SqlClient;
-      yield* sql`INSERT INTO actions (
-        installation_id, project_id, id, artifact_id, version_id, action, principal_id,
-        authorized_by_principal_id, idempotency_key, created_at
-      ) VALUES (
-        ${installationId}, ${command.projectId},
-        COALESCE(${actionId}::text, gen_random_uuid()::text),
-        ${command.artifactId}, ${versionId}, ${action}, ${command.principalId},
-        ${command.authorizedByPrincipalId}, ${command.idempotencyKey},
-        ${command.createdAt}
-      )`;
+    return insertPostgresAction(this.#installationId, {
+      accessFrom: command.accessFrom ?? null,
+      accessTo: command.accessTo ?? null,
+      action,
+      actionId: command.actionId ?? null,
+      actor: command.actor,
+      artifactId: command.artifactId,
+      authorizedByPrincipalId: command.authorizedByPrincipalId,
+      createdAt: command.createdAt,
+      idempotencyKey: command.idempotencyKey,
+      principalId: command.principalId,
+      projectId: command.projectId,
+      replyId: command.replyId ?? null,
+      threadId: command.threadId ?? null,
+      versionId,
     });
   }
 

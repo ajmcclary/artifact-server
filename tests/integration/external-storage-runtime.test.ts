@@ -1187,11 +1187,21 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
           scopedInstallation,
           "administrator-a",
           "2026-08-13T15:01:00.000Z",
+          {
+            actor: {displayName: "Administrator B", kind: "human"},
+            authorizedByPrincipalId: null,
+            principalId: "administrator-b",
+          },
         ),
         repository.deactivateMember(
           scopedInstallation,
           "administrator-b",
           "2026-08-13T15:01:00.000Z",
+          {
+            actor: {displayName: "Administrator A", kind: "human"},
+            authorizedByPrincipalId: null,
+            principalId: "administrator-a",
+          },
         ),
       ]);
       expect(results.map(({status}) => status).toSorted((left, right) =>

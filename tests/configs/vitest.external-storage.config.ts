@@ -12,6 +12,7 @@ export default defineConfig({
     include: [
       "tests/integration/external-storage-runtime.test.ts",
       "tests/integration/postgres-activity-log-migration.test.ts",
+      "tests/integration/postgres-activity-log-writes.test.ts",
       "tests/integration/postgres-expired-staging-cleanup.test.ts",
       "tests/integration/postgres-pool-shutdown.test.ts",
       "tests/integration/postgres-staged-upload-idempotency.test.ts",

@@ -27,6 +27,12 @@ import {
   principalCapabilities,
   principalKinds,
 } from "../core/identity.js";
+import {
+  type ActionAttribution,
+  systemAttribution,
+} from "../core/action-attribution.js";
+import {attributedInsert} from "./action-insert.js";
+import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
 
 const membershipRoleSchema = z.enum([
@@ -132,14 +138,24 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     try {
       await this.#database.run(Effect.gen({self: this}, function*() {
         const sql = yield* SqlClient;
-        yield* sql`INSERT INTO installation_members (
-          installation_id, id, email, display_name, role, status,
-          created_at, updated_at
-        ) VALUES (
-          ${command.installationId}, ${command.id}, ${command.email},
-          ${command.displayName}, ${command.role}, ${memberStatuses.active},
-          ${command.createdAt}, ${command.createdAt}
-        )`;
+        yield* sql.withTransaction(Effect.gen(function*() {
+          yield* sql`INSERT INTO installation_members (
+            installation_id, id, email, display_name, role, status,
+            created_at, updated_at
+          ) VALUES (
+            ${command.installationId}, ${command.id}, ${command.email},
+            ${command.displayName}, ${command.role}, ${memberStatuses.active},
+            ${command.createdAt}, ${command.createdAt}
+          )`;
+          yield* insertPostgresAction(command.installationId, attributedInsert(command.attribution, {
+            action: "member_admit",
+            createdAt: command.createdAt,
+            detail: {how: command.admittedHow, role: command.role, subjectName: command.displayName},
+            idempotencyKey: `member_admit:${command.id}`,
+            projectId: null,
+            subjectId: command.id,
+          }));
+        }));
       }));
     } catch (cause) {
       if (isConstraintFailure(cause)) {
@@ -248,6 +264,7 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     installationId: string,
     memberId: string,
     updatedAt: string,
+    attribution: ActionAttribution,
   ): Promise<InstallationMember> {
     this.#assertInstallationScope(installationId);
     return this.#database.run(Effect.gen({self: this}, function*() {
@@ -290,6 +307,16 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
           WHERE installation_id = ${installationId}
             AND principal_kind = ${principalKinds.human}
             AND principal_id = ${memberId}`;
+        if (existing.status === memberStatuses.active) {
+          yield* insertPostgresAction(installationId, attributedInsert(attribution, {
+            action: "member_deactivate",
+            createdAt: updatedAt,
+            detail: {subjectName: existing.displayName},
+            idempotencyKey: `member_deactivate:${memberId}:${updatedAt}`,
+            projectId: null,
+            subjectId: memberId,
+          }));
+        }
         return {...existing, status: memberStatuses.inactive, updatedAt};
       }));
     }));
@@ -386,9 +413,18 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     }));
   }
 
-  async createApiKey(key: StoredManagedApiKey): Promise<ManagedApiKey> {
+  async createApiKey(
+    key: StoredManagedApiKey,
+    attribution: ActionAttribution,
+  ): Promise<ManagedApiKey> {
     this.#assertInstallationScope(key.installationId);
-    await this.#database.run(this.#insertApiKey(key));
+    await this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        yield* this.#insertApiKey(key);
+        yield* keyIssueAction(key, attribution, "administrator");
+      }));
+    }));
     return withoutSecretDigest(key);
   }
 
@@ -422,6 +458,7 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
           });
         }
         yield* this.#insertApiKey(key);
+        yield* keyIssueAction(key, systemAttribution, "bootstrap");
         return key;
       }));
     }));
@@ -452,19 +489,30 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     installationId: string,
     keyId: string,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey> {
     this.#assertInstallationScope(installationId);
     return this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
       return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
-        const updated = yield* sql`UPDATE managed_api_keys
-          SET revoked_at = COALESCE(revoked_at, ${revokedAt})
-          WHERE installation_id = ${installationId} AND id = ${keyId}
-          RETURNING id`;
-        if (updated.length !== 1) {
+        const existing = yield* this.#findApiKey(installationId, keyId, true);
+        if (existing === null) {
           return yield* new IdentityNotFound({
             message: "The API key does not exist.",
           });
+        }
+        // Revoking a revoked key changes nothing and writes nothing.
+        if (existing.revokedAt === null) {
+          yield* sql`UPDATE managed_api_keys SET revoked_at = ${revokedAt}
+            WHERE installation_id = ${installationId} AND id = ${keyId}`;
+          yield* insertPostgresAction(installationId, attributedInsert(attribution, {
+            action: "key_revoke",
+            createdAt: revokedAt,
+            detail: {subjectName: existing.name},
+            idempotencyKey: `key_revoke:${keyId}`,
+            projectId: null,
+            subjectId: keyId,
+          }));
         }
         const key = yield* this.#findApiKey(installationId, keyId, false);
         if (key === null) throw new Error("The revoked API key disappeared.");
@@ -478,6 +526,7 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     previousKeyId: string,
     replacement: StoredManagedApiKey,
     revokedAt: string,
+    attribution: ActionAttribution,
   ): Promise<ManagedApiKey> {
     this.#assertInstallationScope(installationId);
     this.#assertInstallationScope(replacement.installationId);
@@ -502,6 +551,14 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
         yield* sql`UPDATE managed_api_keys SET revoked_at = ${revokedAt}
           WHERE installation_id = ${installationId} AND id = ${previousKeyId}`;
         yield* this.#insertApiKey(replacement);
+        yield* insertPostgresAction(installationId, attributedInsert(attribution, {
+          action: "key_rotate",
+          createdAt: revokedAt,
+          detail: {replacedKeyId: previousKeyId, subjectName: replacement.name},
+          idempotencyKey: `key_rotate:${replacement.id}`,
+          projectId: null,
+          subjectId: replacement.id,
+        }));
         return withoutSecretDigest(replacement);
       }));
     }));
@@ -682,4 +739,25 @@ function isConstraintFailure(cause: unknown): boolean {
       cause.reason._tag === "UniqueViolation";
   }
   return false;
+}
+
+/** The `key_issue` activity row written beside every new key. */
+function keyIssueAction(
+  key: StoredManagedApiKey,
+  attribution: ActionAttribution,
+  how: "administrator" | "bootstrap",
+): Effect.Effect<void, unknown, SqlClient> {
+  return insertPostgresAction(key.installationId, attributedInsert(attribution, {
+    action: "key_issue",
+    createdAt: key.createdAt,
+    detail: {
+      capabilities: key.capabilities,
+      how,
+      ownerPrincipalId: key.principalId,
+      subjectName: key.name,
+    },
+    idempotencyKey: `key_issue:${key.id}`,
+    projectId: null,
+    subjectId: key.id,
+  }));
 }
