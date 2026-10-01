@@ -74,6 +74,8 @@ describe("activity log schema", () => {
   test("the rebuilt table keeps the legacy row and accepts each scope's valid shape", () => {
     expect(database.prepare("SELECT id, actor_name FROM actions").all())
       .toEqual([{actor_name: null, id: "act_legacy"}]);
+    // Automatic admission is performed by the installation itself, with no principal.
+    insert(["act_auto", null, null, null, "member_admit", null, null, "admit-auto", "2026-09-02T00:00:00.000Z", "member_c", null]);
     insert(["act_member", null, null, null, "member_admit", "member_a", null, "admit-b", "2026-09-02T00:00:00.000Z", "member_b", null]);
     insert(["act_project", "prj_a", null, null, "project_create", "member_a", null, "project-a", "2026-09-02T00:00:00.000Z", "prj_a", JSON.stringify({name: "A"})]);
     insert(["act_public", "prj_a", "art_a", "ver_a", "public_link_enable", "member_a", null, "public-a", "2026-09-02T00:00:00.000Z", null, null]);
@@ -83,7 +85,7 @@ describe("activity log schema", () => {
   test("the rebuilt table refuses rows outside their scope, unattributed live rows and oversized details", () => {
     expect(() => insert(["bad_scope", "prj_a", "art_a", "ver_a", "member_admit", "member_a", null, "bad-1", "2026-09-02T00:00:00.000Z", "member_b", null])).toThrow(/CHECK/);
     expect(() => insert(["bad_project", null, null, null, "project_create", "member_a", null, "bad-2", "2026-09-02T00:00:00.000Z", "prj_a", null])).toThrow(/CHECK/);
-    expect(() => insert(["bad_actor", null, null, null, "member_admit", null, null, "bad-3", "2026-09-02T00:00:00.000Z", "member_b", null])).toThrow(/CHECK/);
+    expect(() => insert(["bad_actor", null, null, null, "member_deactivate", null, null, "bad-3", "2026-09-02T00:00:00.000Z", "member_b", null])).toThrow(/CHECK/);
     expect(() => insert(["bad_kind", "prj_a", "art_a", "ver_a", "mystery", "member_a", null, "bad-4", "2026-09-02T00:00:00.000Z", null, null])).toThrow(/CHECK/);
     expect(() => insert(["bad_json", "prj_a", null, null, "project_create", "member_a", null, "bad-5", "2026-09-02T00:00:00.000Z", "prj_a", "{not json"])).toThrow(/CHECK/);
     const oversized = JSON.stringify({name: "x".repeat(activityDetailJsonMaxBytes)});

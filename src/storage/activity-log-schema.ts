@@ -35,6 +35,16 @@ export const installationScopedActionKinds = [
   installationActionKinds.memberDeactivate,
 ] as const;
 
+/**
+ * Kinds the installation itself may perform with no principal: automatic or
+ * owner-bootstrap admission and the bootstrap API key. Every other live row
+ * keeps a principal (AUD-001-F).
+ */
+export const systemPerformableActionKinds = [
+  installationActionKinds.keyIssue,
+  installationActionKinds.memberAdmit,
+] as const;
+
 // Every value comes from a closed constant set, so quoting needs no escaping.
 const sqlList = (kinds: readonly string[]): string =>
   kinds.map((kind) => `'${kind}'`).join(", ");
@@ -43,6 +53,7 @@ export const artifactActionKindSql = sqlList(Object.values(artifactActionKinds))
 export const artifactHistoryActionKindSql = sqlList(artifactHistoryActionKinds);
 export const projectScopedActionKindSql = sqlList(projectScopedActionKinds);
 export const installationScopedActionKindSql = sqlList(installationScopedActionKinds);
+export const systemPerformableActionKindSql = sqlList(systemPerformableActionKinds);
 export const allActionKindSql = sqlList([
   ...Object.values(artifactActionKinds),
   ...Object.values(installationActionKinds),
@@ -71,7 +82,8 @@ export const actionRowChecks = [
       AND project_id IS NOT NULL AND artifact_id IS NULL AND version_id IS NULL)
     OR (action IN (${installationScopedActionKindSql})
       AND project_id IS NULL AND artifact_id IS NULL AND version_id IS NULL)`,
-  `principal_id IS NOT NULL OR id LIKE '${recoveredActionIdPrefix}%'`,
+  `principal_id IS NOT NULL OR id LIKE '${recoveredActionIdPrefix}%'
+    OR action IN (${systemPerformableActionKindSql})`,
   "actor_kind IS NULL OR actor_kind IN ('human', 'service')",
   "access_from IS NULL OR access_from IN ('account_required', 'public_link')",
   "access_to IS NULL OR access_to IN ('account_required', 'public_link')",

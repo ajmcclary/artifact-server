@@ -196,6 +196,7 @@ export interface ActivityDetail {
   readonly capabilities?: readonly string[];
   readonly how?: string;
   readonly name?: string;
+  readonly ownerPrincipalId?: string;
   readonly replacedKeyId?: string;
   readonly role?: string;
   readonly subjectName?: string;
