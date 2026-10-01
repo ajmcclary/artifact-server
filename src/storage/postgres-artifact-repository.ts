@@ -75,6 +75,9 @@ import {
   type VersionRecord,
 } from "../core/model.js";
 import type {
+  ActivityLog,
+  ActivityPage,
+  ActivityQuery,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -137,6 +140,13 @@ import {
   publicLinkTransition,
 } from "./action-insert.js";
 import {artifactHistoryActionKindSql} from "./activity-log-schema.js";
+import {
+  activitySqlRowSchema,
+  assembleActivityPage,
+  buildListActivityStatement,
+  buildNewestRepliesStatement,
+  snapshotThreadIds,
+} from "./activity-sql.js";
 import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
 import type {
@@ -552,6 +562,7 @@ interface ChangedCommentThreadValues {
 
 /** Installation-scoped Postgres persistence for artifacts and browser content sessions. */
 export class PostgresArtifactRepository implements
+  ActivityLog,
   AgentDispatchRepository,
   ArtifactRepository,
   CommentRepository,
@@ -2150,6 +2161,45 @@ export class PostgresArtifactRepository implements
       );
     }));
   }
+  async listActivity(query: ActivityQuery): Promise<ActivityPage> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const statement = buildListActivityStatement(
+        "postgres",
+        query,
+        installationId,
+      );
+      const rows = z.array(activitySqlRowSchema).parse(
+        yield* sql.unsafe<object>(statement.text, [...statement.values]),
+      );
+      const threadIds = snapshotThreadIds(rows, query.limit);
+      if (threadIds.length === 0) {
+        return assembleActivityPage(rows, [], [], query.limit);
+      }
+      const threads = z.array(commentThreadRowSchema).parse(
+        yield* sql.unsafe<object>(
+          `${commentThreadColumns}
+           WHERE thread.installation_id = $1
+             AND thread.id IN (SELECT jsonb_array_elements_text($2::jsonb))`,
+          [installationId, JSON.stringify(threadIds)],
+        ),
+      ).map(commentThreadFromRow);
+      const repliesStatement = buildNewestRepliesStatement(
+        "postgres",
+        threadIds,
+        installationId,
+      );
+      const replies = z.array(commentReplyRowSchema).parse(
+        yield* sql.unsafe<object>(
+          repliesStatement.text,
+          [...repliesStatement.values],
+        ),
+      ).map(commentReplyFromRow);
+      return assembleActivityPage(rows, threads, replies, query.limit);
+    }));
+  }
+
 
   async restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState> {
     const installationId = this.#installationId;

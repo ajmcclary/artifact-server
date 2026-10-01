@@ -51,3 +51,15 @@ export const agentActivityBeaconTtlMilliseconds = 60 * 1_000;
 
 /** Retention for registered-agent rows whose claim polling stopped. */
 export const registeredAgentRetentionMilliseconds = 7 * 24 * 60 * 60 * 1_000;
+
+/** Activity entries returned when a caller does not ask for a page size. */
+export const defaultActivityPageSize = 30;
+
+/** Maximum activity entries returned by one bounded page. */
+export const maximumActivityPageSize = 100;
+
+/** Maximum characters accepted in one activity search. */
+export const maximumActivitySearchCharacters = 100;
+
+/** Maximum project filters accepted by one activity read. */
+export const maximumActivityProjectFilters = 50;

@@ -7,6 +7,7 @@ import type { AuthenticationService } from "./authentication.js";
 import type { AuthorizationService } from "./authorization.js";
 import type { ContentAccessService } from "./content-access.js";
 import type { ArtifactCommentService } from "./artifact-comments.js";
+import type {ActivityService} from "./activity.js";
 import type { ArtifactManagementService } from "./artifact-management.js";
 import type { CompareArtifactService } from "./compare-artifact.js";
 import type { InstallationAccessService } from "./installation-access.js";
@@ -23,6 +24,7 @@ import type {PublicationPreparationService} from "./publication-preparation.js";
 
 /** Application services shared by every Artifact Server entry point. */
 export type ApplicationServices =
+  | ActivityService
   | AgentDispatchService
   | ArtifactCommentService
   | ArtifactManagementService

@@ -1,6 +1,7 @@
 import type {ActionAttribution} from "./action-attribution.js";
 import type {
   AccessSetting,
+  ActivityActionRow,
   ActorSnapshot,
   AgentDispatchCreation,
   ManifestEntry,
@@ -239,6 +240,75 @@ export interface ListArtifactActions {
   readonly cursor: PageCursor | null;
   readonly limit: number;
   readonly projectId: string;
+}
+
+/** Feed type filters accepted by the activity read model. */
+export type ActivityType = "access" | "admin" | "agents" | "comments" | "versions";
+
+/** Feed segments; "needs_you" and "with_agent" follow the per-thread rule. */
+export type ActivitySegment = "all" | "needs_you" | "with_agent";
+
+/** Values used to read one bounded page of the installation activity log. */
+export interface ActivityQuery {
+  readonly cursor: PageCursor | null;
+  /** False excludes member_* and key_* rows. project_* stays visible. */
+  readonly includeAdministration: boolean;
+  /** Already clamped to 1..maximumActivityPageSize. */
+  readonly limit: number;
+  /** Empty means every project. Unknown IDs match nothing. */
+  readonly projectIds: readonly string[];
+  /** Normalized with normalizeArtifactSearchText, or null. */
+  readonly search: string | null;
+  readonly segment: ActivitySegment;
+  /** Empty means every type. */
+  readonly types: readonly ActivityType[];
+}
+
+/** Thread state per the spec's "Needs you" rule. */
+export type ActivityThreadState = "needs_you" | "resolved" | "with_agent";
+
+/** The thread a latest-per-thread comment row stands for. */
+export interface ActivityThreadSnapshot {
+  readonly anchor: unknown;
+  readonly id: string;
+  readonly isResolved: boolean;
+  readonly opener: CommentThreadRecord;
+  /** The newest two replies, oldest first. */
+  readonly replies: readonly CommentReplyRecord[];
+  readonly replyCount: number;
+  readonly state: ActivityThreadState;
+}
+
+/** One feed row joined with the records it names. */
+export interface ActivityRow {
+  readonly action: ActivityActionRow;
+  readonly artifact: {
+    readonly archived: boolean;
+    readonly id: string;
+    readonly name: string;
+  } | null;
+  readonly dispatch: {
+    readonly agentDisplayName: string;
+    readonly state: AgentDispatchState;
+    readonly threadIds: readonly string[];
+  } | null;
+  /** First line of the thread opener for resolution rows, otherwise null. */
+  readonly excerpt: string | null;
+  readonly project: {readonly id: string; readonly name: string} | null;
+  /** Present only on the newest create or reply row of a live thread. */
+  readonly thread: ActivityThreadSnapshot | null;
+  readonly versionNumber: number | null;
+}
+
+/** One bounded page of activity rows, newest first. */
+export interface ActivityPage {
+  readonly items: readonly ActivityRow[];
+  readonly nextCursor: PageCursor | null;
+}
+
+/** Read side of the installation activity log. */
+export interface ActivityLog {
+  listActivity(query: ActivityQuery): Promise<ActivityPage>;
 }
 
 /** Values used to create one comment thread on one exact saved version. */

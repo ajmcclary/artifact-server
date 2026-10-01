@@ -82,6 +82,9 @@ import {
   type ArtifactActionKind,
 } from "../../../src/core/model.js";
 import type {
+  ActivityLog,
+  ActivityPage,
+  ActivityQuery,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -152,6 +155,13 @@ import {
   publicLinkTransition,
 } from "../../../src/storage/action-insert.js";
 import {artifactHistoryActionKindSql} from "../../../src/storage/activity-log-schema.js";
+import {
+  activitySqlRowSchema,
+  assembleActivityPage,
+  buildListActivityStatement,
+  buildNewestRepliesStatement,
+  snapshotThreadIds,
+} from "../../../src/storage/activity-sql.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 import type {GitHistoryPurgeStore} from
@@ -629,7 +639,7 @@ interface PageResult<Item> {
   readonly nextCursor: PageCursor | null;
 }
 
-export type D1ArtifactRepository = AgentDispatchRepository & ArtifactRepository &
+export type D1ArtifactRepository = ActivityLog & AgentDispatchRepository & ArtifactRepository &
   CommentRepository & ContentSessionRepository & ProjectRepository &
   ProjectGitHistoryStore & GitHistoryMirrorStore & GitHistoryPurgeStore &
   StagedUploadRepository & {
@@ -3295,6 +3305,34 @@ export function createD1ArtifactRepository(
         tags: await readTags(row.artifactId),
       })));
       return publicLinkPageFromRows(parsedRows, artifacts, command.limit);
+    },
+    listActivity: async (query: ActivityQuery): Promise<ActivityPage> => {
+      const statement = buildListActivityStatement("sqlite", query, installationId);
+      const result = await database.prepare(statement.text)
+        .bind(...statement.values)
+        .all<z.input<typeof activitySqlRowSchema>>();
+      const rows = z.array(activitySqlRowSchema).parse(result.results);
+      const threadIds = snapshotThreadIds(rows, query.limit);
+      if (threadIds.length === 0) {
+        return assembleActivityPage(rows, [], [], query.limit);
+      }
+      const threadResult = await database.prepare(
+        `${commentThreadSelect} WHERE t.id IN (SELECT value FROM json_each(?))`,
+      ).bind(JSON.stringify(threadIds))
+        .all<z.input<typeof commentThreadRowSchema>>();
+      const threads = threadResult.results
+        .map((row) => commentThreadFromRow(commentThreadRowSchema.parse(row)));
+      const repliesStatement = buildNewestRepliesStatement(
+        "sqlite",
+        threadIds,
+        installationId,
+      );
+      const replyResult = await database.prepare(repliesStatement.text)
+        .bind(...repliesStatement.values)
+        .all<z.input<typeof commentReplyRowSchema>>();
+      const replies = replyResult.results
+        .map((row) => commentReplyFromRow(commentReplyRowSchema.parse(row)));
+      return assembleActivityPage(rows, threads, replies, query.limit);
     },
     listArtifactActions: async (command: ListArtifactActions): Promise<ArtifactActionPage> => {
       const result = await database.prepare(`

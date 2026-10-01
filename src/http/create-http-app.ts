@@ -16,6 +16,7 @@ import {
   type ApplicationRuntime,
   runApplicationEffect,
 } from "../application/application-runtime.js";
+import {ActivityService} from "../application/activity.js";
 import {PrincipalActivityService} from "../application/principal-activity.js";
 import {
   type CreateStagedUploadCommand,
@@ -138,6 +139,10 @@ import {
 } from "./byte-range.js";
 import {permitsSpaEntryFallback} from "./spa-navigation.js";
 import {
+  defaultActivityPageSize,
+  maximumActivityPageSize,
+  maximumActivityProjectFilters,
+  maximumActivitySearchCharacters,
   maximumCommentPageSize,
   maximumDeclaredFiles,
   maximumUploadPlanRequestBytes,
@@ -384,6 +389,17 @@ const artifactPageQuerySchema = pageQuerySchema.extend({
   tags: z.array(z.string().max(200)).max(20).default([]),
 });
 const publicLinksPageQuerySchema = pageQuerySchema.omit({search: true});
+const activityQuerySchema = z.object({
+  cursor: z.string().max(1_024).optional(),
+  limit: z.coerce.number().int().min(1).max(maximumActivityPageSize)
+    .default(defaultActivityPageSize),
+  project: z.array(projectIdSchema).max(maximumActivityProjectFilters)
+    .default([]),
+  q: z.string().max(maximumActivitySearchCharacters).optional(),
+  segment: z.enum(["all", "needs_you", "with_agent"]).default("all"),
+  type: z.array(z.enum(["access", "admin", "agents", "comments", "versions"]))
+    .max(5).default([]),
+});
 const makePublicLinkPrivateItemSchema = z.object({
   artifactId: z.string().min(1).max(200),
   expectedCurrentVersionId: z.string().min(1).max(200),
@@ -1362,6 +1378,32 @@ export function createHttpApp(
       ),
     );
     return context.json({dispatch: agentDispatchResponse(dispatch)});
+  });
+
+  app.get("/api/v1/activity", async (context) => {
+    const query = activityQuerySchema.parse({
+      ...context.req.query(),
+      project: context.req.queries("project") ?? [],
+      type: context.req.queries("type") ?? [],
+    });
+    const page = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ActivityService.use((activity) =>
+        activity.list(context.get("principal"), {
+          cursor: decodePageCursor(query.cursor),
+          limit: query.limit,
+          projectIds: query.project,
+          search: query.q ?? null,
+          segment: query.segment,
+          types: query.type,
+        })
+      ),
+    );
+    return context.json({
+      items: page.items,
+      nextCursor: encodePageCursor(page.nextCursor),
+    });
   });
 
   app.post(

@@ -15,6 +15,7 @@ import {
   type InteractiveIdentityProvider,
   InteractiveLoginService,
 } from "../application/interactive-login.js";
+import {ActivityService} from "../application/activity.js";
 import {
   makePrincipalActivity,
   PrincipalActivityService,
@@ -124,6 +125,7 @@ import {
   type Principal,
 } from "../core/identity.js";
 import type {
+  ActivityLog,
   AgentDispatchRepository,
   ArtifactRepository,
   BlobStore,
@@ -185,7 +187,7 @@ export interface ApplicationAdapters {
   readonly linked?: LinkedApplicationAdapters;
   readonly localBootstrapCredential: Redacted.Redacted | null;
   readonly protectBootstrapAdministrator: boolean;
-  readonly repository: ArtifactRepository &
+  readonly repository: ActivityLog & ArtifactRepository &
     CommentRepository &
     ContentSessionRepository &
     ProjectRepository &
@@ -222,6 +224,7 @@ interface PublicLinkInventoryStore {
 export function createApplicationLayer(
   adapters: ApplicationAdapters,
 ): Layer.Layer<
+  | ActivityService
   | AgentDispatchService
   | AuthenticationService
   | ArtifactCommentService
@@ -1173,6 +1176,25 @@ export function createApplicationLayer(
   const authorizationLayer = AuthorizationService.layer({
     installationId: adapters.installationId,
   });
+  const activityLayer = ActivityService.layer({
+    directory: {
+      listApiKeys: () => identityEffect(
+        "listApiKeys",
+        () => adapters.identityRepository.listApiKeys(adapters.installationId),
+      ),
+      listMembers: () => identityEffect(
+        "listMembers",
+        () => adapters.identityRepository.listMembers(adapters.installationId),
+      ),
+    },
+    persistence: {
+      listActivity: (query) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.listActivity(query),
+          catch: (cause) => repositoryFailure("listActivity", cause),
+        }),
+    },
+  }).pipe(Layer.provideMerge(authorizationLayer));
   const projectLayer = ProjectManagementService.layer(projectDependencies).pipe(
     Layer.provideMerge(authorizationLayer),
   );
@@ -1303,6 +1325,7 @@ export function createApplicationLayer(
     comparisonDependencies,
   ).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)));
   return Layer.mergeAll(
+    activityLayer,
     authenticationLayer,
     commentLayer,
     dispatchLayer,

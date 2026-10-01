@@ -81,6 +81,9 @@ import {
   type VersionRecord,
 } from "../core/model.js";
 import type {
+  ActivityLog,
+  ActivityPage,
+  ActivityQuery,
   AgentDispatchRepository,
   ArtifactRepository,
   CancelAgentDispatch,
@@ -150,6 +153,13 @@ import {
   sqliteActionsRebuildStatements,
   sqliteActivityRecoveryStatements,
 } from "./activity-log-schema.js";
+import {
+  activitySqlRowSchema,
+  assembleActivityPage,
+  buildListActivityStatement,
+  buildNewestRepliesStatement,
+  snapshotThreadIds,
+} from "./activity-sql.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
   ListPublicLinks,
@@ -578,6 +588,7 @@ interface PageResult<Item> {
 }
 
 export class SqliteArtifactRepository implements
+  ActivityLog,
   AgentDispatchRepository,
   ArtifactRepository,
   CommentRepository,
@@ -2328,6 +2339,41 @@ export class SqliteArtifactRepository implements
       );
     });
   }
+  listActivity(query: ActivityQuery): Promise<ActivityPage> {
+    return Promise.resolve().then(() => {
+      const statement = buildListActivityStatement(
+        "sqlite",
+        query,
+        this.#installationId,
+      );
+      const rows = z.array(activitySqlRowSchema).parse(
+        this.#database.prepare(statement.text).all(...statement.values),
+      );
+      const threadIds = snapshotThreadIds(rows, query.limit);
+      if (threadIds.length === 0) {
+        return assembleActivityPage(rows, [], [], query.limit);
+      }
+      const threads = z.array(commentThreadRowSchema).parse(
+        this.#database
+          .prepare(
+            `${commentThreadColumns}
+             WHERE t.id IN (SELECT value FROM json_each(?))`,
+          )
+          .all(JSON.stringify(threadIds)),
+      ).map(commentThreadFromRow);
+      const repliesStatement = buildNewestRepliesStatement(
+        "sqlite",
+        threadIds,
+        this.#installationId,
+      );
+      const replies = z.array(commentReplyRowSchema).parse(
+        this.#database.prepare(repliesStatement.text)
+          .all(...repliesStatement.values),
+      ).map(commentReplyFromRow);
+      return assembleActivityPage(rows, threads, replies, query.limit);
+    });
+  }
+
 
   restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState> {
     return Promise.resolve().then(() =>
