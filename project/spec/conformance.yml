@@ -1115,10 +1115,15 @@ requirements:
       behavior: {id: ACT-002-B, description: "Populated SQLite, Postgres and D1 installations migrate with IDs, keys and timestamps preserved, and recoverable fields recovered."}
       failure: {id: ACT-002-F, description: "An interrupted or repeated migration cannot duplicate, drop or alter rows, or invent actors."}
     deployments: *all
-    status: implementing
-    proof_gap: The SQLite acceptance tests are being written; Postgres and D1 parity tests and deployment evidence are not attached.
+    status: behavior_verified
+    proof_gap: SQLite behavior and failure tests pass locally. Postgres (tests/integration/postgres-activity-log-migration.test.ts, via pnpm test:external-storage-runtime) and D1 (deploy/cloudflare/tests/d1-activity-log-migration.test.ts, via pnpm check:cloudflare) parity tests carry no acceptance IDs, and no single_server, kubernetes, cloudflare, aws or gcp deployment evidence is attached. Interrupted-migration proof exists for SQLite only; Postgres relies on its transactional migrator and D1 on its atomic batch, neither crash-tested.
     depends_on: [PRJ-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [ACT-002-B, ACT-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T14:46:45Z"
 
   - id: CNT-001
     kind: behavior
