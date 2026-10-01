@@ -57,7 +57,7 @@ import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
 import {useReviewComments} from "./review-comments.tsx";
 import {
   parseReviewRoute,
-  projectSettingsHref,
+  projectsHref,
   readReviewLocation,
   REVIEW_LOCATION_EVENT,
   REVIEW_RETURN_URL_KEY,
@@ -210,7 +210,7 @@ export function ReviewApp() {
   >("loading");
   const [error, setError] = useState<Error | null>(null);
   const [locationHref, setLocationHref] = useState(readDocumentHref);
-  // The retired projects list routes (and bare settings) replace themselves with the review queue.
+  // The retired projects list routes (and bare settings) replace themselves with Activity or Projects.
   const {replaceWith, route} = useMemo(
     () => canonicalReviewRoute(parseReviewRoute(new URL(locationHref, window.location.origin))),
     [locationHref],
@@ -1126,7 +1126,7 @@ function ProjectReview({
             refreshState={catalog.refreshState}
             selectedArtifactId={selectedArtifactId}
             selectedCommentCount={comments.loading ? null : comments.threads.length}
-            settingsHref={selectedProject === null ? null : projectSettingsHref(selectedProject.id)}
+            settingsHref={selectedProject === null ? null : projectsHref(selectedProject.id)}
             sheet={phone}
             sort={catalog.sort}
             tagFilters={catalog.tagFilters}

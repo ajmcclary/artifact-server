@@ -42,9 +42,13 @@ for (const {label, mode} of auditedModes) {
       await localLogin(fixture);
       await expect(page.locator("html")).toHaveAttribute("data-theme-mode", mode);
 
+      // An administrator's first-run feed holds the bootstrap admission; a filter that matches nothing shows the empty state.
       await page.goto(`${fixture.server.baseUrl}/review`);
-      await expect(page.getByText("Nothing to review yet")).toBeVisible();
-      await audit("empty review queue");
+      await expect(page.getByText(/admitted Local administrator/u)).toBeVisible();
+      await audit("first-run activity");
+      await page.goto(`${fixture.server.baseUrl}/review?type=comments`);
+      await expect(page.getByText("Nothing matches these filters")).toBeVisible();
+      await audit("empty activity");
 
       const first = (await publishNew(fixture.server, fixture.installation, {
         accessSetting: "account_required",
@@ -69,8 +73,12 @@ for (const {label, mode} of auditedModes) {
       });
 
       await page.goto(`${fixture.server.baseUrl}/review`);
-      await expect(page.getByRole("button", {name: /Accessibility fixture/u})).toBeVisible();
-      await audit("review queue");
+      await expect(page.getByLabel("Conversation on Accessibility fixture")).toBeVisible();
+      await audit("activity");
+      await page.getByRole("button", {name: "Publish artifact"}).click();
+      await expect(page.getByRole("dialog", {name: "Publish artifact"})).toBeVisible();
+      await audit("publish artifact popover");
+      await page.keyboard.press("Escape");
 
       await page.keyboard.press("ControlOrMeta+k");
       await page.getByRole("combobox", {name: "Search"}).fill("Accessibility");

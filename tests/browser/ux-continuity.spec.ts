@@ -36,9 +36,9 @@ function searchPage(url: URL): boolean {
   return url.pathname === "/api/v1/artifacts" && url.searchParams.get("search") === "alpha";
 }
 
-/** The review queue's per-project read: most-discussed artifacts first. */
-function queueRead(url: URL): boolean {
-  return url.pathname === "/api/v1/artifacts" && url.searchParams.get("sort") === "comments";
+/** The Activity feed's read. */
+function activityRead(url: URL): boolean {
+  return url.pathname === "/api/v1/activity";
 }
 
 function artifactTitle(page: Page) {
@@ -72,7 +72,7 @@ test.describe("Screen continuity", () => {
       const skeletonWidth = await page.locator(".as-boot__nav").evaluate((element) => element.getBoundingClientRect().width);
       expect(Math.abs(skeletonWidth - navigationWidth)).toBeLessThanOrEqual(1);
       sessionHeld.resolve(undefined);
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await expect(skeleton).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);
@@ -97,7 +97,7 @@ test.describe("Screen continuity", () => {
       await expect(page.getByText("Artifact Server did not answer in time. Check the connection, then try again.")).toBeVisible();
       sessionHeld.resolve(undefined);
       await page.getByRole("button", {name: "Try again"}).click();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -110,7 +110,7 @@ test.describe("Screen continuity", () => {
       await localLogin(fixture);
       await page.setViewportSize({height: 844, width: 390});
       await page.goto(`${fixture.server.baseUrl}/review`);
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await page.evaluate(() => {
         document.documentElement.dataset["navigationProbe"] = "same-document";
       });
@@ -122,8 +122,8 @@ test.describe("Screen continuity", () => {
       await expect(page).toHaveURL(/\/review\/library\?project=prj_default/u);
       await expect(drawer).toHaveCount(0);
       await page.getByRole("button", {name: "Open menu"}).click();
-      await drawer.getByRole("link", {name: "Review queue"}).click();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await drawer.getByRole("link", {exact: true, name: "Activity"}).click();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       expect(await probe()).toBe("same-document");
 
       const sessionHeld = Promise.withResolvers<undefined>();
@@ -135,7 +135,7 @@ test.describe("Screen continuity", () => {
       await expect(page.locator(".as-boot")).toBeVisible();
       await expect(page.locator(".as-boot__nav")).toBeHidden();
       sessionHeld.resolve(undefined);
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -155,7 +155,7 @@ test.describe("Screen continuity", () => {
       });
       const page = fixture.page;
       await localLogin(fixture, false);
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
 
       // A project whose first page is still being read opens, rather than asking for a selection.
       const catalogHeld = Promise.withResolvers<undefined>();
@@ -163,7 +163,8 @@ test.describe("Screen continuity", () => {
         await catalogHeld.promise;
         await route.continue();
       });
-      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Default"}).click();
+      // Project folders open Projects; the project's review is its workspace address.
+      await page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
       await expect(page.getByText("Opening project")).toBeVisible();
       await expect(page.getByText("Select an artifact", {exact: true})).toHaveCount(0);
       await expect(page.getByText("Nothing selected")).toHaveCount(0);
@@ -200,7 +201,7 @@ test.describe("Screen continuity", () => {
     }
   });
 
-  test("NAV-001-B: the review queue stays on screen while it refreshes and when the reviewer returns to it", async ({browser}) => {
+  test("NAV-001-B: Activity stays on screen while it re-reads and when the reviewer returns to it", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const published = await publishContinuityFixture(fixture, "Continuity queued", "continuity-queued");
@@ -213,32 +214,32 @@ test.describe("Screen continuity", () => {
       });
       const page = fixture.page;
       await localLogin(fixture, false);
-      const row = page.getByText("Continuity queued", {exact: true});
+      const row = page.getByText(/published v1 of/u).first();
       await expect(row).toBeVisible();
 
-      const queueHeld = Promise.withResolvers<undefined>();
-      await page.route(queueRead, async (route) => {
-        await queueHeld.promise;
+      const feedHeld = Promise.withResolvers<undefined>();
+      await page.route(activityRead, async (route) => {
+        await feedHeld.promise;
         await route.continue();
       });
-      await page.getByRole("button", {name: "Refresh queue"}).click();
-      await expect(page.getByText(/· refreshing$/u)).toBeVisible();
+      // Returning to the window re-reads the feed underneath what is shown.
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(row).toBeVisible();
-      await expect(page.getByText("Loading the review queue")).toHaveCount(0);
-      await expect(page.getByRole("button", {name: "Refresh queue"})).toBeEnabled();
+      await expect(page.getByText("Loading activity")).toHaveCount(0);
 
-      // Leaving and returning shows the last queue at once while it re-reads underneath.
+      // Leaving and returning shows the last feed at once while it re-reads underneath.
       await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Design library"}).click();
-      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Review queue"}).click();
+      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {exact: true, name: "Activity"}).click();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await expect(row).toBeVisible();
-      await expect(page.getByText("Loading the review queue")).toHaveCount(0);
-      queueHeld.resolve(undefined);
-      await expect(page.getByText(/· refreshing$/u)).toHaveCount(0);
+      await expect(page.getByText("Loading activity")).toHaveCount(0);
+      feedHeld.resolve(undefined);
       await expect(row).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }
   });
+
 
   test("NAV-001-F: a refused sign-out says so and keeps the reviewer signed in where they were", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);

@@ -1,7 +1,7 @@
 import {BrandLock} from "@/arkcase";
 import {activityHref} from "@/review/review-routes";
 
-/** The ArkCase lock-up naming Artifact Server; its link opens the review queue. */
+/** The ArkCase lock-up naming Artifact Server; its link opens Activity. */
 export function ArtifactServerBrand({compact = false, showProduct = true}: {readonly compact?: boolean; readonly showProduct?: boolean}) {
   if (compact) {
     return (

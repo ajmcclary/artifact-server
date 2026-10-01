@@ -113,7 +113,7 @@ async function artifactInProject(project: Project, artifactId: string): Promise<
 
 /**
  * Catalog requests the palette keeps in flight across every search, the same
- * bound the review queue uses. It is shared so a superseded search's
+ * bound the activity thumbnails use. It is shared so a superseded search's
  * unfinished requests count against the next one.
  */
 const paletteRequests = createRequestLimiter(4);

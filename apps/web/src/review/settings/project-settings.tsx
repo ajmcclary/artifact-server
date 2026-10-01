@@ -158,7 +158,7 @@ export function ProjectSettings({
       <PageScaffold title="Project settings">
         <SurfaceState
           actionIcon="bi-arrow-left"
-          actionLabel="Open review queue"
+          actionLabel="Open Activity"
           count={0}
           emptyBody="The project named by this settings URL is unavailable."
           emptyIcon="bi-question-circle"

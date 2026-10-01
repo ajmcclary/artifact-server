@@ -78,12 +78,10 @@ test.describe("Shell navigation", () => {
       await expect(artifactTitle(page)).toHaveText("Navigation home fixture");
       await markDocument(page);
 
-      // Catalog search text belongs to one project and must not follow the reviewer.
-      await page.getByRole("searchbox", {name: "Search artifacts"}).fill("home");
+      // A project folder opens that project on the Projects screen.
       await nav.getByRole("link", {name: "Navigation second project"}).click();
-      await expect(page).toHaveURL(new RegExp(`project=${secondProjectId}&artifact=`, "u"));
-      await expect(artifactTitle(page)).toHaveText("Navigation away fixture");
-      await expect(page.getByRole("searchbox", {name: "Search artifacts"})).toHaveValue("");
+      await expect(page).toHaveURL(new RegExp(`/review/projects\\?project=${secondProjectId}$`, "u"));
+      await expect(page.getByRole("main").getByRole("heading", {name: "Navigation second project"})).toBeVisible();
       await expectSameDocument(page);
 
       await nav.getByRole("link", {name: "Design library"}).click();
@@ -94,7 +92,7 @@ test.describe("Shell navigation", () => {
       const libraryUrl = page.url();
       const [opened] = await Promise.all([
         fixture.context.waitForEvent("page"),
-        nav.getByRole("link", {name: "Review queue"}).click({modifiers: ["ControlOrMeta"]}),
+        nav.getByRole("link", {exact: true, name: "Activity"}).click({modifiers: ["ControlOrMeta"]}),
       ]);
       await opened.waitForLoadState();
       expect(new URL(opened.url()).pathname).toBe("/review");
@@ -102,9 +100,9 @@ test.describe("Shell navigation", () => {
       expect(page.url()).toBe(libraryUrl);
       await expectSameDocument(page);
 
-      await nav.getByRole("link", {name: "Review queue"}).click();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
-      await expect(page).toHaveTitle(/Review queue/u);
+      await nav.getByRole("link", {exact: true, name: "Activity"}).click();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
+      await expect(page).toHaveTitle(/Activity/u);
       await expectSameDocument(page);
 
       await page.getByRole("button", {name: /^Account menu/u}).first().click();
@@ -114,22 +112,46 @@ test.describe("Shell navigation", () => {
       const adminNav = page.getByRole("navigation", {name: "Administration"});
       await expectSameDocument(page);
 
+      // Back to review returns to the last artifact reviewed; folders now open Projects, so that is still Default's.
       await adminNav.getByRole("link", {name: "Back to review"}).click();
-      await expect(page).toHaveURL(new RegExp(`project=${secondProjectId}&artifact=`, "u"));
-      await expect(artifactTitle(page)).toHaveText("Navigation away fixture");
+      await expect(page).toHaveURL(/project=prj_default&artifact=/u);
+      await expect(artifactTitle(page)).toHaveText("Navigation home fixture");
       await expectSameDocument(page);
 
       await page.goBack();
       await expect(page).toHaveURL(/\/review\/settings\/members$/u);
       await page.goBack();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await page.goForward();
       await expect(page).toHaveURL(/\/review\/settings\/members$/u);
       await expectSameDocument(page);
 
       await page.getByRole("link", {name: "Artifact Server"}).first().click();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await expectSameDocument(page);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("NAV-001-B: Activity, Projects and a project folder change screens in place and restore Activity filters through history", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const page = fixture.page;
+      const nav = page.getByRole("navigation", {name: "Review and projects"});
+      await nav.getByRole("link", {exact: true, name: "Activity"}).click();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
+      await markDocument(page);
+      await page.getByRole("radio", {name: /Needs you/u}).click();
+      await nav.getByRole("link", {exact: true, name: "Projects"}).click();
+      await expect(page).toHaveURL(/\/review\/projects$/u);
+      await page.goBack();
+      await expect(page).toHaveURL(/segment=needs_you/u);
+      await expect(page.getByRole("radio", {name: /Needs you/u})).toBeChecked();
+      await expectSameDocument(page);
+      await page.goto(`${fixture.server.baseUrl}/review/settings/projects/prj_default`);
+      await expect(page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
     } finally {
       await stopBrowserFixture(fixture);
     }

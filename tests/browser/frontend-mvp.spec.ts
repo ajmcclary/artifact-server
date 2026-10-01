@@ -333,7 +333,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("complementary", {name: "Review navigation"}))
         .toHaveCount(0);
       const reviewNavigation = fixture.page.getByRole("navigation", {name: "Review and projects"});
-      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review queue"}))
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Activity"}))
         .toHaveAttribute("href", "/review");
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
         .toHaveAttribute("aria-current", "page");
@@ -343,11 +343,15 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(projectNameInput).toBeFocused();
       await projectNameInput.fill("Review project");
       await projectDialog.getByRole("button", {name: "Create project"}).click();
-      await expect(fixture.page).toHaveURL(/\/review\?project=(?!prj_default)[^&]+/u);
+      // A new project, like every project folder, opens on the Projects screen.
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=(?!prj_default)[^&]+$/u);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review project"}))
         .toHaveAttribute("aria-current", "page");
       await reviewNavigation.getByRole("link", {exact: true, name: "Default"}).click();
-      await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
+        .toHaveAttribute("aria-current", "page");
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
         .toHaveAttribute("aria-current", "page");
       const navigationBox = await fixture.page.locator("[data-ac-left-nav]").boundingBox();
@@ -421,17 +425,15 @@ test.describe("Artifact Server frontend MVP", () => {
       const canonicalReviewLocation = new URL(fixture.page.url());
       const canonicalReviewUrl = `${canonicalReviewLocation.pathname}${canonicalReviewLocation.search}`;
 
+      // Project settings live on the Projects screen; Back returns to the exact review.
       await fixture.page.getByRole("link", {name: "Project settings"}).click();
       await expect(fixture.page).toHaveURL(
-        new RegExp(`/review/settings/projects/${project.id}$`, "u"),
+        new RegExp(`/review/projects\\?project=${project.id}$`, "u"),
       );
-      const administrationNavigation = fixture.page.getByRole("navigation", {name: "Administration"});
-      const backToReview = administrationNavigation.getByRole("link", {name: "Back to review"});
-      await expect(backToReview).toHaveAttribute("href", canonicalReviewUrl);
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toHaveAttribute("href", "/review");
 
-      await backToReview.click();
+      await fixture.page.goBack();
       await expect(fixture.page).toHaveURL(`${fixture.server.baseUrl}${canonicalReviewUrl}`);
       await expect(reviewNavigation.getByRole("link", {
         exact: true,
@@ -1356,14 +1358,13 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(isolated.status()).toBe(404);
       expect(isolated.headers()["content-type"]).toContain("application/json");
 
-      // The projects list is gone: its routes replace themselves with the review queue (which,
-      // until the queue screen lands, still opens the Default project's first artifact).
+      // The old projects list and bare settings replace themselves with the Projects screen.
       const historyLength = await fixture.page.evaluate(() => window.history.length);
       await fixture.page.goto(`${fixture.server.baseUrl}/projects`);
-      await expect(fixture.page).toHaveURL(/\/review(?:\?project=prj_default(?:&[^#]*)?)?$/u);
+      await expect(fixture.page).toHaveURL(/\/review\/projects(?:\?project=prj_default)?$/u);
       expect(await fixture.page.evaluate(() => window.history.length)).toBe(historyLength + 1);
       await fixture.page.goto(`${fixture.server.baseUrl}/review/settings`);
-      await expect(fixture.page).toHaveURL(/\/review(?:\?project=prj_default(?:&[^#]*)?)?$/u);
+      await expect(fixture.page).toHaveURL(/\/review\/projects(?:\?project=prj_default)?$/u);
 
       await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/prj_default`);
       await expect(fixture.page.getByRole("region", {name: "Project identity"})).toBeVisible();
@@ -1373,9 +1374,8 @@ test.describe("Artifact Server frontend MVP", () => {
         .toHaveAttribute("data-ac-profile", "desktop");
       await expect(fixture.page.getByRole("link", {name: "Artifact Server"}))
         .toHaveAttribute("href", "/review");
-      const administrationNavigation = fixture.page.getByRole("navigation", {name: "Administration"});
-      await expect(administrationNavigation.getByRole("link", {exact: true, name: "Back to review"}))
-        .toBeVisible();
+      // A project's settings address now opens it on the Projects screen.
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
       const compactSettingsActions = [
         fixture.page.getByRole("link", {name: "Open artifacts"}),
         fixture.page.getByRole("button", {name: "Save name"}),

@@ -43,7 +43,7 @@ export async function stopBrowserFixture(fixture: BrowserFixture): Promise<void>
 
 /**
  * Signs in as the local owner, then opens the Default project's review.
- * Bare `/review` becomes the review queue in the redesign, so the project is
+ * Bare `/review` is Activity, so the project is
  * opened explicitly rather than by the application's landing choice.
  */
 export async function localLogin(

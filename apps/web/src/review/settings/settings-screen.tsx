@@ -82,7 +82,7 @@ function SettingsRedirect({href}: {readonly href: string}) {
   return (
     <SurfaceState
       loadingStyle="spinner"
-      loadingTitle="Opening the review queue"
+      loadingTitle="Opening Activity"
       noun="artifacts"
       phase="loading"
     />
@@ -102,7 +102,7 @@ function SettingsState({
     <PageScaffold title="Administration">
       <SurfaceState
         actionIcon="bi-arrow-left"
-        actionLabel="Open review queue"
+        actionLabel="Open Activity"
         count={0}
         emptyBody={body}
         emptyIcon={icon}

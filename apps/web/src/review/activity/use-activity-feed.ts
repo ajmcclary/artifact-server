@@ -6,6 +6,17 @@ import type {ActivityFilters} from "@/review/review-routes";
 import {appendPage, refreshFirstPage} from "./activity-pages";
 
 const pageSize = 30;
+const rememberedFeeds = 8;
+
+/** The last feed shown for each filter set in this tab, so returning to it never blanks what was known. */
+const lastFeeds = new Map<string, {readonly cursor: string | null; readonly entries: readonly ActivityEntry[]}>();
+
+function remember(key: string, cursor: string | null, entries: readonly ActivityEntry[]): void {
+  lastFeeds.delete(key);
+  lastFeeds.set(key, {cursor, entries});
+  const oldest = lastFeeds.keys().next().value;
+  if (lastFeeds.size > rememberedFeeds && oldest !== undefined) lastFeeds.delete(oldest);
+}
 
 export interface ActivityFeedState {
   readonly entries: readonly ActivityEntry[];
@@ -20,11 +31,11 @@ export interface ActivityFeedState {
 
 /** One filtered feed: first page, cursor paging, re-read on focus, own mutations shown at once. */
 export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
-  const [entries, setEntries] = useState<readonly ActivityEntry[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
-  const generation = useRef(0);
   const key = JSON.stringify(filters);
+  const [entries, setEntries] = useState<readonly ActivityEntry[]>(() => lastFeeds.get(key)?.entries ?? []);
+  const [cursor, setCursor] = useState<string | null>(() => lastFeeds.get(key)?.cursor ?? null);
+  const [phase, setPhase] = useState<"loading" | "ready" | "failed">(() => lastFeeds.has(key) ? "ready" : "loading");
+  const generation = useRef(0);
   const request = useCallback((next: string | null) => api.listActivity({
     cursor: next, limit: pageSize, projects: [...filters.projects], q: filters.q, segment: filters.segment, types: [...filters.types],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the filters' value identity
@@ -47,7 +58,21 @@ export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
     })();
   }, [request]);
 
-  useEffect(() => loadFirst("replace"), [loadFirst]);
+  // A filter set shown before in this tab appears at once and re-reads underneath; a new one loads.
+  useEffect(() => {
+    const known = lastFeeds.get(key);
+    if (known === undefined) {
+      loadFirst("replace");
+      return;
+    }
+    setEntries(known.entries);
+    setCursor(known.cursor);
+    setPhase("ready");
+    loadFirst("refresh");
+  }, [key, loadFirst]);
+  useEffect(() => {
+    if (phase === "ready") remember(key, cursor, entries);
+  }, [cursor, entries, key, phase]);
   useEffect(() => {
     const refresh = (): void => loadFirst("refresh");
     window.addEventListener("focus", refresh);

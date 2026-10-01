@@ -73,13 +73,13 @@ test.describe("Command palette", () => {
     }
   });
 
-  test("Escape closes it and returns focus to the nav search button, from the queue too", async ({browser}) => {
+  test("Escape closes it and returns focus to the nav search button, from Activity too", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await localLogin(fixture);
       const page = fixture.page;
       await page.goto(`${fixture.server.baseUrl}/review`);
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       const opener = page.getByRole("button", {name: "Search everything"});
       await opener.click();
       const palette = page.getByRole("dialog", {name: "Search"});
@@ -88,7 +88,7 @@ test.describe("Command palette", () => {
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
       await expect(opener).toBeFocused();
-      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }
