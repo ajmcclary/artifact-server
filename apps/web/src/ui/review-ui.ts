@@ -1,6 +1,26 @@
 import React from "react";
 
-import {Button, Disclosure, FileList, GroupBand, Input, Modal, Popover, SegmentedControl, SelectableRow, SurfaceState} from "@/arkcase";
+import {
+  AnnotationPin,
+  AutoGrid,
+  Button,
+  CommentThread,
+  Disclosure,
+  FileList,
+  GroupBand,
+  Input,
+  Menu,
+  MetricCard,
+  Modal,
+  Popover,
+  ScrollDock,
+  SectionHeading,
+  SegmentedControl,
+  SelectableRow,
+  StatusPill,
+  SurfaceState,
+  Timeline,
+} from "@/arkcase";
 import {createReviewUI} from "@/arkcase/review-ui/review-ui.jsx";
 
 /**
@@ -8,17 +28,45 @@ import {createReviewUI} from "@/arkcase/review-ui/review-ui.jsx";
  * the application's React and the vendored ArkCase components.
  */
 const reviewUi = createReviewUI(React, {
+  AnnotationPin,
+  AutoGrid,
   Button,
+  CommentThread,
   Disclosure,
   FileList,
   GroupBand,
   Input,
+  Menu,
+  MetricCard,
   Modal,
   Popover,
+  ScrollDock,
+  SectionHeading,
   SegmentedControl,
   SelectableRow,
+  StatusPill,
   SurfaceState,
+  Timeline,
 });
 
-export const {ArtifactLinks, DesignGallery, FileGroups, PagePicker} = reviewUi;
-export type {ArtifactFile, ArtifactLinkRow, ArtifactPage as ReviewPage, GalleryItem, PagePickerProps} from "@/arkcase/review-ui/review-ui.jsx";
+export const {
+  ActivityFeed,
+  ActivityHeader,
+  ActivityToolbar,
+  ArtifactLinks,
+  DesignGallery,
+  FileGroups,
+  PagePicker,
+} = reviewUi;
+export type {
+  ActivityEvent,
+  ActivityFeedProps,
+  ActivityHeaderProps,
+  ActivityMetric,
+  ActivityToolbarProps,
+  ArtifactFile,
+  ArtifactLinkRow,
+  ArtifactPage as ReviewPage,
+  GalleryItem,
+  PagePickerProps,
+} from "@/arkcase/review-ui/review-ui.jsx";
