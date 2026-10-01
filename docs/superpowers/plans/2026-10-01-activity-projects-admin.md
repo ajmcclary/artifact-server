@@ -1052,7 +1052,7 @@ Each backend then recovers what the old records already show. Slice 2a writes no
 | Kind | `detail_json` |
 |---|---|
 | `key_issue`, `key_rotate` | `{"capabilities": PrincipalCapability[]}` |
-| `dispatch_create` | `{"agentDisplayName": string, "threadIds": string[]}` |
+| `dispatch_create` | `{"agentDisplayName": string}` (thread ids stay on the dispatch row; a 100-thread bundle exceeds 4 KiB) |
 | `dispatch_addressed` | `{"agentDisplayName": string}` |
 | `project_create` | `{"name": string}` |
 | every other kind | `null` |
@@ -3708,7 +3708,7 @@ These decisions bind every task in this slice.
      | `member_admit` | `how` (`manual`, `automatic` or `owner`), `role` |
      | `key_issue` | `capabilities`, `ownerPrincipalId`, `how` (`administrator` or `bootstrap`) |
      | `key_rotate` | `replacedKeyId` |
-     | `dispatch_create` | `agentId`, `threadIds` |
+     | `dispatch_create` | `agentId` (thread ids stay on the dispatch row) |
 
    - Serialized detail is at most 4 KiB. `serializeActionDetail` throws past that, so the mutation fails rather than truncating history.
 

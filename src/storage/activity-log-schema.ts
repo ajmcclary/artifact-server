@@ -223,8 +223,8 @@ export function sqliteActivityRecoveryStatements(
        'dispatch_create', d.sender_principal_id, d.sender_authorized_by_principal_id,
        'recovered:dispatch_create:' || d.id, d.created_at, d.id,
        d.sender_display_name, d.sender_principal_kind,
-       json_object('agentDisplayName', d.agent_display_name,
-         'threadIds', json(d.thread_ids_json))
+       -- Thread ids stay on the dispatch row: a 100-thread bundle exceeds the detail bound.
+       json_object('agentDisplayName', d.agent_display_name)
        FROM agent_dispatches d`,
     `INSERT OR IGNORE INTO actions (${recoveredInsertColumns})
      SELECT 'recovered:dispatch_addressed:' || d.id, d.project_id, NULL, NULL,

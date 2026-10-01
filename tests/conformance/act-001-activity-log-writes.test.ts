@@ -214,6 +214,48 @@ describe("the installation activity log records every mutation", () => {
     });
     expect(JSON.parse(administration[6]?.detailJson ?? "null"))
       .toEqual({subjectName: "Claims workstation"});
+
+    // Dispatch: the installation credential registers itself as an agent, so
+    // its reply on a held thread is the agent answering.
+    const agent = await client.registerAgent({
+      connectionKey: "act-001-agent",
+      displayName: "site",
+      workingDirectory: "/work/site",
+    });
+    const heldThread = await client.openThread(published, "Check the totals row.", "act-001-held-thread");
+    const dispatch = (await expectJson(
+      await client.sendDispatch({
+        agentId: agent.id,
+        idempotencyKey: "act-001-dispatch",
+        projectId: published.artifact.projectId,
+        threadIds: [heldThread.id],
+      }),
+      201,
+      z.object({dispatch: z.object({id: z.string()}).loose()}).loose(),
+    )).dispatch;
+    // Two agent replies in order: only the first records the answer.
+    const agentReply = async (key: string) => expectJson(
+      await client.fetch(`${threadPath(published, heldThread.id)}/replies${scope(published)}`, {
+        body: JSON.stringify({body: `Answered (${key}).`}),
+        idempotencyKey: key,
+        method: "POST",
+      }),
+      201,
+      z.object({}).loose(),
+    );
+    await agentReply("act-001-agent-reply-1");
+    await agentReply("act-001-agent-reply-2");
+    const dispatchRows = readRows(
+      "WHERE action LIKE 'dispatch\\_%' ESCAPE '\\' ORDER BY created_at, rowid",
+      [],
+    );
+    expect(dispatchRows.map((row) => [row.action, row.subjectId, row.projectId, row.artifactId, row.threadId]))
+      .toEqual([
+        ["dispatch_create", dispatch.id, published.artifact.projectId, null, null],
+        ["dispatch_addressed", dispatch.id, published.artifact.projectId, null, heldThread.id],
+      ]);
+    expect(JSON.parse(dispatchRows[0]?.detailJson ?? "null"))
+      .toEqual({agentId: agent.id, subjectName: "site"});
   });
 
   test("ACT-001-F: replays and no-op administration write nothing, and a refused action rolls its mutation back", async () => {
@@ -259,6 +301,21 @@ describe("the installation activity log records every mutation", () => {
       z.object({members: z.array(z.object({email: z.string()}).loose())}),
     )).members;
     expect(members.map((member) => member.email)).not.toContain("refused@example.test");
+    const agent = await client.registerAgent({
+      connectionKey: "act-001-f-agent",
+      displayName: "site",
+      workingDirectory: "/work/site",
+    });
+    const thread = await client.openThread(published, "Replay me.", "act-001-f-thread");
+    const sendOnce = () => client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "act-001-f-dispatch",
+      projectId: published.artifact.projectId,
+      threadIds: [thread.id],
+    });
+    await sendOnce();
+    await sendOnce();
+    expect(readRows("WHERE action = 'dispatch_create'", [])).toHaveLength(1);
     expect(published.artifact.id).toEqual(expect.any(String));
   });
 

@@ -139,7 +139,9 @@ import {
   type ActionInsert,
   attributedInsert,
   companionIdempotencyKey,
+  positionalActionInsertOnceSql,
   positionalActionInsertSql,
+  positionalActionOnceValues,
   positionalActionValues,
   publicLinkTransition,
 } from "./action-insert.js";
@@ -3538,6 +3540,44 @@ export class SqliteArtifactRepository implements
     return this.#readPublishedVersion(projectId, parsed.versionId, true);
   }
 
+  /**
+   * The first reply by a dispatch's own agent on a thread that dispatch holds
+   * records that the agent answered. The derived key makes it exactly-once.
+   */
+  #recordDispatchAnswer(command: CreateCommentReply): void {
+    const held = z.object({agentName: z.string(), dispatchId: z.string()}).nullable().parse(
+      this.#database.prepare(`
+        SELECT d.id AS dispatchId, d.agent_display_name AS agentName
+        FROM comment_threads t
+        JOIN agent_dispatches d ON d.id = t.dispatch_id
+        JOIN registered_agents a ON a.id = d.agent_id
+        WHERE t.id = ? AND t.project_id = ?
+          AND d.state IN ('queued', 'claimed', 'delivered')
+          AND a.principal_id = ?
+      `).get(command.threadId, command.projectId, command.author.principalId) ?? null,
+    );
+    if (held === null) return;
+    const insert = attributedInsert(
+      {
+        actor: actorSnapshotOfAuthor(command.author),
+        authorizedByPrincipalId: command.author.authorizedByPrincipalId,
+        principalId: command.author.principalId,
+      },
+      {
+        action: "dispatch_addressed",
+        createdAt: command.createdAt,
+        detail: {subjectName: held.agentName},
+        idempotencyKey: `dispatch_addressed:${held.dispatchId}`,
+        projectId: command.projectId,
+        subjectId: held.dispatchId,
+        threadId: command.threadId,
+      },
+    );
+    this.#database
+      .prepare(positionalActionInsertOnceSql)
+      .run(...positionalActionOnceValues(insert));
+  }
+
   #insertAction(insert: ActionInsert): void {
     this.#database
       .prepare(positionalActionInsertSql)
@@ -4219,6 +4259,7 @@ export class SqliteArtifactRepository implements
           threadId: command.threadId,
           versionId: thread.versionId,
         });
+        this.#recordDispatchAnswer(command);
         this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
@@ -4626,6 +4667,22 @@ export class SqliteArtifactRepository implements
             );
           }
         }
+        this.#insertAction(attributedInsert(
+          {
+            actor: actorSnapshotOfAuthor(command.sender),
+            authorizedByPrincipalId: command.sender.authorizedByPrincipalId,
+            principalId: command.sender.principalId,
+          },
+          {
+            action: "dispatch_create",
+            createdAt: command.createdAt,
+            // Thread ids stay on the dispatch row: a 100-thread bundle exceeds the detail bound.
+            detail: {agentId: command.agentId, subjectName: command.agentDisplayName},
+            idempotencyKey: `dispatch_create:${command.id}`,
+            projectId: command.projectId,
+            subjectId: command.id,
+          },
+        ));
         if (command.threadIds.length > 0) {
           this.#bumpCommentRevisionForThreads(command.threadIds, command.createdAt);
         }

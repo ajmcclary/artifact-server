@@ -805,8 +805,7 @@ const addInstallationActivityLog = Effect.gen(function*() {
        NULL, NULL, 'dispatch_create', d.sender_principal_id,
        d.sender_authorized_by_principal_id, 'recovered:dispatch_create:' || d.id,
        d.created_at, d.id, d.sender_display_name, d.sender_principal_kind,
-       json_build_object('agentDisplayName', d.agent_display_name,
-         'threadIds', d.thread_ids_json::json)::text
+       json_build_object('agentDisplayName', d.agent_display_name)::text
        FROM agent_dispatches d
      ON CONFLICT DO NOTHING`,
     `INSERT INTO actions (installation_id, id, project_id, artifact_id, version_id,

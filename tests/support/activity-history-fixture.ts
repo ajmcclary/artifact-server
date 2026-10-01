@@ -397,7 +397,7 @@ export function expectRecoveredActivity(
     project_id: defaultProjectId,
     subject_id: fixture.dispatchId,
   });
-  expect(detailOf(dispatch)).toEqual({agentDisplayName: "Codex", threadIds: [fixture.threads.dispatched]});
+  expect(detailOf(dispatch)).toEqual({agentDisplayName: "Codex"});
 
   const created = byId(`recovered:project_create:${fixture.projectId}`);
   expect(created).toMatchObject({created_at: activityFixtureTimes.projectCreated, project_id: fixture.projectId});
