@@ -142,7 +142,8 @@ function searchPredicate(
 ): string | null {
   if (search === null) return null;
   const find = dialect === "postgres" ? "strpos" : "instr";
-  const needle = () => values.bind(search);
+  // The term passes through the same lower() as the stored text, so both fold case identically.
+  const needle = () => `lower(${values.bind(search)})`;
   return `(${find}(lower(COALESCE(x.actor_name, '')), ${needle()}) > 0
       OR ${find}(lower(COALESCE(a.name, '')), ${needle()}) > 0
       OR ${find}(lower(COALESCE(p.name, '')), ${needle()}) > 0

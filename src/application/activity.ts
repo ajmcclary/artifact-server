@@ -4,7 +4,6 @@ import {
   type AuthorizationOperations,
   AuthorizationService,
 } from "./authorization.js";
-import {normalizeArtifactSearchText} from "./artifact-tags.js";
 import {
   type ActivityEntry,
   type SubjectNames,
@@ -107,12 +106,14 @@ export class ActivityService extends Context.Service<
 
 const emptyNames: SubjectNames = {keys: new Map(), members: new Map()};
 
+/**
+ * The literal search term: trimmed and bounded. Case is matched by the database applying the same
+ * `lower()` to the term and the stored text, so a term always matches text written the same way.
+ */
 function normalizeActivitySearch(candidate: string | null): string | null {
   if (candidate === null) return null;
-  const normalized = normalizeArtifactSearchText(
-    candidate.slice(0, maximumActivitySearchCharacters),
-  );
-  return normalized === "" ? null : normalized;
+  const trimmed = candidate.slice(0, maximumActivitySearchCharacters).trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 function makeActivityService(

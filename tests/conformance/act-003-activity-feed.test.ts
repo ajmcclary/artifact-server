@@ -245,6 +245,14 @@ describe("installation activity feed", () => {
       .map((entry) => entry.kind)).toEqual(["thread"]);
     expect((await readFeed(reader, "?q=local")).items.length).toBeGreaterThan(0);
     expect((await readFeed(reader, "?q=nothing-matches-this")).items).toEqual([]);
+
+    // Non-ASCII text typed as it was written is found on every backend, and spacing is literal.
+    clock.advance(1_000);
+    await reader.openThread(published, "Ask Émile about the  dashboard", "feed-search-accent");
+    expect((await readFeed(reader, `?q=${encodeURIComponent("Émile")}&type=comments`)).items
+      .map((entry) => entry.thread?.opener.body)).toEqual(["Ask Émile about the  dashboard"]);
+    expect((await readFeed(reader, `?q=${encodeURIComponent("the  dashboard")}&type=comments`)).items)
+      .toHaveLength(1);
   });
 
   test("ACT-003: pages walk the feed without gaps or duplicates", async () => {
