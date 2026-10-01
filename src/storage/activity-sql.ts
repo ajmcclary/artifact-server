@@ -12,6 +12,7 @@ import type {
   ActivityPage,
   ActivityQuery,
   ActivityRow,
+  ActivitySegment,
   ActivityThreadSnapshot,
   ActivityType,
 } from "../core/ports.js";
@@ -124,6 +125,33 @@ function visibleKinds(query: ActivityQuery): readonly ActionKind[] {
     : kinds.filter((kind) => !administrationKinds.includes(kind));
 }
 
+function segmentPredicate(segment: ActivitySegment, heads: string): string | null {
+  if (segment === "all") return null;
+  const openHead = `(x.action IN (${heads}) AND t.state = 'open')`;
+  if (segment === "needs_you") return `(${openHead} AND held.id IS NULL)`;
+  return `((${openHead} AND held.id IS NOT NULL)
+      OR (x.action IN (${kindLiterals(feedKindsByType.agents)})
+        AND d.state IN ${activeDispatchStates}))`;
+}
+
+function searchPredicate(
+  dialect: ActivitySqlDialect,
+  values: StatementValues,
+  search: string | null,
+): string | null {
+  if (search === null) return null;
+  const find = dialect === "postgres" ? "strpos" : "instr";
+  const needle = () => values.bind(search);
+  return `(${find}(lower(COALESCE(x.actor_name, '')), ${needle()}) > 0
+      OR ${find}(lower(COALESCE(a.name, '')), ${needle()}) > 0
+      OR ${find}(lower(COALESCE(p.name, '')), ${needle()}) > 0
+      OR ${find}(lower(COALESCE(t.body, '')), ${needle()}) > 0
+      OR EXISTS (
+        SELECT 1 FROM comment_replies sr
+        WHERE sr.thread_id = t.id${scope(dialect, "sr", "t")}
+          AND ${find}(lower(sr.body), ${needle()}) > 0))`;
+}
+
 /** Build the one-page feed statement for a dialect. */
 export function buildListActivityStatement(
   dialect: ActivitySqlDialect,
@@ -146,6 +174,10 @@ export function buildListActivityStatement(
   if (query.projectIds.length > 0) {
     where.push(`x.project_id IN ${values.bindList(query.projectIds)}`);
   }
+  const segment = segmentPredicate(query.segment, heads);
+  if (segment !== null) where.push(segment);
+  const search = searchPredicate(dialect, values, query.search);
+  if (search !== null) where.push(search);
   if (query.cursor !== null) {
     const createdAt = values.bind(query.cursor.createdAt);
     const sameCreatedAt = values.bind(query.cursor.createdAt);

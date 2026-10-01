@@ -1150,6 +1150,20 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-01T14:46:45Z"
 
+
+  - id: ACT-003
+    kind: behavior
+    behavior: Members read one installation activity feed built from recorded actions, newest first, with one entry per conversation dated by its newest reply, type, project, segment and literal search filters, stable cursor paging, and administrator-only member and key events.
+    owner: http-api
+    source: {file: artifact-server-product-spec.html, anchor: activity}
+    acceptance:
+      behavior: {id: ACT-003-B, description: "Publish, comment, reply, dispatch, and admit through HTTP; read the feed newest first with actor names; observe one entry per thread carrying its newest two replies; filter by type, project, segment, and literal search; walk every page without gaps or duplicates on SQLite, Postgres, and D1; parse every response with the web client's schemas."}
+      failure: {id: ACT-003-F, description: "Malformed or extended cursors, out-of-range limits, overlong searches, unknown types or segments, path-shaped or excessive project filters fail with INVALID_INPUT; forged well-formed cursors cannot inject SQL; unknown and other-installation projects return nothing; a thread replied to across a page boundary appears once; hostile comment text stays byte-exact; a demoted administrator loses member and key events on the next request; anonymous and capability-less callers are refused."}
+    deployments: *all
+    status: specified
+    proof_gap: The SQLite feed tests are being written; Postgres and D1 parity, the summary endpoint, and evidence are not attached.
+    depends_on: [ACT-001, AUD-001, PRJ-002, CMT-011]
+    evidence: []
   - id: CNT-001
     kind: behavior
     behavior: HTML and complete client-side directories open in the browser without rebuilding their files.
