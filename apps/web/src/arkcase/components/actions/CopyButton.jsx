@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from './Button.jsx';
 import { IconButton } from './IconButton.jsx';
 import { Tooltip } from '../feedback/Tooltip.jsx';
+import { writeClipboard } from '../utilities/clipboard.jsx';
 
 /**
  * ArkCase CopyButton — copy-to-clipboard with in-place confirmation.
@@ -12,6 +13,10 @@ import { Tooltip } from '../feedback/Tooltip.jsx';
  * it renders a labelled Button (review-link and public-link copies).
  * The confirmation is state, never a toast: copying changes nothing on the
  * record, so there is nothing a transient confirmation needs to carry.
+ *
+ * With `text`, the button performs the write itself through `writeClipboard` and
+ * confirms only when the write succeeded; a refused write keeps the resting state
+ * and announces `failedLabel` instead. `onCopy` still runs, after the attempt.
  */
 export function CopyButton({
   icon = 'bi-clipboard',
@@ -26,6 +31,8 @@ export function CopyButton({
   disabled = false,
   onCopy,
   onAnnounce,
+  text,
+  failedLabel = 'Copy failed. Select the value and copy it manually.',
   children,
   style,
   ...rest
@@ -38,15 +45,27 @@ export function CopyButton({
     ? String(React.Children.toArray(children).map((c) => (typeof c === 'string' || typeof c === 'number') ? c : '').join('')).trim()
     : '';
   const shown = isCopied && copiedLabel ? copiedLabel : label;
-  const click = (e) => {
-    if (disabled) return;
-    if (onCopy) onCopy(e);
+  const confirm = () => {
     if (onAnnounce) onAnnounce(copiedLabel || (label ? label + ' copied' : 'Copied to the clipboard'));
     if (copied === undefined) {
       setInner(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setInner(false), holdMs);
     }
+  };
+  const click = (e) => {
+    if (disabled) return;
+    if (text === undefined) {
+      if (onCopy) onCopy(e);
+      confirm();
+      return;
+    }
+    if (e && e.persist) e.persist();
+    writeClipboard(text).then((ok) => {
+      if (ok) confirm();
+      else if (onAnnounce) onAnnounce(failedLabel);
+      if (onCopy) onCopy(e, ok);
+    });
   };
   const tip = isCopied ? (copiedLabel || (label ? label + ' copied' : 'Copied')) : (label || rest['aria-label'] || 'Copy');
   const btn = React.Children.count(children) > 0

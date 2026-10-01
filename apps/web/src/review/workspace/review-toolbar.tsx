@@ -2,20 +2,22 @@ import {useState, type CSSProperties, type ReactNode} from "react";
 
 import type {ArtifactDetails, ArtifactVersion, SourceFreshness} from "@/api/client";
 import {
+  Alert,
   Button,
+  ConfirmDialog,
   IconButton,
-  Input,
   Menu,
-  Modal,
-  Popover,
+  StatusPill,
   Toolbar,
+  ToolbarSeparator,
   ToolbarSpacer,
 } from "@/arkcase";
-import {formatTimestamp, sourceDriftDescription} from "@/lib/presentation";
-import {PagePicker} from "@/ui/review-ui";
+import {sourceDriftDescription} from "@/lib/presentation";
+import {ArtifactBreadcrumb, PageMenu, VersionMenu} from "@/ui/review-ui";
 
 import {htmlPages} from "./page-inventory.ts";
-import type {ReviewDownload, VersionListItem} from "./workspace-types.ts";
+import {versionMenuEntries} from "./version-entries.ts";
+import type {VersionListItem} from "./workspace-types.ts";
 
 /** The Annotate / Interact toggle for the in-frame annotation surface. */
 export interface AnnotateToggle {
@@ -25,25 +27,33 @@ export interface AnnotateToggle {
   readonly onToggle: () => void;
 }
 
+/** A version with a design gallery: the page menu pins a Gallery row that returns to it. */
+export interface GalleryCrumb {
+  readonly count: number;
+  readonly onOpen: () => void;
+  /** The gallery is on screen rather than one of its pages. */
+  readonly shown: boolean;
+}
+
 export interface ReviewToolbarProps {
   readonly annotate: AnnotateToggle;
   readonly artifactName: string;
   readonly canManage: boolean;
   readonly details: ArtifactDetails | null;
-  readonly download: ReviewDownload | null;
+  readonly focusActive: boolean;
+  readonly gallery: GalleryCrumb | null;
   readonly linkedArtifacts: boolean;
+  readonly onAnnounce: (message: string) => void;
   readonly onCapture: () => Promise<void>;
-  readonly onDelete: () => Promise<boolean>;
   readonly onEnterFocus: () => void;
+  readonly onMakeCurrent: (versionId: string, expectedCurrentVersionId: string) => Promise<boolean>;
   readonly onOpenCatalog: () => void;
   /** Phones have a comments sheet instead of the inspector rail. */
   readonly onOpenComments: () => void;
-  /** Opens Comparison and history; null until that view exists (Task 16). */
-  readonly onOpenComparison: (() => void) | null;
+  readonly onOpenComparison: () => void;
   readonly onOpenLive: () => Promise<void>;
   readonly onOpenRawArtifact: () => void;
-  /** Returns to the version's design gallery while one of its pages is open. */
-  readonly onReturnToGallery: (() => void) | null;
+  readonly onOpenVersionsPanel: () => void;
   readonly onSelectPath: (path: string) => void;
   readonly onSelectVersion: (versionId: string) => void;
   readonly opening: boolean;
@@ -53,56 +63,54 @@ export interface ReviewToolbarProps {
   readonly selectedVersion: ArtifactVersion | null;
   /** The Share control for this toolbar instance. */
   readonly share: ReactNode;
+  /** The artifact list is collapsed, so the name joins the breadcrumb as its first crumb. */
+  readonly showName: boolean;
   readonly versions: readonly VersionListItem[];
 }
 
 const toolbarStyle = {
   background: "var(--surface-card)",
   borderBottom: "1px solid var(--border-color)",
+  boxSizing: "border-box",
   flex: "none",
-  padding: "7px 12px",
+  minHeight: 48,
+  padding: "7px 8px 7px 16px",
 } satisfies CSSProperties;
-const titleStyle = {
-  flex: "0 1 auto",
-  fontSize: 17,
-  lineHeight: 1.3,
-  margin: 0,
-  minWidth: 60,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-} satisfies CSSProperties;
+const phoneToolbarStyle = {...toolbarStyle, padding: "7px 8px"} satisfies CSSProperties;
+const inlineStyle = {display: "inline-flex", flex: "none"} satisfies CSSProperties;
 const anchorStyle = {display: "inline-flex", flex: "none", position: "relative"} satisfies CSSProperties;
-const pagePickerStyle = {display: "inline-flex", flex: "0 1 auto", minWidth: 0} satisfies CSSProperties;
-const popoverTextStyle = {color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.55, margin: 0} satisfies CSSProperties;
-const buttonRowStyle = {alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8} satisfies CSSProperties;
-const pathStyle = {color: "var(--text-data)", fontFamily: "var(--font-data)", overflowWrap: "anywhere"} satisfies CSSProperties;
-const dialogTextStyle = {fontSize: "var(--font-size-sm, 14px)", lineHeight: 1.5, margin: "0 0 12px"} satisfies CSSProperties;
+const separatorStyle = {height: 20, margin: "0 2px"} satisfies CSSProperties;
 
-const driftLabels = {
-  "in-sync": "Source in sync",
+const driftTags = {
+  "in-sync": "In sync",
   missing: "Source missing",
-  modified: "Source modified",
+  modified: "Modified",
   unreadable: "Source unreadable",
 } satisfies Record<SourceFreshness, string>;
 
-/** The toolbar over the canvas: identity, exact version and page, and the artifact's actions. */
+/**
+ * The toolbar over the canvas: a breadcrumb (the artifact name while the list is
+ * collapsed, then the version and the page, each with its own menu), the source-change
+ * and preview tags, then Share, Open raw and Focus as icons, and More.
+ */
 export function ReviewToolbar({
   annotate,
   artifactName,
   canManage,
   details,
-  download,
+  focusActive,
+  gallery,
   linkedArtifacts,
+  onAnnounce,
   onCapture,
-  onDelete,
   onEnterFocus,
+  onMakeCurrent,
   onOpenCatalog,
   onOpenComments,
   onOpenComparison,
   onOpenLive,
   onOpenRawArtifact,
-  onReturnToGallery,
+  onOpenVersionsPanel,
   onSelectPath,
   onSelectVersion,
   opening,
@@ -111,154 +119,166 @@ export function ReviewToolbar({
   selectedPath,
   selectedVersion,
   share,
+  showName,
   versions,
 }: ReviewToolbarProps) {
-  const [versionMenuOpen, setVersionMenuOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  const [versionOpen, setVersionOpen] = useState(false);
+  const [versionQuery, setVersionQuery] = useState("");
+  const [pageOpen, setPageOpen] = useState(false);
   const [pageQuery, setPageQuery] = useState("");
   const [pageLimit, setPageLimit] = useState(50);
-  const [driftOpen, setDriftOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [makeCurrentAsk, setMakeCurrentAsk] = useState(false);
   const shown = selectedVersion?.version ?? null;
   const currentVersionId = details?.artifact.currentVersionId ?? null;
+  const current = versions.find(({version}) => version.id === currentVersionId)?.version ?? null;
+  const historical = shown !== null && current !== null && shown.id !== current.id;
   const pages = selectedVersion === null
     ? []
     : htmlPages(selectedVersion.manifest.entryPath, selectedVersion.manifest.entries);
   const binding = details?.sourceBinding ?? null;
+  const drifted = binding !== null && binding.status !== "in-sync";
   const liveAvailable = linkedArtifacts && details?.links.live !== undefined;
+  const galleryShown = gallery?.shown === true;
+  const pagePath = selectedVersion === null ? null : selectedPath ?? selectedVersion.manifest.entryPath;
+  const pageName = galleryShown ? "Gallery" : pagePath?.split("/").pop() ?? "";
+  const byNumber = new Map(versions.map(({version}) => [version.number, version.id]));
+
+  const driftActions = [
+    ...(canManage && binding?.status === "modified" ? [{
+      label: `Publish Version ${(versions[0]?.version.number ?? 0) + 1}`,
+      onClick: () => {
+        setVersionOpen(false);
+        void onCapture();
+      },
+      variant: "primary" as const,
+    }] : []),
+    ...(liveAvailable ? [{
+      label: "Open Live File",
+      onClick: () => {
+        setVersionOpen(false);
+        void onOpenLive();
+      },
+      variant: "ghost" as const,
+    }] : []),
+  ];
+  const driftNotice = !drifted || binding === null || shown === null ? null : (
+    <Alert action={driftActions} density="compact" live="off" variant="warning">
+      {binding.status === "modified"
+        ? `The source changed after v${shown.number} was captured. Publish a new version to keep it.`
+        : sourceDriftDescription(binding.status, "captured")}
+    </Alert>
+  );
+
+  const versionMenu = shown === null ? null : (
+    <VersionMenu
+      ariaLabel={`${historical && current !== null
+        ? `Version ${shown.number}, a preview; version ${current.number} is current`
+        : `Version ${shown.number}, the current version`} · Choose a version`}
+      footer={driftNotice}
+      label={`v${shown.number}`}
+      onAnnounce={onAnnounce}
+      onOpenChange={(open) => {
+        setVersionOpen(open);
+        setVersionQuery("");
+        if (open) {
+          setPageOpen(false);
+          setMoreOpen(false);
+        }
+      }}
+      onOpenPanel={onOpenVersionsPanel}
+      onQueryChange={setVersionQuery}
+      onSelectVersion={(number) => {
+        const id = byNumber.get(number);
+        if (id !== undefined) onSelectVersion(id);
+      }}
+      open={versionOpen}
+      phone={phone}
+      query={versionQuery}
+      version={shown.number}
+      versions={versionMenuEntries(versions, currentVersionId)}
+    />
+  );
+  const pageMenu = selectedVersion === null || (pages.length === 0 && gallery === null) ? null : (
+    <PageMenu
+      ariaLabel={`Page ${pageName} · Choose a page`}
+      label={galleryShown ? "Gallery" : pagePath ?? ""}
+      limit={pageLimit}
+      onAnnounce={onAnnounce}
+      onLoadMore={() => setPageLimit((limit) => limit + 50)}
+      onOpenChange={(open) => {
+        setPageOpen(open);
+        setPageQuery("");
+        setPageLimit(50);
+        if (open) {
+          setVersionOpen(false);
+          setMoreOpen(false);
+        }
+      }}
+      onQueryChange={(value) => {
+        setPageQuery(value);
+        setPageLimit(50);
+      }}
+      onSelectPage={onSelectPath}
+      open={pageOpen}
+      page={galleryShown ? null : pagePath}
+      pages={[...pages]}
+      phone={phone}
+      query={pageQuery}
+      {...(gallery === null ? {} : {
+        gallery: {
+          description: `${gallery.count} ${gallery.count === 1 ? "preview" : "previews"}`,
+          onOpen: gallery.onOpen,
+        },
+      })}
+    />
+  );
 
   return (
     <>
-      <Toolbar gap={8} label="Artifact" style={toolbarStyle} wrap={phone}>
-        {phone ? (
+      <Toolbar gap={6} label="Artifact" style={phone ? phoneToolbarStyle : toolbarStyle} wrap={phone}>
+        {showName && !phone ? null : (
           <IconButton
             ariaLabel={`Back to ${projectName}`}
             icon="bi-arrow-left"
             onClick={onOpenCatalog}
             size="sm"
+            title={`Back to ${projectName}`}
           />
+        )}
+        <ArtifactBreadcrumb
+          crumbs={[versionMenu, pageMenu]}
+          name={artifactName}
+          nameMaxWidth={phone ? 140 : 260}
+          showName={showName}
+        />
+        {drifted && binding !== null && shown !== null ? (
+          <span style={inlineStyle}>
+            <StatusPill
+              label={driftTags[binding.status]}
+              title={`The linked source file changed on disk after v${shown.number} was captured`}
+              tone="warning"
+            />
+          </span>
         ) : null}
-        <h1 style={titleStyle}>{artifactName}</h1>
-        {shown === null ? null : (
-          <span style={anchorStyle}>
+        {historical && current !== null ? (
+          <>
+            <span style={inlineStyle}><StatusPill label="Preview" tone="neutral" /></span>
             <Button
-              aria-label={`Choose version, showing v${shown.number} of ${versions.length}${shown.id === currentVersionId ? ", current" : ""}`}
-              expanded={versionMenuOpen}
-              hasPopup="menu"
-              iconRight="bi-chevron-down"
-              onClick={() => setVersionMenuOpen((open) => !open)}
-              outline
+              icon="bi-arrow-counterclockwise"
+              onClick={() => onSelectVersion(current.id)}
               size="sm"
-              style={{fontFamily: "var(--font-data)"}}
-              variant="secondary"
+              variant="ghost"
             >
-              {shown.id === currentVersionId ? `v${shown.number}` : `v${shown.number} · not current`}
+              {`Back to v${current.number}`}
             </Button>
-            <Menu
-              align="start"
-              items={[
-                {heading: "Version"},
-                ...versions.map(({version}) => ({
-                  checked: version.id === shown.id,
-                  description: formatTimestamp(version.createdAt),
-                  label: `Version ${version.number}`,
-                  meta: version.id === currentVersionId ? "Current" : null,
-                  onClick: () => onSelectVersion(version.id),
-                  type: "radio" as const,
-                })),
-                ...(onOpenComparison === null ? [] : [
-                  {divider: true},
-                  {icon: "bi-clock-history", label: "Comparison and history", onClick: onOpenComparison},
-                ]),
-              ]}
-              label="Version"
-              onClose={() => setVersionMenuOpen(false)}
-              open={versionMenuOpen}
-              style={{maxHeight: 360, overflowY: "auto"}}
-              width={270}
-            />
-          </span>
-        )}
-        {onReturnToGallery === null ? null : (
-          <Button
-            aria-label="Back to gallery"
-            icon="bi-grid-3x3-gap"
-            onClick={onReturnToGallery}
-            outline
-            size="sm"
-            title="Back to gallery"
-            variant="secondary"
-          >
-            {phone ? null : "Gallery"}
-          </Button>
-        )}
-        {pages.length === 0 || selectedVersion === null ? null : (
-          <span style={pagePickerStyle}>
-            <PagePicker
-              limit={pageLimit}
-              onLoadMore={() => setPageLimit((limit) => limit + 50)}
-              onOpenChange={(open) => {
-                setPagePickerOpen(open);
-                setPageQuery("");
-                setPageLimit(50);
-              }}
-              onQueryChange={(value) => {
-                setPageQuery(value);
-                setPageLimit(50);
-              }}
-              onSelect={onSelectPath}
-              open={pagePickerOpen}
-              pages={[...pages]}
-              phone={phone}
-              query={pageQuery}
-              value={selectedPath ?? selectedVersion.manifest.entryPath}
-            />
-          </span>
-        )}
-        {binding === null || binding.status === "in-sync" ? null : (
-          <Popover
-            contentStyle={{gap: 10, padding: 12}}
-            label="Source file modified on disk"
-            onOpenChange={setDriftOpen}
-            open={driftOpen}
-            trigger={(
-              <Button
-                aria-label="Source file modified on disk"
-                icon="bi-exclamation-triangle-fill"
-                size="sm"
-                variant="outline-warning"
-              >
-                {phone ? null : driftLabels[binding.status]}
+            {canManage ? (
+              <Button onClick={() => setMakeCurrentAsk(true)} outline size="sm" variant="secondary">
+                Make Current
               </Button>
-            )}
-            width={330}
-            zIndex={1200}
-          >
-            <strong>Source file modified on disk</strong>
-            <p style={popoverTextStyle}>{sourceDriftDescription(binding.status, "captured")}</p>
-            <p style={{...popoverTextStyle, ...pathStyle}}>{binding.path}</p>
-            <div style={buttonRowStyle}>
-              {canManage ? (
-                <Button
-                  icon="bi-camera"
-                  onClick={() => {
-                    setDriftOpen(false);
-                    void onCapture();
-                  }}
-                  size="sm"
-                >
-                  Capture current file
-                </Button>
-              ) : null}
-              {liveAvailable ? (
-                <Button icon="bi-box-arrow-up-right" onClick={() => void onOpenLive()} outline size="sm" variant="secondary">
-                  Open live file
-                </Button>
-              ) : null}
-            </div>
-          </Popover>
-        )}
+            ) : null}
+          </>
+        ) : null}
         {annotate.available ? (
           <IconButton
             ariaLabel={annotate.active
@@ -271,47 +291,25 @@ export function ReviewToolbar({
           />
         ) : null}
         <ToolbarSpacer />
-        <Button
-          aria-label={opening ? "Opening raw artifact" : "Open raw artifact"}
+        <span style={inlineStyle}>{share}</span>
+        <IconButton
+          ariaLabel={opening ? "Opening raw in a new window" : "Open raw in a new window"}
           disabled={selectedVersion === null || opening}
           icon="bi-box-arrow-up-right"
           onClick={onOpenRawArtifact}
-          outline
           size="sm"
-          variant="secondary"
-        >
-          {phone ? null : opening ? "Opening…" : "Open raw artifact"}
-        </Button>
-        {download === null ? (
-          <Button aria-label="Download" disabled icon="bi-download" outline size="sm" variant="secondary">
-            {phone ? null : "Download"}
-          </Button>
-        ) : (
-          <Button
-            aria-label="Download"
-            download
-            href={download.href}
-            icon="bi-download"
-            outline
-            size="sm"
-            title={download.title}
-            variant="secondary"
-          >
-            {phone ? null : "Download"}
-          </Button>
-        )}
-        {share}
-        <Button
-          aria-label="Full screen"
+          title="Open raw"
+        />
+        <IconButton
+          ariaLabel={focusActive ? "Focus is on — restore the workspace" : "Focus — expand the workspace"}
           disabled={selectedVersion === null}
-          icon="bi-arrows-fullscreen"
+          icon={focusActive ? "bi-arrows-angle-contract" : "bi-arrows-angle-expand"}
           keyshortcuts="F"
           onClick={onEnterFocus}
+          pressed={focusActive}
           size="sm"
-          title="Full screen (F)"
-        >
-          {phone ? null : "Full screen"}
-        </Button>
+          title="Focus (F)"
+        />
         {phone ? (
           <IconButton
             ariaLabel="Open comments"
@@ -322,90 +320,47 @@ export function ReviewToolbar({
             title="Open comments"
           />
         ) : null}
-        {canManage && details !== null ? (
-          <span style={anchorStyle}>
-            <IconButton
-              ariaLabel="More artifact actions"
-              expanded={moreMenuOpen}
-              hasPopup="menu"
-              icon="bi-three-dots-vertical"
-              onClick={() => setMoreMenuOpen((open) => !open)}
-              size="sm"
-            />
-            <Menu
-              align="end"
-              items={[{
-                danger: true,
-                icon: "bi-trash",
-                label: "Delete artifact",
-                onClick: () => setDeleteOpen(true),
-              }]}
-              label="More artifact actions"
-              onClose={() => setMoreMenuOpen(false)}
-              open={moreMenuOpen}
-              width={240}
-            />
-          </span>
-        ) : null}
+        <ToolbarSeparator style={separatorStyle} />
+        <span style={anchorStyle}>
+          <IconButton
+            ariaLabel="More artifact actions"
+            disabled={details === null}
+            expanded={moreOpen}
+            hasPopup="menu"
+            icon="bi-three-dots-vertical"
+            onClick={() => {
+              setMoreOpen((open) => !open);
+              setVersionOpen(false);
+              setPageOpen(false);
+            }}
+            size="sm"
+          />
+          <Menu
+            align="end"
+            items={[
+              {heading: "This artifact"},
+              {icon: "bi-clock-history", label: "Comparison and history", onClick: onOpenComparison},
+              {icon: "bi-layers", label: "Open Versions Panel", onClick: onOpenVersionsPanel},
+            ]}
+            label="More artifact actions"
+            onClose={() => setMoreOpen(false)}
+            open={moreOpen}
+            width={266}
+          />
+        </span>
       </Toolbar>
-      {details === null ? null : (
-        <DeleteArtifactDialog
-          artifactName={details.artifact.name}
-          key={details.artifact.id}
-          onClose={() => setDeleteOpen(false)}
-          onConfirm={onDelete}
-          open={deleteOpen}
+      {shown === null || current === null ? null : (
+        <ConfirmDialog
+          confirmIcon="bi-bookmark-check"
+          confirmLabel="Make Current"
+          message={`The stable artifact link will point to Version ${shown.number}. No saved version is changed or duplicated.`}
+          onClose={() => setMakeCurrentAsk(false)}
+          onConfirm={() => void onMakeCurrent(shown.id, current.id)}
+          open={makeCurrentAsk}
+          title={`Make Version ${shown.number} current?`}
+          tone="primary"
         />
       )}
     </>
-  );
-}
-
-interface DeleteArtifactDialogProps {
-  readonly artifactName: string;
-  readonly onClose: () => void;
-  readonly onConfirm: () => Promise<boolean>;
-  readonly open: boolean;
-}
-
-/** Name-typed confirmation before the artifact leaves normal use (was TombstoneArtifactControl). */
-function DeleteArtifactDialog({artifactName, onClose, onConfirm, open}: DeleteArtifactDialogProps) {
-  const [value, setValue] = useState("");
-  const [pending, setPending] = useState(false);
-  const close = (): void => {
-    if (pending) return;
-    setValue("");
-    onClose();
-  };
-  const confirm = async (): Promise<void> => {
-    if (value !== artifactName) return;
-    setPending(true);
-    const removed = await onConfirm();
-    setPending(false);
-    if (removed) {
-      setValue("");
-      onClose();
-    }
-  };
-  return (
-    <Modal
-      onClose={close}
-      open={open}
-      portal
-      primaryAction={{
-        disabled: pending || value !== artifactName,
-        icon: "bi-trash",
-        label: pending ? "Deleting…" : "Delete artifact",
-        onClick: () => void confirm(),
-        variant: "danger",
-      }}
-      size="sm"
-      title={`Delete ${artifactName}?`}
-    >
-      <p style={dialogTextStyle}>
-        This removes the artifact from normal use but retains its immutable version records. Type the artifact name to confirm.
-      </p>
-      <Input autoFocus label="Artifact name" onChange={(event) => setValue(event.currentTarget.value)} value={value} />
-    </Modal>
   );
 }

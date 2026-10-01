@@ -42,9 +42,9 @@ describe("activity route", () => {
     expect(routeOf("/review")).toEqual({kind: "activity", filters: emptyActivityFilters});
     expect(routeOf("/review/")).toEqual({kind: "activity", filters: emptyActivityFilters});
     expect(routeOf("/review?view=focus")).toEqual({kind: "activity", filters: emptyActivityFilters});
-    const filters = {projects: ["prj_a", "prj b"], q: "totals", segment: "needs_you", types: ["comments", "versions"]} as const;
+    const filters = {people: ["service:key_1"], projects: ["prj_a", "prj b"], q: "totals", segment: "needs_you", types: ["comments", "versions"]} as const;
     const href = activityHref(filters);
-    expect(href).toBe("/review?segment=needs_you&projects=prj_a&projects=prj+b&type=comments&type=versions&q=totals");
+    expect(href).toBe("/review?segment=needs_you&person=service%3Akey_1&projects=prj_a&projects=prj+b&type=comments&type=versions&q=totals");
     expect(routeOf(href)).toEqual({kind: "activity", filters});
     expect(activityHref()).toBe("/review");
     expect(activityHref(emptyActivityFilters)).toBe("/review");
@@ -57,6 +57,15 @@ describe("activity route", () => {
     expect(filters.segment).toBe("all");
     expect(filters.types).toEqual(["comments"]);
     expect(filters.q).toHaveLength(100);
+  });
+
+  it("ACT-008: people the server would refuse are dropped from the URL, and repeats kept once", () => {
+    const filters = readActivityFilters(new URLSearchParams(
+      `person=member_a&person=${encodeURIComponent("../etc")}&person=member_a&person=&${Array.from({length: 60}, (_, index) => `person=member_${index}`).join("&")}`,
+    ));
+    expect(filters.people[0]).toBe("member_a");
+    expect(filters.people).not.toContain("../etc");
+    expect(filters.people).toHaveLength(50);
   });
 
   it("keeps a project-only URL on the workspace, never on Activity", () => {

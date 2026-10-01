@@ -22,7 +22,7 @@ export type HtmlViewerMode = "annotate" | "interactive";
 /** The inspector's views in rail order. */
 export const inspectorTabs = [
   "comments",
-  "details",
   "files",
   "versions",
+  "details",
 ] as const satisfies readonly InspectorTab[];

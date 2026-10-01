@@ -33,9 +33,15 @@ export interface PopoverProps {
   width?: number | string;
   /** Every open and close is spoken here — hand it the shell's live region. */
   onAnnounce?: (text: string) => void;
+  /** `popover` floats beside the trigger; `sheet` is the phone form — the same trigger opens the content in a viewport `Modal` (focus trapped, Escape and × close, focus returns to the trigger). @default "popover" */
+  presentation?: 'popover' | 'sheet';
+  /** Title of the sheet's Modal header. @default label */
+  sheetTitle?: React.ReactNode;
+  /** In `sheet`: what takes focus when it opens — a selector inside the content or a ref. @default the dialog itself */
+  initialFocus?: string | React.RefObject<HTMLElement | null>;
   /** Style overrides for the Popover root. */
   style?: React.CSSProperties;
-  /** Merged over the floating content's surface. */
+  /** Merged over the floating content's surface; not applied to the sheet, whose body is the Modal's. */
   contentStyle?: React.CSSProperties;
   /** Content rendered inside the Popover. */
   children?: React.ReactNode;
@@ -47,7 +53,8 @@ export interface PopoverProps {
  * instead of centring like a `Modal`. Reach for it when the reader keeps the
  * page they are on — a picker's list, a row's actions. Reach for `Modal` when
  * nothing else may happen first, and for `Menu` when the floating content is
- * a row-action sheet the host already positions.
+ * a row-action sheet the host already positions. `presentation="sheet"` renders
+ * the same content as a phone viewport sheet.
  *
  * @startingPoint section="Overlays" subtitle="Anchored trigger-and-content popover" viewport="700x260"
  */

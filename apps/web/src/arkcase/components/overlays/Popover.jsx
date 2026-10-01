@@ -1,5 +1,6 @@
 import React from 'react';
 import { useEscapeLayer } from './overlay-layer.jsx';
+import { Modal } from './Modal.jsx';
 
 /**
  * ArkCase Popover — an anchored non-modal container: the trigger's own press
@@ -10,6 +11,11 @@ import { useEscapeLayer } from './overlay-layer.jsx';
  * list, a row's actions — and escapes a clipping parent (a `Card` keeps its
  * corners; the popover floats above them). `zIndex` coordinates with Modal's
  * 1050+ frame by intent; the default 30 sits inside local stacking contexts.
+ *
+ * `presentation="sheet"` is the phone form, as `Menu` has one: the same trigger
+ * opens the content in a viewport `Modal` titled `sheetTitle` (or `label`), which
+ * traps Tab, closes on Escape or its ×, and hands focus back to the trigger. A host
+ * switches the presentation by profile and keeps one content tree for both.
  */
 export function Popover({
   open: controlledOpen,
@@ -26,10 +32,14 @@ export function Popover({
   width = 320,
   onAnnounce,
   contentStyle,
+  presentation = 'popover',
+  sheetTitle,
+  initialFocus,
   style,
   children,
   ...rest
 }) {
+  const sheet = presentation === 'sheet';
   const [inner, setInner] = React.useState(defaultOpen);
   const isOpen = controlledOpen !== undefined ? !!controlledOpen : inner;
   const wrapRef = React.useRef(null);
@@ -49,11 +59,11 @@ export function Popover({
     const el = triggerEl.current || wrapRef.current?.querySelector('button, a[href], [tabindex]:not([tabindex="-1"])');
     el?.focus();
   };
-  const handleEscape = useEscapeLayer(isOpen, wrapRef, closeFromEscape, dismissible);
+  const handleEscape = useEscapeLayer(isOpen && !sheet, wrapRef, closeFromEscape, dismissible);
 
   /* Flip vertically when the content would run off the viewport. */
   React.useLayoutEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || sheet) return undefined;
     const t = wrapRef.current;
     const c = contentRef.current;
     /* v8 ignore next */
@@ -82,13 +92,13 @@ export function Popover({
       observer?.disconnect();
       if (typeof c.hidePopover === 'function' && c.matches(':popover-open')) c.hidePopover();
     };
-  }, [isOpen, placement, flip, width]);
+  }, [isOpen, placement, flip, width, sheet]);
 
   /* One capture-phase listener dismisses on an outside press; the trigger's
      own press belongs to the trigger, so the wrapper counts as inside. */
   React.useEffect(() => {
     /* v8 ignore next */
-    if (!isOpen || !dismissible || typeof document === 'undefined') return undefined;
+    if (!isOpen || sheet || !dismissible || typeof document === 'undefined') return undefined;
     const onDown = (e) => {
       const t = e.target;
       if (wrapRef.current && t instanceof Node && wrapRef.current.contains(t)) return;
@@ -115,7 +125,7 @@ export function Popover({
       document.removeEventListener('pointerdown', onDown, true);
       document.removeEventListener('keydown', onKey);
     };
-  }, [isOpen, dismissible, containTab, controlledOpen, onOpenChange, onClose, onAnnounce, label]);
+  }, [isOpen, sheet, dismissible, containTab, controlledOpen, onOpenChange, onClose, onAnnounce, label]);
 
   const top = placement.startsWith('top') !== flipped;
   const renderedTrigger = React.isValidElement(trigger)
@@ -135,6 +145,21 @@ export function Popover({
       },
     })
     : trigger;
+
+  if (sheet) {
+    return (
+      <div ref={wrapRef} data-popover-presentation="sheet" style={{ position: 'relative', ...style }} {...rest}>
+        {renderedTrigger}
+        {isOpen && (
+          <Modal open size="viewport" title={sheetTitle || label} initialFocus={initialFocus}
+            dismissible={dismissible} zIndex={Math.max(zIndex, 1050)}
+            onClose={() => setOpen(false, 'dismiss')}>
+            {children}
+          </Modal>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', ...style }} {...rest}

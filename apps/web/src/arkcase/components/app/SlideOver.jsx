@@ -11,8 +11,10 @@ import React from 'react';
  * truncates while the title does. `width="100%"` fills the parent: inside a `Panel` the
  * sheet takes the pane's full height and leaves the edge rule to the pane. `fullscreen`
  * is the phone form: the pane covers the viewport (fixed, inset 0, at `zIndex`).
+ * `actions` sits in the header before the close button — a pane-level command such as
+ * Compare.
  */
-export function SlideOver({ title, subtitle, leading, titleMeta, onClose, closeLabel = 'Close', footer, width = 320, side = 'end', fullscreen = false, zIndex = 1040, style, bodyStyle, children, ...rest }) {
+export function SlideOver({ title, subtitle, leading, titleMeta, actions, onClose, closeLabel = 'Close', footer, width = 320, side = 'end', fullscreen = false, zIndex = 1040, style, bodyStyle, children, ...rest }) {
   const fill = width === '100%';
   const edge = fill || fullscreen ? null : side === 'start' ? { borderRight:'1px solid var(--border-color, #dee2e6)' } : { borderLeft:'1px solid var(--border-color, #dee2e6)' };
   const size = fullscreen
@@ -33,6 +35,7 @@ export function SlideOver({ title, subtitle, leading, titleMeta, onClose, closeL
           </div>
           {subtitle != null && <div style={{ fontSize:'var(--font-size-xs, 12px)', color:'var(--text-secondary, #5a6268)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{subtitle}</div>}
         </div>
+        {actions != null && <div style={{ flex:'none', display:'flex', alignItems:'center', gap:4 }}>{actions}</div>}
         {onClose && (
           <button
             type="button"

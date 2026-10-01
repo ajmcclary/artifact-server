@@ -99,6 +99,8 @@ export interface PreviewCanvasProps {
   readonly readOnly: boolean;
   readonly selectedPath: string | null;
   readonly selectedThreadId: string | null;
+  /** Bumped to bring the selected thread's place into view again. */
+  readonly threadFocusRevision: number;
   readonly version: ArtifactVersion | null;
 }
 
@@ -200,6 +202,7 @@ export function PreviewCanvas({
   readOnly,
   selectedPath,
   selectedThreadId,
+  threadFocusRevision,
   version,
 }: PreviewCanvasProps) {
   const columnRef = useRef<HTMLDivElement | null>(null);
@@ -214,14 +217,18 @@ export function PreviewCanvas({
     <div ref={columnRef} style={focus ? focusColumnStyle : columnStyle}>
       {detailError === null || focus ? null : <Alert variant="danger">{detailError.message}</Alert>}
       {galleryNotice === null ? null : <Alert variant="warning">{galleryNotice}</Alert>}
+      {/* No title bar in the workspace: the toolbar's breadcrumb already names the version and
+          page. Focus hides that toolbar, so there the frame keeps its bar. */}
       <PreviewFrame
         bodyStyle={frameBodyStyle}
         label="Artifact preview"
-        meta={version === null ? null : `v${version.version.number}`}
         style={focus ? focusFrameStyle : frameStyle}
         tabIndex={-1}
-        title={gallery?.title ?? path ?? artifactName}
         width={focus ? null : preset?.px ?? null}
+        {...(focus ? {
+          meta: version === null ? null : `v${version.version.number}`,
+          title: gallery?.title ?? path ?? artifactName,
+        } : {})}
       >
         {artifactId === null && emptyProject !== null ? (
           <div style={stateStyle}>{emptyProject}</div>
@@ -289,6 +296,7 @@ export function PreviewCanvas({
             readOnly={readOnly}
             selectedPath={selectedPath}
             selectedThreadId={selectedThreadId}
+            threadFocusRevision={threadFocusRevision}
             version={version}
           />
         ) : (
@@ -369,6 +377,7 @@ function ReviewPreview({
   projectId,
   readOnly,
   selectedThreadId,
+  threadFocusRevision,
   selectedPath,
   version,
 }: {
@@ -394,6 +403,8 @@ function ReviewPreview({
   readonly projectId: string;
   readonly readOnly: boolean;
   readonly selectedThreadId: string | null;
+  /** Bumped to bring the selected thread's place into view again. */
+  readonly threadFocusRevision: number;
   readonly selectedPath: string | null;
   readonly version: ArtifactVersion | null;
 }) {
@@ -462,6 +473,7 @@ function ReviewPreview({
         projectId={projectId}
         readOnly={readOnly}
         selectedThreadId={selectedThreadId}
+            threadFocusRevision={threadFocusRevision}
         version={version}
       />
     );
@@ -564,6 +576,7 @@ function HtmlPreview({
   projectId,
   readOnly,
   selectedThreadId,
+  threadFocusRevision,
   version,
 }: {
   readonly accessSetting: "account_required" | "public_link";
@@ -587,6 +600,8 @@ function HtmlPreview({
   readonly projectId: string;
   readonly readOnly: boolean;
   readonly selectedThreadId: string | null;
+  /** Bumped to bring the selected thread's place into view again. */
+  readonly threadFocusRevision: number;
   readonly version: ArtifactVersion;
 }) {
   const [previewDocument, setPreviewDocument] = useState<PreviewDocument | null>(null);
@@ -767,7 +782,7 @@ function HtmlPreview({
       type: "as-review-focus",
       v: reviewProtocolVersion,
     });
-  }, [postToFrame, selectedThreadId]);
+  }, [postToFrame, selectedThreadId, threadFocusRevision]);
 
   if (loading) {
     return (

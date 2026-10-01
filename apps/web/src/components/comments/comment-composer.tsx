@@ -7,6 +7,8 @@ export interface CommentComposerProps {
   readonly cancelLabel: string | null;
   /** True when `initialBody` came out of the draft store, not the caller. */
   readonly draftRestored?: boolean;
+  /** The prompt box docked at a panel's foot: it grows to six lines, then scrolls; Cmd/Ctrl+Enter posts. */
+  readonly docked?: boolean;
   readonly initialBody: string;
   readonly label: string;
   readonly maximumCharacters: number;
@@ -30,6 +32,7 @@ const draftMetaStyle = {alignItems: "center", display: "inline-flex", gap: 6} sa
 export function CommentComposer({
   autoFocus = false,
   cancelLabel,
+  docked = false,
   draftRestored = false,
   initialBody,
   label,
@@ -74,11 +77,15 @@ export function CommentComposer({
     onSubmit: (value) => void submit(value),
     overLimitMessage: (over, limit) => `A comment holds at most ${limit} characters. Remove ${over}.`,
     placeholder: "Describe what should change and why.",
-    rows: 3,
+    rows: docked ? 2 : 3,
     submitLabel: pending ? "Saving…" : submitLabel,
     value: body,
-    variant: "block",
+    variant: docked ? "prompt" : "block",
   };
+  if (docked) {
+    field.maxRows = 6;
+    field.submitOnEnter = false;
+  }
   if (onCancel !== null && cancelLabel !== null) {
     field.cancelLabel = cancelLabel;
     field.onCancel = onCancel;
@@ -94,5 +101,5 @@ export function CommentComposer({
     );
   }
   // The DS marks only its prompt variant; the block root forwards the hook for tests and styling.
-  return <ComposerField {...field} data-comment-composer="block" />;
+  return <ComposerField {...field} data-comment-composer={docked ? "prompt" : "block"} />;
 }

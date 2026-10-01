@@ -4,12 +4,14 @@ import {readBoundedReviewHtml} from "./bounded-text";
 import {
   activityPageSchema,
   type ActivityListParams,
+  activityFacetsSchema,
   activityQueryString,
   activitySummarySchema,
 } from "./activity-contract";
 
 export type {
   ActivityEntry,
+  ActivityFacets,
   ActivityListParams,
   ActivityPageResponse,
   ActivitySegment,
@@ -912,6 +914,9 @@ export const api = {
   session: () => request(sessionSchema, "/api/v1/session"),
   listActivity: (params: ActivityListParams) =>
     request(activityPageSchema, `/api/v1/activity${activityQueryString(params)}`),
+  /** Counts for the Activity filter row: people, every entry, and those matching the filters. */
+  activityFacets: (params: Omit<ActivityListParams, "cursor" | "limit">) =>
+    request(activityFacetsSchema, `/api/v1/activity/facets${activityQueryString(params)}`),
   activitySummary: (projects: readonly string[] = []) =>
     request(
       activitySummarySchema,

@@ -34,12 +34,19 @@ const fmt = (n) => Number(n).toLocaleString();
  * limit, swaps the hint for an error and blocks submit (nothing is truncated); `meta` sits at
  * the right of the hint row ("Draft saved"). `busy` replaces the field with a status line
  * and a Stop button (`onStop`) while an answer is being produced.
+ *
+ * In `prompt`, `tools` puts a row of host controls (mention, attach a location) under the
+ * field inside the box, with the send button at its end, and `maxRows` lets the field grow
+ * with the draft up to that many lines before it scrolls. `inputProps` spreads extra
+ * attributes onto the field (a host's combobox wiring), and `onKeyDown` sees each key first:
+ * when it calls `preventDefault()` the composer leaves that key alone.
  */
 export function CommentComposer({
   value = '', onChange, onSubmit, placeholder, label, submitLabel, hint, author,
   rows = 2, variant = 'block', submitOnEnter, onEscape, disabled = false, inputRef, autoFocus = false,
   onCancel, cancelLabel = 'Cancel', submitIcon, maxLength, countFrom, overLimitMessage, meta,
   busy = false, onStop, busyLabel = 'Working', stopLabel = 'Stop',
+  tools, maxRows, inputProps, onKeyDown: onKeyDownProp,
   style, ...rest
 }) {
   const inline = variant === 'inline';
@@ -56,12 +63,31 @@ export function CommentComposer({
   const blocked = disabled || empty || overLimit;
   const sendLabel = submitLabel || (prompt ? 'Send' : 'Post');
   React.useEffect(() => { if (prompt) ensureComposerStyles(); }, [prompt]);
+  /* The prompt field grows with its draft up to `maxRows` lines, then scrolls. */
+  const fieldRef = React.useRef(null);
+  const setFieldRef = (node) => {
+    fieldRef.current = node;
+    if (typeof inputRef === 'function') inputRef(node);
+    else if (inputRef) inputRef.current = node;
+  };
+  const grows = prompt && typeof maxRows === 'number' && maxRows > rows;
+  React.useLayoutEffect(() => {
+    const el = fieldRef.current;
+    if (!grows || !el || typeof window === 'undefined') return;
+    const line = parseFloat(window.getComputedStyle(el).lineHeight) || 19.5;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, Math.ceil(line * maxRows));
+    el.style.height = Math.max(next, Math.ceil(line * rows)) + 'px';
+    el.style.overflowY = el.scrollHeight > next + 1 ? 'auto' : 'hidden';
+  }, [grows, text, maxRows, rows]);
 
   const submit = () => {
     if (blocked || busy) return;
     onSubmit && onSubmit(text.trim());
   };
   const onKeyDown = (event) => {
+    if (onKeyDownProp) onKeyDownProp(event);
+    if (event.defaultPrevented) return;
     if (event.nativeEvent && event.nativeEvent.isComposing) return;
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || (enterPosts && !event.shiftKey))) {
       event.preventDefault();
@@ -87,6 +113,7 @@ export function CommentComposer({
     value: text, onChange: change, onKeyDown, placeholder, disabled, inputRef, autoFocus,
     'aria-label': label, 'aria-describedby': hasHint ? hintId : undefined,
     'aria-invalid': overLimit ? true : undefined,
+    ...inputProps,
   };
   const keys = enterPosts ? 'Enter' : 'Control+Enter Meta+Enter';
   const button = (
@@ -139,14 +166,16 @@ export function CommentComposer({
           <>
             <div data-ak-composer-box="" style={{
               display: 'flex', alignItems: 'flex-end', gap: 'var(--space-2, 0.5rem)',
-              padding: 8,
+              ...(tools != null ? { flexDirection: 'column', alignItems: 'stretch', padding: '8px 6px 6px 10px' } : null),
+              ...(tools != null ? null : { padding: 8 }),
               border: `1px solid ${overLimit ? 'var(--bs-danger, #d83506)' : 'var(--border-color-strong, #ced4da)'}`,
               borderRadius: 'var(--radius-md, 5px)',
               background: disabled ? 'var(--bs-gray-200, #e9ecef)' : 'var(--surface-card, #fff)',
               transition: 'border-color .15s ease, box-shadow .15s ease',
             }}>
               <textarea
-                ref={inputRef}
+                {...inputProps}
+                ref={setFieldRef}
                 rows={rows}
                 value={text}
                 onChange={change}
@@ -158,13 +187,19 @@ export function CommentComposer({
                 aria-describedby={fieldProps['aria-describedby']}
                 aria-invalid={fieldProps['aria-invalid']}
                 style={{
-                  flex: 1, minWidth: 0, margin: 0, padding: 0,
+                  flex: tools != null ? 'none' : 1, minWidth: 0, margin: 0, padding: tools != null ? '0 4px 0 0' : 0,
                   border: 0, outline: 'none', resize: 'none', background: 'transparent',
                   fontFamily: 'inherit', fontSize: 'var(--font-size-dense, 0.8125rem)', lineHeight: 1.5,
                   color: 'var(--text-body, #212529)',
                 }}
               />
-              <SendButton label={sendLabel} icon={submitIcon || 'bi-arrow-up'} disabled={blocked} onClick={submit} keys={keys} />
+              {tools != null ? (
+                <div data-composer-tools="" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1, 0.25rem)' }}>
+                  {tools}
+                  <span style={{ flex: 1 }} />
+                  <SendButton label={sendLabel} icon={submitIcon || 'bi-arrow-up'} disabled={blocked} onClick={submit} keys={keys} />
+                </div>
+              ) : <SendButton label={sendLabel} icon={submitIcon || 'bi-arrow-up'} disabled={blocked} onClick={submit} keys={keys} />}
             </div>
             {(hintNode || trailingInfo) && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2, 0.5rem)' }}>

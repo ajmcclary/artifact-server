@@ -3,7 +3,7 @@ import {describe, expect, it} from "vitest";
 import type {ActivityEntry} from "@/api/client";
 import {dayKey, dayLabel, usDate, usDateTime, usTime} from "@/ui/activity-model";
 
-import {feedGroups, mergedFeed, toFeedEvents} from "./activity-adapter";
+import {type FeedEvent, feedEntries, feedGroups, mergedFeed, openTarget, thumbnailEntry, toFeedEvents} from "./activity-adapter";
 import {appendPage} from "./activity-pages";
 
 /** Type one API entry literal without asserting it. */
@@ -37,7 +37,7 @@ describe("toFeedEvents", () => {
   it("ACT-005: maps one event per entry kind, newest first as the server ordered them", () => {
     const events = toFeedEvents([
       threadEntry(),
-      entry({...base, at: at(30, 10), excerpt: "Agreed.", id: "act_r", kind: "resolution", threadId: "thr_2", verb: "resolved"}),
+      entry({...base, at: at(30, 10), excerpt: "Agreed.", id: "act_r", kind: "resolution", thread: {...requiredThread(), id: "thr_2"}, threadId: "thr_2", verb: "resolved"}),
       version("act_v", 3, "Claude", at(30, 9)),
       entry({...base, agent: {dispatchState: "delivered", name: "Codex", threadIds: ["thr_1"]}, at: at(30, 8), id: "act_g", kind: "agent", verb: "sent"}),
       entry({...base, access: {from: "account_required", to: "public_link"}, at: at(30, 7), id: "act_a", kind: "access", verb: "enabled"}),
@@ -58,7 +58,8 @@ describe("toFeedEvents", () => {
 
   it("ACT-005: resolution, agent, access and admin events carry their own fields", () => {
     const [resolution, agent, access, admin, deleted] = toFeedEvents([
-      entry({...base, at: at(30, 10), excerpt: "Agreed: stands down.", id: "act_r", kind: "resolution", threadId: "thr_2", verb: "resolved"}),
+      entry({...base, at: at(30, 10), excerpt: "Agreed: stands down.", id: "act_r", kind: "resolution", thread: {...requiredThread(), id: "thr_2", isResolved: true, state: "resolved"},
+        threadId: "thr_2", verb: "resolved"}),
       entry({...base, agent: {dispatchState: "delivered", name: "Codex", threadIds: ["thr_1"]}, artifact: {...base.artifact, archived: true}, at: at(30, 8), id: "act_g", kind: "agent", verb: "sent"}),
       entry({...base, access: {from: null, to: "public_link"}, at: at(30, 7), id: "act_a", kind: "access", verb: "enabled"}),
       entry({...base, artifact: null, at: at(30, 6), id: "act_k", kind: "admin", project: null, subject: {id: "key_1", name: "CI publisher"}, verb: "revoked", versionNumber: null}),
@@ -69,6 +70,14 @@ describe("toFeedEvents", () => {
     expect([access?.from, access?.to]).toEqual(["—", "Public link"]);
     expect([admin?.adminOnly, admin?.verb, admin?.detail, admin?.icon]).toEqual([true, "revoked the API key", "CI publisher", "bi-key"]);
     expect([deleted?.verb, deleted?.detail, deleted?.icon, deleted?.adminOnly]).toEqual(["deleted a conversation on", "Inspector study", "bi-trash", false]);
+    // A resolution carries its conversation, so the feed draws it inside the conversation's card.
+    expect(resolution?.thread).toMatchObject({isResolved: true, key: "thr_2", path: "index.html", version: 3});
+  });
+
+  it("ACT-005: a resolution whose conversation is gone stays a plain line rather than an empty card", () => {
+    const [gone] = toFeedEvents([entry({...base, at: at(30, 10), excerpt: "Agreed.", id: "act_r", kind: "resolution", threadId: "thr_9", verb: "resolved"})]);
+    expect(gone).toMatchObject({detail: "Inspector study", icon: "bi-check2-circle", type: "admin", verb: "resolved a conversation on"});
+    expect(gone?.thread).toBeUndefined();
   });
 
   it("ACT-005: a thread's state decides Your turn and With an agent; resolved threads show neither", () => {
@@ -96,6 +105,9 @@ describe("toFeedEvents", () => {
     const [event] = toFeedEvents([threadEntry()]);
     expect(event?.thread?.at).toBe(at(30, 10, 56));
     expect(usDateTime(Date.parse(event?.thread?.replies[0]?.at ?? ""))).toBe("09/30/2026 11:20 AM");
+    // The card's bylines read epoch instants: the clock alone on the entry's day.
+    expect(event?.thread?.atMs).toBe(Date.parse(at(30, 10, 56)));
+    expect(event?.thread?.replies[0]?.atMs).toBe(Date.parse(at(30, 11, 20)));
   });
 });
 
@@ -147,5 +159,57 @@ describe("day groups and formats", () => {
     expect(usTime(localTime(12, 0))).toBe("12:00 PM");
     expect(usDateTime(localTime(23, 59))).toBe("04/04/2026 11:59 PM");
     expect([usDate(Number.NaN), usTime(Number.NaN), usDateTime(Number.NaN)]).toEqual(["", "", ""]);
+  });
+});
+
+const anchored = {htmlAnchor: {point: {x: 0.5, y: 0.5}, selector: "#title", tagName: "H1"}, originalText: "Title"};
+const conversation = (id: string, hour: number, author: string, anchor: NonNullable<ActivityEntry["thread"]>["anchor"] = null): ActivityEntry => threadEntry({
+  actor: {kind: "human", name: author}, at: at(30, hour), id: `act_${id}`, verb: "commented",
+  thread: {...requiredThread(), anchor, id, opener: comment(id, author, at(30, hour), `Note ${id}`),
+    replies: [], replyCount: 0, versionId: `ver_${id}`},
+});
+const byId = (events: readonly FeedEvent[]): Map<string, FeedEvent> => new Map(events.map((event) => [event.id, event]));
+
+describe("feed entries", () => {
+  it("ACT-005: one actor's versions across artifacts within 30 minutes become one burst whose items open one by one", () => {
+    const events = mergedFeed(toFeedEvents([
+      version("v_a", 4, "Claude", at(30, 9, 30), "art_a"), version("v_b", 2, "Claude", at(30, 9, 10), "art_b"),
+      version("v_b1", 1, "Claude", at(30, 9, 5), "art_b"),
+    ]));
+    const entries = feedEntries(events);
+    expect(entries.map((row) => row.id)).toEqual(["burst:version:v_a"]);
+    const [burst] = entries;
+    if (burst === undefined || !("items" in burst)) throw new Error("The versions form a burst.");
+    // A merged span keeps its count inside the burst: one version on A, two on B.
+    expect([burst.count, burst.items.map((item) => item.count)]).toEqual([3, [1, 2]]);
+    expect(burst.items.map((item) => openTarget(item, byId(events))?.artifactId)).toEqual(["art_a", "art_b"]);
+    // The burst itself opens its newest item.
+    expect(openTarget(burst, byId(events))).toMatchObject({artifactId: "art_a", projectId: "prj_a", threadId: null});
+  });
+
+  it("ACT-005: an artifact's conversations that day form one card that opens its newest conversation", () => {
+    const events = mergedFeed(toFeedEvents([conversation("thr_new", 11, "Rosa Santoro"), conversation("thr_old", 9, "Dana Okonkwo")]));
+    const [card] = feedEntries(events);
+    if (card === undefined || !("threads" in card)) throw new Error("The conversations form a card.");
+    expect(card.actors).toEqual(["Rosa Santoro", "Dana Okonkwo"]);
+    expect(openTarget(card, byId(events))).toEqual({artifactId: "art_a", path: "index.html", projectId: "prj_a", threadId: "thr_new", versionId: "ver_thr_new"});
+  });
+
+  it("ACT-005: a card's thumbnail draws its newest conversation with a pin, else its newest conversation", () => {
+    const pinned = mergedFeed(toFeedEvents([conversation("thr_new", 11, "Rosa Santoro"), conversation("thr_pin", 9, "Dana Okonkwo", anchored)]));
+    const [card] = feedEntries(pinned);
+    if (card === undefined || !("threads" in card)) throw new Error("The conversations form a card.");
+    expect(thumbnailEntry(card, byId(pinned))?.thread?.id).toBe("thr_pin");
+
+    const unpinned = mergedFeed(toFeedEvents([conversation("thr_new", 11, "Rosa Santoro"), conversation("thr_old", 9, "Dana Okonkwo")]));
+    const [plain] = feedEntries(unpinned);
+    if (plain === undefined || !("threads" in plain)) throw new Error("The conversations form a card.");
+    expect(thumbnailEntry(plain, byId(unpinned))?.thread?.id).toBe("thr_new");
+  });
+
+  it("ACT-005: an entry naming no artifact opens nothing", () => {
+    const events = toFeedEvents([entry({...base, artifact: null, at: at(30, 6), id: "act_m", kind: "admin", project: null, verb: "admitted", versionNumber: null})]);
+    const [admin] = events;
+    expect(admin === undefined ? undefined : openTarget(admin, byId(events))).toBeNull();
   });
 });

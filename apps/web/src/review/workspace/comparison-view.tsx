@@ -1,4 +1,4 @@
-import {useId, useState, type CSSProperties} from "react";
+import {useEffect, useId, useState, type CSSProperties} from "react";
 
 import type {ArtifactAction, ArtifactComparison, ComparedFile} from "@/api/client";
 import {
@@ -27,6 +27,8 @@ export interface ComparisonViewProps {
   readonly comparisonError: Error | null;
   readonly comparisonLoading: boolean;
   readonly currentVersionId: string;
+  /** A pair chosen elsewhere (a version's "Compare with vN"); compared as soon as the view opens. */
+  readonly initialPair?: {readonly from: string; readonly to: string} | null;
   readonly onBack: () => void;
   readonly onCompare: (fromVersionId: string, toVersionId: string) => Promise<void>;
   readonly onLoadMoreActivity: () => void;
@@ -93,6 +95,7 @@ export function ComparisonView({
   comparisonError,
   comparisonLoading,
   currentVersionId,
+  initialPair = null,
   onBack,
   onCompare,
   onLoadMoreActivity,
@@ -101,8 +104,12 @@ export function ComparisonView({
   versions,
 }: ComparisonViewProps) {
   const ids = useId();
-  const [fromVersionId, setFromVersionId] = useState(versions.at(-1)?.version.id ?? currentVersionId);
-  const [toVersionId, setToVersionId] = useState(currentVersionId);
+  const [fromVersionId, setFromVersionId] = useState(initialPair?.from ?? versions.at(-1)?.version.id ?? currentVersionId);
+  const [toVersionId, setToVersionId] = useState(initialPair?.to ?? currentVersionId);
+  const [requestedPair] = useState(initialPair);
+  useEffect(() => {
+    if (requestedPair !== null) void onCompare(requestedPair.from, requestedPair.to);
+  }, [onCompare, requestedPair]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const entries = comparison === null ? [] : changedEntries(comparison);
   const selected = entries.find((entry) => entry.path === selectedPath)

@@ -27,10 +27,7 @@ describe("artifact review workspace docking", () => {
     expect(isPhoneWidth(768)).toBe(false);
   });
 
-  it("gives each inspector view the width the design draws it at", () => {
-    expect(inspectorDefaultWidth("comments")).toBe(344);
-    expect(inspectorDefaultWidth("details")).toBe(392);
-    expect(inspectorDefaultWidth("files")).toBe(380);
-    expect(inspectorDefaultWidth("versions")).toBe(360);
+  it("opens every inspector view in the one 360 px column the design draws", () => {
+    expect(inspectorDefaultWidth()).toBe(360);
   });
 });

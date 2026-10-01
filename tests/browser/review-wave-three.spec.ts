@@ -7,7 +7,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, previewFrame} from "./review-helpers.js";
+import {chooseVersionAction, openInspectorTab, previewFrame, selectThread, versionRow} from "./review-helpers.js";
 import {createReplyOverApi, createThreadOverApi} from "./comment-api.js";
 
 test.describe("Artifact Server Review wave three", () => {
@@ -36,22 +36,19 @@ test.describe("Artifact Server Review wave three", () => {
       await expect(preview.getByRole("heading", {name: "Historical review stays open"}))
         .toBeVisible();
 
-      await openInspectorTab(fixture.page, "Versions");
-      const firstRow = fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 1"});
-      await firstRow.getByRole("button", {name: "Make current"}).click();
+      await chooseVersionAction(fixture.page, 1, "Make Current");
       const confirmation = fixture.page.getByRole("dialog", {
         name: "Make Version 1 current?",
       });
       await expect(confirmation).toContainText("No saved version is changed or duplicated.");
-      await confirmation.getByRole("button", {name: "Make current"}).click();
-      await expect(firstRow.getByText(/^Current/u)).toBeVisible();
+      await confirmation.getByRole("button", {name: "Make Current"}).click();
+      await expect(versionRow(fixture.page, 1).getByText("Current", {exact: true})).toBeVisible();
       await expect(preview.getByRole("heading", {name: "Historical review stays open"}))
         .toBeVisible();
       expect(new URL(fixture.page.url()).searchParams.get("version"))
         .toBe(first.body.version.id);
 
-      const secondRow = fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 2"});
-      await secondRow.getByRole("button", {name: "Make current"}).click();
+      await chooseVersionAction(fixture.page, 2, "Make Current");
       const third = await publishVersion(fixture.server, fixture.installation, {
         artifactId: first.body.artifact.id,
         content: "<!doctype html><html lang=\"en\"><h1>Concurrent version</h1></html>",
@@ -59,7 +56,7 @@ test.describe("Artifact Server Review wave three", () => {
         idempotencyKey: "review-make-current-v3",
       });
       await fixture.page.getByRole("dialog", {name: "Make Version 2 current?"})
-        .getByRole("button", {name: "Make current"}).click();
+        .getByRole("button", {name: "Make Current"}).click();
       await expect(fixture.page.getByRole("dialog", {name: "Make Version 2 current?"}))
         .toHaveCount(0);
       await expect(fixture.page.getByText(/current version changed/u)).toBeVisible();
@@ -111,26 +108,24 @@ test.describe("Artifact Server Review wave three", () => {
         published.body.version.id,
       ));
       await openInspectorTab(fixture.page, "Comments");
-      const conversation = fixture.page.getByRole("article").filter({hasText: "Root feedback"});
+      const conversation = fixture.page.getByRole("article", {name: /^Comment by /u}).filter({hasText: "Root feedback"});
+      // A collapsed thread summarises its replies; selecting it opens them and its actions.
+      await expect(conversation.getByText(/^1 reply · /u)).toBeVisible();
+      await expect(conversation.getByText("Agent reply already in this conversation")).toHaveCount(0);
+      await selectThread(fixture.page, "Root feedback");
       await expect(conversation.getByText("Agent reply already in this conversation"))
         .toBeVisible();
-      await expect(conversation.getByText("1 reply", {exact: true})).toBeVisible();
       await expect(conversation.getByText(/^Updated /u)).toBeVisible();
       await expect(conversation.getByText("Whole version", {exact: true})).toBeVisible();
-      await expect(conversation.getByRole("textbox", {exact: true, name: "Reply"}))
-        .toHaveCount(0);
       const agentReply = conversation.getByRole("article", {name: /^Reply by /u})
         .filter({hasText: "Agent reply already in this conversation"});
       await expect(agentReply.getByRole("button", {name: "Edit"})).toHaveCount(0);
 
-      await conversation.getByRole("button", {exact: true, name: "Reply"}).click();
-      await conversation.getByRole("textbox", {exact: true, name: "Reply"})
-        .fill("Human follow-up");
-      const postReply = conversation.getByRole("button", {name: "Post reply"});
-      await expect(postReply).toHaveCSS("text-transform", "none");
-      expect(await postReply.evaluate((element) => element.getBoundingClientRect().height))
-        .toBeLessThanOrEqual(32);
-      await postReply.click();
+      // The composer docked at the panel's foot now replies to the selected thread.
+      const inspector = fixture.page.getByRole("complementary", {name: "Artifact inspector"});
+      await expect(inspector.getByText(/^Replying to /u)).toBeVisible();
+      await inspector.getByRole("textbox", {exact: true, name: "Reply"}).fill("Human follow-up");
+      await inspector.getByRole("button", {name: "Post reply"}).click();
       await expect(conversation.getByText("Human follow-up", {exact: true})).toBeVisible();
       await expect(conversation.getByText("2 replies", {exact: true})).toBeVisible();
       const humanReply = conversation.getByRole("article", {name: /^Reply by /u})

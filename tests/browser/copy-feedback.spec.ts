@@ -84,7 +84,7 @@ test.describe("Copy feedback", () => {
       await refuseClipboardWrites(page);
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
-      await page.getByRole("button", {exact: true, name: "Share"}).click();
+      await page.getByRole("button", {exact: true, name: "Share this version"}).click();
       const share = page.getByRole("dialog");
       await share.getByRole("button", {name: "Connect MCP"}).click();
       const copy = share.getByRole("button", {name: "Copy MCP server address"});

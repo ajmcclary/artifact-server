@@ -73,6 +73,8 @@ export interface RecordTableProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   headerRule?: 'default' | 'strong';
   /** Pin the first column to the left edge while a narrow container scrolls the ledger horizontally (pair with `minWidth`) — the phone ledgers. The pinned cells stay opaque: card, stripe, hover, selection and tone washes are laid over the card. @default false */
   stickyFirstColumn?: boolean;
+  /** Below this measured width in px, rows stack: each labelled column a label/value pair, unlabelled (action) columns in a row beneath, as a list instead of a table. Omit to keep the grid at every width. */
+  stackBelow?: number;
 }
 
 /**

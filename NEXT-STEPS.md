@@ -1892,9 +1892,23 @@ gate.
   thumbnails (`build:thumbnails`, per-item fingerprint provenance; stale captures
   are never referenced). Preview sources and indexes moved to version 2 with
   related guide links; Review renders text guides as plain text, keeps the
-  gallery return in the toolbar, and adds the project Design library as a moving
+  gallery return in the toolbar (superseded October 1: it is now the page menu's
+  Gallery row), and adds the project Design library as a moving
   view over current versions (DSN-005). Remaining: frozen, shareable collections
   pinning a version set (T24) and optional theme/phone thumbnail variants.
+- **Progress, October 1 (design port 67f5a14 → 175aef3):** the vendored design
+  system is re-synced. The Review toolbar is a breadcrumb — the artifact name
+  while the list is collapsed, then a version menu (find by number or date, the
+  linked-source notice with Publish Version N) and a page menu whose pinned
+  Gallery row is the only way back to a version's gallery; the toolbar's Gallery
+  button and Download are gone and the preview frame has no title bar outside
+  Focus. Inspector panels share one 360px column in the rail order Comments,
+  Files, Versions, Details, with no header ×; Files docks Download Artifact,
+  Versions uses the row-action list, and Details ends with Delete Artifact
+  (moved from the More menu). Remaining: version rows show the saved time
+  where the design shows the publisher, because the versions API names
+  publishers only by principal id; mentions in the docked comment composer
+  are deferred until the server notifies mentioned people.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

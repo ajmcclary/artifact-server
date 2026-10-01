@@ -73,7 +73,7 @@ function isDirectHuman(principal: Principal): boolean {
 
 /** Activity's row, with the Needs-you count only when something waits. */
 function activityItem(needsYou: number | null): NavItem {
-  const item: NavItem = {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: activityHref()};
+  const item: NavItem = {group: "Review", icon: "bi-inbox", id: "activity", label: "Activity", link: activityHref()};
   if (needsYou !== null && needsYou > 0) item.count = needsYou;
   return item;
 }
@@ -81,7 +81,7 @@ function activityItem(needsYou: number | null): NavItem {
 function reviewItems(input: ShellNavInput): NavItem[] {
   const items: NavItem[] = [
     activityItem(input.needsYou),
-    {icon: "bi-folder2-open", id: "projects", label: "Projects", link: projectsHref(null)},
+    {icon: "bi-briefcase", id: "projects", label: "Projects", link: projectsHref(null)},
     {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref()},
   ];
   const firstProjectIndex = items.length;

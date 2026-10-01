@@ -14,16 +14,19 @@ const entry = (over: {path?: string | null; anchor?: NonNullable<ActivityEntry["
 });
 
 describe("thumbnailPlan", () => {
-  it("ACT-005: an anchored HTML page renders in the review frame", () => {
-    expect(thumbnailPlan(entry({}), null)).toEqual({kind: "frame", path: "index.html"});
-    expect(thumbnailPlan(entry({path: null}), "docs/Index.HTM")).toEqual({kind: "frame", path: "docs/Index.HTM"});
+  it("ACT-005: an anchored HTML page renders in the review frame with its pin", () => {
+    expect(thumbnailPlan(entry({}), null)).toEqual({kind: "frame", path: "index.html", pin: true});
+    expect(thumbnailPlan(entry({path: null}), "docs/Index.HTM")).toEqual({kind: "frame", path: "docs/Index.HTM", pin: true});
   });
 
-  it("ACT-005: a non-HTML entry, a missing or unreadable anchor, or a missing artifact shows the file tile", () => {
+  it("ACT-005: a conversation with no pin on the page draws its exact version without one", () => {
+    expect(thumbnailPlan(entry({anchor: null}), null)).toEqual({kind: "frame", path: "index.html", pin: false});
+    expect(thumbnailPlan(entry({anchor: {kind: "page"}}), null)).toEqual({kind: "frame", path: "index.html", pin: false});
+  });
+
+  it("ACT-005: a non-HTML entry or a missing artifact shows the file tile", () => {
     expect(thumbnailPlan(entry({path: "report.pdf"}), null)).toEqual({kind: "tile", reason: "not-html"});
     expect(thumbnailPlan(entry({path: null}), "image.png")).toEqual({kind: "tile", reason: "not-html"});
-    expect(thumbnailPlan(entry({anchor: null}), null)).toEqual({kind: "tile", reason: "no-anchor"});
-    expect(thumbnailPlan(entry({anchor: {kind: "page"}}), null)).toEqual({kind: "tile", reason: "no-anchor"});
     expect(thumbnailPlan(entry({artifact: null}), null)).toEqual({kind: "tile", reason: "no-artifact"});
   });
 });

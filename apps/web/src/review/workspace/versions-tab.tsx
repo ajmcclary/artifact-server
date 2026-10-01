@@ -1,120 +1,99 @@
-import {useState, type CSSProperties} from "react";
+import {useState} from "react";
 
-import type {Version} from "@/api/client";
-import {ActionRow, Button, Modal} from "@/arkcase";
-import {formatTimestamp} from "@/lib/presentation";
+import {ConfirmDialog} from "@/arkcase";
+import {VersionList} from "@/ui/review-ui";
 
-import {compactId} from "./workspace-format.ts";
+import {versionListEntries} from "./version-entries.ts";
 import type {VersionListItem} from "./workspace-types.ts";
 
 export interface VersionsTabProps {
+  readonly artifactName: string;
   readonly canManage: boolean;
   readonly currentVersionId: string;
+  readonly onCompare: (fromVersionId: string, toVersionId: string) => void;
   readonly onMakeCurrent: (versionId: string, expectedCurrentVersionId: string) => Promise<boolean>;
-  readonly onOpenComparison: () => void;
+  readonly onOpenHistory: () => void;
   readonly onSelect: (versionId: string) => void;
+  readonly phone: boolean;
   readonly selectedVersionId: string | null;
   readonly versions: readonly VersionListItem[];
 }
 
-const listStyle = {listStyle: "none", margin: 0, padding: 0} satisfies CSSProperties;
-const shownRowStyle = {background: "var(--tint-primary-selected)"} satisfies CSSProperties;
-const plainRowStyle = {} satisfies CSSProperties;
-const footerStyle = {padding: "12px 14px 16px"} satisfies CSSProperties;
-const dialogTextStyle = {fontSize: "var(--font-size-sm, 14px)", lineHeight: 1.5, margin: 0} satisfies CSSProperties;
+/** Rows shown before Show Older; each press adds another page. */
+const versionPage = 20;
 
-/** The artifact's immutable history, newest first, with preview and restore on each row. */
+/**
+ * The artifact's immutable history, newest first. Each row previews its version; Preview
+ * and More (Make Current, Compare with vN, Action History) appear on hover or focus.
+ */
 export function VersionsTab({
+  artifactName,
   canManage,
   currentVersionId,
+  onCompare,
   onMakeCurrent,
-  onOpenComparison,
+  onOpenHistory,
   onSelect,
+  phone,
   selectedVersionId,
   versions,
 }: VersionsTabProps) {
-  return (
-    <div>
-      <ul aria-label="Versions" style={listStyle}>
-        {versions.map(({version}, index) => {
-          const current = version.id === currentVersionId;
-          const shown = version.id === selectedVersionId;
-          return (
-            <li key={version.id}>
-              <ActionRow
-                last={index === versions.length - 1}
-                meta={`${formatTimestamp(version.createdAt)} · ${compactId(version.id)}`}
-                note={current ? (shown ? "Current · shown" : "Current") : shown ? "Shown" : null}
-                style={shown ? shownRowStyle : plainRowStyle}
-                title={(
-                  <Button
-                    aria-current={shown ? "true" : undefined}
-                    flush
-                    onClick={() => onSelect(version.id)}
-                    size="sm"
-                    variant="link"
-                  >
-                    Version {version.number}
-                  </Button>
-                )}
-              >
-                {canManage && !current ? (
-                  <MakeCurrentControl
-                    expectedCurrentVersionId={currentVersionId}
-                    onConfirm={onMakeCurrent}
-                    version={version}
-                  />
-                ) : null}
-              </ActionRow>
-            </li>
-          );
-        })}
-      </ul>
-      <div style={footerStyle}>
-        <Button icon="bi-clock-history" onClick={onOpenComparison} size="sm" variant="link">
-          Comparison and history
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-interface MakeCurrentControlProps {
-  readonly expectedCurrentVersionId: string;
-  readonly onConfirm: (versionId: string, expectedCurrentVersionId: string) => Promise<boolean>;
-  readonly version: Version;
-}
-
-function MakeCurrentControl({expectedCurrentVersionId, onConfirm, version}: MakeCurrentControlProps) {
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const confirm = async (): Promise<void> => {
-    setPending(true);
-    await onConfirm(version.id, expectedCurrentVersionId);
-    setPending(false);
-    setOpen(false);
+  const [limit, setLimit] = useState(versionPage);
+  const [pendingCurrent, setPendingCurrent] = useState<number | null>(null);
+  const entries = versionListEntries(versions, currentVersionId);
+  const idOf = new Map(versions.map(({version}) => [version.number, version.id]));
+  const shown = versions.find(({version}) => version.id === selectedVersionId)?.version.number ?? 0;
+  const current = versions.find(({version}) => version.id === currentVersionId)?.version.number ?? null;
+  const remaining = Math.max(0, entries.length - limit);
+  const compare = (left: number, right: number): void => {
+    const from = idOf.get(Math.min(left, right));
+    const to = idOf.get(Math.max(left, right));
+    if (from !== undefined && to !== undefined) onCompare(from, to);
   };
   return (
     <>
-      <Button onClick={() => setOpen(true)} size="xs" variant="link">Make current</Button>
-      <Modal
-        onClose={() => {
-          if (!pending) setOpen(false);
+      <VersionList
+        label={`Versions of ${artifactName}`}
+        menuItems={(entry) => {
+          const other = entry.current ? (entry.n > 1 ? entry.n - 1 : null) : current;
+          return [
+            ...(entry.current || !canManage ? [] : [{
+              icon: "bi-bookmark-check",
+              label: "Make Current",
+              onClick: () => setPendingCurrent(entry.n),
+            }]),
+            ...(other === null || !idOf.has(other) ? [] : [{
+              icon: "bi-file-diff",
+              label: `Compare with v${other}`,
+              onClick: () => compare(entry.n, other),
+            }]),
+            {icon: "bi-clock-history", label: "Action History", onClick: onOpenHistory},
+          ];
         }}
-        open={open}
-        portal
-        primaryAction={{
-          disabled: pending,
-          label: pending ? "Making current…" : "Make current",
-          onClick: () => void confirm(),
+        olderLabel={`Show ${Math.min(versionPage, remaining)} Older`}
+        onPreview={(n) => {
+          const id = idOf.get(n);
+          if (id !== undefined) onSelect(id);
         }}
-        size="sm"
-        title={`Make Version ${version.number} current?`}
-      >
-        <p style={dialogTextStyle}>
-          The stable artifact link will point to Version {version.number}. No saved version is changed or duplicated.
-        </p>
-      </Modal>
+        onShowOlder={() => setLimit((value) => value + versionPage)}
+        phone={phone}
+        remaining={remaining}
+        shown={shown}
+        versions={entries.slice(0, limit)}
+      />
+      <ConfirmDialog
+        confirmIcon="bi-bookmark-check"
+        confirmLabel="Make Current"
+        message={`The stable artifact link will point to Version ${pendingCurrent ?? ""}. No saved version is changed or duplicated.`}
+        onClose={() => setPendingCurrent(null)}
+        onConfirm={() => {
+          const id = pendingCurrent === null ? undefined : idOf.get(pendingCurrent);
+          if (id !== undefined) void onMakeCurrent(id, currentVersionId);
+        }}
+        open={pendingCurrent !== null}
+        title={`Make Version ${pendingCurrent ?? ""} current?`}
+        tone="primary"
+      />
     </>
   );
 }

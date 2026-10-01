@@ -81,18 +81,22 @@ const libraryPathname = "/review/library";
  * The project filter uses `projects=`, never `project=`: a `/review?project=` URL is the workspace.
  */
 export interface ActivityFilters {
+  /** Principal IDs; the people filter uses `person=`. */
+  readonly people: readonly string[];
   readonly projects: readonly string[];
   readonly q: string;
   readonly segment: ActivitySegment;
   readonly types: readonly ActivityType[];
 }
 
-export const emptyActivityFilters: ActivityFilters = {projects: [], q: "", segment: "all", types: []};
+export const emptyActivityFilters: ActivityFilters = {people: [], projects: [], q: "", segment: "all", types: []};
 
 const activitySegments: readonly ActivitySegment[] = ["all", "needs_you", "with_agent"];
 const activityTypes: readonly ActivityType[] = ["comments", "versions", "agents", "access", "admin"];
 /** The server's own search limit; a longer value would only be refused. */
 const activitySearchLimit = 100;
+/** The server's own people-filter limit and identifier shape; anything else would only be refused. */
+const activityPeopleLimit = 50;
 const projectsPathname = "/review/projects";
 
 /** Read the feed filters from a query string, dropping values the server does not accept. */
@@ -103,6 +107,7 @@ export function readActivityFilters(search: URLSearchParams): ActivityFilters {
     return known === undefined ? [] : [known];
   });
   return {
+    people: [...new Set(search.getAll("person").filter((id) => /^[A-Za-z0-9_:-]{1,200}$/u.test(id)))].slice(0, activityPeopleLimit),
     projects: [...new Set(search.getAll("projects").filter((id) => id !== ""))],
     q: (search.get("q") ?? "").trim().slice(0, activitySearchLimit),
     segment: activitySegments.find((candidate) => candidate === segment) ?? "all",
@@ -114,6 +119,7 @@ export function readActivityFilters(search: URLSearchParams): ActivityFilters {
 export function activityHref(filters: ActivityFilters = emptyActivityFilters): string {
   const search = new URLSearchParams();
   if (filters.segment !== "all") search.set("segment", filters.segment);
+  for (const person of filters.people) search.append("person", person);
   for (const project of filters.projects) search.append("projects", project);
   for (const type of filters.types) search.append("type", type);
   if (filters.q !== "") search.set("q", filters.q);

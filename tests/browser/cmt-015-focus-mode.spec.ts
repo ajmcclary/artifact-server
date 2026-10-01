@@ -48,7 +48,7 @@ test.describe("Artifact review full screen", () => {
       const fullCanvas = [0, 0, viewport.width, viewport.height];
       await expect(previewFrame(page).getByRole("heading", {name: "Focus fixture content"})).toBeVisible();
 
-      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {name: "Full screen"}))
+      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {name: "Focus — expand the workspace"}))
         .toHaveAttribute("aria-keyshortcuts", "F");
       await page.getByRole("region", {name: "Artifact preview"}).focus();
       await page.keyboard.press("f");
@@ -120,7 +120,7 @@ test.describe("Artifact review full screen", () => {
 
       // Escape leaves full screen once nothing inner is open; F toggles it.
       await page.keyboard.press("Escape");
-      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {name: "Full screen"}))
+      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {name: "Focus — expand the workspace"}))
         .toBeVisible();
       expect(new URL(page.url()).searchParams.has("view")).toBe(false);
       await expect(page.getByRole("complementary", {name: "Artifact catalog"})).toBeVisible();

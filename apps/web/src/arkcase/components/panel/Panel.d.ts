@@ -60,6 +60,10 @@ export interface PanelProps {
   floatOffset?: number | string;
   /** Phone presentation: the column fills the viewport (fixed, inset 0, above page chrome), with no rail, an empty pin slot and no seam. @default false */
   sheet?: boolean;
+  /** With `sheet`: adds a 44px "‹ Back" link above the header that calls this — the sheet's way back to the screen it covers. */
+  onSheetClose?: () => void;
+  /** Label of the sheet's back link. @default "Back" */
+  sheetCloseLabel?: string;
   /** Narrow column layout (Advanced Search's filters above the results, its preview under them): the panel spans the full width with no rail, pin or seam, and a 32px `surface-secondary` toggle strip on its outer edge carries a ghost xs button — "Show filters" / "Hide filters" (`aria-expanded`, `aria-controls`), with the panel's `icon`, and its `count` beside it while closed. Open is the same `pinned` value, reported through `onPinChange` and announced "Filters shown." / "Filters hidden.". @default false */
   stacked?: boolean;
   /** Which edge the stacked strip sits on; the panel opens from it toward the content. @default "top" for side="start", "bottom" for side="end" */

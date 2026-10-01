@@ -1,5 +1,6 @@
 import { akStyleDocument } from '@/arkcase-style';
 import React from 'react';
+import { useElementSize } from '../utilities/element-size.jsx';
 
 const TONES = {
   success:  { fg: 'var(--pill-success-fg, #15803d)', bg: 'rgba(0,181,50,.07)' },
@@ -75,13 +76,21 @@ function recordTableFromControl(e) {
  * detail row beneath it. With `onRowSelect` the rows become selectable: click, Enter and
  * Space select, ArrowUp and ArrowDown move focus, the selected row takes the 10% primary
  * wash and a 3px rail, and `renderDetail` opens a full-width row under it.
+ *
+ * `stackBelow` is the narrow form: while the table's own width is under that many px, each
+ * row becomes a stacked block — every labelled column a label/value pair, the unlabelled
+ * (action) columns in a row under them — so a ledger reads in a phone column or a narrow
+ * panel without a horizontal scroll.
  */
 export function RecordTable({
   columns = [], rows = [], footer, ariaLabel, stickyHeader = false, maxHeight, minWidth, empty,
   rowKey, selectedKey, onRowSelect, rowProps, renderDetail, style,
-  striped = false, rowTone, totals, headerRule = 'default', stickyFirstColumn = false, ...rest
+  striped = false, rowTone, totals, headerRule = 'default', stickyFirstColumn = false, stackBelow, ...rest
 }) {
   const baseId = React.useId();
+  const rootRef = React.useRef(null);
+  const size = useElementSize(rootRef);
+  const stack = stackBelow != null && size.width > 0 && size.width < stackBelow;
   const selectable = typeof onRowSelect === 'function';
   const strongHead = headerRule === 'strong';
   const pinFirst = !!stickyFirstColumn;
@@ -276,9 +285,44 @@ export function RecordTable({
     </div>
   );
 
+  if (stack) {
+    const labelled = columns.map((c, i) => ({ c, i })).filter(({ c }) => c.label != null && c.label !== '');
+    const acts = columns.map((c, i) => ({ c, i })).filter(({ c }) => c.label == null || c.label === '');
+    return (
+      <div ref={rootRef} data-record-table-stacked="" style={style} {...rest}>
+        <div role="list" aria-label={ariaLabel}>
+          {rows.map((row, r) => {
+            const cells = normalize(row, columns);
+            return (
+              <div key={'row-' + keys[r]} role="listitem" style={{ padding: '12px 14px', borderBottom: '1px solid var(--list-divider, #e9ecef)', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {labelled.map(({ c, i }) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '104px minmax(0, 1fr)', gap: 10, alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: '0.025em', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{c.label}</span>
+                    <StackedValue cell={cells[i] || { value: null }} col={c} />
+                  </div>
+                ))}
+                {acts.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 2 }}>
+                    {acts.map(({ c, i }) => <StackedValue key={i} cell={cells[i] || { value: null }} col={c} bare />)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {rows.length === 0 && empty != null && (
+            <div role="listitem" style={{ padding: '14px 12px', fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-secondary, #5a6268)' }}>{empty}</div>
+          )}
+        </div>
+        {footer && (
+          <div style={{ padding: '10px 14px', background: 'var(--surface-secondary, #f8f9fa)', fontSize: 'var(--font-size-xs, 12px)', lineHeight: 1.5, color: 'var(--text-data, #495057)' }}>{footer}</div>
+        )}
+      </div>
+    );
+  }
+
   const scrolls = maxHeight != null || minWidth != null;
   return (
-    <div style={style} {...rest}>
+    <div ref={rootRef} style={style} {...rest}>
       {scrolls ? (
         <div
           data-ak-record-table-scroll=""
@@ -292,6 +336,27 @@ export function RecordTable({
         <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border-color, #dee2e6)', background: 'var(--surface-secondary, #f8f9fa)', fontSize: 'var(--font-size-xs, 12px)', lineHeight: 1.5, color: 'var(--text-data, #495057)' }}>{footer}</div>
       )}
     </div>
+  );
+}
+
+/* One value of a stacked row, in the cell's own face and tone. An action cell (`bare`) drops
+   the absent dash, so an empty action slot leaves no mark. */
+function StackedValue({ cell, col, bare = false }) {
+  const tone = cell.tone ? TONES[cell.tone] : null;
+  const mono = cell.mono != null ? cell.mono : col.mono;
+  if (cell.value == null) return bare ? null : <span style={{ color: 'var(--text-secondary, #5a6268)', fontStyle: 'italic' }}>&mdash;</span>;
+  const link = cell.onClick || cell.href;
+  return (
+    <span style={{
+      minWidth: 0, overflowWrap: 'anywhere', lineHeight: 1.45,
+      fontFamily: mono ? 'var(--font-data, monospace)' : undefined,
+      fontSize: 'var(--font-size-dense, 13px)',
+      fontWeight: cell.strong ? 600 : 400,
+      fontStyle: cell.absent ? 'italic' : undefined,
+      color: tone ? tone.fg : cell.muted ? 'var(--text-secondary, #5a6268)' : 'var(--text-data, #495057)',
+    }}>
+      {link ? <RecordTableLink cell={cell}>{cell.value}</RecordTableLink> : cell.value}
+    </span>
   );
 }
 

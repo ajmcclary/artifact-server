@@ -129,13 +129,107 @@ export function collectCspViolations(page: Page): () => Promise<readonly string[
   };
 }
 
-/** Open Comparison and history from the toolbar's version menu and choose one tab. */
+/** The toolbar breadcrumb's version crumb, which opens "Choose a version". */
+export function versionCrumb(page: Page): Locator {
+  return page.getByRole("toolbar", {exact: true, name: "Artifact"})
+    .getByRole("button", {name: /^Version \d+, .* · Choose a version$/u});
+}
+
+/** The toolbar breadcrumb's page crumb, which opens "Choose a page". */
+export function pageCrumb(page: Page): Locator {
+  return page.getByRole("toolbar", {exact: true, name: "Artifact"})
+    .getByRole("button", {name: /^Page .* · Choose a page$/u});
+}
+
+/** One conversation in the Comments panel, by text it contains. */
+export function commentThread(page: Page, text: string): Locator {
+  return page.getByRole("article", {name: /^Comment by /u}).filter({hasText: text});
+}
+
+/** Selects a conversation in the Comments panel: it opens, and the docked composer replies to it. */
+export async function selectThread(page: Page, text: string): Promise<void> {
+  const summary = commentThread(page, text).locator('[role="button"][aria-expanded]').first();
+  if (await summary.getAttribute("aria-expanded") !== "true") await summary.click();
+  await expect(summary).toHaveAttribute("aria-expanded", "true");
+}
+
+/** The Versions panel's history list. */
+export function versionsList(page: Page): Locator {
+  return page.getByRole("complementary", {name: "Artifact inspector"}).getByRole("region", {name: /^Versions of /u});
+}
+
+/** One version's row in the Versions panel: its preview button, actions and Current tag. */
+export function versionRow(page: Page, number: number): Locator {
+  return versionsList(page).locator("[data-row-actions-host]")
+    .filter({has: page.getByRole("button", {name: new RegExp(`^v${number} `, "u")})});
+}
+
+/** Chooses one item of a version row's More menu (Make Current, Compare with vN, Action History). */
+export async function chooseVersionAction(page: Page, number: number, action: string | RegExp): Promise<void> {
+  await openInspectorTab(page, "Versions");
+  await versionRow(page, number).getByRole("button", {name: `More actions for v${number}`}).click();
+  await page.getByRole("menu", {name: `More actions for v${number}`}).getByRole("menuitem", {name: action}).click();
+}
+
+/** Makes a version current from its row and confirms. */
+export async function makeVersionCurrent(page: Page, number: number): Promise<void> {
+  await chooseVersionAction(page, number, "Make Current");
+  await page.getByRole("dialog", {name: `Make Version ${number} current?`}).getByRole("button", {name: "Make Current"}).click();
+}
+
+/** Deletes the open artifact from Details and confirms. */
+export async function deleteOpenArtifact(page: Page, name: string): Promise<void> {
+  await openInspectorTab(page, "Details");
+  await page.getByRole("complementary", {name: "Artifact inspector"}).getByRole("button", {name: "Delete Artifact"}).click();
+  await page.getByRole("dialog", {name: `Delete ${name}?`}).getByRole("button", {name: "Delete Artifact"}).click();
+}
+
+/** Opens the page crumb's "Choose a page" menu. */
+export async function openPageMenu(page: Page): Promise<Locator> {
+  await pageCrumb(page).click();
+  const menu = page.getByRole("dialog", {name: "Choose a page"});
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** The Gallery row pinned at the top of the page menu while a version has a gallery. */
+export function galleryRow(menu: Locator): Locator {
+  return menu.getByRole("button", {name: /^Gallery\b/u});
+}
+
+/** Focus hides the toolbar; its viewer controls keep their own way back to the gallery. */
+async function inFocus(page: Page): Promise<boolean> {
+  return await page.getByRole("toolbar", {name: "Artifact viewer controls"}).count() > 0;
+}
+
+/** Returns to the version's gallery: the page menu's Gallery row, or Focus's Back to gallery. */
+export async function returnToGallery(page: Page): Promise<void> {
+  if (await inFocus(page)) {
+    await page.getByRole("toolbar", {name: "Artifact viewer controls"}).getByRole("button", {name: "Back to gallery"}).click();
+    return;
+  }
+  await galleryRow(await openPageMenu(page)).click();
+}
+
+/** Checks whether the way back to a gallery is offered, closing the page menu after looking. */
+export async function expectGalleryReturn(page: Page, offered: boolean): Promise<void> {
+  if (await inFocus(page)) {
+    await expect(page.getByRole("button", {name: "Back to gallery"})).toHaveCount(offered ? 1 : 0);
+    return;
+  }
+  const menu = await openPageMenu(page);
+  await expect(galleryRow(menu)).toHaveCount(offered ? 1 : 0);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+}
+
+/** Open Comparison and history from the toolbar's More menu and choose one tab. */
 export async function openComparison(page: Page, tab: "Compare" | "Activity"): Promise<void> {
   const view = page.getByRole("region", {name: "Comparison and history"});
   if (!(await view.isVisible())) {
     await page.getByRole("toolbar", {exact: true, name: "Artifact"})
-      .getByRole("button", {name: /^Choose version, showing /u}).click();
-    await page.getByRole("menu", {name: "Version"})
+      .getByRole("button", {name: "More artifact actions"}).click();
+    await page.getByRole("menu", {name: "More artifact actions"})
       .getByRole("menuitem", {name: "Comparison and history"}).click();
     await expect(view).toBeVisible();
   }

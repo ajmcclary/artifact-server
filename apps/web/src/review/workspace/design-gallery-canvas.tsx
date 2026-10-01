@@ -9,17 +9,20 @@ import {
   initialGalleryViewState,
   type GalleryViewState,
 } from "./design-gallery.ts";
+import type {GalleryCrumb} from "./review-toolbar.tsx";
 import {usePreviewIndex} from "./use-preview-index.ts";
 
 /** What the canvas draws for a design version: the gallery, a return control or a notice. */
 export interface DesignGalleryCanvas {
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
+  /** The page menu's Gallery row while this version has a readable gallery. */
+  readonly galleryCrumb: GalleryCrumb | null;
   readonly galleryNotice: string | null;
   /** Returns to the gallery while one of this version's exact pages is open. */
   readonly onReturnToGallery: (() => void) | null;
 }
 
-const noGallery: DesignGalleryCanvas = {gallery: null, galleryNotice: null, onReturnToGallery: null};
+const noGallery: DesignGalleryCanvas = {gallery: null, galleryCrumb: null, galleryNotice: null, onReturnToGallery: null};
 const loadingStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"};
 
 /**
@@ -27,7 +30,7 @@ const loadingStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"}
  * an explicit path. Opening a tile
  * is ordinary exact-page navigation (`onNavigate(path)`); returning navigates to the
  * entry (`onNavigate(null)`). Query, kind, layout, scroll and the returning tile are
- * kept per exact version, so browser Back and "Back to gallery" land where they left.
+ * kept per exact version, so browser Back and the page menu's Gallery row land where they left.
  */
 export function useDesignGalleryCanvas({
   announce,
@@ -85,12 +88,14 @@ export function useDesignGalleryCanvas({
     states.current.set(versionId, {...(states.current.get(versionId) ?? initialGalleryViewState), ...patch});
     if (render) setRevision((revision) => revision + 1);
   };
-  if (!onEntry) return {...noGallery, onReturnToGallery: () => onNavigate(null)};
+  const galleryCrumb = {count: index.items.length, onOpen: () => onNavigate(null), shown: onEntry};
+  if (!onEntry) return {...noGallery, galleryCrumb, onReturnToGallery: () => onNavigate(null)};
   const media = (path: string | null): string | null => path === null
     ? null
     : api.versionMediaUrl(projectId, artifactId, versionId, path);
   return {
     ...noGallery,
+    galleryCrumb,
     gallery: {
       title: index.title,
       content: (

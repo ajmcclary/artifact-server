@@ -26,8 +26,12 @@ export interface CopyButtonProps {
   holdMs?: number;
   /** Disables interaction with the CopyButton. */
   disabled?: boolean;
-  /** The host's clipboard write — the button never touches the clipboard itself. */
-  onCopy?: (e: React.MouseEvent) => void;
+  /** Without `text`: the host's clipboard write, and the button confirms on press. With `text`: called after the button's own write with whether it succeeded. */
+  onCopy?: (e: React.MouseEvent, ok?: boolean) => void;
+  /** The value to copy. Given, the button writes it through `writeClipboard` and confirms only when the write succeeded. */
+  text?: string;
+  /** Announced through `onAnnounce` when a `text` write is refused. @default "Copy failed. Select the value and copy it manually." */
+  failedLabel?: string;
   /** Every copy is spoken here — hand it the shell's live region. */
   onAnnounce?: (text: string) => void;
   /** Label text; omit for the icon-only row copy. */
@@ -39,7 +43,8 @@ export interface CopyButtonProps {
 /**
  * Copy-to-clipboard with in-place confirmation: the icon (and label, when it
  * has one) swap to the copied state for a short hold, then swap back. The
- * tooltip names the control on hover and keyboard focus.
+ * tooltip names the control on hover and keyboard focus. Give it `text` and it
+ * writes the clipboard itself and confirms only a write that succeeded.
  *
  * @startingPoint section="Actions" subtitle="Copy with in-place confirmation" viewport="700x150"
  */

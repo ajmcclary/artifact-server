@@ -8,8 +8,9 @@ import {ActivityThumbnail} from "./activity-thumbnail";
 import {type ActivityFeedState, useActivityFeed} from "./use-activity-feed";
 
 /** One feed's loading, failure, empty and loaded states. The empty state comes from the vendored feed. */
-export function ActivityFeedBody({feed, filtered, label, onClearFilters, onRetry, principalId, stickyTop}: {
-  readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string; readonly onClearFilters: () => void;
+export function ActivityFeedBody({feed, filtered, label, onChanged, onClearFilters, onRetry, principalId, stickyTop}: {
+  readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string;
+  readonly onChanged?: (() => void) | undefined; readonly onClearFilters: () => void;
   readonly onRetry: () => void; readonly principalId: string; readonly stickyTop: number;
 }) {
   if (feed.phase === "loading") {
@@ -23,8 +24,9 @@ export function ActivityFeedBody({feed, filtered, label, onClearFilters, onRetry
   }
   return (
     <ActivityFeedPanel
-      feed={feed} filtered={filtered} label={label} onClearFilters={onClearFilters}
-      principalId={principalId} renderThumbnail={(event) => <ActivityThumbnail event={event} />} stickyTop={stickyTop}
+      feed={feed} filtered={filtered} label={label} onChanged={onChanged} onClearFilters={onClearFilters}
+      principalId={principalId} renderThumbnail={(entry, artifactName) => <ActivityThumbnail artifactName={artifactName} entry={entry} />}
+      stickyTop={stickyTop}
     />
   );
 }

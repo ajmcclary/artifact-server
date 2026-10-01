@@ -23,21 +23,21 @@ import {
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
-import {dismissInnermost, SurfaceState} from "@/arkcase";
+import {dismissInnermost, IconButton, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
-import {CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
+import {CommentsComposer, CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {useDesignGalleryCanvas} from "./workspace/design-gallery-canvas.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
 import {FocusComments, FocusViewerControls, useFocusContainment} from "./workspace/focus-mode.tsx";
-import {FilesTab} from "./workspace/files-tab.tsx";
+import {FilesDownload, FilesTab} from "./workspace/files-tab.tsx";
 import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
 import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
-import {SharePopover} from "./workspace/share-popover.tsx";
+import {exactReviewLink, SharePopover} from "./workspace/share-popover.tsx";
 import {VersionsTab} from "./workspace/versions-tab.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useArtifactCatalog} from "./workspace/use-artifact-catalog.ts";
@@ -397,6 +397,7 @@ function ProjectReview({
     versions,
   } = record;
   const [comparisonView, setComparisonView] = useState<ComparisonTab | null>(null);
+  const [comparisonPair, setComparisonPair] = useState<{readonly from: string; readonly to: string} | null>(null);
   const activity = useArtifactActivity(projectId, selectedArtifactId, comparisonView === "activity");
   const versionComparison = useVersionComparison(projectId, selectedArtifactId);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
@@ -450,6 +451,7 @@ function ProjectReview({
   useFocusContainment(workspaceRef, focusMode);
   const commentsInspectorRef = useRef<CommentsTabHandle | null>(null);
   const [previewModeTarget, setPreviewModeTarget] = useState<HTMLDivElement | null>(null);
+  const [threadFocusRevision, setThreadFocusRevision] = useState(0);
   const followCommentVersion = useCallback((versionId: string): void => {
     setDetailError(null);
     setSelectedVersionId(versionId);
@@ -534,6 +536,7 @@ function ProjectReview({
   useEffect(() => {
     // Comparison and history belong to one artifact.
     setComparisonView(null);
+    setComparisonPair(null);
   }, [selectedArtifactId]);
 
   useEffect(() => {
@@ -746,11 +749,16 @@ function ProjectReview({
         details.artifact.currentVersionId,
         crypto.randomUUID(),
       );
+      // Deleting opens the project's next artifact (or the one before it), or the empty project.
+      const next = catalogItems[selectedIndex + 1] ?? catalogItems[selectedIndex - 1] ?? null;
       catalog.removeArtifact(details.artifact.id);
-      setSelectedArtifactId(null);
-      setSelectedVersionId(null);
+      setSelectedArtifactId(next?.artifact.id ?? null);
+      setSelectedVersionId(next?.artifact.currentVersionId ?? null);
       setSelectedPath(null);
       catalog.reload();
+      announce(next === null
+        ? `${details.artifact.name} deleted.`
+        : `${details.artifact.name} deleted. ${next.artifact.name} opened.`);
       return true;
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught : new Error("Artifact deletion failed."));
@@ -981,11 +989,20 @@ function ProjectReview({
     setInspectorTab(tab);
     setInspectorOpen(true);
   };
+  const openInspector = (tab: InspectorTab): void => {
+    setInspectorTab(tab);
+    setInspectorOpen(true);
+  };
+  const openComparison = (pair: {readonly from: string; readonly to: string} | null, tab: ComparisonTab): void => {
+    setComparisonPair(pair);
+    setComparisonView(tab);
+  };
+  // Rail order: Comments, Files, Versions, Details.
   const inspectorItems: readonly InspectorRailItem[] = [
     {count: openCommentCount, countTone: "primary", icon: "bi-chat-square-text", id: "comments", label: "Comments"},
-    {count: null, countTone: "neutral", icon: "bi-info-circle", id: "details", label: "Details"},
     {count: selectedVersion?.manifest.entries.length ?? 0, countTone: "neutral", icon: "bi-folder2", id: "files", label: "Files"},
     {count: versions.length, countTone: "neutral", icon: "bi-layers", id: "versions", label: "Versions"},
+    {count: null, countTone: "neutral", icon: "bi-info-circle", id: "details", label: "Details"},
   ];
 
   const projectEmpty = selectedProject !== null
@@ -1005,8 +1022,22 @@ function ProjectReview({
       details={details}
       key={`${placement}-share-${details?.artifact.id ?? "empty"}`}
       onArtifactChanged={updateArtifact}
+      // Focus hides the inspector, so there Share keeps its own access screen.
+      onManageAccess={placement === "toolbar" ? () => openInspector("details") : undefined}
       selectedPath={selectedPath}
       selectedVersion={selectedVersion}
+    />
+  );
+  const showThreadInArtifact = (threadId: string): void => {
+    comments.selectThread(threadId);
+    setThreadFocusRevision((revision) => revision + 1);
+  };
+  const commentsComposer = (
+    <CommentsComposer
+      canComment={canComment}
+      principalId={session.principal.id}
+      session={comments}
+      versionId={selectedVersionId}
     />
   );
   const commentsTab = (
@@ -1015,6 +1046,7 @@ function ProjectReview({
       <CommentsTab
         canComment={canComment}
         canDeleteAny={canDeleteAnyComment}
+        onShowInArtifact={showThreadInArtifact}
         handleRef={commentsInspectorRef}
         principalId={session.principal.id}
         session={comments}
@@ -1049,14 +1081,18 @@ function ProjectReview({
     )
   ) : inspectorTab === "details" ? (
     <DetailsTab
+      archived={selectedProject !== null && selectedProject.archivedAt !== null}
       canManage={canManageArtifacts}
       details={details}
       linkedArtifacts={session.capabilities.linkedArtifacts}
       onAccessChange={changeAccess}
       onCapture={captureLinkedArtifact}
+      onDelete={tombstoneArtifact}
       onOpenLive={openLinkedArtifact}
       onTagsChange={changeTags}
+      reviewLink={exactReviewLink(selectedVersion, selectedPath)}
       version={selectedVersion}
+      versionCount={versions.length}
     />
   ) : inspectorTab === "files" ? (
     <FilesTab
@@ -1066,15 +1102,18 @@ function ProjectReview({
     />
   ) : (
     <VersionsTab
+      artifactName={details.artifact.name}
       canManage={canManageArtifacts}
       currentVersionId={details.artifact.currentVersionId}
+      onCompare={(from, to) => openComparison({from, to}, "compare")}
       onMakeCurrent={makeVersionCurrent}
-      onOpenComparison={() => setComparisonView("compare")}
+      onOpenHistory={() => openComparison(null, "activity")}
       onSelect={(versionId) => {
         setDetailError(null);
         setSelectedVersionId(versionId);
         setSelectedPath(null);
       }}
+      phone={phone}
       selectedVersionId={selectedVersionId}
       versions={versions}
     />
@@ -1135,20 +1174,19 @@ function ProjectReview({
             artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
             canManage={canManageArtifacts}
             details={details}
-            download={download}
+            focusActive={false}
+            gallery={galleryCanvas.galleryCrumb}
             linkedArtifacts={session.capabilities.linkedArtifacts}
+            onAnnounce={announce}
             onCapture={captureLinkedArtifact}
-            onDelete={tombstoneArtifact}
             onEnterFocus={enterFocusMode}
+            onMakeCurrent={makeVersionCurrent}
             onOpenCatalog={toggleCatalog}
-            onOpenComments={() => {
-              setInspectorTab("comments");
-              setInspectorOpen(true);
-            }}
-            onOpenComparison={() => setComparisonView("compare")}
+            onOpenComments={() => openInspector("comments")}
+            onOpenComparison={() => openComparison(null, "compare")}
             onOpenLive={openLinkedArtifact}
             onOpenRawArtifact={() => void openRawArtifact()}
-            onReturnToGallery={galleryCanvas.onReturnToGallery}
+            onOpenVersionsPanel={() => openInspector("versions")}
             onSelectPath={selectManifestPath}
             onSelectVersion={(versionId) => {
               setDetailError(null);
@@ -1161,6 +1199,8 @@ function ProjectReview({
             selectedPath={selectedPath}
             selectedVersion={selectedVersion}
             share={sharePopover("toolbar")}
+            // The docked list already names the artifact; collapsed, the name joins the breadcrumb.
+            showName={!catalogDocked}
             versions={versions}
           />
         )}
@@ -1177,7 +1217,8 @@ function ProjectReview({
                 comparisonError={versionComparison.error}
                 comparisonLoading={versionComparison.loading}
                 currentVersionId={details.artifact.currentVersionId}
-                key={details.artifact.id}
+                initialPair={comparisonPair}
+                key={`${details.artifact.id}:${comparisonPair?.from ?? ""}:${comparisonPair?.to ?? ""}`}
                 onBack={() => setComparisonView(null)}
                 onCompare={versionComparison.compare}
                 onLoadMoreActivity={activity.loadMore}
@@ -1219,12 +1260,22 @@ function ProjectReview({
                 readOnly={!canComment}
                 selectedPath={selectedPath}
                 selectedThreadId={comments.selectedThreadId}
+                threadFocusRevision={threadFocusRevision}
                 version={selectedVersion}
               />
             </div>
           </div>
           {focusMode ? null : (
             <InspectorPanel
+              actions={inspectorTab === "versions" && details !== null ? (
+                <IconButton
+                  ariaLabel="Compare versions"
+                  icon="bi-file-diff"
+                  onClick={() => openComparison(null, "compare")}
+                  size="sm"
+                  title="Compare versions"
+                />
+              ) : null}
               active={inspectorTab}
               canPin={!phone && viewportWidth >= workspaceBudget.inspector}
               items={inspectorItems}
@@ -1236,19 +1287,19 @@ function ProjectReview({
               open={inspectorOpen}
               pinned={inspectorPreference.pinned}
               railLabels={viewportHeight >= 680}
+              footer={inspectorTab === "files" && selectedVersion !== null
+                ? <FilesDownload download={download} />
+                : inspectorTab === "comments" && selectedArtifactId !== null ? commentsComposer : null}
               sheet={phone}
-              subtitle={details === null || selectedVersion === null
-                ? null
-                : `${details.artifact.name} · v${selectedVersion.version.number}`}
               title={inspectorTitles[inspectorTab]}
               titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
-              width={inspectorPreference.width ?? inspectorDefaultWidth(inspectorTab)}
+              width={inspectorPreference.width ?? inspectorDefaultWidth()}
             >
               {inspectorBody}
             </InspectorPanel>
           )}
           {focusMode && focusCommentsOpen ? (
-            <FocusComments commentCount={openCommentCount} onClose={() => setFocusCommentsOpen(false)}>
+            <FocusComments commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
               {commentsTab}
             </FocusComments>
           ) : null}

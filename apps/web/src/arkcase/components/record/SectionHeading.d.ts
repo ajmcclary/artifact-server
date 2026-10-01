@@ -11,7 +11,7 @@ export interface SectionHeadingProps extends Omit<React.HTMLAttributes<HTMLDivEl
   titleFace?: 'display' | 'data';
   /** A node directly after the title, before the count chip and meta — typically a StatusPill ("Active", "Hearing Requested"). Rendered outside the heading element, so the heading's name stays the title. */
   badge?: React.ReactNode;
-  /** Uppercase 11px navy label above the title — "Step 3", "Run workspace". Rendered outside the heading element. */
+  /** Uppercase 11px navy label above the title — "Step 3", "Run workspace" — or a node such as a `Breadcrumb`. Rendered outside the heading element: text in a `p`, a node in a `div`. */
   eyebrow?: React.ReactNode;
   /** Muted 13px line under the title — the page's one-sentence description. Distinct from the inline `meta`. */
   subtitle?: React.ReactNode;

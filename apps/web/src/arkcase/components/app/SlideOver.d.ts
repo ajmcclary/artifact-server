@@ -9,6 +9,8 @@ export interface SlideOverProps {
   leading?: React.ReactNode;
   /** Rendered inline right after the title text — a count badge. It never truncates; the title does. */
   titleMeta?: React.ReactNode;
+  /** Header controls before the close button — a pane-level command such as a Compare IconButton. */
+  actions?: React.ReactNode;
   /** Called when the SlideOver requests dismissal. */
   onClose?: () => void;
   /** @default "Close" */

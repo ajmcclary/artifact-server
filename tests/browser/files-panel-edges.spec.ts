@@ -16,7 +16,7 @@ async function box(locator: Locator): Promise<{readonly left: number; readonly r
   return {left: rect.x, right: rect.x + rect.width};
 }
 
-test("Files panel: every icon shares one edge, folder files sit under the folder name, labels end at the same edge", async ({browser}) => {
+test("Files panel: the version is a tree whose icons share one edge per level and whose sizes end at one edge", async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   try {
     const files = [
@@ -42,34 +42,35 @@ test("Files panel: every icon shares one edge, folder files sit under the folder
     });
     await openInspectorTab(fixture.page, "Files");
 
-    const inventory = fixture.page.getByRole("complementary", {name: "Artifact inspector"})
-      .getByRole("region", {name: /^Files in version \d+$/u});
-    const topLevel = inventory.getByRole("list", {name: "Top-level files"});
-    const folderButton = inventory.getByRole("button", {name: /^assets\//u});
-    const folderFiles = inventory.getByRole("list", {name: "Files in assets"});
-    await expect(folderFiles).toBeVisible();
+    const tree = fixture.page.getByRole("complementary", {name: "Artifact inspector"})
+      .getByRole("tree", {name: /^Files in version \d+$/u});
+    const row = (level: number, label: string): Locator =>
+      tree.locator(`[role="treeitem"][aria-level="${level}"]`).filter({hasText: new RegExp(`^${label.replaceAll(".", "\\.")}`, "u")});
+    const folder = row(1, "assets");
+    const selected = row(2, "app.css");
+    // The folder holding the selected file opens itself; the selected file is the tree's selection.
+    await expect(folder).toHaveAttribute("aria-expanded", "true");
+    await expect(selected).toHaveAttribute("aria-selected", "true");
     // The inspector settles its width after opening; measure only once it stops moving.
     let previous = Number.NaN;
     await expect.poll(async () => {
-      const left = (await box(inventory)).left;
+      const left = (await box(tree)).left;
       const settled = left === previous;
       previous = left;
       return settled;
     }, {intervals: [100]}).toBe(true);
 
-    const panel = await box(inventory);
-    const topIcon = await box(topLevel.getByRole("listitem").first().locator("i.bi"));
-    const folderIcon = await box(folderButton.locator("i.bi-folder"));
-    const folderName = await box(folderButton.getByText("assets/", {exact: true}));
-    const folderFileIcon = await box(folderFiles.getByRole("listitem").first().locator("i.bi"));
-    const defaultLabel = await box(topLevel.getByText("Default page", {exact: true}));
-    const selectedLabel = await box(folderFiles.getByText("Selected", {exact: true}));
-
+    // A chevron column keeps every icon of one level on one edge; each level steps in by 14px.
+    const topIcon = await box(row(1, "index.html").locator("i.bi:not([data-tree-chevron])"));
+    const folderIcon = await box(folder.locator("i.bi:not([data-tree-chevron])"));
+    const nestedIcon = await box(row(2, "logo.svg").locator("i.bi:not([data-tree-chevron])"));
     expect(Math.abs(topIcon.left - folderIcon.left)).toBeLessThanOrEqual(1);
-    expect(Math.abs(topIcon.left - panel.left - 14)).toBeLessThanOrEqual(1);
-    expect(Math.abs(folderFileIcon.left - folderName.left)).toBeLessThanOrEqual(1);
-    expect(Math.abs(panel.right - defaultLabel.right - 14)).toBeLessThanOrEqual(1);
-    expect(Math.abs(defaultLabel.right - selectedLabel.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(nestedIcon.left - folderIcon.left - 14)).toBeLessThanOrEqual(1);
+    // Sizes and the folder's file count end at one right edge (a pill such as Default page follows the size).
+    const sizes = await Promise.all([row(1, "about.html"), folder, row(2, "logo.svg")].map((item) => box(item.locator("[data-tree-meta]"))));
+    expect(Math.max(...sizes.map((size) => size.right)) - Math.min(...sizes.map((size) => size.right))).toBeLessThanOrEqual(1);
+    await expect(folder.locator("[data-tree-meta]")).toHaveText("2 files");
+    await expect(row(1, "index.html")).toContainText("Default page");
   } finally {
     await stopBrowserFixture(fixture);
   }

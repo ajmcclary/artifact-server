@@ -14,7 +14,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {inspectorTabButton, openInspectorTab, openReview, previewFrame} from "./review-helpers.js";
+import {inspectorTabButton, openInspectorTab, openReview, pageCrumb, previewFrame, versionCrumb} from "./review-helpers.js";
 
 function catalogPanel(page: Page) {
   return page.locator('[data-panel="artifact-catalog"]');
@@ -203,7 +203,7 @@ test.describe("Artifact review workspace layout", () => {
       await stopBrowserFixture(fixture);
     }
   });
-  test("CMT-015-B CMT-015-F: the toolbar switches the exact version and page and offers raw, download, share and full screen", async ({browser}) => {
+  test("CMT-015-B CMT-015-F: the toolbar breadcrumb switches the exact version and page beside share, raw and focus", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const files = [
@@ -230,27 +230,47 @@ test.describe("Artifact review workspace layout", () => {
       await expect(toolbar.getByRole("heading", {level: 1, name: "Pages fixture"})).toBeVisible();
       await expect(previewFrame(page).getByRole("heading", {name: "Pages second version"})).toBeVisible();
 
-      await toolbar.getByRole("button", {name: /^Choose version, showing v2 of 2, current$/u}).click();
-      const versionMenu = page.getByRole("menu", {name: "Version"});
-      await expect(versionMenu.getByRole("menuitemradio", {name: /Version 2/u})).toHaveAttribute("aria-checked", "true");
-      await versionMenu.getByRole("menuitemradio", {name: /Version 1/u}).click();
+      // The breadcrumb's version crumb finds a version; the shown one is checked, the current one tagged.
+      await versionCrumb(page).click();
+      const versionMenu = page.getByRole("dialog", {name: "Choose a version"});
+      await expect(versionMenu.getByRole("button", {name: /^v2 /u})).toHaveAttribute("aria-current", "true");
+      await expect(versionMenu.getByText("2 of 2 versions")).toBeVisible();
+      await versionMenu.getByRole("searchbox", {name: "Find a version"}).fill("v1");
+      await versionMenu.getByRole("button", {name: /^v1 /u}).click();
       await expect(previewFrame(page).getByRole("heading", {name: "Pages home"})).toBeVisible();
       expect(new URL(page.url()).searchParams.get("version")).toBe(first.body.version.id);
+      // An older version is a preview with its way back and Make Current.
+      await expect(toolbar.getByText("Preview", {exact: true})).toBeVisible();
+      await expect(toolbar.getByRole("button", {name: "Back to v2"})).toBeVisible();
+      await expect(toolbar.getByRole("button", {name: "Make Current"})).toBeVisible();
 
-      await toolbar.getByRole("button", {name: /^Pages · index\.html · 2 pages$/u}).click();
-      await page.getByRole("dialog", {name: "Pages"}).getByRole("button", {name: "Open page about.html"}).click();
+      // The page crumb names the page and finds another.
+      await expect(pageCrumb(page)).toHaveAttribute("aria-current", "page");
+      await pageCrumb(page).click();
+      await page.getByRole("dialog", {name: "Choose a page"}).getByRole("button", {name: /^about\.html/u}).click();
       await expect(previewFrame(page).getByRole("heading", {name: "Pages about"})).toBeVisible();
       expect(new URL(page.url()).searchParams.get("path")).toBe("about.html");
+      await expect(pageCrumb(page)).toHaveAccessibleName("Page about.html · Choose a page");
 
-      await expect(toolbar.getByRole("button", {name: "Open raw artifact"})).toBeEnabled();
-      await expect(toolbar.getByRole("link", {exact: true, name: "Download"}))
-        .toHaveAttribute("title", "Download 2 files as a ZIP");
-      await expect(toolbar.getByRole("button", {name: "Full screen"})).toHaveAttribute("aria-keyshortcuts", "F");
+      // Share, Open raw and Focus are icons; the toolbar carries no Download or Gallery button.
+      await expect(toolbar.getByRole("button", {name: "Share this version"})).toBeEnabled();
+      await expect(toolbar.getByRole("button", {name: "Open raw in a new window"})).toBeEnabled();
+      await expect(toolbar.getByRole("button", {name: "Focus — expand the workspace"})).toHaveAttribute("aria-keyshortcuts", "F");
+      await expect(toolbar.getByRole("link", {name: /Download/u})).toHaveCount(0);
+      await expect(toolbar.getByRole("button", {name: /Gallery/u})).toHaveCount(0);
       await expect(toolbar.getByRole("button", {name: /^(Open|Close) inspector$/u})).toHaveCount(0);
       await toolbar.getByRole("button", {name: "More artifact actions"}).click();
-      await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: "Delete artifact"})).toBeVisible();
+      await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: "Comparison and history"})).toBeVisible();
+      await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: /Delete/u})).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu", {name: "More artifact actions"})).toHaveCount(0);
+
+      // Download moved to the Files panel's foot; Delete moved to Details.
+      await openInspectorTab(page, "Files");
+      await expect(page.getByRole("link", {exact: true, name: "Download Artifact"}))
+        .toHaveAttribute("title", "Download 2 files as a ZIP");
+      await openInspectorTab(page, "Details");
+      await expect(page.getByRole("button", {name: "Delete Artifact"})).toBeEnabled();
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -314,17 +334,17 @@ test.describe("Artifact review workspace layout", () => {
       await expect(inspectorTabButton(page, "Details")).toHaveAttribute("aria-pressed", "true");
 
       const seam = page.getByRole("separator", {name: "Resize the artifact inspector"});
-      await expect(seam).toHaveAttribute("aria-valuenow", "392");
+      await expect(seam).toHaveAttribute("aria-valuenow", "360");
       await expect(seam).toHaveAttribute("aria-valuemin", "300");
       await expect(seam).toHaveAttribute("aria-valuemax", "560");
       await seam.focus();
       await page.keyboard.press("ArrowLeft");
-      await expect(seam).toHaveAttribute("aria-valuenow", "408");
-      await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector.w\":408");
+      await expect(seam).toHaveAttribute("aria-valuenow", "376");
+      await expect.poll(() => storedPanels(page)).toContain("\"artifact-inspector.w\":376");
       // Aim at the seam only once the stepped width has settled, and re-measure per attempt.
       await expect.poll(() => page.locator('[data-panel="artifact-inspector"]').evaluate(
         (node) => Math.round(node.getBoundingClientRect().width),
-      )).toBe(408);
+      )).toBe(376);
       await expect(async () => {
         const seamBox = await seam.boundingBox();
         if (seamBox === null) throw new Error("The inspector seam has no geometry.");
@@ -332,7 +352,7 @@ test.describe("Artifact review workspace layout", () => {
         await page.mouse.down();
         await page.mouse.move(seamBox.x + seamBox.width / 2 - 40, seamBox.y + 200, {steps: 4});
         await page.mouse.up();
-        expect(Number(await seam.getAttribute("aria-valuenow"))).toBeGreaterThanOrEqual(440);
+        expect(Number(await seam.getAttribute("aria-valuenow"))).toBeGreaterThanOrEqual(408);
       }).toPass({timeout: 10_000});
 
       // Pressing the open view again closes it; the rail stays.

@@ -2,6 +2,7 @@ import React from 'react';
 import { Avatar } from './Avatar.jsx';
 import { StatusPill } from './StatusPill.jsx';
 import { Button } from '../actions/Button.jsx';
+import { MentionText } from './MentionText.jsx';
 
 /* The two sizes the prototypes drew: a side-panel thread (24px thread avatars, 14px copy)
    and a dense inspector list (20px avatars, 13px copy). Replies are always 20px. */
@@ -153,8 +154,12 @@ function Thread({ c, d, onReply, onResolve, renderReplyComposer, renderActions, 
  */
 export function CommentThread({
   comments = [], onReply, onResolve, density = 'comfortable', renderReplyComposer, renderActions,
-  selectedId, onSelect, visibleReplies, expandedIds, onToggleReplies, emptyMessage = 'No comments yet.', style, ...rest
+  selectedId, onSelect, visibleReplies, expandedIds, onToggleReplies, emptyMessage = 'No comments yet.', mentions, style, ...rest
 }) {
+  /* With `mentions`, every string body — comment and reply — draws its @mentions as names. */
+  const mention = (text) => (mentions && typeof text === 'string' ? <MentionText text={text} people={mentions} /> : text);
+  const list = mentions ? comments.map((c) => ({ ...c, text: mention(c.text),
+    replies: c.replies ? c.replies.map((r) => ({ ...r, text: mention(r.text) })) : c.replies })) : comments;
   const selectable = typeof onSelect === 'function';
   const [ownExpanded, setOwnExpanded] = React.useState([]);
   const expandedList = expandedIds || ownExpanded;
@@ -163,7 +168,7 @@ export function CommentThread({
     if (!expandedIds) setOwnExpanded((all) => (next ? all.concat(id) : all.filter((x) => x !== id)));
   };
   const d = DENSITY[density] || DENSITY.comfortable;
-  if (!comments.length) {
+  if (!list.length) {
     // No list, so no list name: a generic div must not carry aria-label.
     const { 'aria-label': _unused, ...plain } = rest;
     return (
@@ -174,7 +179,7 @@ export function CommentThread({
   }
   return (
     <ul style={{ ...LIST, fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', ...style }} {...rest}>
-      {comments.map((c) => (
+      {list.map((c) => (
         <Thread key={c.id} c={c} d={d} onReply={onReply} onResolve={onResolve} renderReplyComposer={renderReplyComposer}
           renderActions={renderActions} selectable={selectable} selected={selectable && c.id === selectedId} onSelect={onSelect}
           visibleReplies={visibleReplies} repliesOpen={expandedList.indexOf(c.id) > -1} onToggleReplies={toggleReplies} />

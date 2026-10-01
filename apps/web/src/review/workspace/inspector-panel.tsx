@@ -16,9 +16,13 @@ export interface InspectorRailItem {
 
 export interface InspectorPanelProps {
   readonly active: string;
+  /** The open view's own command at the header's end, e.g. Compare versions. */
+  readonly actions?: ReactNode;
   /** Whether the width budget lets the inspector dock (DS `canPin`). */
   readonly canPin: boolean;
   readonly children: ReactNode;
+  /** Docked at the panel's foot, e.g. the comment composer or Download Artifact. */
+  readonly footer?: ReactNode;
   readonly items: readonly InspectorRailItem[];
   readonly onAnnounce: (message: string) => void;
   readonly onClose: () => void;
@@ -32,7 +36,6 @@ export interface InspectorPanelProps {
   readonly railLabels: boolean;
   /** Phone presentation: the inspector fills the viewport. */
   readonly sheet: boolean;
-  readonly subtitle: string | null;
   readonly title: string;
   readonly titleCount: number | null;
   readonly width: number;
@@ -43,9 +46,11 @@ const sheetViewStyle = {borderBottom: "1px solid var(--border-color)", flex: "no
 
 /** The inspector column and its tab rail at the canvas's end edge. */
 export function InspectorPanel({
+  actions = null,
   active,
   canPin,
   children,
+  footer = null,
   items,
   onAnnounce,
   onClose,
@@ -56,14 +61,17 @@ export function InspectorPanel({
   pinned,
   railLabels,
   sheet,
-  subtitle,
   title,
   titleCount,
   width,
 }: InspectorPanelProps) {
+  // The toolbar already names the artifact and version, so the header carries the view's
+  // name, its count and its own command. The rail tab that opened the panel closes it, so
+  // only a phone's sheet, which covers the rail, keeps a close button.
   const slideOver: ComponentProps<typeof SlideOver> = {
+    actions,
     bodyStyle: {gap: 0, padding: 0},
-    subtitle,
+    footer,
     title,
     titleMeta: titleCount === null ? null : <CountBadge count={titleCount} label={`${titleCount} open`} tone="primary" />,
     width: "100%",

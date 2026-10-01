@@ -15,6 +15,7 @@ import {
   openInspectorTab,
   openReview,
   reviewHref,
+  selectThread,
   waitForSettledPaint,
 } from "./review-helpers.js";
 import {createThreadOverApi, listThreadsOverApi} from "./comment-api.js";
@@ -135,6 +136,9 @@ test.describe("WMC-001 WebMCP review tools", () => {
       expect(replied.thread.replies.map((reply) => reply.body)).toEqual(["Cited the 2024 survey."]);
       expect(replied.counts).toEqual({open: 2, resolved: 0});
       const firstCard = page.getByRole("article", {name: /^Comment by /u}).filter({hasText: "The first claim needs a source."});
+      // Collapsed, the card summarises the reply; selected, it shows it.
+      await expect(firstCard.getByText(/^1 reply · /u)).toBeVisible();
+      await selectThread(page, "The first claim needs a source.");
       await expect(firstCard.getByText("Cited the 2024 survey.")).toBeVisible();
 
       // Resolve echoes the new state and the decremented open count; the

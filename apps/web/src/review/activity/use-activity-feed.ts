@@ -25,7 +25,7 @@ export interface ActivityFeedState {
   readonly insertLocal: (entry: ActivityEntry) => void;
   readonly loadOlder: () => void;
   readonly reload: () => void;
-  /** Swap a thread entry's snapshot (full replies after hydration, a new reply, a resolve). */
+  /** Swap a conversation's snapshot wherever it shows (full replies after hydration, a new reply, a resolve). */
   readonly replaceThread: (threadId: string, thread: NonNullable<ActivityEntry["thread"]>) => void;
 }
 
@@ -50,7 +50,8 @@ export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
   const [state, setState] = useState<FeedState>(() => knownFeed(key));
   const generation = useRef(0);
   const request = useCallback((next: string | null) => api.listActivity({
-    cursor: next, limit: pageSize, projects: [...filters.projects], q: filters.q, segment: filters.segment, types: [...filters.types],
+    cursor: next, limit: pageSize, people: [...filters.people], projects: [...filters.projects], q: filters.q, segment: filters.segment,
+    types: [...filters.types],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the filters' value identity
   }), [key]);
 
@@ -111,9 +112,10 @@ export function useActivityFeed(filters: ActivityFilters): ActivityFeedState {
     setState((current) => ({...current, entries: appendPage([entry], current.entries.filter((existing) =>
       !(existing.kind === "thread" && entry.kind === "thread" && existing.thread?.id === entry.thread?.id)))}));
   }, []);
+  // A conversation's entry and any resolve or reopen entries carrying it show the same snapshot.
   const replaceThread = useCallback((threadId: string, thread: NonNullable<ActivityEntry["thread"]>) => {
     setState((current) => ({...current, entries: current.entries.map((entry) =>
-      entry.kind === "thread" && entry.thread?.id === threadId ? {...entry, thread} : entry)}));
+      entry.thread?.id === threadId ? {...entry, thread} : entry)}));
   }, []);
   const reload = useCallback(() => loadFirst("refresh"), [loadFirst]);
 

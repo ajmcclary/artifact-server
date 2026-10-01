@@ -15,7 +15,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, toast} from "./review-helpers.js";
+import {openInspectorTab, openReview, selectThread, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml =
@@ -130,8 +130,9 @@ test.describe("PRS-004 one-click send and undo", () => {
       // Nothing is left in the mailbox for the agent to take.
       expect((await agent.client.claim(agent.agentId, 1)).status).toBe(204);
 
-      // A single card is the secondary path. A send the agent already
-      // delivered refuses the undo, and says so.
+      // A single card is the secondary path: its actions show once it is selected.
+      // A send the agent already delivered refuses the undo, and says so.
+      await selectThread(page, bodies.second);
       await cards.filter({hasText: bodies.second})
         .getByRole("button", {name: "Send to solo"}).click();
       await expect(toast(page, "Sent 1 thread to solo")).toBeVisible();

@@ -113,17 +113,15 @@ test.describe("PRS-006 presence avatar", () => {
       // The primary compose action reads as a real input at rest: its label
       // names the action plainly and the writing surface stays visibly
       // bounded before focus instead of disappearing into the inspector.
+      // It is the prompt box docked at the panel's foot: a bordered box around the field.
       const newCommentInput = page.getByLabel("Add a comment");
       await expect(newCommentInput).toBeVisible();
-      expect(await newCommentInput.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          borderWidth: style.borderTopWidth,
-          height: element.getBoundingClientRect().height,
-        };
-      })).toEqual({borderWidth: "1px", height: expect.any(Number)});
-      expect(await newCommentInput.evaluate((element) => element.getBoundingClientRect().height))
-        .toBeGreaterThanOrEqual(56);
+      const boundedHeight = await newCommentInput.evaluate((element) => {
+        let node: Element | null = element;
+        while (node !== null && getComputedStyle(node).borderTopWidth !== "1px") node = node.parentElement;
+        return node === null ? 0 : node.getBoundingClientRect().height;
+      });
+      expect(boundedHeight).toBeGreaterThanOrEqual(56);
 
       // Idle: the primary send-all control carries the agent's avatar — the
       // Pi brand mark in a circle whose solid ring is the state, not a bare

@@ -1,11 +1,10 @@
 import {useEffect, useRef, useState, type CSSProperties} from "react";
 
-import {api} from "@/api/client";
+import {api, type ActivityEntry} from "@/api/client";
 import {createRequestLimiter} from "@/lib/request-limiter";
 import {frameMessageSchema, reviewAnnotationSchema, reviewProtocolVersion, type HostMessage} from "@/review-frame/protocol";
 import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 
-import type {FeedEvent} from "./activity-adapter";
 import {thumbnailPlan} from "./thumbnail-plan";
 
 /** At most four conversation screens load at once, across the whole feed. */
@@ -15,7 +14,7 @@ const frameStyle = {border: 0, display: "block", height: 500, width: 800} satisf
 const tileStyle = {alignItems: "center", background: "var(--surface-muted, #f1f5f7)", color: "var(--text-secondary, #5a6268)",
   display: "flex", fontSize: 160, height: 500, justifyContent: "center", width: 800} satisfies CSSProperties;
 
-type Loaded = {readonly baseHref: string; readonly entryPath: string; readonly html: string};
+type Loaded = {readonly baseHref: string; readonly entryPath: string; readonly html: string; readonly pin: boolean};
 type ScreenState = {readonly kind: "idle" | "tile"; readonly reason: string} | {readonly kind: "frame"; readonly loaded: Loaded};
 
 const rememberedScreens = 200;
@@ -38,13 +37,16 @@ function knownScreen(key: string | null): ScreenState | null {
   return known === undefined || known.until <= Date.now() ? null : known.state;
 }
 
-/** The file-type tile shown before loading, for non-HTML entries, unplaceable anchors and failures. */
+/** The file-type tile shown before loading, for non-HTML entries, unplaceable pins and failures. */
 function FileTile({reason}: {readonly reason: string}) {
   return <div data-thumbnail="tile" data-thumbnail-reason={reason} style={tileStyle}><i aria-hidden="true" className="bi bi-file-earmark-richtext" /></div>;
 }
 
-export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
-  const entry = event.entry;
+/**
+ * One conversation's exact version, drawn in the review frame: with its pin when the page holds
+ * one, else the page alone. `entry` is the API entry of the conversation the card chose.
+ */
+export function ActivityThumbnail({artifactName, entry}: {readonly artifactName: string; readonly entry: ActivityEntry}) {
   const thread = entry.thread;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -99,7 +101,7 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
       if (lease.versionId !== versionId) throw new Error("lease version mismatch");
       if (!live) return;
       const base = new URL(plan.path.split("/").map(encodeURIComponent).join("/"), lease.baseUrl);
-      const frame = {kind: "frame", loaded: {baseHref: new URL(".", base).toString(), entryPath: plan.path, html}} as const;
+      const frame = {kind: "frame", loaded: {baseHref: new URL(".", base).toString(), entryPath: plan.path, html, pin: plan.pin}} as const;
       rememberScreen(screenKey, frame, Date.parse(lease.expiresAt) - leaseMarginMilliseconds);
       setState(frame);
       // Hold the slot until the frame has been initialised, gives up, or this load is cancelled.
@@ -129,15 +131,17 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
       if (!parsed.success) return;
       if (parsed.data.type === "as-review-ready") {
         // The wire anchor is untyped JSON; the frame's own schema decides what it can place.
-        const annotation = reviewAnnotationSchema.parse({anchor: thread.anchor, body: thread.opener.body,
-          state: thread.isResolved ? "resolved" : "open", threadId: thread.id});
-        post({annotateModeActive: false, annotations: [annotation],
+        const annotations = state.loaded.pin
+          ? [reviewAnnotationSchema.parse({anchor: thread.anchor, body: thread.opener.body,
+            state: thread.isResolved ? "resolved" : "open", threadId: thread.id})]
+          : [];
+        post({annotateModeActive: false, annotations,
           baseHref: state.loaded.baseHref, entryPath: state.loaded.entryPath, html: state.loaded.html, isLight: frameIsLight(),
           readOnly: true, themeTokens: arkcaseFrameTokens(), type: "as-review-init", v: reviewProtocolVersion});
-        post({threadId: thread.id, type: "as-review-focus", v: reviewProtocolVersion});
+        if (state.loaded.pin) post({threadId: thread.id, type: "as-review-focus", v: reviewProtocolVersion});
       }
       // The frame could not place this thread's anchor on the page: never show a misplaced pin.
-      if (parsed.data.type === "as-review-unanchored" && parsed.data.threadIds.includes(thread.id)) {
+      if (state.loaded.pin && parsed.data.type === "as-review-unanchored" && parsed.data.threadIds.includes(thread.id)) {
         const tile = {kind: "tile", reason: "unanchored"} as const;
         if (screenKey !== null) rememberScreen(screenKey, tile, Number.POSITIVE_INFINITY);
         setState(tile);
@@ -150,7 +154,7 @@ export function ActivityThumbnail({event}: {readonly event: FeedEvent}) {
   return (
     <div ref={rootRef} data-thumbnail-for={thread?.id}>
       {state.kind === "frame"
-        ? <iframe data-thumbnail="frame" ref={frameRef} src="/review-frame" style={frameStyle} tabIndex={-1} title={`Screen of ${event.artifactName ?? "artifact"}`} />
+        ? <iframe data-thumbnail="frame" ref={frameRef} src="/review-frame" style={frameStyle} tabIndex={-1} title={`Screen of ${artifactName}`} />
         : <FileTile reason={state.reason} />}
     </div>
   );

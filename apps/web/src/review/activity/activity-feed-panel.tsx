@@ -8,13 +8,14 @@ import {maximumCommentBodyCharacters} from "@/components/comments/comment-limits
 import {createRequestLimiter} from "@/lib/request-limiter";
 import {readStored, writeStored} from "@/lib/safe-storage";
 import {navigateReview, workspaceHref} from "@/review/review-routes";
-import {type ActivityEvent, ActivityFeed} from "@/ui/review-ui";
+import {type ActivityArtifactGroup, type ActivityEntry as OpenedEntry, ActivityFeed} from "@/ui/review-ui";
 import {useToasts} from "@/ui/toasts";
 
-import {type FeedEvent, mergedFeed, toFeedEvents} from "./activity-adapter";
+import {feedEntries, mergedFeed, openTarget, thumbnailEntry, toFeedEvents} from "./activity-adapter";
 import type {ActivityFeedState} from "./use-activity-feed";
 
 const expandedKey = "activity-expanded-threads";
+const openGroupsKey = "activity-open-groups";
 
 type WireComment = NonNullable<ActivityEntry["thread"]>["opener"];
 
@@ -26,10 +27,12 @@ interface ThreadContext {
   readonly thread: NonNullable<ActivityEntry["thread"]>;
 }
 
+/** Each conversation's context, from its own entry (a resolution's copy only when its entry is not loaded). */
 function threadContexts(entries: readonly ActivityEntry[]): Map<string, ThreadContext> {
   const contexts = new Map<string, ThreadContext>();
   for (const entry of entries) {
     if (entry.thread === undefined || entry.artifact === null || entry.project === null) continue;
+    if (entry.kind !== "thread" && contexts.has(entry.thread.id)) continue;
     contexts.set(entry.thread.id, {artifact: entry.artifact, entry, projectId: entry.project.id, thread: entry.thread});
   }
   return contexts;
@@ -41,13 +44,20 @@ const hydratingThreads = new Set<string>();
 
 const expandedSchema = z.array(z.string());
 
-function readExpanded(): string[] {
+/** Ids kept open for this tab: expanded threads, or open bursts. */
+function readIds(key: string): string[] {
   try {
-    const parsed = expandedSchema.safeParse(JSON.parse(readStored("session", expandedKey) ?? "[]"));
+    const parsed = expandedSchema.safeParse(JSON.parse(readStored("session", key) ?? "[]"));
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
   }
+}
+
+function toggled(current: readonly string[], id: string, open: boolean, key: string): string[] {
+  const next = open ? [...new Set([...current, id])] : current.filter((known) => known !== id);
+  writeStored("session", key, JSON.stringify(next));
+  return next;
 }
 
 function ReplyComposer({context, onDone, onPosted, principalId}: {
@@ -67,7 +77,7 @@ function ReplyComposer({context, onDone, onPosted, principalId}: {
           draft.onPosted();
           const shown = {author: {kind: reply.author.principalKind, name: reply.author.displayName}, body: reply.body, createdAt: reply.createdAt, id: reply.id};
           onPosted({...entry, actor: {kind: reply.author.principalKind, name: reply.author.displayName}, at: reply.createdAt,
-            id: `local:${reply.id}`, thread: {...thread, replies: [...thread.replies, shown], replyCount: thread.replyCount + 1}, verb: "replied"});
+            id: `local:${reply.id}`, kind: "thread", thread: {...thread, replies: [...thread.replies, shown], replyCount: thread.replyCount + 1}, verb: "replied"});
           onDone();
           return true;
         } catch {
@@ -81,14 +91,21 @@ function ReplyComposer({context, onDone, onPosted, principalId}: {
 }
 
 /** The feed body shared by Activity and a project's Activity section. */
-export function ActivityFeedPanel({feed, filtered, label, onClearFilters, principalId, renderThumbnail, stickyTop}: {
-  readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string; readonly onClearFilters: () => void;
-  readonly principalId: string; readonly renderThumbnail?: (event: FeedEvent) => React.ReactNode; readonly stickyTop: number;
+export function ActivityFeedPanel({feed, filtered, label, onChanged, onClearFilters, principalId, renderThumbnail, stickyTop}: {
+  readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string;
+  /** Called after a reply or a resolve lands, so counts read beside the feed can re-read. */
+  readonly onChanged?: (() => void) | undefined;
+  readonly onClearFilters: () => void;
+  readonly principalId: string;
+  /** Draws an artifact card's screen from the conversation it chose (`thumbnailEntry`). */
+  readonly renderThumbnail?: (entry: ActivityEntry, artifactName: string) => React.ReactNode; readonly stickyTop: number;
 }) {
   const toasts = useToasts();
-  const [expanded, setExpanded] = useState<string[]>(readExpanded);
+  const [expanded, setExpanded] = useState<string[]>(() => readIds(expandedKey));
+  const [openGroups, setOpenGroups] = useState<string[]>(() => readIds(openGroupsKey));
   const [replying, setReplying] = useState<string | null>(null);
   const events = useMemo(() => mergedFeed(toFeedEvents(feed.entries)), [feed.entries]);
+  const entries = useMemo(() => feedEntries(events), [events]);
   const byThread = useMemo(() => threadContexts(feed.entries), [feed.entries]);
   const byEvent = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
 
@@ -124,15 +141,10 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
     }
   }, [byThread, replaceThread]);
 
-  // The vendored feed hands back the events it was given; recover each one's API entry by id.
-  const open = (event: ActivityEvent): void => {
-    const entry = byEvent.get(event.id)?.entry;
-    if (entry === undefined) return;
-    if (entry.artifact === null || entry.project === null) return;
-    navigateReview(workspaceHref({
-      artifactId: entry.artifact.id, path: entry.thread?.path ?? null, projectId: entry.project.id,
-      threadId: entry.thread?.id ?? entry.threadId ?? null, versionId: entry.thread?.versionId ?? null, view: null,
-    }));
+  // An event opens its artifact; an artifact card opens its newest conversation; a burst's items open one by one.
+  const open = (entry: OpenedEntry): void => {
+    const target = openTarget(entry, byEvent);
+    if (target !== null) navigateReview(workspaceHref({...target, view: null}));
   };
   const resolve = async (threadKey: string, next: boolean): Promise<void> => {
     const context = byThread.get(threadKey);
@@ -141,6 +153,7 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
       const saved = await api.updateComment(context.projectId, context.artifact.id, threadKey, {state: next ? "resolved" : "open"});
       feed.replaceThread(threadKey, {...context.thread, isResolved: saved.state === "resolved", state: saved.state === "resolved" ? "resolved" : "needs_you"});
       feed.reload();
+      onChanged?.();
     } catch {
       toasts.push({message: "The conversation was not changed. Try again.", title: next ? "Not resolved" : "Not reopened", variant: "danger"});
     }
@@ -148,7 +161,7 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
 
   return (
     <ActivityFeed
-      events={events}
+      events={entries}
       expandedIds={expanded}
       filtered={filtered}
       hasMore={feed.hasMore}
@@ -159,11 +172,9 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
       onReply={(threadKey) => setReplying((current) => current === threadKey ? null : threadKey)}
       onResolve={(threadKey, next) => void resolve(threadKey, next)}
       onShowOlder={feed.loadOlder}
-      onToggleReplies={(threadKey, isOpen) => setExpanded((current) => {
-        const next = isOpen ? [...new Set([...current, threadKey])] : current.filter((id) => id !== threadKey);
-        writeStored("session", expandedKey, JSON.stringify(next));
-        return next;
-      })}
+      onToggleGroup={(id, isOpen) => setOpenGroups((current) => toggled(current, id, isOpen, openGroupsKey))}
+      onToggleReplies={(threadKey, isOpen) => setExpanded((current) => toggled(current, threadKey, isOpen, expandedKey))}
+      openGroups={openGroups}
       remaining={0}
       renderReplyComposer={(threadKey) => {
         const context = byThread.get(threadKey);
@@ -171,13 +182,14 @@ export function ActivityFeedPanel({feed, filtered, label, onClearFilters, princi
           <ReplyComposer context={context} onDone={() => setReplying(null)} onPosted={(local) => {
             feed.insertLocal(local);
             feed.reload();
+            onChanged?.();
           }} principalId={principalId} />
         );
       }}
       {...(renderThumbnail === undefined ? {} : {
-        renderThumbnail: (event: ActivityEvent) => {
-          const feedEvent = byEvent.get(event.id);
-          return feedEvent === undefined ? null : renderThumbnail(feedEvent);
+        renderThumbnail: (group: ActivityArtifactGroup) => {
+          const chosen = thumbnailEntry(group, byEvent);
+          return chosen === null ? null : renderThumbnail(chosen, group.artifactName);
         },
       })}
       stickyTop={stickyTop}

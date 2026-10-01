@@ -14,7 +14,14 @@ import {parseDesignCard} from "../../src/manifest/design-card.js";
 import {writeDesignCardFixture, writePreviewSourceFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
 import {listThreadsOverApi} from "./comment-api.js";
-import {annotationFrame, interactiveFrame, openInspectorTab, previewFrame} from "./review-helpers.js";
+import {
+  annotationFrame,
+  expectGalleryReturn,
+  interactiveFrame,
+  openInspectorTab,
+  previewFrame,
+  returnToGallery,
+} from "./review-helpers.js";
 
 const privateArtifact = {kind: "new_artifact", accessSetting: "account_required", tags: []} as const;
 
@@ -79,7 +86,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(page).toHaveURL(/path=project%2FPortal\.dc\.html/u);
     expect(new URL(page.url()).searchParams.get("version")).toBe(published.version.id);
     await expect(interactiveFrame(page).getByRole("heading", {name: "Claimant portal"})).toBeVisible();
-    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
+    await expectGalleryReturn(page, true);
 
     await page.goBack();
     await expect(view.getByRole("radio", {name: "List"})).toHaveAttribute("aria-checked", "true");
@@ -87,7 +94,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(portal).toBeFocused();
     await page.goForward();
     await expect(interactiveFrame(page).getByRole("heading", {name: "Claimant portal"})).toBeVisible();
-    await page.getByRole("button", {name: "Back to gallery"}).click();
+    await returnToGallery(page);
     await expect(view.getByRole("heading", {name: "Claims Workspace", level: 2})).toBeVisible();
     expect(new URL(page.url()).searchParams.has("path")).toBe(false);
 
@@ -107,7 +114,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     await expect(interactive.locator("output")).toHaveText("Clicked");
     // The reversible mode switch sits with the workspace comment controls.
     await page.getByRole("button", {name: "Exit full screen"}).click();
-    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
+    await expectGalleryReturn(page, true);
     await openInspectorTab(page, "Comments");
     const mode = page.getByRole("group", {name: "HTML preview mode"});
     await expect(mode.getByRole("button", {name: "Interactive preview"})).toHaveAttribute("aria-pressed", "true");
@@ -127,7 +134,7 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     catalogUrl.searchParams.set("path", "artifact-server-design.html");
     await page.goto(catalogUrl.toString());
     await expect(interactiveFrame(page).getByRole("heading", {name: "Claims Workspace"})).toBeVisible();
-    await expect(page.getByRole("button", {name: "Back to gallery"})).toBeVisible();
+    await expectGalleryReturn(page, true);
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});
@@ -188,7 +195,7 @@ test("DSN-004: pre-index publications keep their catalog, later versions gain th
     await page.goto(legacy.links.review.toString());
     await expect(interactiveFrame(page).getByRole("heading", {name: "Legacy system"})).toBeVisible();
     await expect(gallery(page)).toHaveCount(0);
-    await expect(page.getByRole("button", {name: "Back to gallery"})).toHaveCount(0);
+    await expectGalleryReturn(page, false);
     const current = new URL(legacy.links.review);
     current.searchParams.set("version", indexed.version.id);
     await page.goto(current.toString());

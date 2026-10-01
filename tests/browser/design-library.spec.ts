@@ -24,7 +24,7 @@ function publish(fixture: BrowserFixture, inputPath: string, target: FilePublica
 }
 const named = (name: string): FilePublicationTarget => ({kind: "new_artifact", accessSetting: "account_required", name, tags: []});
 
-test("DSN-005-B: the design library gathers every current gallery across all projects and opens exact pages", async ({browser}) => {
+test("DSN-005-B: the design library gathers every current gallery across all projects, dates pages from server records and opens exact pages", async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   const directory = await mkdtemp(path.join(tmpdir(), "design-library-browser-"));
   try {
@@ -42,7 +42,7 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     await writeFile(path.join(broken, "artifact-server-previews/index.json"), "{not json");
 
     const claimsPublished = await publish(fixture, claims, named("Claims Workspace"));
-    await publish(fixture, studio, named("Portal Studio"));
+    const studioPublished = await publish(fixture, studio, named("Portal Studio"));
     await publish(fixture, plain, named("Plain page"));
     await publish(fixture, broken, named("Broken gallery"), "artifact-server-design.html");
     const portal = path.join(directory, "portal");
@@ -50,45 +50,111 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     await writeFile(path.join(portal, "artifactserver.previews.json"), JSON.stringify({...previewSourceFixture(), title: "Claimant Portal"}));
     const owner = new ApiClient(fixture.server, fixture.installation.apiToken);
     const portalProjectId = await owner.createProject("Portal project", "design-library-portal-project");
-    await publish(fixture, portal, named("Claimant Portal"), undefined, portalProjectId);
+    const portalPublished = await publish(fixture, portal, named("Claimant Portal"), undefined, portalProjectId);
+    // Version 2 changes only the claimant portal page, so only it gains activity; its creation stays at version 1.
+    await writeFile(path.join(claims, "project/Portal.dc.html"), "<!doctype html><h1>Claimant portal, revised</h1>");
+    const claimsRevised = await publish(fixture, claims, {kind: "new_version", artifactId: claimsPublished.artifact.id, expectedCurrentVersionId: claimsPublished.version.id});
+    // A comment on one page of an older gallery makes that page the most recently active.
+    const commented = await owner.fetch(
+      `/api/v1/artifacts/${studioPublished.artifact.id}/versions/${studioPublished.version.id}/comments?projectId=${studioPublished.artifact.projectId}`,
+      {body: JSON.stringify({body: "Tighten the button spacing.", path: "project/components/buttons.card.html"}), idempotencyKey: randomUUID(), method: "POST"},
+    );
+    expect(commented.status).toBe(201);
     await localLogin(fixture);
     const page = fixture.page;
 
     await page.getByRole("link", {name: "Design library"}).click();
     await expect(page).toHaveURL(/\/review\/library$/u);
-    const library = page.getByRole("region", {name: "Design library gallery"});
-    await expect(library.getByRole("heading", {name: "Design library", level: 2})).toBeVisible();
-    await expect(library.getByText(/^12 previews/u)).toBeVisible();
-    await expect(library.getByText(/^3 galleries · current versions as of/u)).toBeVisible();
+    const library = page.getByRole("region", {name: "Design library", exact: true});
+    await expect(library.getByRole("heading", {name: "Design library", level: 1})).toBeVisible();
     await expect(page.getByText("These galleries could not be read and are not shown: Broken gallery.")).toBeVisible();
-    await expect(library.getByRole("region", {name: "Prototypes · Claims Workspace · Prototypes"})).toBeVisible();
-    await expect(library.getByRole("region", {name: "Prototypes · Portal Studio · Prototypes"})).toBeVisible();
-    // The second project's gallery appears in the same library.
-    await expect(library.getByRole("region", {name: "Prototypes · Claimant Portal · Prototypes"})).toBeVisible();
+    const toolbar = library.getByRole("toolbar", {name: "Library view"});
+    // Grouped by date and sorted by last activity by default; everything here happened today.
+    await expect(toolbar.getByRole("button", {name: "Group: Date"})).toBeVisible();
+    await expect(toolbar.getByRole("button", {name: "Sort: Last activity (newest)"})).toBeVisible();
+    await expect(library.getByRole("button", {name: /^Today · 12/u})).toHaveAttribute("aria-expanded", "true");
+    const tiles = library.locator("a[data-gallery-path]");
+    await expect(tiles).toHaveCount(12);
     await expect(library.getByText("Plain page")).toHaveCount(0);
-    const claimsApp = library.getByRole("link", {name: "Open Examiner App · Prototype · Claims Workspace · Prototypes"});
+    const tile = (artifactId: string, pagePath: string) =>
+      library.locator(`a[href*="artifact=${artifactId}"][href*="path=${encodeURIComponent(pagePath)}"]`);
+    const claimsApp = tile(claimsPublished.artifact.id, "project/App.dc.html");
+    await expect(claimsApp).toHaveAttribute("aria-label", "Open Examiner App · Prototype · Default");
     await expect.poll(() => claimsApp.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(16);
     const exact = new URL(await claimsApp.getAttribute("href") ?? "", page.url());
     expect(exact.pathname).toBe("/review");
     expect(exact.searchParams.get("artifact")).toBe(claimsPublished.artifact.id);
-    expect(exact.searchParams.get("version")).toBe(claimsPublished.version.id);
+    expect(exact.searchParams.get("version")).toBe(claimsRevised.version.id);
     expect(exact.searchParams.get("path")).toBe("project/App.dc.html");
 
-    await library.getByRole("searchbox", {name: "Find a preview"}).fill("portal studio");
-    await expect(library.getByRole("link")).toHaveCount(4);
-    await library.getByRole("searchbox", {name: "Find a preview"}).fill("examiner");
-    await expect(library.getByRole("link")).toHaveCount(3);
+    const order = () => tiles.evaluateAll((links) => links.map((link) => {
+      const url = new URL(link.getAttribute("href") ?? "", window.location.href);
+      return `${url.searchParams.get("artifact")}:${url.searchParams.get("path")}`;
+    }));
+    const studioButton = `${studioPublished.artifact.id}:project/components/buttons.card.html`;
+    const claimsPortal = `${claimsPublished.artifact.id}:project/Portal.dc.html`;
+    // Last activity: the commented page, then the page version 2 changed, then the rest.
+    expect((await order()).slice(0, 2)).toEqual([studioButton, claimsPortal]);
+    // Date created ignores both: the claims pages were all first listed by the oldest version.
+    await toolbar.getByRole("button", {name: "Sort: Last activity (newest)"}).click();
+    await page.getByRole("menuitemradio", {name: "Date created"}).click();
+    await expect(toolbar.getByRole("button", {name: "Sort: Date created (newest)"})).toBeVisible();
+    await expect.poll(async () => (await order()).slice(-4).includes(claimsPortal)).toBe(true);
+    expect((await order())[0]?.startsWith(`${portalPublished.artifact.id}:`)).toBe(true);
+    // Name sorts A to Z by default and offers the reverse.
+    await toolbar.getByRole("button", {name: "Sort: Date created (newest)"}).click();
+    await page.getByRole("menuitemradio", {name: "Name"}).click();
+    await expect(toolbar.getByRole("button", {name: "Sort: Name (A–Z)"})).toBeVisible();
+    await toolbar.getByRole("button", {name: "Sort: Name (A–Z)"}).click();
+    await page.getByRole("menuitemradio", {name: "Z to A"}).click();
+    await expect(toolbar.getByRole("button", {name: "Sort: Name (Z–A)"})).toBeVisible();
+    await expect(tiles.first()).toHaveAttribute("aria-label", /^Open Screen · Template/u);
+
+    // Types filter by kind with counts, and Clear filters appears only while filtering.
+    await toolbar.getByRole("button", {name: "All types"}).click();
+    await page.getByRole("menuitemcheckbox", {name: "Components"}).click();
+    await page.keyboard.press("Escape");
+    await expect(toolbar.getByRole("button", {name: "Types · 1"})).toBeVisible();
+    await expect(tiles).toHaveCount(3);
+    await toolbar.getByRole("button", {name: "Clear filters"}).click();
+    await expect(tiles).toHaveCount(12);
+    await expect(toolbar.getByRole("button", {name: "Clear filters"})).toHaveCount(0);
+
+    // Group by project, collapse one project's band, switch to list and search.
+    await toolbar.getByRole("button", {name: "Group: Date"}).click();
+    await page.getByRole("menuitemradio", {name: "Project"}).click();
+    const portalBand = library.getByRole("button", {name: /^Portal project · /u});
+    await expect(library.getByRole("button", {name: /^Default · 8/u})).toBeVisible();
+    // The band counts the previews it holds under the current filters.
+    await expect(portalBand).toHaveAccessibleName(/^Portal project · 4/u);
+    await portalBand.click();
+    await expect(portalBand).toHaveAttribute("aria-expanded", "false");
+    await expect(tiles).toHaveCount(8);
+    await toolbar.getByRole("radio", {name: "List"}).click();
+    await toolbar.getByRole("searchbox", {name: "Search previews"}).fill("portal studio");
+    await expect(tiles).toHaveCount(4);
+    await toolbar.getByRole("searchbox", {name: "Search previews"}).fill("examiner");
+    await expect(tiles).toHaveCount(2);
+
+    // Opening a page and coming back restores every choice and the tile left from.
     await claimsApp.click();
     await expect(page).toHaveURL(new RegExp(`artifact=${claimsPublished.artifact.id}.*path=project%2FApp\\.dc\\.html`, "u"));
     await expect(interactiveFrame(page).getByRole("heading", {name: "Examiner app"})).toBeVisible();
     await page.goBack();
-    await expect(library.getByRole("searchbox", {name: "Find a preview"})).toHaveValue("examiner");
+    await expect(toolbar.getByRole("searchbox", {name: "Search previews"})).toHaveValue("examiner");
+    await expect(toolbar.getByRole("button", {name: "Group: Project"})).toBeVisible();
+    await expect(toolbar.getByRole("button", {name: "Sort: Name (Z–A)"})).toBeVisible();
+    await expect(toolbar.getByRole("radio", {name: "List"})).toHaveAttribute("aria-checked", "true");
+    await expect(portalBand).toHaveAccessibleName(/^Portal project · 1/u);
+    await expect(portalBand).toHaveAttribute("aria-expanded", "false");
     await expect(claimsApp).toBeFocused();
 
-    // A moving view: Refresh follows the newly current version.
-    const next = await publish(fixture, claims, {kind: "new_version", artifactId: claimsPublished.artifact.id, expectedCurrentVersionId: claimsPublished.version.id});
-    expect(new URL(await claimsApp.getAttribute("href") ?? "", page.url()).searchParams.get("version")).toBe(claimsPublished.version.id);
-    await page.getByRole("button", {name: "Refresh"}).click();
+    // A moving view: the icon-only Refresh follows the newly current version.
+    const refresh = toolbar.getByRole("button", {name: "Refresh", exact: true});
+    await expect(refresh).toHaveAttribute("title", /^Refresh · read /u);
+    const next = await publish(fixture, claims, {kind: "new_version", artifactId: claimsPublished.artifact.id, expectedCurrentVersionId: claimsRevised.version.id});
+    expect(new URL(await claimsApp.getAttribute("href") ?? "", page.url()).searchParams.get("version")).toBe(claimsRevised.version.id);
+    await refresh.click();
     await expect.poll(async () => new URL(await claimsApp.getAttribute("href") ?? "", page.url()).searchParams.get("version")).toBe(next.version.id);
   } finally {
     await stopBrowserFixture(fixture);

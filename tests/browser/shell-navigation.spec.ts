@@ -8,7 +8,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
-import {openComparison} from "./review-helpers.js";
+import {openComparison, versionCrumb} from "./review-helpers.js";
 
 async function publishNavigationFixture(
   fixture: BrowserFixture,
@@ -177,14 +177,13 @@ test.describe("Shell navigation", () => {
       });
       await page.getByRole("list", {name: "Artifacts"})
         .getByRole("button", {name: /^Navigation first artifact/u}).click();
-      const versionControl = page.getByRole("toolbar", {exact: true, name: "Artifact"})
-        .getByRole("button", {name: /^Choose version, showing /u});
+      const versionControl = versionCrumb(page);
       // The catalog already names the chosen artifact; the old record must not stay up.
       await expect(artifactTitle(page)).toHaveText("Navigation first artifact");
       await expect(versionControl).toHaveCount(0);
-      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {exact: true, name: "Share"})).toBeDisabled();
+      await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {exact: true, name: "Share this version"})).toBeDisabled();
       held.resolve(undefined);
-      await expect(versionControl).toHaveAccessibleName("Choose version, showing v1 of 1, current");
+      await expect(versionControl).toHaveAccessibleName("Version 1, the current version · Choose a version");
       await expect(artifactTitle(page)).toHaveText("Navigation first artifact");
     } finally {
       await stopBrowserFixture(fixture);

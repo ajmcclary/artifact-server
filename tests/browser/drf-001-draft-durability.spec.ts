@@ -6,7 +6,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, reviewHref} from "./review-helpers.js";
+import {openInspectorTab, reviewHref, selectThread, versionsList} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const pageHtml = (title: string): string =>
@@ -58,19 +58,22 @@ test.describe("comment draft durability", () => {
       await page.goto(reviewUrl);
       await openInspectorTab(page, "Comments");
 
+      // One composer is docked at the panel's foot: a new comment, or a reply to the
+      // selected thread. Each keeps its own draft while the other is shown.
       const newThread = page.getByLabel("Add a comment");
-      await page.getByRole("button", {exact: true, name: "Reply"}).click();
       const reply = page.getByLabel("Reply", {exact: true});
       const newText = "A careful multi-paragraph thought about the heading.";
       const replyText = "Reply in progress, do not lose me.";
       await newThread.fill(newText);
+      await selectThread(page, "Seeded thread for the reply draft.");
+      await expect(newThread).toHaveCount(0);
       await reply.fill(replyText);
-      await page.getByRole("button", {exact: true, name: "Cancel"}).click();
-      await expect(page.getByRole("textbox", {exact: true, name: "Reply"})).toHaveCount(0);
-      await page.getByRole("button", {exact: true, name: "Reply"}).click();
-      await expect(page.getByRole("textbox", {exact: true, name: "Reply"}))
-        .toHaveValue(replyText);
-      await expect(page.locator("[data-comment-composer]")).toHaveCount(2);
+      await page.getByRole("button", {exact: true, name: "Cancel reply"}).click();
+      await expect(reply).toHaveCount(0);
+      await expect(newThread).toHaveValue(newText);
+      await selectThread(page, "Seeded thread for the reply draft.");
+      await expect(reply).toHaveValue(replyText);
+      await expect(page.locator("[data-comment-composer]")).toHaveCount(1);
       // The mirror write is debounced: poll until both the new-thread draft
       // and the reply draft have settled into localStorage.
       await expect.poll(() => page.evaluate(
@@ -81,46 +84,49 @@ test.describe("comment draft durability", () => {
         total: keys.length,
       }))).toEqual({hasNewThread: true, hasReply: true, total: 2});
 
+      const expectBothDrafts = async (): Promise<void> => {
+        await openInspectorTab(page, "Comments");
+        await expect(newThread.or(reply)).toBeVisible();
+        if (await reply.count() > 0) await page.getByRole("button", {exact: true, name: "Cancel reply"}).click();
+        await expect(newThread).toHaveValue(newText);
+        await expect(page.locator("[data-draft-marker]")).toHaveCount(1);
+        await selectThread(page, "Seeded thread for the reply draft.");
+        await expect(reply).toHaveValue(replyText);
+        await expect(page.locator("[data-draft-marker]")).toHaveCount(1);
+      };
+
       // In-app version switch and back: the drafts never left.
       await openInspectorTab(page, "Versions");
-      await page.getByRole("button", {name: /Version 1/u}).click();
+      await versionsList(page).getByRole("button", {name: /^v1 /u}).click();
       await openInspectorTab(page, "Versions");
-      await page.getByRole("button", {name: /Version 2/u}).click();
-      await openInspectorTab(page, "Comments");
-      await expect(page.getByLabel("Add a comment")).toHaveValue(newText);
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveValue(replyText);
-      await expect(page.locator("[data-draft-marker]")).toHaveCount(2);
+      await versionsList(page).getByRole("button", {name: /^v2 /u}).click();
+      await expectBothDrafts();
 
       // Artifact navigation and back (the newer "Other fixture" sorts first,
       // so the drafted artifact is the last catalog entry).
       await page.getByRole("button", {name: "Previous artifact"}).click();
       await expect(page).not.toHaveURL(new RegExp(`artifact=${artifactId}`, "u"));
       await page.getByRole("button", {name: "Next artifact"}).click();
-      await openInspectorTab(page, "Comments");
-      await expect(page.getByLabel("Add a comment")).toHaveValue(newText);
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveValue(replyText);
+      await expectBothDrafts();
 
       // A full reload restores both from the mirror, marker included.
       await page.reload();
-      await openInspectorTab(page, "Comments");
-      await expect(page.getByLabel("Add a comment")).toHaveValue(newText);
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveValue(replyText);
-      await expect(page.locator("[data-draft-marker]")).toHaveCount(2);
+      await expectBothDrafts();
 
-      // Posting the reply consumes its draft.
+      // Posting the reply consumes its draft; the composer stays on the selected thread.
       await page.getByRole("button", {name: "Post reply"}).click();
       await expect(page.getByText(replyText)).toBeVisible();
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveCount(0);
-      await expect(page.getByRole("button", {exact: true, name: "Reply"})).toBeVisible();
+      await expect(reply).toHaveValue("");
 
       // Discarding the new-thread draft empties it; neither survives a reload.
+      await page.getByRole("button", {exact: true, name: "Cancel reply"}).click();
       await page.getByRole("button", {name: "Discard"}).click();
-      await expect(page.getByLabel("Add a comment")).toHaveValue("");
+      await expect(newThread).toHaveValue("");
       await page.reload();
       await openInspectorTab(page, "Comments");
-      await expect(page.getByLabel("Add a comment")).toHaveValue("");
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveCount(0);
-      await expect(page.getByRole("button", {exact: true, name: "Reply"})).toBeVisible();
+      await expect(newThread).toHaveValue("");
+      await selectThread(page, "Seeded thread for the reply draft.");
+      await expect(reply).toHaveValue("");
       await expect(page.locator("[data-draft-marker]")).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);

@@ -6,6 +6,7 @@ import {
   useState,
   type ComponentProps,
   type CSSProperties,
+  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -16,7 +17,7 @@ import {
   type CommentReply,
   type CommentThread as ReviewThread,
 } from "@/api/client";
-import {Alert, Button, CommentThread, SegmentedControl, SurfaceState} from "@/arkcase";
+import {Alert, Button, type CommentItem, CommentThread, IconButton, SegmentedControl, SurfaceState} from "@/arkcase";
 import {CommentComposer} from "@/components/comments/comment-composer";
 import {useCommentDraft} from "@/components/comments/comment-drafts";
 import {maximumCommentBodyCharacters} from "@/components/comments/comment-limits";
@@ -54,6 +55,8 @@ export interface CommentsTabHandle {
 
 export interface CommentsTabProps {
   readonly canComment: boolean;
+  /** Brings the thread's place on the page into view. */
+  readonly onShowInArtifact: (threadId: string) => void;
   readonly canDeleteAny: boolean;
   readonly handleRef: RefObject<CommentsTabHandle | null>;
   readonly principalId: string;
@@ -72,11 +75,36 @@ const selectedBodyStyle = {...bodyStyle, background: "var(--tint-primary-selecte
 const threadTextStyle = {margin: 0, overflowWrap: "anywhere", whiteSpace: "pre-wrap"} satisfies CSSProperties;
 const metaStyle = {color: "var(--text-secondary)", fontSize: "var(--font-size-label, 11px)", margin: 0} satisfies CSSProperties;
 const replyActionsStyle = {display: "flex", gap: 4, marginTop: 4} satisfies CSSProperties;
+const markStyle = {
+  alignItems: "center",
+  color: "var(--text-secondary)",
+  display: "inline-flex",
+  flex: "none",
+  fontSize: 13,
+  justifyContent: "center",
+  width: 18,
+} satisfies CSSProperties;
+const composerStyle = {display: "flex", flexDirection: "column", gap: 6} satisfies CSSProperties;
+const contextStyle = {
+  alignItems: "center",
+  color: "var(--text-secondary)",
+  display: "flex",
+  fontSize: "var(--font-size-xs, 12px)",
+  gap: 6,
+  minHeight: 24,
+} satisfies CSSProperties;
+const contextTextStyle = {flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"} satisfies CSSProperties;
+const contextStrongStyle = {color: "var(--text-emphasis)"} satisfies CSSProperties;
 
-/** The Comments view: presence, send, filters, the new-thread composer and every thread. */
+/**
+ * The Comments view: presence, send, filters and every thread. Threads are selectable:
+ * the selected one opens its replies and actions, the others collapse to a summary.
+ * The composer is docked at the panel's foot (`CommentsComposer`).
+ */
 export function CommentsTab({
   canComment,
   canDeleteAny,
+  onShowInArtifact,
   handleRef,
   principalId,
   session,
@@ -97,6 +125,8 @@ export function CommentsTab({
   const [sentReplies, setSentReplies] = useState<ReadonlyMap<string, readonly CommentReply[]>>(new Map());
   const [dispatchByThread, setDispatchByThread] = useState<ReadonlyMap<string, AgentDispatch>>(new Map());
   const [sentLoading, setSentLoading] = useState(false);
+  // Sent threads are not in the session's list, so the Sent view keeps its own selection.
+  const [sentSelectedId, setSentSelectedId] = useState<string | null>(null);
   const [sentError, setSentError] = useState<Error | null>(null);
   const density = useDensity();
 
@@ -208,8 +238,10 @@ export function CommentsTab({
     "aria-label": "Comment threads",
     comments: visibleThreads.map((thread) => {
       const replies = visibleReplies.get(thread.id) ?? [];
-      return {
+      const last = replies.at(-1);
+      const item: CommentItem = {
         author: thread.author.displayName,
+        badge: <ThreadMark thread={thread} />,
         id: thread.id,
         replies: replies.map((reply) => ({
           author: reply.author.displayName,
@@ -238,8 +270,17 @@ export function CommentsTab({
         ),
         time: formatTimestamp(thread.createdAt),
       };
+      // A collapsed thread says who answered last and when.
+      if (last !== undefined) {
+        item.activity = `${replies.length} ${replies.length === 1 ? "reply" : "replies"} · ${last.author.displayName}, ${formatTimestamp(last.updatedAt)}`;
+      }
+      return item;
     }),
     density,
+    onSelect: (id) => {
+      if (view === "sent") setSentSelectedId((current) => current === id ? null : id);
+      else session.selectThread(session.selectedThreadId === id ? null : id);
+    },
     renderActions: (id) => {
       const thread = findThread(id);
       if (thread === undefined) return null;
@@ -270,30 +311,18 @@ export function CommentsTab({
             />
           ) : null}
           {thread.path === null ? null : (
-            <Button onClick={() => session.selectThread(thread.id)} size="xs" variant="ghost">Show in page</Button>
+            <IconButton
+              ariaLabel="Show in the artifact"
+              icon="bi-geo-alt"
+              onClick={() => onShowInArtifact(thread.id)}
+              size="xs"
+              title="Show in the artifact"
+            />
           )}
         </>
       );
     },
-    renderReplyComposer: (id) => {
-      const thread = findThread(id);
-      if (
-        thread === undefined
-        || view === "sent"
-        || !canComment
-        || thread.state !== "open"
-        || session.artifactId === null
-      ) return null;
-      return (
-        <ReplyComposer
-          artifactId={session.artifactId}
-          key={thread.id}
-          principalId={principalId}
-          session={session}
-          thread={thread}
-        />
-      );
-    },
+    selectedId: view === "sent" ? sentSelectedId : session.selectedThreadId,
   };
   if (view !== "sent" && canComment) {
     threadList.onResolve = (id) => {
@@ -349,15 +378,6 @@ export function CommentsTab({
         size="sm"
         value={view}
       />
-      {canComment && versionId !== null && session.artifactId !== null ? (
-        <NewThreadComposer
-          artifactId={session.artifactId}
-          key={`${session.artifactId}-${versionId}`}
-          principalId={principalId}
-          session={session}
-          versionId={versionId}
-        />
-      ) : null}
       {loadingVisible && visibleThreads.length === 0 ? (
         <SurfaceState density="inline" loadingStyle="spinner" loadingTitle="Loading comments…" noun="comments" phase="loading" />
       ) : null}
@@ -397,6 +417,69 @@ function ThreadBody({dispatch, replyCount, selected, thread, unanchored}: Thread
   );
 }
 
+/** A thread's leading mark: a pin for a place on the page, layers for the whole page or version. */
+function ThreadMark({thread}: {readonly thread: ReviewThread}) {
+  const pinned = thread.anchor !== null && thread.anchor !== undefined;
+  return (
+    <span aria-hidden="true" style={markStyle}>
+      <i className={pinned ? "bi bi-geo-alt-fill" : "bi bi-layers"} />
+    </span>
+  );
+}
+
+export interface CommentsComposerProps {
+  readonly canComment: boolean;
+  readonly principalId: string;
+  readonly session: ReviewCommentSession;
+  readonly versionId: string | null;
+}
+
+/**
+ * The composer docked at the Comments panel's foot. The line above the box says what is
+ * being written: a reply to the selected thread (Escape or × cancels the reply and keeps
+ * its draft), or a new comment on the version. Drafts are kept per thread and version.
+ */
+export function CommentsComposer({canComment, principalId, session, versionId}: CommentsComposerProps) {
+  if (!canComment || versionId === null || session.artifactId === null) return null;
+  const selected = session.threads.find((thread) => thread.id === session.selectedThreadId);
+  const replyTo = selected !== undefined && selected.state === "open" ? selected : null;
+  return replyTo === null ? (
+    <NewThreadComposer
+      artifactId={session.artifactId}
+      key={`new:${session.artifactId}:${versionId}`}
+      principalId={principalId}
+      session={session}
+      versionId={versionId}
+    />
+  ) : (
+    <ReplyComposer
+      artifactId={session.artifactId}
+      key={`reply:${replyTo.id}`}
+      principalId={principalId}
+      session={session}
+      thread={replyTo}
+    />
+  );
+}
+
+interface ComposerContextProps {
+  readonly cancel?: {readonly label: string; readonly onClick: () => void};
+  readonly children: ReactNode;
+  readonly icon: string;
+}
+
+function ComposerContext({cancel, children, icon}: ComposerContextProps) {
+  return (
+    <div style={contextStyle}>
+      <i aria-hidden="true" className={`bi ${icon}`} />
+      <span style={contextTextStyle}>{children}</span>
+      {cancel === undefined ? null : (
+        <IconButton ariaLabel={cancel.label} icon="bi-x-lg" onClick={cancel.onClick} size="xs" />
+      )}
+    </div>
+  );
+}
+
 interface NewThreadComposerProps {
   readonly artifactId: string;
   readonly principalId: string;
@@ -408,9 +491,11 @@ interface NewThreadComposerProps {
 function NewThreadComposer({artifactId, principalId, session, versionId}: NewThreadComposerProps) {
   const draft = useCommentDraft({artifactId, principalId, threadId: null, versionId});
   return (
-    <div data-new-thread-composer="">
+    <div data-new-thread-composer="" style={composerStyle}>
+      <ComposerContext icon="bi-layers">New comment on the whole version</ComposerContext>
       <CommentComposer
         cancelLabel={null}
+        docked
         draftRestored={draft.restored}
         initialBody={draft.initialBody}
         key={`new-thread-${versionId}-${draft.restored ? "draft" : "empty"}`}
@@ -437,46 +522,39 @@ interface ReplyComposerProps {
   readonly thread: ReviewThread;
 }
 
-/** One thread's reply composer, drafted per thread; collapsed to a Reply button until used. */
+/** The selected thread's reply composer, drafted per thread. */
 function ReplyComposer({artifactId, principalId, session, thread}: ReplyComposerProps) {
   const draft = useCommentDraft({artifactId, principalId, threadId: thread.id, versionId: null});
-  const [expanded, setExpanded] = useState(draft.restored);
-  const [replyBody, setReplyBody] = useState(draft.initialBody);
-
-  if (!expanded) {
-    return (
-      <Button onClick={() => setExpanded(true)} outline size="xs" variant="secondary">Reply</Button>
-    );
-  }
-
+  const cancel = (): void => session.selectThread(null);
   return (
-    <CommentComposer
-      autoFocus
-      cancelLabel="Cancel"
-      draftRestored={draft.restored}
-      initialBody={replyBody}
-      label="Reply"
-      maximumCharacters={maximumCommentBodyCharacters}
-      onBodyChange={(body) => {
-        setReplyBody(body);
-        draft.onBodyChange(body);
-      }}
-      onCancel={() => setExpanded(false)}
-      onDiscardDraft={() => {
-        setReplyBody("");
-        draft.onDiscard();
-      }}
-      onSubmit={async (body, idempotencyKey) => {
-        const saved = await session.createReply(thread, body, idempotencyKey);
-        if (saved) {
-          setReplyBody("");
-          draft.onPosted();
-          setExpanded(false);
-        }
-        return saved;
-      }}
-      submitLabel="Post reply"
-    />
+    <div data-reply-composer="" onKeyDown={(event) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.stopPropagation();
+        cancel();
+      }
+    }} style={composerStyle}>
+      <ComposerContext cancel={{label: "Cancel reply", onClick: cancel}} icon="bi-reply">
+        Replying to <strong style={contextStrongStyle}>{thread.author.displayName}</strong>
+        {" · "}{thread.path === null ? "Whole version" : thread.path}
+      </ComposerContext>
+      <CommentComposer
+        cancelLabel={null}
+        docked
+        draftRestored={draft.restored}
+        initialBody={draft.initialBody}
+        label="Reply"
+        maximumCharacters={maximumCommentBodyCharacters}
+        onBodyChange={draft.onBodyChange}
+        onCancel={null}
+        onDiscardDraft={draft.onDiscard}
+        onSubmit={async (body, idempotencyKey) => {
+          const saved = await session.createReply(thread, body, idempotencyKey);
+          if (saved) draft.onPosted();
+          return saved;
+        }}
+        submitLabel="Post reply"
+      />
+    </div>
   );
 }
 

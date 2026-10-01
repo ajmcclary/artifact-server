@@ -5,13 +5,15 @@ import {
   Alert,
   Button,
   Checkbox,
+  ChoiceGroup,
   IconButton,
+  Input,
+  PanelSection,
   Popover,
 } from "@/arkcase";
 import {useThemeMode} from "@/theme/use-theme-mode";
 import {CopyAction} from "@/ui/copy-action";
 import {CopyableCode} from "@/ui/copyable-code";
-import {ArtifactLinks} from "@/ui/review-ui";
 
 import claudeLogoUrl from "../assets/agents/claude.svg";
 import codexDarkLogoUrl from "../assets/agents/codex-dark.svg";
@@ -27,10 +29,13 @@ import piLightLogoUrl from "../assets/agents/pi-light.svg";
 import {accessChangeWarning, changeArtifactAccess} from "./artifact-access.ts";
 
 type ShareScreen = "access" | "agents" | "overview";
+type ShareTarget = "latest" | "version";
 
 export interface SharePopoverProps {
   readonly details: ArtifactDetails | null;
   readonly onArtifactChanged: (artifact: ArtifactDetails["artifact"]) => void;
+  /** Opens the access controls elsewhere (the Details panel); without it Share edits access itself. */
+  readonly onManageAccess?: (() => void) | undefined;
   readonly selectedPath: string | null;
   readonly selectedVersion: ArtifactVersion | null;
 }
@@ -45,18 +50,25 @@ const agentLogos = [
 ] as const;
 
 const contentStyle = {gap: 12, maxHeight: "75vh", overflowY: "auto", padding: 12} satisfies CSSProperties;
+const overviewContentStyle = {gap: 0, maxHeight: "80vh", overflowY: "auto", padding: 0} satisfies CSSProperties;
+const linkRowStyle = {alignItems: "center", display: "flex", gap: 8} satisfies CSSProperties;
+const linkFieldStyle = {flex: "1 1 auto", minWidth: 0} satisfies CSSProperties;
+const accessLineStyle = {
+  alignItems: "flex-start",
+  color: "var(--text-secondary)",
+  display: "flex",
+  fontSize: 13,
+  gap: 8,
+  lineHeight: 1.45,
+} satisfies CSSProperties;
+const accessIconStyle = {marginTop: 2} satisfies CSSProperties;
+const bandTitleStyle = {color: "var(--text-strong)", fontSize: 13, fontWeight: 600} satisfies CSSProperties;
+const bandTextStyle = {display: "flex", flexDirection: "column", gap: 2} satisfies CSSProperties;
 const headerStyle = {alignItems: "flex-start", display: "flex", gap: 8} satisfies CSSProperties;
 const headerTextStyle = {flex: "1 1 auto", minWidth: 0} satisfies CSSProperties;
 const headingStyle = {fontSize: "var(--font-size-md, 16px)", margin: 0, overflowWrap: "anywhere"} satisfies CSSProperties;
 const subtleStyle = {color: "var(--text-secondary)", fontSize: "var(--font-size-xs, 12px)", margin: 0} satisfies CSSProperties;
 const sectionStyle = {display: "flex", flexDirection: "column", gap: 8} satisfies CSSProperties;
-const sectionHeadingStyle = {fontSize: "var(--font-size-sm, 14px)", margin: 0} satisfies CSSProperties;
-const linkStyle = {
-  color: "var(--text-link)",
-  fontFamily: "var(--font-data)",
-  fontSize: 12,
-  overflowWrap: "anywhere",
-} satisfies CSSProperties;
 const rowStyle = {alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8} satisfies CSSProperties;
 const logosStyle = {alignItems: "center", display: "inline-flex", gap: 4} satisfies CSSProperties;
 const logoStyle = {height: 18, width: 18} satisfies CSSProperties;
@@ -77,11 +89,13 @@ const visuallyHiddenStyle = {
 export function SharePopover({
   details,
   onArtifactChanged,
+  onManageAccess,
   selectedPath,
   selectedVersion,
 }: SharePopoverProps) {
   const [open, setOpen] = useState(false);
   const [screen, setScreen] = useState<ShareScreen>("overview");
+  const [target, setTarget] = useState<ShareTarget>("version");
   const [selectedAccess, setSelectedAccess] = useState<AccessSetting>(
     details?.artifact.accessSetting ?? "account_required",
   );
@@ -100,9 +114,15 @@ export function SharePopover({
   };
 
   const reviewLink = selectedVersion === null ? null : exactReviewLink(selectedVersion, selectedPath);
+  const shareLink = target === "latest" ? details?.links.artifact ?? null : reviewLink;
 
   const openAccess = (): void => {
     if (details === null) return;
+    if (onManageAccess !== undefined) {
+      setOpen(false);
+      onManageAccess();
+      return;
+    }
     setSelectedAccess(details.artifact.accessSetting);
     setFailure(null);
     setNotice(null);
@@ -142,28 +162,25 @@ export function SharePopover({
 
   return (
     <Popover
-      contentStyle={contentStyle}
-      label="Share artifact"
+      contentStyle={screen === "overview" ? overviewContentStyle : contentStyle}
+      label="Share this version"
       onOpenChange={updateOpen}
       open={open}
       placement="bottom-end"
       trigger={(
-        <Button
-          aria-label="Share"
+        <IconButton
+          ariaLabel="Share this version"
           disabled={details === null || selectedVersion === null}
           icon="bi-share"
-          outline
           size="sm"
-          variant="secondary"
-        >
-          Share
-        </Button>
+          title="Share"
+        />
       )}
       width={380}
       zIndex={1200}
     >
-      <header style={headerStyle}>
-        {screen === "overview" ? null : (
+      {screen === "overview" ? null : (
+        <header style={headerStyle}>
           <IconButton
             ariaLabel="Back to Share"
             disabled={pending}
@@ -171,66 +188,89 @@ export function SharePopover({
             onClick={() => setScreen("overview")}
             size="sm"
           />
-        )}
-        <div style={headerTextStyle}>
-          <h2 style={headingStyle}>{title}</h2>
-          <p style={subtleStyle}>{subtitle}</p>
-        </div>
-        <IconButton
-          ariaLabel="Close Share"
-          disabled={pending}
-          icon="bi-x-lg"
-          onClick={() => updateOpen(false)}
-          size="sm"
-        />
-      </header>
+          <div style={headerTextStyle}>
+            <h2 style={headingStyle}>{title}</h2>
+            <p style={subtleStyle}>{subtitle}</p>
+          </div>
+          <IconButton
+            ariaLabel="Close Share"
+            disabled={pending}
+            icon="bi-x-lg"
+            onClick={() => updateOpen(false)}
+            size="sm"
+          />
+        </header>
+      )}
 
       {screen === "overview" ? (
         <>
-          <section aria-labelledby={`${headingId}-review`} style={sectionStyle}>
-            <h3 id={`${headingId}-review`} style={sectionHeadingStyle}>Review and comment</h3>
-            <code style={linkStyle}>{reviewLink ?? ""}</code>
-            {reviewLink === null ? null : (
-              <CopyAction copiedLabel="Copied" label="Copy Review link" text={reviewLink} variant="outline">
-                Copy Review link
-              </CopyAction>
+          <PanelSection divided={false} gap={12} headingLevel={2} title="Link Opens">
+            <ChoiceGroup
+              label="Link opens"
+              minColumnWidth={150}
+              onChange={(id) => {
+                if (id === "version" || id === "latest") setTarget(id);
+              }}
+              options={[
+                {
+                  description: "Exact version, with review and comments",
+                  id: "version",
+                  title: `This version · v${selectedVersion?.version.number ?? "—"}`,
+                },
+                {description: "Moves when a new version is published", id: "latest", title: "Latest"},
+              ]}
+              value={target}
+            />
+            {shareLink === null ? null : (
+              <div style={linkRowStyle}>
+                <Input
+                  aria-label="Link"
+                  icon="bi-link-45deg"
+                  mono
+                  readOnly
+                  size="sm"
+                  style={linkFieldStyle}
+                  value={shareLink.replace(/^https?:\/\//u, "")}
+                />
+                <CopyAction
+                  copiedLabel="Link copied"
+                  label={target === "latest" ? "Copy Latest link" : "Copy Review link"}
+                  text={shareLink}
+                  variant="outline"
+                >
+                  Copy Link
+                </CopyAction>
+              </div>
             )}
-          </section>
-          <section style={sectionStyle}>
-            <p style={subtleStyle}>
-              People with access to this Artifact Server can review this exact version.
-              {publicArtifact ? " The latest raw artifact is public." : ""}
-            </p>
-            <div style={rowStyle}>
-              <Button disabled={details === null} onClick={openAccess} outline size="sm" variant="secondary">
-                Manage access
+            <div style={accessLineStyle}>
+              <i aria-hidden="true" className="bi bi-people" style={accessIconStyle} />
+              <span style={headerTextStyle}>
+                {publicArtifact
+                  ? "Anyone with the latest link can open it. People with access to this Artifact Server can review it."
+                  : "People with access to this Artifact Server can review it."}
+              </span>
+              <Button disabled={details === null} onClick={openAccess} size="xs" variant="link">
+                Manage Access
               </Button>
             </div>
-          </section>
-          {details === null || selectedVersion === null ? null : (
-            <ArtifactLinks
-              note="Copy a link to hand this artifact on."
-              onCopy={(text, label) => <CopyAction label={`${label} link`} text={text} />}
-              rows={[
-                {description: "Moves when a new version is published", label: "Latest", url: details.links.artifact},
-                {description: "Exact version without Review controls", label: "Raw", url: selectedVersion.links.version},
-              ]}
-              title="Other links"
-            />
-          )}
-          <section aria-labelledby={`${headingId}-agent`} style={sectionStyle}>
-            <h3 id={`${headingId}-agent`} style={sectionHeadingStyle}>Review with an AI agent</h3>
-            <p style={subtleStyle}>Copy one complete prompt into Claude, Codex, Cursor, GitHub Copilot, Pi, or OpenCode.</p>
+            {failure === null ? null : <Alert variant="danger">{failure}</Alert>}
+            {notice === null ? null : <Alert variant="success">{notice}</Alert>}
+          </PanelSection>
+          <PanelSection padding="12px 16px 16px" tone="band">
+            <div style={bandTextStyle}>
+              <span style={bandTitleStyle}>Review with an AI agent</span>
+              <span style={subtleStyle}>One complete prompt for Claude, Codex, Cursor, GitHub Copilot, Pi or OpenCode.</span>
+            </div>
             <div style={rowStyle}>
               <AgentLogos />
               {details === null || selectedVersion === null || reviewLink === null ? null : (
                 <CopyAction
-                  copiedLabel="Prompt copied"
-                  label="Copy review prompt"
+                  copiedLabel="Review prompt copied"
+                  label="Copy Review Prompt"
                   text={buildAgentReviewPrompt(details, selectedVersion, reviewLink)}
                   variant="outline"
                 >
-                  Copy review prompt
+                  Copy Review Prompt
                 </CopyAction>
               )}
               <Button
@@ -246,13 +286,7 @@ export function SharePopover({
                 Connect MCP
               </Button>
             </div>
-          </section>
-          {failure === null ? null : <Alert variant="danger">{failure}</Alert>}
-          {notice === null ? null : <Alert variant="success">{notice}</Alert>}
-          <p style={subtleStyle}>
-            This Review link stays pinned to Version {selectedVersion?.version.number ?? "—"}
-            {selectedPath === null ? "." : ` and ${selectedPath}.`}
-          </p>
+          </PanelSection>
         </>
       ) : screen === "agents" ? (
         <>
@@ -348,7 +382,8 @@ function copyRefusal(subject: string): string {
   return `The browser did not copy the ${subject}. Select it and copy it manually.`;
 }
 
-function exactReviewLink(
+/** The Review link pinned to this exact version and, when it is in the version, this page. */
+export function exactReviewLink(
   selectedVersion: ArtifactVersion,
   selectedPath: string | null,
 ): string {

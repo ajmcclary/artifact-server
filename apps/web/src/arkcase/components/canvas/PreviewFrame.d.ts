@@ -9,7 +9,7 @@ export interface PreviewPreset {
 }
 
 export interface PreviewFrameProps extends Omit<React.HTMLAttributes<HTMLElement>, 'style' | 'title'> {
-  /** The artifact's frame name in the navy bar; truncates with an ellipsis at 12px. */
+  /** The artifact's frame name in the navy bar; truncates with an ellipsis at 12px. Omit it and `meta` for a frame with no bar. */
   title?: React.ReactNode;
   /** Right-hand meta in the data face at 11px — a version such as "v3 · draft". */
   meta?: React.ReactNode;
@@ -23,7 +23,7 @@ export interface PreviewFrameProps extends Omit<React.HTMLAttributes<HTMLElement
   children?: React.ReactNode;
   /** Style overrides for the frame root. */
   style?: React.CSSProperties;
-  /** Style overrides for the positioned content area under the title bar — padding, min-height. */
+  /** Style overrides for the positioned content area (under the title bar, when there is one) — padding, min-height. */
   bodyStyle?: React.CSSProperties;
 }
 

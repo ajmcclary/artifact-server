@@ -24,7 +24,7 @@ async function thread(fixture: BrowserFixture, published: PublishResponse, body:
 }
 
 test.describe("Activity", () => {
-  test("ACT-005-B: the feed shows versions, bursts and conversations under day headers, folds long threads, replies and resolves inline, filters through the URL, and opens the thread", async ({browser}) => {
+  test("ACT-005-B: the feed shows versions, bursts and conversations under day panels, folds long threads, replies and resolves inline, filters through the URL, and opens the thread", async ({browser}) => {
     test.setTimeout(120_000);
     const fixture = await startBrowserFixture(browser);
     try {
@@ -46,12 +46,25 @@ test.describe("Activity", () => {
       const page = fixture.page;
       await page.goto(`${fixture.server.baseUrl}/review`);
       await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
-      await expect(page.getByRole("heading", {exact: true, level: 2, name: "Today"})).toBeVisible();
-      await expect(page.getByText(/published v1–v3 of Activity burst fixture/u)).toBeVisible();
+      // The page header is the title alone: no projects-and-artifacts summary line.
+      await expect(page.getByText(/\d+ projects? · /u)).toHaveCount(0);
+      const today = page.getByRole("region", {name: /^Today \d{2}\/\d{2}\/\d{4}$/u});
+      await expect(today.getByRole("heading", {exact: true, level: 2, name: "Today"})).toBeVisible();
       await expect(page.locator("[data-activity-feed]")).toContainText(/\d{1,2}:\d{2} (AM|PM)/u);
 
-      const conversation = page.getByRole("region", {name: "Conversation on Activity conversation fixture"}).or(
-        page.getByLabel("Conversation on Activity conversation fixture"));
+      // One publisher's versions across two artifacts within half an hour collapse into one burst.
+      const burstEntry = page.locator("[data-entry^='burst:']");
+      await expect(burstEntry.locator("[data-event]")).toHaveText(/published 4 versions in /u);
+      await expect(burstEntry).toContainText("Activity conversation fixture and Activity burst fixture");
+      await burstEntry.getByRole("button", {name: "Show 4 versions"}).click();
+      const burstItem = burstEntry.locator("[data-group-item]").filter({hasText: "Activity burst fixture"});
+      await expect(burstItem).toContainText("v1–v3");
+      await expect(burstEntry.getByRole("button", {name: "Hide 4 versions"})).toHaveAttribute("aria-expanded", "true");
+      // The open burst stays open across a reload in this tab.
+      await page.reload();
+      await expect(page.locator("[data-entry^='burst:']").getByRole("button", {name: "Hide 4 versions"})).toBeVisible();
+
+      const conversation = page.getByLabel("Conversations on Activity conversation fixture");
       await expect(conversation.getByText("Reply number 5.")).toBeVisible();
       await expect(conversation.getByText("Reply number 1.")).toHaveCount(0);
       await conversation.getByRole("button", {name: "Show 3 earlier replies"}).click();
@@ -71,8 +84,11 @@ test.describe("Activity", () => {
       await expect(page).toHaveURL(/\/review\?segment=needs_you$/u);
       await page.getByRole("radio", {name: /^All/u}).click();
 
-      await conversation.getByRole("button", {name: "Resolve"}).first().click();
-      await expect(page.getByText(/resolved a conversation on Activity conversation fixture/u)).toBeVisible();
+      await conversation.getByRole("button", {name: /^Resolve comment by/u}).first().click();
+      // The resolution joins the conversation's card rather than adding a second one.
+      await expect(conversation.getByText("Resolved", {exact: true})).toBeVisible();
+      await expect(conversation.getByRole("button", {name: /^Reopen comment by/u})).toBeVisible();
+      await expect(page.locator("[data-artifact-card]")).toHaveCount(1);
 
       // Record the address Open pushes; the workspace drops `thread=` as soon as it has selected the conversation.
       await page.evaluate(() => {
@@ -122,14 +138,14 @@ test.describe("Activity", () => {
       await localLogin(fixture);
       const page = fixture.page;
       await page.goto(`${fixture.server.baseUrl}/review`);
-      const card = page.getByLabel("Conversation on Activity hostile fixture");
+      const card = page.getByLabel("Conversations on Activity hostile fixture");
       await expect(card).toBeVisible();
       expect(await page.evaluate(() => "pwnedMarker" in window)).toBe(false);
       await expect(card.locator("img")).toHaveCount(0);
       const width = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(width).toBeLessThanOrEqual(0);
       await page.getByRole("searchbox", {name: "Search activity"}).fill("onerror");
-      await expect(page.getByLabel("Conversation on Activity hostile fixture")).toBeVisible();
+      await expect(page.getByLabel("Conversations on Activity hostile fixture")).toBeVisible();
       await page.getByRole("searchbox", {name: "Search activity"}).fill("%_\\");
       await expect(page.getByText("Nothing matches these filters")).toBeVisible();
     } finally {
@@ -197,8 +213,50 @@ test.describe("Activity", () => {
       await thread(fixture, free, "Still mine.", "free-thread");
       await localLogin(fixture);
       await fixture.page.goto(`${fixture.server.baseUrl}/review?segment=with_agent`);
-      await expect(fixture.page.getByLabel("Conversation on Activity held fixture")).toBeVisible();
-      await expect(fixture.page.getByLabel("Conversation on Activity free fixture")).toHaveCount(0);
+      await expect(fixture.page.getByLabel("Conversations on Activity held fixture")).toBeVisible();
+      await expect(fixture.page.getByLabel("Conversations on Activity free fixture")).toHaveCount(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+});
+
+test.describe("Activity people", () => {
+  test("ACT-008-B: the People menu narrows the feed through the URL, counts the matches, and a chip removes the filter", async ({browser}) => {
+    test.setTimeout(90_000);
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publish(fixture, "Activity people fixture", "people");
+      await thread(fixture, published, "Who answers this?", "people-thread");
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      // The reviewer answers inline, so the conversation is now theirs.
+      const conversation = page.getByLabel("Conversations on Activity people fixture");
+      await conversation.getByRole("button", {name: "Reply"}).first().click();
+      await page.getByRole("textbox", {name: "Reply on Activity people fixture"}).fill("I will.");
+      await page.getByRole("button", {exact: true, name: "Reply"}).last().click();
+      await expect(conversation.getByText("I will.")).toBeVisible();
+
+      await page.getByRole("button", {name: "Everyone"}).click();
+      const menu = page.getByRole("menu", {name: "People"});
+      // The reviewer is marked as themselves; the installation token is a service principal, listed as an agent.
+      await expect(menu.getByRole("menuitemcheckbox", {exact: true, name: "Local administrator"})).toContainText("You");
+      const local = menu.getByRole("menuitemcheckbox", {exact: true, name: "Local"});
+      await expect(local).toContainText("Agent");
+      await local.click();
+      await expect(page).toHaveURL(/\/review\?person=/u);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("button", {name: "People · 1"})).toBeVisible();
+      // The conversation's newest reply is the reviewer's, so only the publish remains.
+      await expect(page.getByText(/published v1 of Activity people fixture/u)).toBeVisible();
+      await expect(page.getByLabel("Conversations on Activity people fixture")).toHaveCount(0);
+      await expect(page.getByRole("status").filter({hasText: /^Showing \d+ of \d+ entries$/u})).toBeVisible();
+
+      await page.getByRole("button", {name: "Remove Local filter"}).click();
+      await expect(page).toHaveURL(/\/review$/u);
+      await expect(page.getByLabel("Conversations on Activity people fixture")).toBeVisible();
+      await expect(page.getByRole("button", {name: "Remove Local filter"})).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);
     }

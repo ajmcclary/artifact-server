@@ -53,6 +53,14 @@ export interface CommentComposerProps {
   inputRef?: React.Ref<HTMLInputElement | HTMLTextAreaElement>;
   /** Focus the field on mount — a reply box opened by a Reply action. @default false */
   autoFocus?: boolean;
+  /** In `prompt`: host controls (a mention button, attach a location) in a row under the field inside the box; the send button moves to that row's end. */
+  tools?: React.ReactNode;
+  /** In `prompt`: the field grows with the draft from `rows` up to this many lines, then scrolls. */
+  maxRows?: number;
+  /** Extra attributes spread onto the native field, e.g. a host's combobox wiring (`role`, `aria-expanded`, `aria-controls`, `aria-activedescendant`). */
+  inputProps?: React.TextareaHTMLAttributes<HTMLTextAreaElement> & Record<string, unknown>;
+  /** Sees every key in the field first; call `preventDefault()` to stop the composer's own Enter/Escape handling for that key. */
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement | HTMLTextAreaElement>;
   /** Style overrides for the composer root. */
   style?: React.CSSProperties;
 }

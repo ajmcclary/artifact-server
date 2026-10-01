@@ -56,7 +56,7 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
   };
 
   const listButton = phone ? (
-    <Button icon="bi-folder2-open" onClick={() => setSheetOpen(true)} outline size="sm" variant="secondary">
+    <Button icon="bi-briefcase" onClick={() => setSheetOpen(true)} outline size="sm" variant="secondary">
       Projects
     </Button>
   ) : null;
@@ -68,7 +68,7 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
         actionLabel="New project"
         count={0}
         emptyBody="Create a project to publish artifacts into it."
-        emptyIcon="bi-folder2-open"
+        emptyIcon="bi-briefcase"
         emptyTitle="No projects yet"
         noun="projects"
         onAction={() => setCreateOpen(true)}

@@ -77,7 +77,7 @@ export function ProjectListPanel({
       countLabel={`${total} ${total === 1 ? "project" : "projects"}`}
       footerMeta={projectListFooter(rows.length, total, query)}
       header={header}
-      icon="bi-folder2-open"
+      icon="bi-briefcase"
       id={projectListPanelId}
       maxWidth={catalogWidth.maximum}
       minWidth={catalogWidth.minimum}

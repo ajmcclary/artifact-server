@@ -96,7 +96,7 @@ export function buildEvents({ artifacts, threadsFor, versionsFor, dispatches = {
       if (t.isResolved && t.resolvedAt) {
         events.push({
           id: 'resolution:' + t.key, type: 'resolution', at: instantOf(t.resolvedAt, year), actor: t.resolvedBy || t.author,
-          verb: 'resolved a conversation on', ...about(a), version: t.version, thread: t, excerpt: firstLine(t.body),
+          verb: 'resolved a conversation on', ...about(a), version: t.version, thread: shown, excerpt: firstLine(t.body),
           needsYou: false, withAgent: false, adminOnly: false,
         });
       }
@@ -166,15 +166,199 @@ export function mergeBursts(events) {
 const searchText = (e) => [e.actor, e.artifactName, e.projectName, e.artifactId, e.detail, e.agent,
   e.thread && e.thread.body, ...((e.thread && e.thread.replies) || []).map((r) => r.body)].filter(Boolean).join(' ').toLowerCase();
 
-export function filterEvents(events, { segment = 'All', projects = [], types = [], query = '', isAdmin = true } = {}) {
+/* The events an entry stands for: a burst's items, an artifact group's events, or the event itself. */
+export function membersOf(e) {
+  if (e.kind === 'burst') return e.items;
+  if (e.kind === 'artifact') return e.events;
+  return [e];
+}
+
+/**
+ * Narrows events or grouped entries. A group matches when any event it holds matches, so a
+ * person, project, type or search hit anywhere in a burst or an artifact's day keeps the entry.
+ */
+export function filterEvents(events, { segment = 'All', people = [], projects = [], types = [], query = '', isAdmin = true } = {}) {
   const typeSet = types.length ? new Set(TYPE_FILTERS.filter((f) => types.includes(f.id)).flatMap((f) => f.types)) : null;
   const q = query.trim().toLowerCase();
+  const any = (e, test) => membersOf(e).some(test);
   return events.filter((e) => (isAdmin || !e.adminOnly)
     && (segment !== 'Needs you' || e.needsYou)
     && (segment !== 'With an agent' || e.withAgent)
-    && (!projects.length || projects.includes(e.projectId))
-    && (!typeSet || typeSet.has(e.type))
-    && (!q || searchText(e).includes(q)));
+    && (!people.length || any(e, (m) => people.includes(m.actor)))
+    && (!projects.length || any(e, (m) => projects.includes(m.projectId)))
+    && (!typeSet || any(e, (m) => typeSet.has(m.type)))
+    && (!q || any(e, (m) => searchText(m).includes(q))));
+}
+
+/**
+ * Everyone the people filter offers, with how many entries each appears in: active members,
+ * then any other person the entries name, then the agents. `self` marks the signed-in reviewer.
+ */
+export function peopleOf(events, { members = [], agents = [], self = null, isAdmin = true } = {}) {
+  const count = (name) => filterEvents(events, { people: [name], isAdmin }).length;
+  const agentNames = agents.map((a) => a.name);
+  const humans = members.filter((m) => !m.status || m.status === 'Active').map((m) => m.name);
+  const seen = new Set();
+  events.forEach((e) => membersOf(e).forEach((m) => { if (m.actor) seen.add(m.actor); }));
+  const others = [...seen].filter((n) => !humans.includes(n) && !agentNames.includes(n)).sort();
+  const person = (name, agent) => ({ id: name, name, agent, count: count(name), ...(name === self ? { self: true } : {}) });
+  return humans.concat(others).map((n) => person(n, false)).concat(agentNames.map((n) => person(n, true)));
+}
+
+export const BURST_WINDOW = 30 * 60 * 1000;
+const BURST_TYPES = ['version', 'access'];
+const weight = (e) => e.count || 1;
+
+function burstOf(items) {
+  const first = items[0];
+  const projects = [];
+  items.forEach((i) => {
+    let p = projects.find((x) => x.id === i.projectId);
+    if (!p) { p = { id: i.projectId, name: i.projectName, count: 0 }; projects.push(p); }
+    p.count += weight(i);
+  });
+  return {
+    id: 'burst:' + first.id, kind: 'burst', type: first.type, actor: first.actor, verb: first.verb, items, projects,
+    count: items.reduce((n, i) => n + weight(i), 0), at: first.at, firstAt: items[items.length - 1].at,
+    archived: items.every((i) => i.archived), needsYou: items.some((i) => i.needsYou), withAgent: items.some((i) => i.withAgent),
+    adminOnly: items.every((i) => i.adminOnly),
+  };
+}
+
+/**
+ * Consecutive version or access events (newest first) by one actor, on any artifacts in any
+ * projects, within `windowMs` of the newest and on its day, collapse into one burst. A run of
+ * one stays the event it was. Apply after `mergeBursts`.
+ */
+export function groupBursts(events, { windowMs = BURST_WINDOW } = {}) {
+  const out = [];
+  let run = null;
+  const close = () => {
+    if (run) out.push(run.length > 1 ? burstOf(run) : run[0]);
+    run = null;
+  };
+  events.forEach((e) => {
+    const burstable = BURST_TYPES.includes(e.type) && !Number.isNaN(e.at);
+    const lead = run && run[0];
+    if (lead && burstable && e.type === lead.type && e.actor === lead.actor
+      && lead.at - e.at <= windowMs && dayKey(e.at) === dayKey(lead.at)) {
+      run.push(e);
+      return;
+    }
+    close();
+    if (burstable) run = [e];
+    else out.push(e);
+  });
+  close();
+  return out;
+}
+
+const THREAD_TYPES = ['comment', 'resolution'];
+
+/**
+ * Within one day (newest first), every comment, resolution and agent event on an artifact
+ * that has a conversation that day becomes one entry at the newest one's place: its actors
+ * (newest first), one thread per conversation, and the agent hand-off as `agent`. An agent
+ * event on an artifact with no conversation that day stays its own entry.
+ */
+export function groupByArtifact(dayEvents) {
+  const talked = new Set(dayEvents.filter((e) => e.artifactId && THREAD_TYPES.includes(e.type)).map((e) => e.artifactId));
+  const groups = new Map();
+  const out = [];
+  dayEvents.forEach((e) => {
+    if (!talked.has(e.artifactId) || !(THREAD_TYPES.includes(e.type) || e.type === 'agent')) { out.push(e); return; }
+    let g = groups.get(e.artifactId);
+    if (!g) {
+      g = {
+        id: 'artifact:' + e.artifactId + ':' + (Number.isNaN(e.at) ? 'undated' : dayKey(e.at)), kind: 'artifact', type: 'comment',
+        artifactId: e.artifactId, artifactName: e.artifactName, projectId: e.projectId, projectName: e.projectName, archived: e.archived,
+        actors: [], threads: [], agent: null, events: [], at: e.at, needsYou: false, withAgent: false, adminOnly: false,
+      };
+      groups.set(e.artifactId, g);
+      out.push(g);
+    }
+    g.events.push(e);
+    if (!g.actors.includes(e.actor)) g.actors.push(e.actor);
+    if (e.type === 'agent') { if (!g.agent) g.agent = e; }
+    else if (!g.threads.some((t) => t.thread.key === e.thread.key)) g.threads.push(e);
+    g.needsYou = g.needsYou || !!e.needsYou;
+    g.withAgent = g.withAgent || !!e.withAgent;
+  });
+  return out;
+}
+
+/** The feed's entries: bursts collapsed, then each day's conversations grouped by artifact. Newest first. */
+export function groupEntries(events, { windowMs = BURST_WINDOW } = {}) {
+  const out = [];
+  let day = [];
+  let key = null;
+  groupBursts(events, { windowMs }).forEach((e) => {
+    const k = Number.isNaN(e.at) ? 'undated' : dayKey(e.at);
+    if (k !== key) { out.push(...groupByArtifact(day)); day = []; key = k; }
+    day.push(e);
+  });
+  out.push(...groupByArtifact(day));
+  return out;
+}
+
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const versionSpan = (e) => (e.count > 1 ? 'v' + e.firstVersion + '–v' + e.version : 'v' + e.version);
+
+/** A version event's change in the data face: `v4 → v5`, `v5–v7`, or `v1 · new`. */
+export function versionChange(e) {
+  if (e.count > 1) return versionSpan(e);
+  return e.fromVersion ? 'v' + e.fromVersion + ' → v' + e.version : 'v' + e.version + ' · new';
+}
+
+/** "A and B", or "A, B and 2 more". */
+export function listPreview(names, shown = 2) {
+  if (names.length <= shown) return names.join(' and ');
+  return names.slice(0, shown).join(', ') + ' and ' + (names.length - shown) + ' more';
+}
+
+/** A clock span on one day: `10:00–10:12 AM`, `11:50 AM–12:10 PM`, or one time when they agree. */
+export function timeRange(from, to) {
+  const a = usTime(from); const b = usTime(to);
+  if (!a || !b || a === b) return b || a;
+  const [ta, pa] = a.split(' '); const [, pb] = b.split(' ');
+  return pa === pb ? ta + '–' + b : a + '–' + b;
+}
+
+/** A byline's time: the clock alone on the entry's own day, the full date and time otherwise. */
+export function bylineTime(ms, entryAt) {
+  if (Number.isNaN(ms) || Number.isNaN(entryAt) || dayKey(ms) !== dayKey(entryAt)) return usDateTime(ms);
+  return usTime(ms);
+}
+
+/**
+ * An entry's title as typed parts, so no whole string is bolded: `actor`, `verb` (connectives
+ * too), `code` (version spans and counts), `name` (the artifact, a link) and `plain` objects.
+ */
+export function sentenceOf(e) {
+  const P = (kind, text) => ({ kind, text });
+  const where = (projects) => (projects.length > 1
+    ? [P('verb', 'across'), P('plain', plural(projects.length, 'project', 'projects'))]
+    : [P('verb', 'in'), P('plain', projects[0].name)]);
+  if (e.kind === 'burst') {
+    if (e.type === 'version') return [P('actor', e.actor), P('verb', 'published'), P('code', plural(e.count, 'version', 'versions')), ...where(e.projects)];
+    const artifacts = new Set(e.items.map((i) => i.artifactId)).size;
+    return [P('actor', e.actor), P('verb', 'changed access on'), P('code', plural(artifacts, 'artifact', 'artifacts')), ...where(e.projects)];
+  }
+  if (e.kind === 'artifact') {
+    const talk = e.events.filter((m) => THREAD_TYPES.includes(m.type));
+    const names = [];
+    talk.forEach((m) => { if (!names.includes(m.actor)) names.push(m.actor); });
+    const who = names.length === 1 ? [P('actor', names[0])]
+      : names.length === 2 ? [P('actor', names[0]), P('verb', 'and'), P('actor', names[1])]
+        : [P('actor', names[0]), P('verb', 'and'), P('plain', plural(names.length - 1, 'other', 'others'))];
+    const verb = talk.length === 1 ? talk[0].verb
+      : talk.every((m) => m.type === 'resolution') ? 'resolved conversations on' : 'commented on';
+    return [...who, P('verb', verb), P('name', e.artifactName)];
+  }
+  if (e.type === 'version') return [P('actor', e.actor), P('verb', 'published'), P('code', versionSpan(e)), P('verb', 'of'), P('name', e.artifactName)];
+  if (e.type === 'agent') return [P('actor', e.actor), P('verb', e.verb), P('name', e.artifactName), P('verb', 'to'), P('actor', e.agent)];
+  if (e.type === 'admin') return [P('actor', e.actor), P('verb', e.verb), P('plain', e.detail)];
+  return [P('actor', e.actor), P('verb', e.verb), P('name', e.artifactName)];
 }
 
 export function segmentCounts(events, { isAdmin = true } = {}) {
@@ -189,12 +373,24 @@ export function dayKey(ms) {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-export function dayLabel(key, now) {
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function relativeDay(key, now) {
   if (key === dayKey(now)) return 'Today';
   const y = new Date(now); y.setDate(y.getDate() - 1);
-  if (key === dayKey(y.getTime())) return 'Yesterday';
+  return key === dayKey(y.getTime()) ? 'Yesterday' : null;
+}
+export function dayLabel(key, now) {
+  const near = relativeDay(key, now);
+  if (near) return near;
   const [Y, M, D] = key.split('-').map(Number);
   return WEEKDAYS[new Date(Y, M - 1, D).getDay()] + ' ' + pad(M) + '/' + pad(D) + '/' + Y;
+}
+
+/** A day cap's two halves: `Today`, `Yesterday` or the weekday's name, and `MM/DD/YYYY`. */
+export function dayParts(key, now) {
+  if (key === 'undated') return { weekday: 'Undated', date: '' };
+  const [Y, M, D] = key.split('-').map(Number);
+  return { weekday: relativeDay(key, now) || WEEKDAY_NAMES[new Date(Y, M - 1, D).getDay()], date: pad(M) + '/' + pad(D) + '/' + Y };
 }
 
 export function groupByDay(events, now) {
@@ -203,7 +399,7 @@ export function groupByDay(events, now) {
     const key = Number.isNaN(e.at) ? 'undated' : dayKey(e.at);
     let group = groups[groups.length - 1];
     if (!group || group.key !== key) {
-      group = { key, label: key === 'undated' ? 'Undated' : dayLabel(key, now), events: [] };
+      group = { key, label: key === 'undated' ? 'Undated' : dayLabel(key, now), ...dayParts(key, now), events: [] };
       groups.push(group);
     }
     group.events.push(e);

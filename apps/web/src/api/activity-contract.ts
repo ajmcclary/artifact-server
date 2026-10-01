@@ -72,13 +72,31 @@ export const activitySummarySchema = z.object({
   withAgent: z.number().int().nonnegative(),
 });
 
+/** Counts behind the Activity filter row, in feed entries (one per conversation). */
+export const activityFacetsSchema = z.object({
+  /** Entries matching the request's filters. */
+  matching: z.number().int().nonnegative(),
+  /** Everyone with a visible entry, whatever else is filtered; most active first. */
+  people: z.array(z.object({
+    count: z.number().int().nonnegative(),
+    id: z.string(),
+    kind: principalKindSchema,
+    name: z.string(),
+  })),
+  /** Every visible entry, whatever is filtered. */
+  total: z.number().int().nonnegative(),
+});
+
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;
+export type ActivityFacets = z.infer<typeof activityFacetsSchema>;
 export type ActivityPageResponse = z.infer<typeof activityPageSchema>;
 export type ActivitySummary = z.infer<typeof activitySummarySchema>;
 
 export interface ActivityListParams {
   readonly cursor?: string | null;
   readonly limit?: number;
+  /** Principal IDs whose entries to keep; empty keeps everyone. */
+  readonly people?: readonly string[];
   readonly projects?: readonly string[];
   readonly q?: string;
   readonly segment?: ActivitySegment;
@@ -90,6 +108,7 @@ export function activityQueryString(params: ActivityListParams): string {
   const search = new URLSearchParams();
   for (const project of params.projects ?? []) search.append("project", project);
   for (const type of params.types ?? []) search.append("type", type);
+  for (const person of params.people ?? []) search.append("person", person);
   if (params.segment !== undefined) search.set("segment", params.segment);
   const q = params.q?.trim() ?? "";
   if (q !== "") search.set("q", q);

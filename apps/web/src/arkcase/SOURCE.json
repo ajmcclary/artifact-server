@@ -1,6 +1,6 @@
 {
-  "commit": "67f5a141510eab39f8bf2c0ac3a723a7a6310f91",
-  "entriesSha256": "611cb7f5b53da6c5ab3b46a66163ee9fb77d883e596d3564862429f5cfa9443d",
+  "commit": "175aef38e2f884c24007dc8fba4f1b3a62a27b51",
+  "entriesSha256": "8dc72b1f20c46955097911f3d2c4dd5fdcad89f62b2bc1173dc9e4232e146c58",
   "files": {
     "README.md": {
       "sha256": "e7ad2c4fc6e64da215efc2447c1d7e4f125d2fa1c79205dfcf6f56f3f1758311",
@@ -23,11 +23,11 @@
       "source": "arkcase/project/components/actions/Button.jsx"
     },
     "components/actions/CopyButton.d.ts": {
-      "sha256": "21ca4e6ad2b10afb77d32c94929425da505f83c930258f9b2bdc01686ec7c397",
+      "sha256": "301650a8a5e5460bb3a333904c01052b8a45054c6f2949fd653e430e26c048aa",
       "source": "arkcase/project/components/actions/CopyButton.d.ts"
     },
     "components/actions/CopyButton.jsx": {
-      "sha256": "1af9a6177de7a8a259352b029dac78aab09e81c4378e2e5ba8bdf00311f4e6e0",
+      "sha256": "ad3e1aa8b25d720e892c2ef7ed23c0bf791b1d2a87e83250f9205487ab0db859",
       "source": "arkcase/project/components/actions/CopyButton.jsx"
     },
     "components/actions/IconButton.d.ts": {
@@ -38,6 +38,22 @@
       "sha256": "28299e2dfb38f92656d79507ca600fe375509f0d2c07f8e786fddfdfe7c86591",
       "source": "arkcase/project/components/actions/IconButton.jsx"
     },
+    "components/actions/LoadMore.d.ts": {
+      "sha256": "47e5c2c86398254ed8be2656d6f4a631bfb3ba91ef32b2a5d1d4d46dfdd6cd7d",
+      "source": "arkcase/project/components/actions/LoadMore.d.ts"
+    },
+    "components/actions/LoadMore.jsx": {
+      "sha256": "7f5c6ea43cd8d9363285dc0cb541b07304b6f7be4656051e41d0c9534f1e4669",
+      "source": "arkcase/project/components/actions/LoadMore.jsx"
+    },
+    "components/actions/RowActions.d.ts": {
+      "sha256": "9a3914be31fe3c97671bac0d931ea638ea1f093883b795cd7346373852d89e6b",
+      "source": "arkcase/project/components/actions/RowActions.d.ts"
+    },
+    "components/actions/RowActions.jsx": {
+      "sha256": "83201cdf57e7c585e6e5f441b9464f2c620190f55be8b6cfbb23d0c16729cfd3",
+      "source": "arkcase/project/components/actions/RowActions.jsx"
+    },
     "components/actions/Toolbar.d.ts": {
       "sha256": "5935d2de1d5671c63d78c3b4db23a149b1aa850bc0338425f3270b61fa7a2383",
       "source": "arkcase/project/components/actions/Toolbar.d.ts"
@@ -45,6 +61,14 @@
     "components/actions/Toolbar.jsx": {
       "sha256": "bdf837b0604f5d9da5f0fd14afdaeda9e7b832cf070815022f9e7feeb24e8b5d",
       "source": "arkcase/project/components/actions/Toolbar.jsx"
+    },
+    "components/app/AdminConsole.d.ts": {
+      "sha256": "6c21f34c2a25449caaeae1a9efdad747bbb4058f2a5aa2b0344b6b8dc99f4ad1",
+      "source": "arkcase/project/components/app/AdminConsole.d.ts"
+    },
+    "components/app/AdminConsole.jsx": {
+      "sha256": "79725519977b366033331a2cb3aa3999bc859509fe992a02b6f2ccb28597a798",
+      "source": "arkcase/project/components/app/AdminConsole.jsx"
     },
     "components/app/AutoGrid.d.ts": {
       "sha256": "1ae34e617752dc49d65f50e7ec28f73e6db0334fe4b898dcdda06cd44df9d655",
@@ -54,12 +78,20 @@
       "sha256": "a37f09457c0d5d95547f1aaff89aa09bb1af3597bf2d64e20bb04ebea07bf167",
       "source": "arkcase/project/components/app/AutoGrid.jsx"
     },
+    "components/app/ConfirmDialog.d.ts": {
+      "sha256": "0387817ac817f789e078d96174c712880179297298dbc5edead1ef1e9d6866ac",
+      "source": "arkcase/project/components/app/ConfirmDialog.d.ts"
+    },
+    "components/app/ConfirmDialog.jsx": {
+      "sha256": "efbd372841e0a30cd3c6ce3d92b2eb8be906e71604d67d134580f52a19ea06b0",
+      "source": "arkcase/project/components/app/ConfirmDialog.jsx"
+    },
     "components/app/DiscardDialog.d.ts": {
       "sha256": "77dd63095954e770cf645271339f811f18fcf49d6423e4b88fcca6c55c92cb33",
       "source": "arkcase/project/components/app/DiscardDialog.d.ts"
     },
     "components/app/DiscardDialog.jsx": {
-      "sha256": "4913a32208b9b296f32a637146f7a7af4daac0634fe6e4155cadc45a6564599b",
+      "sha256": "ad8a05f26d1a94f4b6e2b6233e090da1eb38ce45e9b0c573c4d890622ae0bd2a",
       "source": "arkcase/project/components/app/DiscardDialog.jsx"
     },
     "components/app/PageScaffold.d.ts": {
@@ -69,6 +101,14 @@
     "components/app/PageScaffold.jsx": {
       "sha256": "63ba77a9ecb3d55d58eef669494d64656ebed5587d929950f7517dbd499d07cd",
       "source": "arkcase/project/components/app/PageScaffold.jsx"
+    },
+    "components/app/PanelSection.d.ts": {
+      "sha256": "9d8216008dcce847f31a2865e9f8cb6656cfb44f8ea9f5cc41d87867b864a209",
+      "source": "arkcase/project/components/app/PanelSection.d.ts"
+    },
+    "components/app/PanelSection.jsx": {
+      "sha256": "6110dd1e0ac2b102ab7b6354058bac980216db0063b09f4acb9a171cfb0aafdf",
+      "source": "arkcase/project/components/app/PanelSection.jsx"
     },
     "components/app/RailHeader.d.ts": {
       "sha256": "06d94613b1af5cb7d63835aefe7a5270893ce597b4eb767182e2fbcbc864a648",
@@ -87,11 +127,11 @@
       "source": "arkcase/project/components/app/ScrollDock.jsx"
     },
     "components/app/SlideOver.d.ts": {
-      "sha256": "1d78879f9f15ce36102e5cbc9893687eb76c3b8f3226953672465d39bf4151a5",
+      "sha256": "a146069af818e45e768387593eafdc6b1755a8958149e9a4ecc03321fc7a8932",
       "source": "arkcase/project/components/app/SlideOver.d.ts"
     },
     "components/app/SlideOver.jsx": {
-      "sha256": "89ec5866829a16def6389a7e3c23ae92383d422c82378c73aea514d8411b019f",
+      "sha256": "833300297731be3b8497ce76da636baa98b4150206b2edcd35d1bad20ece4c93",
       "source": "arkcase/project/components/app/SlideOver.jsx"
     },
     "components/canvas/AnnotationPin.d.ts": {
@@ -103,11 +143,11 @@
       "source": "arkcase/project/components/canvas/AnnotationPin.jsx"
     },
     "components/canvas/PreviewFrame.d.ts": {
-      "sha256": "34076c36e3d1128f35139ff80ef85c0a992d6be31adbbbc36881f40502e8219c",
+      "sha256": "9d794e3b8b47e85ff8a0afdf89e0bfd38a2b0b11acb64ce6c1eb2b45f50b30b9",
       "source": "arkcase/project/components/canvas/PreviewFrame.d.ts"
     },
     "components/canvas/PreviewFrame.jsx": {
-      "sha256": "22f63a3106f3dd1e61531b9d9be8777b8e5eeeab679eeb9c52e61fcf4ea57272",
+      "sha256": "747d4f1a283da07fd1c5589ae536eaff898f5fc862a7444ad28a472ec232e59c",
       "source": "arkcase/project/components/canvas/PreviewFrame.jsx"
     },
     "components/data-display/Avatar.d.ts": {
@@ -127,19 +167,19 @@
       "source": "arkcase/project/components/data-display/CodeBlock.jsx"
     },
     "components/data-display/CommentThread.d.ts": {
-      "sha256": "ebbd562c35af79ce1bacd64fd2da66b2b8164f2bd2838a5d28909824922521bc",
+      "sha256": "916d859feeb23052d0ac2db89ffee8d233c4ffad7358ba7d84ce68c95eeee618",
       "source": "arkcase/project/components/data-display/CommentThread.d.ts"
     },
     "components/data-display/CommentThread.jsx": {
-      "sha256": "613bdefe307fb0e9e8274980d7242a8d1ff7ec83a6dfcc84dc47a4662167f1ae",
+      "sha256": "2b3ac5e21cc1ba1fb42a3274acaabaf9dfa67eb7904b3e57062b5974ffd478b5",
       "source": "arkcase/project/components/data-display/CommentThread.jsx"
     },
     "components/data-display/CountBadge.d.ts": {
-      "sha256": "23c200086bbc64fc1121c6371736e7549032fe4f2987ffe08eb92754e4440481",
+      "sha256": "62ef511a4b8d7a903fe4a2d6972bc5246ff50776832cd423909f94240a3e73ff",
       "source": "arkcase/project/components/data-display/CountBadge.d.ts"
     },
     "components/data-display/CountBadge.jsx": {
-      "sha256": "69a87c8e2a18f4636e6f65fc4343b859c62bb89011d713f7c93d8c8e41eecb8d",
+      "sha256": "aeb47dbf458d8503efd7dae16df8c35448d02b36356d554ceb8099a9ab932ded",
       "source": "arkcase/project/components/data-display/CountBadge.jsx"
     },
     "components/data-display/DiffLines.d.ts": {
@@ -198,6 +238,22 @@
       "sha256": "bad955e854e6ed77a803fcee4cd271a2b31bec5dbdeac6ec27bbf8bdb645f460",
       "source": "arkcase/project/components/data-display/IdentityBlock.jsx"
     },
+    "components/data-display/LinkRow.d.ts": {
+      "sha256": "0c6dbb91d49730787bac2d477e8f270812fe268fc01b202d2be62e6370671257",
+      "source": "arkcase/project/components/data-display/LinkRow.d.ts"
+    },
+    "components/data-display/LinkRow.jsx": {
+      "sha256": "86c0d53df3882333cd197bcc24ad96c1791ac7c4e04ca92b00393a4b94f33969",
+      "source": "arkcase/project/components/data-display/LinkRow.jsx"
+    },
+    "components/data-display/MentionText.d.ts": {
+      "sha256": "34557c6bfcb6c754fc80340b5997c76fd235187b526808251945873a14500e81",
+      "source": "arkcase/project/components/data-display/MentionText.d.ts"
+    },
+    "components/data-display/MentionText.jsx": {
+      "sha256": "68452afb65e60cec8daed078a98167c67b27610a15c6d1d0e03b4bb128f6ca71",
+      "source": "arkcase/project/components/data-display/MentionText.jsx"
+    },
     "components/data-display/MetricCard.d.ts": {
       "sha256": "3757ef3ea54f4809a655bbee0ac2f1bd97ed0265a9e2a75e012bc948e7e907b6",
       "source": "arkcase/project/components/data-display/MetricCard.d.ts"
@@ -253,6 +309,14 @@
     "components/feedback/ModeBanner.jsx": {
       "sha256": "a980fb7f9fba2476dfe58c6055f493df01cc34bbc085777167b01c776ab1ade8",
       "source": "arkcase/project/components/feedback/ModeBanner.jsx"
+    },
+    "components/feedback/SkeletonLines.d.ts": {
+      "sha256": "1ad248b500b6369a915703e27d895b84dfd2cbb6cca7b446958a52e0a5eecab8",
+      "source": "arkcase/project/components/feedback/SkeletonLines.d.ts"
+    },
+    "components/feedback/SkeletonLines.jsx": {
+      "sha256": "cab5f69012c30190e0b54f8125fd0dc9a3643d43a89fc12d70dcbcf3fd1aaedd",
+      "source": "arkcase/project/components/feedback/SkeletonLines.jsx"
     },
     "components/feedback/Spinner.d.ts": {
       "sha256": "b4baa4b95d11716e2af0ef0970421fc2fa7732386c95efc60a1acff720fa9a22",
@@ -310,12 +374,20 @@
       "sha256": "dfbcff84f37d720d816d3e2d47540b1f8ed7a0cdcb00fb3a55898bfca1f9bfd2",
       "source": "arkcase/project/components/forms/Checkbox.jsx"
     },
+    "components/forms/ChoiceGroup.d.ts": {
+      "sha256": "f8be191e91bd00df9e90a7c7ca8d8127ac935602b554bdd120e239f404f6879a",
+      "source": "arkcase/project/components/forms/ChoiceGroup.d.ts"
+    },
+    "components/forms/ChoiceGroup.jsx": {
+      "sha256": "25452879e4e606fb85ba566481935b62933d3fc81f74956a2a33e32be07232be",
+      "source": "arkcase/project/components/forms/ChoiceGroup.jsx"
+    },
     "components/forms/CommentComposer.d.ts": {
-      "sha256": "9d4871936ce05377956163fa2dbd7cc343c547f93a620573f373da6c737cf728",
+      "sha256": "be2fe404dbf98e3d393e469520d06805c5e0e29e3feb60d5a4592ea8f83cfb8a",
       "source": "arkcase/project/components/forms/CommentComposer.d.ts"
     },
     "components/forms/CommentComposer.jsx": {
-      "sha256": "e6fb73e964c3320425773e0833e94d59477975768f1216a803ded9bdba2299f5",
+      "sha256": "aea306e4cde1554022624f529951086c685dc0e081cb0344dc32015a99b2f96d",
       "source": "arkcase/project/components/forms/CommentComposer.jsx"
     },
     "components/forms/Input.d.ts": {
@@ -326,12 +398,20 @@
       "sha256": "c976e445736e7f893f557de929e3117d6ea98097304b300e0a4a98bb28d8995d",
       "source": "arkcase/project/components/forms/Input.jsx"
     },
+    "components/forms/MentionComposer.d.ts": {
+      "sha256": "061398354556ca32b940d05d216df179f0437ab56cd5828f590cfc8a2898b2f7",
+      "source": "arkcase/project/components/forms/MentionComposer.d.ts"
+    },
+    "components/forms/MentionComposer.jsx": {
+      "sha256": "d9db9c618393eed72dc854e94e0e47379acd9d0a3a7a1046977ec6fc2f3a21b2",
+      "source": "arkcase/project/components/forms/MentionComposer.jsx"
+    },
     "components/forms/Select.d.ts": {
       "sha256": "55957c93cded5f2e44fc039c49f2fc2d9050690e9b8332f78e13874e3d21ab6f",
       "source": "arkcase/project/components/forms/Select.d.ts"
     },
     "components/forms/Select.jsx": {
-      "sha256": "55747fdb85466e4bb3e02f78f8c6c773270b6404e2bb83959212686552a6a9c4",
+      "sha256": "6df87442e305e0b4292b4abdde65ac6fb720a6e3cd58040ebe2c63108b61f896",
       "source": "arkcase/project/components/forms/Select.jsx"
     },
     "components/forms/Switch.d.ts": {
@@ -371,12 +451,20 @@
       "source": "arkcase/project/components/grid/data-grid-view.jsx"
     },
     "components/navigation/Breadcrumb.d.ts": {
-      "sha256": "fc340af32514919e4dabf2af2479b8c149b9aabb99350c1ae432037025d39784",
+      "sha256": "d353e34d5bde4bd4d0c059b72d924a1228a152d12fda0ca0ec05993cd1f1624e",
       "source": "arkcase/project/components/navigation/Breadcrumb.d.ts"
     },
     "components/navigation/Breadcrumb.jsx": {
-      "sha256": "26f3b285a75234e473c31e2fc3d190657aab70d99289108672601a2c4b19b0c5",
+      "sha256": "f3b3955115e7096aaff12a11cf04e94ffc1894f36138d85d5e804ab45f977e06",
       "source": "arkcase/project/components/navigation/Breadcrumb.jsx"
+    },
+    "components/navigation/CrumbMenu.d.ts": {
+      "sha256": "f2edbf95dd1af574424b66e8968e9b6ac08748dced905950d5134e2e00b8eb5f",
+      "source": "arkcase/project/components/navigation/CrumbMenu.d.ts"
+    },
+    "components/navigation/CrumbMenu.jsx": {
+      "sha256": "25bbe29436c51fda04092c7bb40047b1eb39751a54e923d38cc510b0aabbcbee",
+      "source": "arkcase/project/components/navigation/CrumbMenu.jsx"
     },
     "components/navigation/LeftNav.d.ts": {
       "sha256": "cb7cc8c8ad3ce76c08f73b93e54b60069b95e1f666d48e27b6d7a63e835697f2",
@@ -393,6 +481,14 @@
     "components/navigation/NavigationIcon.jsx": {
       "sha256": "03de8367de7ab4099049236c0d89ba7d9eabfd20e7837020b8adfd5307ef9ad1",
       "source": "arkcase/project/components/navigation/NavigationIcon.jsx"
+    },
+    "components/navigation/SearchableList.d.ts": {
+      "sha256": "8e762fb865eb41e33be4b9dd150c2493d2b2cc1ab042e975bc84a745afb978d4",
+      "source": "arkcase/project/components/navigation/SearchableList.d.ts"
+    },
+    "components/navigation/SearchableList.jsx": {
+      "sha256": "70c9663d9e531d4c870ac4daf5b4478f0ab33043d6cf2f30b465618fba23cf56",
+      "source": "arkcase/project/components/navigation/SearchableList.jsx"
     },
     "components/navigation/SegmentedControl.d.ts": {
       "sha256": "9bba7989ed8495415243ac8f000ca435122b3a94e3d11a2c3daccd0f25d85bad",
@@ -417,6 +513,18 @@
     "components/navigation/Tabs.jsx": {
       "sha256": "69035ff93e4fe1ac263b4602ff80a28d9e730518fc9e73383fe1905cdd32ef7c",
       "source": "arkcase/project/components/navigation/Tabs.jsx"
+    },
+    "components/navigation/TreeView.d.ts": {
+      "sha256": "0549ec2f12b8eb252e49f44d6c4d8002b795d1563b0391396e2a27dafecf8608",
+      "source": "arkcase/project/components/navigation/TreeView.d.ts"
+    },
+    "components/navigation/TreeView.jsx": {
+      "sha256": "8a847fd62fe1d3830cd343b0a09bc4e1657c5472c786bdf02dd03f14a6f1035a",
+      "source": "arkcase/project/components/navigation/TreeView.jsx"
+    },
+    "components/navigation/tree-model.js": {
+      "sha256": "f6da12c6301020e73b0b2ae4925e7095d010d98b752b2f6c736456cbc26e68ea",
+      "source": "arkcase/project/components/navigation/tree-model.js"
     },
     "components/overlays/CommandPalette.d.ts": {
       "sha256": "af056092de689bbd7dfd219434fe5915d7825d0f981befd519f9d877329d8c4e",
@@ -443,11 +551,11 @@
       "source": "arkcase/project/components/overlays/Modal.jsx"
     },
     "components/overlays/Popover.d.ts": {
-      "sha256": "0f5f22177de7c44fe1f9511f8c595b34f43ff841411610870c3c537f0f055a1a",
+      "sha256": "494786010c4827bbfbf8d0db6fcce774f9dcd24e986a06528724e04bebcb11e2",
       "source": "arkcase/project/components/overlays/Popover.d.ts"
     },
     "components/overlays/Popover.jsx": {
-      "sha256": "0ebe57b633cdfbce9d818efd3034d7644621708c3bc607f948a9cc9d53e9cd14",
+      "sha256": "c304e957e5441b4d6df7ca30f8d89250fd7438d1dd24913368bb0ba1eb694daa",
       "source": "arkcase/project/components/overlays/Popover.jsx"
     },
     "components/overlays/overlay-layer.jsx": {
@@ -455,11 +563,11 @@
       "source": "arkcase/project/components/overlays/overlay-layer.jsx"
     },
     "components/panel/Panel.d.ts": {
-      "sha256": "66f1bba19b63408de2bcd329be5dea9b5791e0a034fbc713a20d80e71c94ac72",
+      "sha256": "a346d52e857957f0b1f2b07b099914fe41f05546bf49e9aa966b68728aa3e843",
       "source": "arkcase/project/components/panel/Panel.d.ts"
     },
     "components/panel/Panel.jsx": {
-      "sha256": "73a1c6f8e84144ea7639d303618d7385d30a9d1cd8da7e08c18440b46e287e18",
+      "sha256": "19f1a6b450c58e17dcdac2240a440afcf75ff276180e612b62377658e248e96e",
       "source": "arkcase/project/components/panel/Panel.jsx"
     },
     "components/panel/PanelBudget.d.ts": {
@@ -563,19 +671,27 @@
       "source": "arkcase/project/components/record/RecordPanel.jsx"
     },
     "components/record/RecordTable.d.ts": {
-      "sha256": "a13367c4b8a31177f83c868f28a7940afe5d2a6107699436c91237262adaf28f",
+      "sha256": "17a106dc161661cc7a3b9d93fb1276c769de0e3d0f2acbd2f5c6352d6bcdb1c8",
       "source": "arkcase/project/components/record/RecordTable.d.ts"
     },
     "components/record/RecordTable.jsx": {
-      "sha256": "780e3aeda6b8cf3643d739dd53699bef71bc46a376d5401673587e6b10e6780d",
+      "sha256": "4c67f6ae766155e93ccda665df207f1965ece733841625d070e3297caa3c9fd4",
       "source": "arkcase/project/components/record/RecordTable.jsx"
     },
+    "components/record/RowSummary.d.ts": {
+      "sha256": "fa0c8c3e012e6eb305666b3c4914ad255a62ebc3b909006ec6f144b7d952db7a",
+      "source": "arkcase/project/components/record/RowSummary.d.ts"
+    },
+    "components/record/RowSummary.jsx": {
+      "sha256": "d3715c942dbe7b5d192bbd24ce86bfe40c7fc9feed4d379811e04147c4e7cbb2",
+      "source": "arkcase/project/components/record/RowSummary.jsx"
+    },
     "components/record/SectionHeading.d.ts": {
-      "sha256": "e172df9f9511ded40d3c8edb75f9112fad25862ff6c9d506be7c7952b7d2ef1b",
+      "sha256": "cc2fac1085f03a5e4234a1b71da5c121712e19e42e4f03b75753b93fad7b5f7b",
       "source": "arkcase/project/components/record/SectionHeading.d.ts"
     },
     "components/record/SectionHeading.jsx": {
-      "sha256": "1982ac3de92fa94f376928d2450525e850025eeb153aa895a7ab1f4eef326680",
+      "sha256": "87ebcd0d37a9b1dd307c1fb366cb3ebef9bf41473125e2ae30180606f1e1482b",
       "source": "arkcase/project/components/record/SectionHeading.jsx"
     },
     "components/record/SelectableRow.d.ts": {
@@ -658,6 +774,14 @@
       "sha256": "ff0e3b73bb0e220363182def178f05a49b8bea557f676c4a35b6f8dc689878a4",
       "source": "arkcase/project/components/utilities/announcer.jsx"
     },
+    "components/utilities/clipboard.d.ts": {
+      "sha256": "97ced7989de486a7dcd1c86738f29fae412d439b5da8455a72576997432cc065",
+      "source": "arkcase/project/components/utilities/clipboard.d.ts"
+    },
+    "components/utilities/clipboard.jsx": {
+      "sha256": "6aa55a2aa025c7baab16f626f1ee8000210b32134fc045e160f350a667992fc2",
+      "source": "arkcase/project/components/utilities/clipboard.jsx"
+    },
     "components/utilities/dismiss.d.ts": {
       "sha256": "1ed7467e1ac196ed891b0c942c6c6fc9bd19afdeb6d0cff0ff6d454da1f3d232",
       "source": "arkcase/project/components/utilities/dismiss.d.ts"
@@ -699,27 +823,35 @@
       "source": "arkcase/project/components/utilities/tones.jsx"
     },
     "index.ts": {
-      "sha256": "59beb499819d35e1e4f78babc940f7e91456407c5280bd8c5312bc45b82abf07",
+      "sha256": "a9df8d90fdb244ca1423f20509a26e5565cd68592dd3724454a00d70687ba675",
       "source": null
     },
     "review-ui/activity-model.js": {
-      "sha256": "a382f7822a24ab5321c45ecba5c086477b460a9be4652107e0af4966bef9715b",
+      "sha256": "69ee86f948c98ad6b31bf9b55e26361c93e45bb038d96805740470d16f0780f4",
       "source": "workspace/projects/arkcase-artifacts/activity-model.js"
     },
     "review-ui/activity-ui.jsx": {
-      "sha256": "13f6b5353b25d51d57fea31893ab2b733dcc98030b4312d1fb771b4dff362f3a",
+      "sha256": "5e036460e880c79009430296994a021a2806f8e4b14d80c24202ee6c9eee1e43",
       "source": "workspace/projects/arkcase-artifacts/activity-ui.jsx"
     },
+    "review-ui/library-ui.jsx": {
+      "sha256": "8b54e84a284c538002f2a531de2e0b35f8bc37f68cd79a9cc4f4d2ac0497de93",
+      "source": "workspace/projects/arkcase-artifacts/library-ui.jsx"
+    },
     "review-ui/page-model.js": {
-      "sha256": "18e3c7d141e9c13ad3a34359b6973dd5313faf43d736bc9a25732b251ae6148c",
+      "sha256": "e52461636956a396280ce0062d9753fdc58eb1527d1d76b228819fb66b07ac94",
       "source": "workspace/projects/arkcase-artifacts/page-model.js"
     },
+    "review-ui/placeholder-ui.jsx": {
+      "sha256": "46a658390aadc017e33b988cebaf3c4c98d8efd90defd0f1f58290ff13a1b1c2",
+      "source": "workspace/projects/arkcase-artifacts/placeholder-ui.jsx"
+    },
     "review-ui/review-ui.d.ts": {
-      "sha256": "9ddfdb6b71847dd183a1f66e37177744756801423e81d2482cc17b9332b966f2",
+      "sha256": "a80d52f96c849e72718a5b6ab80486793a33509c80de45318db3fc3a8233f729",
       "source": "workspace/projects/arkcase-artifacts/review-ui.d.ts"
     },
     "review-ui/review-ui.jsx": {
-      "sha256": "419e5df140fb4f539bb64bf14089ff91cfa55cf13a206debe6f9d0fd89e6bb81",
+      "sha256": "9f2bb51c726745fbdda373004a6bdbff8204e6b1d382b3034e9f61f38f82b825",
       "source": "workspace/projects/arkcase-artifacts/review-ui.jsx"
     },
     "tokens/base.css": {
@@ -807,7 +939,7 @@
       "source": "arkcase/project/tokens/fonts/publicsans-OFL.txt"
     },
     "tokens/fonts/sourcecodepro-OFL.txt": {
-      "sha256": "4a4a4179a96b5ef6786186d199f0d049b151352f460b8d2f3c00083792f37dd9",
+      "sha256": "cb30d3086a8b3ce0b9e3690bf48d6620402b61160bc658076f95180ccd9e9dae",
       "source": "arkcase/project/tokens/fonts/sourcecodepro-OFL.txt"
     },
     "tokens/fonts/sourceserif4-OFL.txt": {
@@ -815,7 +947,7 @@
       "source": "arkcase/project/tokens/fonts/sourceserif4-OFL.txt"
     },
     "tokens/icons.css": {
-      "sha256": "09913a82b0f4cb321bb0dcd562fce7333510ef12b6c3675e034e87731e3656c3",
+      "sha256": "d37a9d665652fdacbf83bf7bc9d9b62f399ace11cde54dc916e5e1dab6f53f18",
       "source": "arkcase/project/tokens/icons.css"
     },
     "tokens/spacing.css": {
@@ -841,16 +973,19 @@
       "bi-arrow-left-right",
       "bi-arrow-repeat",
       "bi-arrow-up",
-      "bi-arrows-fullscreen",
+      "bi-arrows-angle-contract",
+      "bi-arrows-angle-expand",
+      "bi-bookmark-check",
       "bi-bounding-box",
       "bi-box-arrow-right",
       "bi-box-arrow-up-right",
-      "bi-camera",
+      "bi-briefcase",
       "bi-chat-left-text",
       "bi-chat-square-quote",
       "bi-chat-square-text",
       "bi-check",
       "bi-check-circle-fill",
+      "bi-check-lg",
       "bi-check2",
       "bi-check2-circle",
       "bi-chevron-bar-left",
@@ -867,34 +1002,40 @@
       "bi-cpu",
       "bi-dash-circle",
       "bi-download",
+      "bi-easel2",
       "bi-envelope",
       "bi-exclamation-octagon",
       "bi-exclamation-octagon-fill",
       "bi-exclamation-triangle",
       "bi-exclamation-triangle-fill",
+      "bi-eye",
+      "bi-file-diff",
       "bi-file-earmark",
       "bi-file-earmark-code",
+      "bi-file-earmark-image",
       "bi-file-earmark-pdf",
       "bi-file-earmark-richtext",
       "bi-file-earmark-text",
+      "bi-file-earmark-word",
       "bi-filetype-css",
       "bi-filetype-html",
       "bi-filetype-json",
       "bi-filetype-svg",
       "bi-filetype-xml",
-      "bi-folder",
       "bi-folder-plus",
       "bi-folder2",
       "bi-folder2-open",
       "bi-fullscreen",
       "bi-funnel",
       "bi-gear",
+      "bi-geo-alt",
       "bi-geo-alt-fill",
       "bi-git",
       "bi-github",
       "bi-grid-1x2",
       "bi-grid-3x3-gap",
       "bi-image",
+      "bi-inbox",
       "bi-info-circle",
       "bi-info-circle-fill",
       "bi-journal-text",
@@ -909,6 +1050,7 @@
       "bi-palette",
       "bi-pencil-square",
       "bi-people",
+      "bi-person",
       "bi-person-dash",
       "bi-person-plus",
       "bi-pin-angle",
@@ -916,6 +1058,7 @@
       "bi-plug",
       "bi-plus-lg",
       "bi-question-circle",
+      "bi-record-circle-fill",
       "bi-reply",
       "bi-save",
       "bi-search",
@@ -923,7 +1066,9 @@
       "bi-share",
       "bi-shield-lock",
       "bi-sliders",
+      "bi-sort-alpha-down",
       "bi-stop-fill",
+      "bi-table",
       "bi-three-dots",
       "bi-three-dots-vertical",
       "bi-trash",

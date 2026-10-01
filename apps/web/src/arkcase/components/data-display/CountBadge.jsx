@@ -20,9 +20,30 @@ const TONES = {
  * tint with on-tint link ink for counts that ask for attention; `neutral` is
  * the canvas tint with data ink for plain totals. With a `label`, the visible
  * count is hidden from assistive technology and the label is spoken instead.
+ * `icon` draws a glyph in place of the count — a 20px round mark for an item that has no
+ * number, such as a whole-page comment beside numbered pins; give it a `label`.
  */
-export function CountBadge({ count, tone = 'neutral', label, mono = true, style, ...rest }) {
+export function CountBadge({ count, tone = 'neutral', label, mono = true, icon, style, ...rest }) {
   const t = TONES[tone] || TONES.neutral;
+  if (icon) {
+    return (
+      <span
+        role={label ? 'img' : undefined}
+        aria-label={label}
+        title={label}
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none',
+          width: 20, height: 20, borderRadius: '50%',
+          background: tone === 'primary' ? t.background : 'var(--surface-tertiary, #e9ecef)',
+          color: t.color,
+          ...style,
+        }}
+        {...rest}
+      >
+        <i className={'bi ' + icon} aria-hidden="true" style={{ fontSize: 'var(--font-size-label, 11px)' }} />
+      </span>
+    );
+  }
   return (
     <span
       style={{

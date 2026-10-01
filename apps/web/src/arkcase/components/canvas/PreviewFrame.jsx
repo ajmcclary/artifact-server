@@ -3,7 +3,9 @@ import React from 'react';
 /**
  * ArkCase PreviewFrame — the sheet a review surface draws an artifact in: a card
  * with a slim navy title bar (a tone dot, the truncating title, a mono meta such
- * as the version) over the preview itself. `width` is the viewport preset the
+ * as the version) over the preview itself. Omit both `title` and `meta` when the
+ * host's own toolbar already names the artifact and version: the frame then has no
+ * bar, and `label` names the region. `width` is the viewport preset the
  * reviewer chose — 1440, 834, 390 — or null to fit; the frame is centred and
  * never wider than its column. The body is `position: relative` so the host can
  * lay `AnnotationPin`s and a `PickLayer` over the content.
@@ -33,6 +35,8 @@ export function previewPresets(available, presets = DEFAULT_PREVIEW_PRESETS, sla
 export function PreviewFrame({
   title, meta, dotTone = 'info', width = null, label, children, style, bodyStyle, ...rest
 }) {
+  const filled = (v) => v != null && v !== '';
+  const bar = filled(title) || filled(meta);
   return (
     <section
       aria-label={label || (typeof title === 'string' ? title : undefined)}
@@ -47,13 +51,13 @@ export function PreviewFrame({
       }}
       {...rest}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'var(--surface-header, #073652)' }}>
+      {bar && <div data-preview-bar="" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'var(--surface-header, #073652)' }}>
         <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: DOT[dotTone] || DOT.info }} />
         <span style={{ flex: '1 1 auto', minWidth: 0, fontSize: 12, color: 'var(--text-on-navy, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
         {meta != null && meta !== '' && (
           <span style={{ flex: 'none', fontFamily: 'var(--font-data, monospace)', fontSize: 11, color: 'var(--text-on-navy-secondary, rgba(255,255,255,.72))' }}>{meta}</span>
         )}
-      </div>
+      </div>}
       <div data-preview-body="" style={{ position: 'relative', ...bodyStyle }}>
         {children}
       </div>

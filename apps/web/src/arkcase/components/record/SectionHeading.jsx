@@ -101,7 +101,7 @@ export function SectionHeading({ level, size = 'md', title, titleFace = 'display
       >
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
           {eyebrow != null && eyebrow !== '' && (
-            <Eyebrow as="p" tone="navy" data-section-heading-eyebrow="" style={{ margin: 0, lineHeight: 1.4, letterSpacing: '.12em' }}>{eyebrow}</Eyebrow>
+            <Eyebrow as={typeof eyebrow === 'string' || typeof eyebrow === 'number' ? 'p' : 'div'} tone="navy" data-section-heading-eyebrow="" style={{ margin: 0, lineHeight: 1.4, letterSpacing: '.12em' }}>{eyebrow}</Eyebrow>
           )}
           {titleRow}
           {subtitle != null && subtitle !== '' && (

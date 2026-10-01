@@ -27,6 +27,8 @@ export interface FocusViewerControlsProps {
 export interface FocusCommentsProps {
   readonly children: ReactNode;
   readonly commentCount: number;
+  /** The docked comment composer. */
+  readonly footer?: ReactNode;
   readonly onClose: () => void;
 }
 
@@ -138,12 +140,13 @@ export function FocusViewerControls({
 }
 
 /** The comments column of the expanded workspace, beside the canvas at its end edge. */
-export function FocusComments({children, commentCount, onClose}: FocusCommentsProps) {
+export function FocusComments({children, commentCount, footer = null, onClose}: FocusCommentsProps) {
   return (
     <div id="review-focus-comments" style={commentsDockStyle}>
       <SlideOver
         bodyStyle={{gap: 0, padding: 0}}
         closeLabel="Close comments"
+        footer={footer}
         onClose={onClose}
         title="Comments"
         titleMeta={<CountBadge count={commentCount} tone="primary" />}

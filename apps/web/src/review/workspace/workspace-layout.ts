@@ -1,4 +1,3 @@
-import type {InspectorTab} from "./workspace-types.ts";
 
 /**
  * The review workspace's width budget. These are product constants, not
@@ -16,14 +15,8 @@ export const workspaceBudget = {
 } as const;
 
 export const catalogWidth = {defaultWidth: 302, maximum: 460, minimum: 240} as const;
-export const inspectorWidth = {maximum: 560, minimum: 300} as const;
-
-const inspectorDefaultWidths = {
-  comments: 344,
-  details: 392,
-  files: 380,
-  versions: 360,
-} as const satisfies Record<InspectorTab, number>;
+/** The four inspector views share one column, so switching views never moves the canvas. */
+export const inspectorWidth = {defaultWidth: 360, maximum: 560, minimum: 300} as const;
 
 /** Which panes may take width beside the canvas. */
 export interface WorkspaceDocking {
@@ -51,7 +44,7 @@ export function dockingFor(width: number, inspectorOpen: boolean): WorkspaceDock
   return {inspectorDocked, listDocked: room, navExpandable: room};
 }
 
-/** The width an inspector view opens at before the reviewer resizes it. */
-export function inspectorDefaultWidth(tab: InspectorTab): number {
-  return inspectorDefaultWidths[tab];
+/** The width the inspector opens at before the reviewer resizes it, whichever view is open. */
+export function inspectorDefaultWidth(): number {
+  return inspectorWidth.defaultWidth;
 }

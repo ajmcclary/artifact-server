@@ -21,7 +21,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, previewFrame, toast} from "./review-helpers.js";
+import {openInspectorTab, openReview, previewFrame, selectThread, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -163,6 +163,7 @@ test.describe("Review send-all", () => {
       const queuedCard = page.getByRole("article", {name: /^Comment by /u}).filter({
         hasText: queuedThread.body,
       });
+      await selectThread(page, queuedThread.body);
       await queuedCard.getByRole("button", {name: "Cancel send"}).click();
       await page.getByRole("button", {exact: true, name: "Open"}).click();
       await expect(page.getByRole("article", {name: /^Comment by /u})).toHaveCount(1);

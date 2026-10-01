@@ -1,3 +1,5 @@
+import { usDate } from './activity-model.js';
+
 // Browser-local compatibility fixtures. Example URLs and digests are not publication evidence.
 export const exampleOrigin = 'https://artifacts.example.invalid';
 export const catalogPath = 'artifact-server-design.html';
@@ -9,7 +11,7 @@ export function safePagePath(path) {
     && !path.split('/').some((part) => !part || part === '.' || part === '..');
 }
 
-const entry = (path, size = 1024) => ({ path, size, sha256: digest, disposition: 'inline',
+const entry = (path, size = 1024, sha256 = digest) => ({ path, size, sha256, disposition: 'inline',
   mediaType: /\.html?$/i.test(path) ? 'text/html; charset=utf-8' : path.endsWith('.md') ? 'text/markdown; charset=utf-8'
     : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'application/json' });
 
@@ -130,10 +132,13 @@ export const galleryKinds = [
   { id: 'template', label: 'Templates', singular: 'Template', icon: 'bi-columns-gap' },
   { id: 'component', label: 'Components', singular: 'Component', icon: 'bi-grid-1x2' },
   { id: 'guideline', label: 'Guidelines', singular: 'Guideline', icon: 'bi-palette' },
-  { id: 'documentation', label: 'Documentation', singular: 'Document', icon: 'bi-journal-text' },
+  { id: 'documentation', label: 'Documentation', singular: 'Documentation', icon: 'bi-journal-text' },
   { id: 'artboard', label: 'Artboards', singular: 'Artboard', icon: 'bi-bounding-box' },
+  { id: 'document', label: 'Documents', singular: 'Document', icon: 'bi-file-earmark-word' },
+  { id: 'spreadsheet', label: 'Spreadsheets', singular: 'Spreadsheet', icon: 'bi-table' },
+  { id: 'presentation', label: 'Presentations', singular: 'Presentation', icon: 'bi-easel2' },
 ];
-export const galleryKind = (id) => galleryKinds.find((kind) => kind.id === id) || galleryKinds.at(-1);
+export const galleryKind = (id) => galleryKinds.find((kind) => kind.id === id) || galleryKinds.find((kind) => kind.id === 'artboard');
 
 export function filterGallery(items, query = '', kind = 'all') {
   const q = query.trim().toLocaleLowerCase();
@@ -150,6 +155,110 @@ export function groupGallery(items) {
       .map((section) => ({ section, items: inKind.filter((item) => item.section === section) }));
     return { ...kind, count: inKind.length, sections };
   }).filter((group) => group.count > 0);
+}
+
+/* Design library. Items carry `createdAt`, the first version that listed the page, and
+   `activityAt`, the later of the last version that changed its bytes and its newest comment
+   (epoch ms the host derives from version and conversation records). Grouping by date reads
+   the field the sort uses: creation when sorting by Date created, otherwise last activity. */
+export const libraryGroupings = [
+  { id: 'date', label: 'Date' }, { id: 'project', label: 'Project' },
+  { id: 'type', label: 'Artifact type' }, { id: 'none', label: 'None' },
+];
+export const librarySorts = [
+  { id: 'name', label: 'Name' }, { id: 'created', label: 'Date created' }, { id: 'activity', label: 'Last activity' },
+];
+/** Name reads A to Z by default; either date reads newest first. */
+export const defaultSortDir = (sortBy) => (sortBy === 'name' ? 'asc' : 'desc');
+export const libraryDateField = (sortBy) => (sortBy === 'created' ? 'createdAt' : 'activityAt');
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const midnight = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d; };
+const daysBefore = (day, n) => { const d = new Date(day); d.setDate(d.getDate() - n); return d; };
+
+/** Today, Yesterday, Earlier this week (weeks start Monday), Last week, then the month. */
+export function dateBucket(ms, now) {
+  if (!Number.isFinite(ms)) return { key: 'undated', label: 'Undated', start: -Infinity };
+  const today = midnight(now);
+  const day = midnight(ms);
+  const yesterday = daysBefore(today, 1);
+  const week = daysBefore(today, (today.getDay() + 6) % 7);
+  const lastWeek = daysBefore(week, 7);
+  if (day >= today) return { key: 'today', label: 'Today', start: today.getTime() };
+  if (day >= yesterday) return { key: 'yesterday', label: 'Yesterday', start: yesterday.getTime() };
+  if (day >= week) return { key: 'week', label: 'Earlier this week', start: week.getTime() };
+  if (day >= lastWeek) return { key: 'last-week', label: 'Last week', start: lastWeek.getTime() };
+  const month = new Date(day.getFullYear(), day.getMonth(), 1);
+  return { key: `month-${month.getFullYear()}-${month.getMonth() + 1}`, label: `${MONTHS[month.getMonth()]} ${month.getFullYear()}`, start: month.getTime() };
+}
+
+export function filterLibrary(items, query = '', types = []) {
+  const q = query.trim().toLocaleLowerCase();
+  return items.filter((item) => (!types.length || types.includes(item.kind))
+    && `${item.title} ${item.description || ''} ${item.path} ${item.project || ''} ${item.gallery || ''} ${galleryKind(item.kind).label} ${galleryKind(item.kind).singular}`
+      .toLocaleLowerCase().includes(q));
+}
+
+/** Name uses localeCompare; dates sort numerically with the title breaking ties. */
+export function sortLibrary(items, sortBy = 'activity', dir = defaultSortDir(sortBy)) {
+  const sign = dir === 'asc' ? 1 : -1;
+  const byName = (a, b) => String(a.title).localeCompare(String(b.title));
+  const field = libraryDateField(sortBy);
+  const time = (item) => (Number.isFinite(item[field]) ? item[field] : -Infinity);
+  return items.slice().sort(sortBy === 'name' ? (a, b) => sign * byName(a, b)
+    : (a, b) => sign * (time(a) - time(b)) || byName(a, b));
+}
+
+/**
+ * Sorted groups: date buckets in the sort's direction (newest first under Name), projects
+ * alphabetically, kinds in their fixed order, or one unbanded run. The sort applies within each.
+ */
+export function groupLibrary(items, { groupBy = 'date', sortBy = 'activity', dir = defaultSortDir(sortBy), now = Date.now() } = {}) {
+  const sorted = sortLibrary(items, sortBy, dir);
+  if (groupBy === 'none') return [{ key: 'all', label: 'All previews', note: '', banded: false, items: sorted }];
+  if (groupBy === 'project') {
+    return [...new Set(sorted.map((item) => item.project))].sort((a, b) => String(a).localeCompare(String(b))).map((project) => {
+      const inProject = sorted.filter((item) => item.project === project);
+      const galleries = new Set(inProject.map((item) => item.gallery)).size;
+      return { key: `project:${project}`, label: project, note: `${galleries} ${galleries === 1 ? 'gallery' : 'galleries'}`, banded: true, items: inProject };
+    });
+  }
+  if (groupBy === 'type') {
+    return galleryKinds.map((kind) => ({ key: `kind:${kind.id}`, label: kind.label, note: '', banded: true,
+      items: sorted.filter((item) => item.kind === kind.id) })).filter((group) => group.items.length);
+  }
+  const field = libraryDateField(sortBy);
+  const buckets = new Map();
+  sorted.forEach((item) => {
+    const bucket = dateBucket(item[field], now);
+    if (!buckets.has(bucket.key)) buckets.set(bucket.key, { ...bucket, items: [] });
+    buckets.get(bucket.key).items.push(item);
+  });
+  const oldestFirst = sortBy !== 'name' && dir === 'asc';
+  return [...buckets.values()].sort((a, b) => (oldestFirst ? a.start - b.start : b.start - a.start)).map((bucket) => {
+    const times = bucket.items.map((item) => item[field]).filter(Number.isFinite);
+    const first = times.length ? usDate(Math.min(...times)) : '';
+    const last = times.length ? usDate(Math.max(...times)) : '';
+    return { key: `date:${bucket.key}`, label: bucket.label, banded: true, items: bucket.items,
+      note: times.length ? `${field === 'createdAt' ? 'created' : 'active'} ${first === last ? first : `${first} – ${last}`}` : '' };
+  });
+}
+
+/**
+ * The first version that listed `path` and the last version that changed its bytes, read from
+ * each version's manifest in ascending order (`[{ number, manifest }]`); null when never listed.
+ */
+export function pageHistory(versions, path) {
+  let since = null;
+  let changed = null;
+  let previous;
+  versions.forEach(({ number, manifest }) => {
+    const item = manifest.entries.find((candidate) => candidate.path === path);
+    if (!item) { previous = undefined; return; }
+    if (since == null) since = number;
+    if (item.sha256 !== previous) changed = number;
+    previous = item.sha256;
+  });
+  return since == null ? null : { since, changed };
 }
 
 /* Preview index. A generated catalog publishes `artifact-server-previews/index.json`
@@ -207,9 +316,17 @@ const standardTexts = {
     + '[data-ak-panel][data-pinned="true"] {\n  flex: none;\n  width: var(--ak-panel-width, 344px);\n}\n',
 };
 
-const galleryItem = (kind, section, title, path, width, height, description, related = []) =>
+/* `revisions` lists the versions that changed the page, the first being the one that added it.
+   It stays fixture-side: a manifest only shows it through the page's digest changing. */
+const galleryItem = (kind, section, title, path, width, height, description, related = [], revisions = [1]) =>
   ({ kind, section, title, description, path, viewport: { width, height }, thumbnail: null,
-    related: related.map(([linkTitle, linkPath]) => ({ title: linkTitle, path: linkPath })) });
+    related: related.map(([linkTitle, linkPath]) => ({ title: linkTitle, path: linkPath })), revisions });
+/** A deterministic placeholder digest per page revision; never file-integrity evidence. */
+const revisionDigest = (path, revision) => {
+  let hash = 2166136261;
+  for (const char of `${path}@${revision}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  return hash.toString(16).padStart(8, '0').repeat(8);
+};
 const guide = (title, lead) => `# ${title}\n\n${lead}\n\nThis guide is a local fixture; a published version serves`
   + ' the producer\'s own text.\n';
 
@@ -222,22 +339,22 @@ const galleryFixtures = {
     description: 'Components, guidelines, templates and their guides.',
     items: [
       galleryItem('template', 'Templates', 'Case review', 'templates/Case review.dc.html', 1440, 900,
-        'A complete record workspace with its inspector.', [['Templates guide', 'templates/README.md']]),
+        'A complete record workspace with its inspector.', [['Templates guide', 'templates/README.md']], [1, 3]),
       galleryItem('template', 'Templates', 'Record list', 'templates/Record list.dc.html', 1440, 900,
         'A queue with filters and a docked record.', [['Templates guide', 'templates/README.md']]),
       galleryItem('component', 'Actions', 'Buttons', 'components/actions/Button.card.html', 1100, 460,
         'Primary, secondary and link actions.', [['Button guide', 'components/actions/Button.README.md'],
-          ['IconButton guide', 'components/actions/IconButton.README.md']]),
+          ['IconButton guide', 'components/actions/IconButton.README.md']], [1, 2, 3]),
       galleryItem('component', 'Forms', 'Input', 'components/forms/Input.card.html', 1100, 460,
-        'Labelled fields with helper and error text.', [['Input guide', 'components/forms/Input.README.md']]),
+        'Labelled fields with helper and error text.', [['Input guide', 'components/forms/Input.README.md']], [2]),
       galleryItem('component', 'Data display', 'Data grid', 'components/data-display/DataGrid.card.html', 1100, 700,
-        'Sort, select and filter.', [['DataGrid guide', 'components/data-display/DataGrid.README.md']]),
+        'Sort, select and filter.', [['DataGrid guide', 'components/data-display/DataGrid.README.md']], [3]),
       galleryItem('component', 'Feedback', 'Alert', 'components/feedback/Alert.card.html', 1100, 460,
         'Messages that sit in the flow of a page.', [['Alert guide', 'components/feedback/Alert.README.md']]),
-      galleryItem('guideline', 'Foundations', 'Color', 'guidelines/Color.card.html', 1100, 700, 'Semantic surface and text pairs.'),
+      galleryItem('guideline', 'Foundations', 'Color', 'guidelines/Color.card.html', 1100, 700, 'Semantic surface and text pairs.', [], [1, 2]),
       galleryItem('guideline', 'Foundations', 'Typography', 'guidelines/Typography.card.html', 1100, 700, 'Display, body and data faces.'),
       galleryItem('documentation', 'Guides', 'Getting started', 'docs/Getting started.html', 1100, 800,
-        'Loading order and theme boot for portable pages.', [['Design system readme', 'readme.md']]),
+        'Loading order and theme boot for portable pages.', [['Design system readme', 'readme.md']], [2, 3]),
     ],
     texts: {
       'readme.md': guide('ArkCase design system', 'Token sheets load in order: fonts, icons, colors, typography, spacing, elevation, base.'),
@@ -255,18 +372,33 @@ const galleryFixtures = {
     description: 'Examiner app, claimant portal and design studies.',
     items: [
       galleryItem('prototype', 'Prototypes', 'App', 'project/App.dc.html', 1440, 900,
-        'The examiner workstation.', [['App guide', 'docs/App.README.md']]),
+        'The examiner workstation.', [['App guide', 'docs/App.README.md']], [1, 3, 5]),
       galleryItem('prototype', 'Prototypes', 'Portal', 'project/Portal.dc.html', 390, 844,
-        'The claimant portal on a phone.', [['Portal guide', 'docs/Portal.README.md']]),
+        'The claimant portal on a phone.', [['Portal guide', 'docs/Portal.README.md']], [1, 4]),
       galleryItem('prototype', 'Prototypes', 'Sign in', 'project/Auth.dc.html', 1440, 900, 'Sign-in scenarios.'),
-      galleryItem('artboard', 'Design studies', 'Inspector dock', 'project/studies/Inspector dock.dc.html', 1440, 900, ''),
-      galleryItem('artboard', 'Design studies', 'Stage bar', 'project/studies/Stage bar.dc.html', 390, 844, ''),
-      galleryItem('artboard', 'Design studies', 'Coverage ribbon', 'project/studies/Coverage ribbon.dc.html', 1280, 800, ''),
+      galleryItem('artboard', 'Design studies', 'Inspector dock', 'project/studies/Inspector dock.dc.html', 1440, 900, '', [], [2, 3]),
+      galleryItem('artboard', 'Design studies', 'Stage bar', 'project/studies/Stage bar.dc.html', 390, 844, '', [], [3]),
+      galleryItem('artboard', 'Design studies', 'Coverage ribbon', 'project/studies/Coverage ribbon.dc.html', 1280, 800, '', [], [4, 5]),
     ],
     texts: {
       'docs/App.README.md': guide('App', 'The workstation opens on the queue; a record docks its inspector at the end edge.'),
       'docs/Portal.README.md': guide('Portal', 'Hit targets hold at 44px below the tablet floor.'),
     },
+  },
+  // Office-style pages: a letter-size document, a worksheet and a slide deck.
+  reporting: {
+    since: 1,
+    title: 'Claims reporting',
+    description: 'The monthly summary, the reserve worksheet and the quarterly deck.',
+    items: [
+      galleryItem('document', 'Reports', 'Examiner summary', 'reports/Examiner summary.html', 816, 1056,
+        'The monthly summary each examiner signs.', [], [1, 2]),
+      galleryItem('spreadsheet', 'Reports', 'Reserve worksheet', 'reports/Reserve worksheet.html', 1280, 800,
+        'Reserves by claim and payment type.', [], [2]),
+      galleryItem('presentation', 'Reports', 'Quarterly review', 'reports/Quarterly review.html', 1280, 720,
+        'The district\'s quarter in eight slides.', [], [1]),
+    ],
+    texts: {},
   },
   // An index this Review cannot read: the version falls back to its original catalog.
   unreadable: {
@@ -279,10 +411,15 @@ const galleryFixtures = {
 
 function galleryManifest(fixture, number) {
   const indexed = number >= fixture.since;
-  const paths = [...new Set(fixture.items.flatMap((preview) => [preview.path, ...preview.related.map((link) => link.path)])
+  // A page joins at its first revision; its digest changes with each later one.
+  const items = fixture.items.filter((preview) => preview.revisions[0] <= number);
+  const revision = new Map(items.map((preview) => [preview.path, Math.max(...preview.revisions.filter((n) => n <= number))]));
+  const paths = [...new Set(items.flatMap((preview) => [preview.path, ...preview.related.map((link) => link.path)])
     .concat(Object.keys(fixture.texts)))];
-  const entries = [entry(catalogPath), ...(indexed ? [entry(previewIndexPath, 2600)] : []), ...paths.map((path) => entry(path))];
+  const entries = [entry(catalogPath), ...(indexed ? [entry(previewIndexPath, 2600)] : []),
+    ...paths.map((path) => entry(path, 1024, revision.has(path) ? revisionDigest(path, revision.get(path)) : digest))];
   return { digest, entryPath: catalogPath, routingMode: 'static', entries, texts: fixture.texts,
     previewIndex: indexed ? { format: 'artifact-server.preview-index', version: fixture.version || 2, origin: 'producer',
-      title: fixture.title, description: fixture.description, cover: null, items: fixture.items } : undefined };
+      title: fixture.title, description: fixture.description, cover: null,
+      items: items.map(({ revisions, ...preview }) => preview) } : undefined };
 }

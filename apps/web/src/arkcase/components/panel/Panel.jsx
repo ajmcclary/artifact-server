@@ -38,7 +38,8 @@ import { PIN_CUE_MS, PIN_RING, PIN_CUE_CHIP_STYLE, ensurePinCueKeyframes } from 
  * edge — the inspector's unpinned mode: the root takes no layout width, the column is laid
  * absolutely against the nearest positioned ancestor, `floatOffset` in from the edge (inside
  * a `RailTabs` strip), and the footer pin brings it back into the flow. `sheet` is the phone
- * presentation: the column fills the viewport, no rail, no pin, no seam.
+ * presentation: the column fills the viewport, no rail, no pin, no seam; with `onSheetClose` it
+ * opens on a 44px "‹ Back" link above the header, the sheet's way back to the screen it covers.
  *
  * `stacked` is the narrow layout where the workspace becomes a column (Advanced Search's
  * filters above the results, its preview under them): the panel spans the full width, has no
@@ -106,7 +107,7 @@ export function Panel({
   pinned, defaultPinned = true, onPinChange, canPin: canPinProp, pinnable = true,
   side = 'start', width, onWidthChange, resizable = false, minWidth = 200, maxWidth,
   unpinned = 'rail', floatOffset = 0, sheet = false, stacked = false, stackEdge, stackLabel,
-  peek = true, peeking: peekingProp, onPeekChange, cueExternalPin = false, header: headerProp, selection: selectionProp, footerMeta: footerMetaProp, onAnnounce, style, bodyStyle, children: childrenProp, ...rest
+  peek = true, peeking: peekingProp, onPeekChange, cueExternalPin = false, onSheetClose, sheetCloseLabel = 'Back', header: headerProp, selection: selectionProp, footerMeta: footerMetaProp, onAnnounce, style, bodyStyle, children: childrenProp, ...rest
 }) {
   /* A portable page fills the node props through slotted children; an explicit prop wins. A
      function child is the peek API form and carries no slots. */
@@ -326,8 +327,14 @@ export function Panel({
   );
 
   const body = typeof children === 'function' ? children({ peeking, closePeek, pinned: isPinned }) : children;
+  const sheetBack = isSheet && onSheetClose ? (
+    <div data-panel-sheet-back="" style={{ flex: 'none', padding: '4px 8px 0', background: 'var(--surface-secondary, #f8f9fa)' }}>
+      <Button variant="link" size="sm" icon="bi-chevron-left" onClick={onSheetClose} style={{ minHeight: 44 }}>{sheetCloseLabel}</Button>
+    </div>
+  ) : null;
   const column = (
     <React.Fragment>
+      {sheetBack}
       {header}
       {selection}
       <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', ...bodyStyle }}>{body}</div>

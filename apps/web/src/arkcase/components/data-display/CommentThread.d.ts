@@ -45,6 +45,8 @@ export interface CommentThreadProps {
   onToggleReplies?: (id: string, expanded: boolean) => void;
   /** Text shown when there are no comments. @default "No comments yet." */
   emptyMessage?: string;
+  /** People who can be mentioned; every string comment and reply body draws its "@Name" mentions through `MentionText`. */
+  mentions?: Array<{ name: string; detail?: string; icon?: string }>;
   /** Accessible name for the thread list, e.g. "Comments on Build 482". */
   'aria-label'?: string;
   /** Style overrides for the list root. */

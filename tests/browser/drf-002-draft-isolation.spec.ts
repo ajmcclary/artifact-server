@@ -7,7 +7,7 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, reviewHref} from "./review-helpers.js";
+import {openInspectorTab, reviewHref, selectThread} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const pageHtml =
@@ -53,7 +53,7 @@ test.describe("DRF-002 draft isolation", () => {
       // an asymmetric matcher inside toEqual would also match the empty array
       // (missing index 0 counts as matching an asymmetric expectation), so the
       // poll would resolve before the debounce fires.
-      await page.getByRole("button", {exact: true, name: "Reply"}).click();
+      await selectThread(page, "Seeded thread.");
       await page.getByLabel("Reply", {exact: true}).fill("Reply-only draft.");
       await expect.poll(() => page.evaluate(
         () => Object.keys(localStorage).filter((key) => key.startsWith("draft:")),
@@ -72,6 +72,7 @@ test.describe("DRF-002 draft isolation", () => {
       await page.reload();
       await openInspectorTab(page, "Comments");
       await expect(page.getByLabel("Add a comment")).toHaveValue("");
+      await selectThread(page, "Seeded thread.");
       await expect(page.getByLabel("Reply", {exact: true})).toHaveValue("Reply-only draft.");
       expect(await page.evaluate(([key]) => localStorage.getItem(key ?? ""), [foreignKey]))
         .not.toBeNull();
@@ -91,8 +92,9 @@ test.describe("DRF-002 draft isolation", () => {
       await localLogin(fixture);
       await page.goto(reviewUrl);
       await openInspectorTab(page, "Comments");
-      await expect(page.getByLabel("Reply", {exact: true})).toHaveCount(0);
-      await expect(page.getByRole("button", {exact: true, name: "Reply"})).toBeVisible();
+      await selectThread(page, "Seeded thread.");
+      await expect(page.getByLabel("Reply", {exact: true})).toHaveValue("");
+      await page.getByRole("button", {exact: true, name: "Cancel reply"}).click();
       await expect(page.getByLabel("Add a comment")).toHaveValue("");
 
       // Closing the tab over a non-empty draft asks first.

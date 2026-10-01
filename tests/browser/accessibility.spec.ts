@@ -73,7 +73,7 @@ for (const {label, mode} of auditedModes) {
       });
 
       await page.goto(`${fixture.server.baseUrl}/review`);
-      await expect(page.getByLabel("Conversation on Accessibility fixture")).toBeVisible();
+      await expect(page.getByLabel("Conversations on Accessibility fixture")).toBeVisible();
       await audit("activity");
       await page.getByRole("button", {name: "Publish artifact"}).click();
       await expect(page.getByRole("dialog", {name: "Publish artifact"})).toBeVisible();
@@ -112,7 +112,7 @@ for (const {label, mode} of auditedModes) {
       await audit("activity history");
 
       await openReview(fixture, {artifactId: first.artifact.id, versionId: second.version.id});
-      await page.getByRole("button", {exact: true, name: "Share"}).click();
+      await page.getByRole("button", {exact: true, name: "Share this version"}).click();
       await expect(page.getByRole("dialog")).toBeVisible();
       await audit("share popover");
       await page.keyboard.press("Escape");

@@ -25,15 +25,23 @@ import {
 } from "./browser-fixture.js";
 import {
   artifactFrameSelectors,
+  deleteOpenArtifact,
   inspectorTabButton,
   isolatedReviewFrame,
+  makeVersionCurrent,
   openComparison,
   openInspectorTab,
   openReview,
   openSettings,
+  versionRow,
   waitForSettledPaint,
 } from "./review-helpers.js";
 import {listThreadsOverApi} from "./comment-api.js";
+
+/** The Share link field shows an address without its scheme. */
+function withoutScheme(link: string): string {
+  return link.replace(/^https?:\/\//u, "");
+}
 
 const reviewImagePaths = [
   "media/preview.png",
@@ -123,7 +131,7 @@ test.describe("Artifact Server frontend MVP", () => {
       ]);
       await fixture.page.keyboard.press("Escape");
       await expect(shortcutMap).toBeHidden();
-      await expect(inspector.getByRole("combobox", {name: "Access"})).toHaveValue("account_required");
+      await expect(inspector.getByRole("combobox", {name: "Who can open this artifact"})).toHaveValue("account_required");
       await expect(inspector.getByText("Account required", {exact: true})).toHaveCount(0);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
@@ -324,9 +332,9 @@ test.describe("Artifact Server frontend MVP", () => {
 
 
       await openInspectorTab(fixture.page, "Files");
-      await expect(inspector.getByRole("region", {name: /^Files in version \d+$/u}).getByRole("button", {name: /^index\.html · /u})).toBeVisible();
+      await expect(inspector.getByRole("tree", {name: /^Files in version \d+$/u}).getByRole("treeitem", {name: /^index\.html\b/u})).toBeVisible();
       await openInspectorTab(fixture.page, "Versions");
-      await expect(inspector.getByRole("list", {name: "Versions"}).getByRole("button", {name: "Version 2"})).toHaveAttribute("aria-current", "true");
+      await expect(inspector.getByRole("region", {name: /^Versions of /u}).getByRole("button", {name: /^v2 /u})).toHaveAttribute("aria-current", "true");
       await expect(fixture.page.locator('a[href^="/projects"], a[href^="/workbench"]'))
         .toHaveCount(0);
 
@@ -589,9 +597,11 @@ test.describe("Artifact Server frontend MVP", () => {
       await localLogin(fixture);
       await openReview(fixture, {artifactId: downloadFixture.artifactId, projectId: downloadFixture.projectId, versionId: downloadFixture.versionId});
 
+      // Download is docked at the Files panel's foot; the toolbar carries none.
+      await openInspectorTab(fixture.page, "Files");
       const standardDownload = fixture.page.getByRole("link", {
         exact: true,
-        name: "Download",
+        name: "Download Artifact",
       });
       await expect(standardDownload).toBeVisible();
       await expect(standardDownload).toHaveAttribute(
@@ -610,7 +620,7 @@ test.describe("Artifact Server frontend MVP", () => {
         downloadFixture.files,
       );
 
-      await fixture.page.getByRole("button", {name: "Full screen"}).click();
+      await fixture.page.getByRole("button", {name: "Focus — expand the workspace"}).click();
       const focusControls = fixture.page.getByRole("toolbar", {
         name: "Artifact viewer controls",
       });
@@ -822,33 +832,29 @@ test.describe("Artifact Server frontend MVP", () => {
       await openReview(fixture, {artifactId: published.body.artifact.id, path: "index.html", projectId: published.body.artifact.projectId, versionId: published.body.version.id});
 
       const headerActions = fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"});
-      const headerShare = headerActions.getByRole("button", {exact: true, name: "Share"});
-      const fullScreen = headerActions.getByRole("button", {name: "Full screen"});
+      const headerShare = headerActions.getByRole("button", {exact: true, name: "Share this version"});
+      const focusToggle = headerActions.getByRole("button", {name: "Focus — expand the workspace"});
       await expect(headerShare).toBeVisible();
       // The header re-renders while the preview settles, so a one-shot pair
       // of boundingBox reads can straddle a detach; poll until both boxes
-      // exist in the same frame and Share sits left of Full screen.
+      // exist in the same frame and Share sits left of Focus.
       await expect.poll(async () => {
-        const [share, full] = await Promise.all([
+        const [shareBox, focusBox] = await Promise.all([
           headerShare.boundingBox(),
-          fullScreen.boundingBox(),
+          focusToggle.boundingBox(),
         ]);
-        return share !== null && full !== null && share.x < full.x;
-      }, {message: "Share is laid out left of Full screen"}).toBe(true);
+        return shareBox !== null && focusBox !== null && shareBox.x < focusBox.x;
+      }, {message: "Share is laid out left of Focus"}).toBe(true);
 
       await headerShare.click();
-      const share = fixture.page.getByRole("dialog", {name: "Share artifact"});
-      await expect(share.getByRole("heading", {name: "Share fixture"})).toBeVisible();
-      await expect(share.getByText("Exact version · Version 1", {exact: true})).toBeVisible();
-      await expect(share.getByText(exactReviewLink.toString(), {exact: true})).toBeVisible();
-      await expect(share.getByText(published.body.links.artifact, {exact: true})).toBeVisible();
+      const share = fixture.page.getByRole("dialog", {name: "Share this version"});
+      // One link, chosen by what it opens: this exact version (the default) or the latest.
+      await expect(share.getByRole("radio", {name: /^This version · v1/u})).toBeChecked();
+      await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(exactReviewLink.toString()));
       await expect(share.getByText(
-        "People with access to this Artifact Server can review this exact version.",
+        "People with access to this Artifact Server can review it.",
         {exact: true},
       )).toBeVisible();
-      await expect(share.getByText(published.body.links.version, {exact: true})).toBeVisible();
-      await expect(share.getByText("Moves when a new version is published", {exact: true}))
-        .toBeVisible();
       await waitForSettledPaint(fixture.page);
       const shareAccessibility = await new AxeBuilder({page: fixture.page})
         .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
@@ -856,18 +862,18 @@ test.describe("Artifact Server frontend MVP", () => {
         .analyze();
       expect(shareAccessibility.violations).toEqual([]);
       if (canInspectClipboard) {
-        await share.getByRole("button", {name: "Copy Review link"}).click();
-        await expect(share.getByRole("button", {name: "Copied"})).toBeVisible();
+        await share.getByRole("button", {name: "Copy Link"}).click();
+        await expect(share.getByRole("button", {name: "Link copied"})).toBeVisible();
         expect(await fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
           exactReviewLink.toString(),
         );
-        await share.getByRole("button", {name: "Copy latest link"}).click();
-        expect(await fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
+      }
+      await share.getByRole("radio", {name: /^Latest/u}).click();
+      await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(published.body.links.artifact));
+      if (canInspectClipboard) {
+        await share.getByRole("button", {name: /^Copy Link$|^Link copied$/u}).click();
+        await expect.poll(() => fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
           published.body.links.artifact,
-        );
-        await share.getByRole("button", {name: "Copy raw link"}).click();
-        expect(await fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
-          published.body.links.version,
         );
       }
 
@@ -875,8 +881,8 @@ test.describe("Artifact Server frontend MVP", () => {
         name: "Claude, Codex, Cursor, GitHub Copilot, Pi, and OpenCode",
       })).toBeVisible();
       if (canInspectClipboard) {
-        await share.getByRole("button", {name: "Copy review prompt"}).click();
-        await expect(share.getByRole("button", {name: "Prompt copied"})).toBeVisible();
+        await share.getByRole("button", {name: "Copy Review Prompt"}).click();
+        await expect(share.getByRole("button", {name: "Review prompt copied"})).toBeVisible();
         const agentPrompt = await fixture.page.evaluate(() => navigator.clipboard.readText());
         expect(agentPrompt).toContain("artifact_get");
         expect(agentPrompt).toContain("artifact_version_list");
@@ -903,30 +909,46 @@ test.describe("Artifact Server frontend MVP", () => {
       }
       await share.getByRole("button", {name: "Back to Share"}).click();
 
-      await share.getByRole("button", {name: "Manage access"}).click();
-      await expect(share.getByRole("heading", {name: "Artifact access"})).toBeVisible();
-      await share.getByRole("radio", {name: /Public link/u}).check();
-      await share.getByRole("button", {name: "Save"}).click();
-      await expect(share.getByText(
-        /The latest raw artifact is public/u,
-      )).toBeVisible();
-      await expect(fixture.page.getByRole("complementary", {name: "Artifact inspector"}).getByRole("combobox", {name: "Access"})).toHaveValue("public_link");
-      await share.getByRole("button", {name: "Close Share"}).click();
+      // Manage Access opens Details, where access is changed and the latest and raw links live.
+      await share.getByRole("button", {name: "Manage Access"}).click();
+      await expect(share).toHaveCount(0);
+      const inspector = fixture.page.getByRole("complementary", {name: "Artifact inspector"});
+      await expect(inspectorTabButton(fixture.page, "Details")).toHaveAttribute("aria-pressed", "true");
+      const access = inspector.getByRole("combobox", {name: "Who can open this artifact"});
+      await access.selectOption("public_link");
+      await inspector.getByRole("button", {name: "Save access"}).click();
+      await expect(access).toHaveValue("public_link");
+      if (canInspectClipboard) {
+        await inspector.getByRole("button", {name: "Copy Latest link"}).click();
+        await expect.poll(() => fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
+          published.body.links.artifact,
+        );
+        await inspector.getByRole("button", {name: "Copy Raw link"}).click();
+        await expect.poll(() => fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
+          published.body.links.version,
+        );
+      }
 
-      await fixture.page.getByRole("button", {name: "Full screen"}).click();
+      await focusToggle.click();
       const focusControls = fixture.page.getByRole("toolbar", {
         name: "Artifact viewer controls",
       });
-      const focusShare = focusControls.getByRole("button", {exact: true, name: "Share"});
+      const focusShare = focusControls.getByRole("button", {exact: true, name: "Share this version"});
       const exitFullScreen = focusControls.getByRole("button", {name: "Exit full screen"});
       expect((await focusShare.boundingBox())?.x).toBeLessThan(
         (await exitFullScreen.boundingBox())?.x ?? 0,
       );
       await focusShare.click();
-      await expect(share.getByRole("heading", {name: "Share fixture"})).toBeVisible();
-      await expect(share.getByText(exactReviewLink.toString(), {exact: true})).toBeVisible();
-      await expect(share.getByText(latest.body.links.version, {exact: true})).toHaveCount(0);
-      await share.getByRole("button", {name: "Close Share"}).click();
+      // The review stays pinned to version 1 although version 2 is the latest.
+      await expect(share.getByRole("radio", {name: /^This version · v1/u})).toBeChecked();
+      await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(exactReviewLink.toString()));
+      await expect(share.getByRole("textbox", {name: "Link"})).not.toHaveValue(new RegExp(latest.body.version.id, "u"));
+      await expect(share.getByText(
+        "Anyone with the latest link can open it. People with access to this Artifact Server can review it.",
+        {exact: true},
+      )).toBeVisible();
+      await fixture.page.keyboard.press("Escape");
+      await expect(share).toHaveCount(0);
       await exitFullScreen.click();
     } finally {
       await stopBrowserFixture(fixture);
@@ -964,7 +986,7 @@ test.describe("Artifact Server frontend MVP", () => {
       )).toBe(false);
 
       await selectManifestFile(fixture.page, "media/preview.png");
-      await fixture.page.getByRole("button", {name: "Full screen"}).click();
+      await fixture.page.getByRole("button", {name: "Focus — expand the workspace"}).click();
       await expect(fixture.page.getByRole("img", {
         name: "Review media fixture — media/preview.png",
       })).toBeVisible();
@@ -1056,7 +1078,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: /Public fixture/u}).click();
       const [publicPage] = await Promise.all([
         fixture.context.waitForEvent("page"),
-        fixture.page.getByRole("button", {name: "Open raw artifact"}).click(),
+        fixture.page.getByRole("button", {name: "Open raw in a new window"}).click(),
       ]);
       await expect(publicPage.locator("body")).toContainText("public browser content");
       await publicPage.close();
@@ -1064,7 +1086,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: /Private fixture/u}).click();
       const [privatePage] = await Promise.all([
         fixture.context.waitForEvent("page"),
-        fixture.page.getByRole("button", {name: "Open raw artifact"}).click(),
+        fixture.page.getByRole("button", {name: "Open raw in a new window"}).click(),
       ]);
       await expect(privatePage.locator("body")).toContainText("private browser content");
       await privatePage.close();
@@ -1131,10 +1153,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.getByRole("button", {name: "Back to the preview"}).click();
       await expect(fixture.page.getByRole("region", {name: "Comparison and history"})).toHaveCount(0);
 
-      await openInspectorTab(fixture.page, "Versions");
-      await fixture.page.getByRole("button", {name: "Make current"}).click();
-      await fixture.page.getByRole("button", {name: "Make current", exact: true}).last().click();
-      await expect(fixture.page.getByRole("list", {name: "Versions"}).getByRole("listitem").filter({hasText: "Version 1"}).getByText(/^Current/u)).toBeVisible();
+      await makeVersionCurrent(fixture.page, 1);
+      await expect(versionRow(fixture.page, 1).getByText("Current", {exact: true})).toBeVisible();
 
       await openComparison(fixture.page, "Activity");
       const activityPanel = fixture.page.getByRole("tabpanel", {name: "Activity"});
@@ -1200,10 +1220,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(keyRow.getByText("Revoked", {exact: true})).toBeVisible();
 
       await openReview(fixture, {artifactId: first.body.artifact.id});
-      await fixture.page.getByRole("button", {name: "More artifact actions"}).click();
-      await fixture.page.getByRole("menuitem", {name: "Delete artifact"}).click();
-      await fixture.page.getByRole("textbox", {name: "Artifact name"}).fill("Workflow fixture");
-      await fixture.page.getByRole("button", {name: "Delete artifact", exact: true}).last().click();
+      await deleteOpenArtifact(fixture.page, "Workflow fixture");
       await expect(fixture.page.getByRole("button", {name: /Workflow fixture/u})).toHaveCount(0);
     } finally {
       await stopBrowserFixture(fixture);
@@ -1893,17 +1910,17 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 /** Choose one manifest file in the Files tab, opening its folder first. */
 async function selectManifestFile(page: Page, path: string): Promise<void> {
-  const inventory = page.getByRole("complementary", {name: "Artifact inspector"})
-    .getByRole("region", {name: /^Files in version \d+$/u});
-  const slash = path.indexOf("/");
-  const folder = slash < 0 ? null : path.slice(0, slash);
-  const name = slash < 0 ? path : path.slice(slash + 1);
-  if (folder !== null) {
-    const disclosure = inventory.getByRole("button", {name: new RegExp(`^${escapeRegExp(folder)}/`, "u")});
-    if (await disclosure.getAttribute("aria-expanded") === "false") await disclosure.click();
+  const tree = page.getByRole("complementary", {name: "Artifact inspector"})
+    .getByRole("tree", {name: /^Files in version \d+$/u});
+  const segments = path.split("/");
+  const name = segments.pop() ?? path;
+  // Each folder on the way opens like a tree: its row is a treeitem with aria-expanded.
+  for (const [depth, folder] of segments.entries()) {
+    const row = tree.locator(`[role="treeitem"][aria-level="${depth + 1}"][aria-expanded]`)
+      .filter({hasText: new RegExp(`^${escapeRegExp(folder)}`, "u")}).first();
+    // eslint-disable-next-line no-await-in-loop -- a folder's rows exist only once its parent is open
+    if (await row.getAttribute("aria-expanded") === "false") await row.click();
   }
-  const list = folder === null
-    ? inventory.getByRole("list").first()
-    : inventory.getByRole("list", {name: `Files in ${folder}`});
-  await list.getByRole("button", {name: new RegExp(`^${escapeRegExp(name)} · `, "u")}).click();
+  await tree.locator(`[role="treeitem"][aria-level="${segments.length + 1}"]:not([aria-expanded])`)
+    .filter({hasText: new RegExp(`^${escapeRegExp(name)}`, "u")}).first().click();
 }

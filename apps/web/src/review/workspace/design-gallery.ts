@@ -8,7 +8,18 @@ export const previewIndexPath = "artifact-server-previews/index.json";
 /** Generated indexes are small; anything larger is not one this Review reads. */
 export const maximumPreviewIndexBytes = 1024 * 1024;
 
-const previewKinds = ["prototype", "template", "component", "guideline", "documentation", "artboard"] as const;
+// The producer emits the first six; Review also reads the office kinds after artboard.
+const previewKinds = [
+  "prototype",
+  "template",
+  "component",
+  "guideline",
+  "documentation",
+  "artboard",
+  "document",
+  "spreadsheet",
+  "presentation",
+] as const;
 const imageTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 const label = (maximum: number) => z.string().max(maximum).regex(/^(?=.*\S)[^\p{Cc}\p{Cf}]+$/u);
 const description = z.string().max(1_000).regex(/^[^\p{Cc}\p{Cf}]*$/u);

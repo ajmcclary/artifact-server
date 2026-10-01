@@ -18,7 +18,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {isolatedReviewFrame, openInspectorTab, openReview, reviewHref} from "./review-helpers.js";
+import {isolatedReviewFrame, openInspectorTab, openReview, returnToGallery, reviewHref} from "./review-helpers.js";
 import {
   createThreadOverApi,
   deleteThreadOverApi,
@@ -209,7 +209,7 @@ test.describe("critical engine review paths @critical", () => {
       await fixture.page.goBack();
       await fixture.page.goForward();
       await expect(fixture.page.frameLocator('iframe[title^="Interactive preview: "]').getByRole("heading", {name: "Examiner app"})).toBeVisible();
-      await fixture.page.getByRole("button", {name: "Back to gallery"}).click();
+      await returnToGallery(fixture.page);
       await expect(app).toBeFocused();
     } finally {
       await stopBrowserFixture(fixture);
@@ -232,8 +232,8 @@ test.describe("critical engine review paths @critical", () => {
       }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
       await localLogin(fixture);
       await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
-      const card = fixture.page.getByRole("region", {name: "Design library gallery"})
-        .getByRole("link", {name: "Open Primary button · Component · Claims Workspace · Actions"});
+      const card = fixture.page.getByRole("region", {name: "Design library", exact: true})
+        .locator(`a[href*="artifact=${published.artifact.id}"][href*="path=${encodeURIComponent("project/components/buttons.card.html")}"]`);
       await card.click();
       const exact = new URL(fixture.page.url());
       expect(exact.searchParams.get("version")).toBe(published.version.id);

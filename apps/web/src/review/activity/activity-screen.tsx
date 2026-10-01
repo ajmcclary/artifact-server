@@ -7,6 +7,7 @@ import {ActivityHeader, ActivityToolbar} from "@/ui/review-ui";
 import {CopyableCode} from "@/ui/copyable-code";
 
 import {ActivityFeedBody} from "./activity-feed-section";
+import {useActivityFacets} from "./use-activity-facets";
 import {useActivityFeed} from "./use-activity-feed";
 import {useActivitySummary} from "./use-activity-summary";
 
@@ -31,6 +32,7 @@ export function ActivityScreen({filters, projects, session}: {
 }) {
   const feed = useActivityFeed(filters);
   const {phase: summaryPhase, reload: reloadSummary, summary} = useActivitySummary([]);
+  const {facets, reload: reloadFacets} = useActivityFacets(filters);
   const [query, setQuery] = useState(filters.q);
   const [dock, setDock] = useState(0);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -43,10 +45,15 @@ export function ActivityScreen({filters, projects, session}: {
     const timer = setTimeout(() => changeQuery(query.trim().slice(0, 100)), searchDebounceMilliseconds);
     return () => clearTimeout(timer);
   });
-  const filtered = filters.segment !== "all" || filters.projects.length > 0 || filters.types.length > 0 || filters.q !== "";
+  const filtered = filters.segment !== "all" || filters.people.length > 0 || filters.projects.length > 0 || filters.types.length > 0 || filters.q !== "";
   const count = (value: number | undefined): string => summaryPhase === "ready" && value !== undefined ? String(value) : "—";
-  const artifactCount = summary?.projects.reduce((total, project) => total + project.artifactCount, 0);
   const command = "artifactserver publish ./dist";
+  // People who acted, from the server's counts; agents are the service principals (API keys and bridges).
+  const people = (facets?.people ?? []).map((person) => ({
+    agent: person.kind === "service", count: person.count, id: person.id, name: person.name, self: person.id === session.principal.id,
+  }));
+  // The server's entry counts (one per conversation) for these filters and in all; omitted until known.
+  const counted = facets === null ? {} : {shown: facets.matching, total: facets.total};
 
   return (
     <section aria-label="Activity" style={screenStyle}>
@@ -63,26 +70,31 @@ export function ActivityScreen({filters, projects, session}: {
           {id: "open", label: "Open conversations", value: count(summary?.openConversations)},
           {id: "review", label: "Artifacts in review", value: count(summary?.artifactsInReview)},
         ]}
-        summary={`${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${artifactCount === undefined ? "—" : artifactCount} artifacts`}
         title="Activity"
       />
       <ActivityToolbar
         counts={summary === null ? {} : {"Needs you": summary.needsYou, "With an agent": summary.withAgent}}
+        {...counted}
+        onClearFilters={() => navigateReview(activityHref())}
         onHeight={setDock}
+        onPeople={(ids) => change({people: ids})}
         onProjects={(ids) => change({projects: ids})}
         onQuery={setQuery}
         onSegment={(label) => change({segment: segmentOf(label)})}
         onTypes={(ids) => change({types: toolbarTypesOf(ids)})}
-        projects={projects.map((project) => ({id: project.id, name: project.name}))}
+        people={people}
+        projects={projects.map((project) => ({archived: project.archivedAt !== null, id: project.id, name: project.name}))}
         query={query}
         segment={segmentLabels[filters.segment]}
+        selectedPeople={[...filters.people]}
         selectedProjects={[...filters.projects]}
         types={toolbarTypesOf(filters.types)}
       />
       <ActivityFeedBody
         feed={feed} filtered={filtered} label="Activity"
         onClearFilters={() => navigateReview(activityHref())}
-        onRetry={() => { feed.reload(); reloadSummary(); }}
+        onChanged={() => { reloadSummary(); reloadFacets(); }}
+        onRetry={() => { feed.reload(); reloadSummary(); reloadFacets(); }}
         principalId={session.principal.id}
         stickyTop={dock}
       />

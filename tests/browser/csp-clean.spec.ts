@@ -201,12 +201,17 @@ test("CSP-clean: the artifact review workspace raises no policy violation in any
       await openReview(fixture, {artifactId: first.body.artifact.id});
       await expect(previewFrame(page).getByRole("heading", {name: "CSP workspace content"})).toBeVisible();
       const toolbar = page.getByRole("toolbar", {exact: true, name: "Artifact"});
-      await toolbar.getByRole("button", {exact: true, name: "Share"}).click();
-      const share = page.getByRole("dialog", {name: "Share artifact"});
+      await toolbar.getByRole("button", {exact: true, name: "Share this version"}).click();
+      const share = page.getByRole("dialog", {name: "Share this version"});
       await share.getByRole("button", {name: "Connect MCP"}).click();
       await share.getByRole("button", {name: "Back to Share"}).click();
-      await share.getByRole("button", {name: "Manage access"}).click();
-      await share.getByRole("button", {name: "Close Share"}).click();
+      // Manage Access closes Share and opens Details.
+      await share.getByRole("button", {name: "Manage Access"}).click();
+      await expect(share).toHaveCount(0);
+      await toolbar.getByRole("button", {name: /· Choose a version$/u}).click();
+      await page.keyboard.press("Escape");
+      await toolbar.getByRole("button", {name: /· Choose a page$/u}).click();
+      await page.keyboard.press("Escape");
       await openInspectorTab(page, "Comments");
       await openInspectorTab(page, "Details");
       await openInspectorTab(page, "Files");
@@ -216,7 +221,7 @@ test("CSP-clean: the artifact review workspace raises no policy violation in any
       await expect(page.getByRole("heading", {name: "Changed files"})).toBeVisible();
       await openComparison(page, "Activity");
       await page.getByRole("button", {name: "Back to the preview"}).click();
-      await toolbar.getByRole("button", {name: "Full screen"}).click();
+      await toolbar.getByRole("button", {name: "Focus — expand the workspace"}).click();
       const controls = page.getByRole("toolbar", {name: "Artifact viewer controls"});
       await controls.getByRole("button", {name: /^Comments/u}).click();
       await expect(page.getByRole("complementary", {name: "Comments"})).toBeVisible();
@@ -348,7 +353,7 @@ for (const mode of queueThemeModes) {
       const violations = collectCspViolations(fixture.page);
       await fixture.page.goto(`${fixture.server.baseUrl}/review?theme=${mode}`);
       await expect(fixture.page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
-      await expect(fixture.page.getByLabel("Conversation on CSP queue fixture")).toBeVisible();
+      await expect(fixture.page.getByLabel("Conversations on CSP queue fixture")).toBeVisible();
       await expect(fixture.page.frameLocator("[data-thumbnail='frame']").frameLocator("iframe")
         .getByRole("heading", {name: "CSP queue fixture"})).toBeVisible();
       expect(await violations()).toEqual([]);

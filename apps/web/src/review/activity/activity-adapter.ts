@@ -1,11 +1,27 @@
 import type {ActivityEntry} from "@/api/client";
+import {reviewAnchorSchema} from "@/review-frame/protocol";
+import {type ActivityDayGroup, type ActivityEntryOf, groupByDay, groupEntries, mergeBursts, sortEvents} from "@/ui/activity-model";
+import type {ActivityArtifactGroup, ActivityEntry as OpenedEntry, ActivityEvent} from "@/ui/review-ui";
 
 type WireComment = NonNullable<ActivityEntry["thread"]>["opener"];
-import {type ActivityDayGroup, groupByDay, mergeBursts, sortEvents} from "@/ui/activity-model";
-import type {ActivityEvent} from "@/ui/review-ui";
+type VendoredThread = NonNullable<ActivityEvent["thread"]>;
+
+/**
+ * A conversation as the vendored card reads it: the declared shape plus the instants its
+ * bylines print, the version it is on and its page (null for the whole version).
+ */
+type FeedThread = VendoredThread & {
+  readonly atMs: number;
+  readonly path: string | null;
+  readonly replies: (VendoredThread["replies"][number] & {readonly atMs: number})[];
+  readonly version?: number;
+};
 
 /** One vendored-model event plus the API entry it came from (for Open, Reply and thumbnails). */
-export type FeedEvent = ActivityEvent & {readonly entry: ActivityEntry};
+export type FeedEvent = ActivityEvent & {readonly entry: ActivityEntry; readonly thread?: FeedThread};
+
+/** One feed row: an event, one actor's burst, or an artifact's day of conversations. */
+export type FeedEntry = ActivityEntryOf<FeedEvent>;
 
 const unknownActor = "Unknown";
 const notRecorded = "—";
@@ -56,26 +72,41 @@ function about(entry: ActivityEntry): SharedFields {
   return fields;
 }
 
-const shown = (record: WireComment) => ({at: record.createdAt, author: record.author.name, body: record.body, id: record.id});
+const shown = (record: WireComment) => ({at: record.createdAt, atMs: instant(record.createdAt), author: record.author.name, body: record.body, id: record.id});
+
+function feedThread(entry: ActivityEntry, thread: NonNullable<ActivityEntry["thread"]>): FeedThread {
+  const base = {...shown(thread.opener), isResolved: thread.isResolved, key: thread.id, path: thread.path, replies: thread.replies.map(shown)};
+  return entry.versionNumber === null ? base : {...base, version: entry.versionNumber};
+}
+
+/** A conversation entry whose conversation is gone still shows, as a plain line naming the artifact. */
+function withoutConversation(shared: SharedFields, entry: ActivityEntry, icon: string, verb: string): FeedEvent {
+  return {...shared, detail: entry.artifact?.name ?? notRecorded, icon, id: `gone:${entry.id}`, type: "admin", verb};
+}
 
 function toFeedEvent(entry: ActivityEntry): FeedEvent {
   const shared = about(entry);
   switch (entry.kind) {
     case "thread": {
       const thread = entry.thread;
-      if (thread === undefined) return {...shared, id: `comment:${entry.id}`, type: "comment", verb: "commented on"};
+      if (thread === undefined) return withoutConversation(shared, entry, "bi-chat-left-text", "commented on");
       return {
         ...shared, excerpt: firstLine(thread.opener.body), id: `comment:${thread.id}`,
         needsYou: thread.state === "needs_you",
-        thread: {...shown(thread.opener), isResolved: thread.isResolved, key: thread.id, replies: thread.replies.map(shown)},
+        thread: feedThread(entry, thread),
         type: "comment", verb: entry.verb === "replied" ? "replied on" : "commented on", withAgent: thread.state === "with_agent",
       };
     }
     case "version":
       return {...shared, fromVersion: entry.versionNumber !== null && entry.versionNumber > 1 ? entry.versionNumber - 1 : null,
         id: `version:${entry.id}`, type: "version", verb: entry.verb === "restored" ? "restored" : "published"};
-    case "resolution":
-      return {...shared, excerpt: entry.excerpt ?? "", id: `resolution:${entry.id}`, type: "resolution", verb: `${entry.verb} a conversation on`};
+    case "resolution": {
+      // The vendored card draws a resolution inside its conversation, so it needs the thread.
+      const verb = `${entry.verb} a conversation on`;
+      if (entry.thread === undefined) return withoutConversation(shared, entry, "bi-check2-circle", verb);
+      return {...shared, excerpt: entry.excerpt ?? firstLine(entry.thread.opener.body), id: `resolution:${entry.id}`,
+        thread: feedThread(entry, entry.thread), type: "resolution", verb};
+    }
     case "thread_deleted":
       return {...shared, detail: entry.artifact?.name ?? notRecorded, icon: "bi-trash", id: `deleted:${entry.id}`, type: "admin", verb: "deleted a conversation on"};
     case "agent": {
@@ -105,6 +136,61 @@ export function toFeedEvents(entries: readonly ActivityEntry[]): FeedEvent[] {
 /** Newest first (unreadable times last), then consecutive version bursts merged. */
 export function mergedFeed(events: readonly FeedEvent[]): FeedEvent[] {
   return mergeBursts(sortEvents(events));
+}
+
+/**
+ * The feed's rows from already merged events (`mergedFeed`): bursts and each day's conversations
+ * per artifact grouped. Merging twice would reset each merged span's count, so this never merges.
+ */
+export function feedEntries(merged: readonly FeedEvent[]): FeedEntry[] {
+  return groupEntries(merged);
+}
+
+/** Where Open goes: an artifact, and the conversation to select in it when there is one. */
+export interface OpenTarget {
+  readonly artifactId: string;
+  readonly path: string | null;
+  readonly projectId: string;
+  readonly threadId: string | null;
+  readonly versionId: string | null;
+}
+
+/**
+ * The event an entry opens: a burst's newest item (the feed opens each item itself), an artifact
+ * group's newest conversation, or the event. The vendored feed hands back the objects it was
+ * given, so the event is recovered by id from the events the host passed.
+ */
+function eventToOpen(entry: OpenedEntry, byEvent: ReadonlyMap<string, FeedEvent>): FeedEvent | undefined {
+  if ("kind" in entry && entry.kind === "burst") return entry.items[0] === undefined ? undefined : byEvent.get(entry.items[0].id);
+  if ("kind" in entry && entry.kind === "artifact") {
+    const newest = entry.threads[0] ?? entry.events[0];
+    return newest === undefined ? undefined : byEvent.get(newest.id);
+  }
+  return byEvent.get(entry.id);
+}
+
+/** The workspace location an entry opens, or null when it names no artifact. */
+export function openTarget(entry: OpenedEntry, byEvent: ReadonlyMap<string, FeedEvent>): OpenTarget | null {
+  const api = eventToOpen(entry, byEvent)?.entry;
+  if (api === undefined || api.artifact === null || api.project === null) return null;
+  return {
+    artifactId: api.artifact.id, path: api.thread?.path ?? null, projectId: api.project.id,
+    threadId: api.thread?.id ?? api.threadId ?? null, versionId: api.thread?.versionId ?? null,
+  };
+}
+
+const placesPin = (entry: ActivityEntry): boolean => {
+  const anchor = reviewAnchorSchema.safeParse(entry.thread?.anchor);
+  return anchor.success && anchor.data.htmlAnchor !== null;
+};
+
+/**
+ * The conversation an artifact card's thumbnail draws: its newest one with a pin on the page,
+ * else its newest one, whose exact version is then drawn without a pin.
+ */
+export function thumbnailEntry(group: ActivityArtifactGroup, byEvent: ReadonlyMap<string, FeedEvent>): ActivityEntry | null {
+  const entries = group.threads.flatMap((thread) => byEvent.get(thread.id)?.entry ?? []).filter((entry) => entry.thread !== undefined);
+  return entries.find(placesPin) ?? entries[0] ?? null;
 }
 
 /** The merged feed grouped under day headers, exactly as the vendored feed renders it. */
