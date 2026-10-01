@@ -11,6 +11,7 @@ export default defineConfig({
     fileParallelism: false,
     include: [
       "tests/integration/external-storage-runtime.test.ts",
+      "tests/integration/postgres-activity-feed.test.ts",
       "tests/integration/postgres-activity-log-migration.test.ts",
       "tests/integration/postgres-activity-log-writes.test.ts",
       "tests/integration/postgres-expired-staging-cleanup.test.ts",
