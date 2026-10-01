@@ -1,17 +1,28 @@
 import {useEffect, useState} from "react";
 
-import {api, type InstallationMember} from "@/api/client";
-import {Button, Input, Modal, PageScaffold, Select, StatusPill, SurfaceState} from "@/arkcase";
-import {formatTimestamp} from "@/lib/presentation";
+import {api, type AdministeredMember} from "@/api/client";
 import {
-  AdminPanel,
-  AdminStack,
-  IdentityCell,
-  Ledger,
-  nativeInputAttributes,
-  RequestFailure,
-  type LedgerColumn,
-} from "./admin-parts.tsx";
+  Button, DataGrid, FieldGrid, Input, Modal, RecordPanel, Select, SlideOver, StatusPill, SurfaceState,
+  type GridColumn,
+} from "@/arkcase";
+import {AddRecordButton, AdminStack, nativeInputAttributes, RequestFailure} from "./admin-parts.tsx";
+import {AdminConsole, useAdminInspectorFullscreen} from "./admin-console.tsx";
+import {admittedLabel, dateOrDash, dateTimeOrDash} from "./admin-areas.ts";
+import {useSelectedRecord} from "./use-selected-record.ts";
+
+interface MemberRow {
+  readonly email: string;
+  readonly id: string;
+  readonly lastActive: string;
+  readonly member: AdministeredMember;
+  readonly name: string;
+  readonly role: string;
+  readonly status: "Active" | "Inactive";
+}
+
+const statusPill = (status: MemberRow["status"]) => (
+  <StatusPill label={status} tone={status === "Active" ? "success" : "neutral"} />
+);
 
 const roleOptions = [
   {label: "Member", value: "member"},
@@ -20,7 +31,7 @@ const roleOptions = [
 
 /** Administrator-only installation member lifecycle surface. */
 export function MembersScreen() {
-  const [members, setMembers] = useState<readonly InstallationMember[]>([]);
+  const [members, setMembers] = useState<readonly AdministeredMember[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -28,7 +39,7 @@ export function MembersScreen() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"administrator" | "member">("member");
   const [admitOpen, setAdmitOpen] = useState(false);
-  const [deactivating, setDeactivating] = useState<InstallationMember | null>(null);
+  const [deactivating, setDeactivating] = useState<AdministeredMember | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -77,99 +88,81 @@ export function MembersScreen() {
     }
   };
 
-  const columns: readonly LedgerColumn<InstallationMember>[] = [
-    {
-      align: "left",
-      cell: (member) => ({
-        value: <IdentityCell detail={member.email} detailMono primary={member.displayName} />,
-      }),
-      key: "member",
-      kind: "field",
-      label: "Member",
-      width: "minmax(0, 1.4fr)",
-    },
-    {
-      align: "left",
-      cell: (member) => ({value: member.role === "administrator" ? "Administrator" : "Member"}),
-      key: "role",
-      kind: "field",
-      label: "Role",
-      width: "140px",
-    },
-    {
-      align: "left",
-      cell: (member) => ({
-        value: (
-          <StatusPill
-            label={member.status}
-            tone={member.status === "active" ? "success" : "neutral"}
-          />
-        ),
-      }),
-      key: "status",
-      kind: "field",
-      label: "Status",
-      width: "110px",
-    },
-    {
-      align: "left",
-      cell: (member) => ({mono: true, muted: true, value: formatTimestamp(member.createdAt)}),
-      key: "admitted",
-      kind: "field",
-      label: "Admitted",
-      width: "170px",
-    },
-    {
-      align: "right",
-      cell: (member) => ({
-        value: member.status === "inactive" ? "" : (
-          <Button
-            danger
-            disabled={pending}
-            icon="bi-person-dash"
-            onClick={() => setDeactivating(member)}
-            size="sm"
-            variant="ghost"
-          >
-            Deactivate
-          </Button>
-        ),
-      }),
-      key: "actions",
-      kind: "action",
-      label: "",
-      width: "140px",
-    },
+  const [selectedId, selectRecord] = useSelectedRecord();
+  const fullscreen = useAdminInspectorFullscreen();
+  const rows: MemberRow[] = members.map((member) => ({
+    email: member.email,
+    id: member.id,
+    lastActive: dateOrDash(member.lastActiveAt),
+    member,
+    name: member.displayName,
+    role: member.role === "administrator" ? "Administrator" : "Member",
+    status: member.status === "active" ? "Active" : "Inactive",
+  }));
+  const columns: GridColumn<MemberRow>[] = [
+    {field: "name", headerName: "Member", onCellClick: (row) => selectRecord(row.id), width: 220},
+    {field: "email", headerName: "Email", type: "contact", width: 260},
+    {field: "role", headerName: "Role", width: 140},
+    {cellRenderer: (value: MemberRow["status"]) => statusPill(value), field: "status", headerName: "Status", width: 120},
+    {field: "lastActive", headerName: "Last active", type: "date", width: 130},
   ];
+  const selected = members.find((member) => member.id === selectedId) ?? null;
+  const inspector = selected === null ? null : (
+    <SlideOver
+      footer={selected.status === "active" ? (
+        <Button danger icon="bi-person-dash" onClick={() => setDeactivating(selected)} outline size="sm" variant="secondary">
+          Deactivate
+        </Button>
+      ) : null}
+      fullscreen={fullscreen}
+      onClose={() => selectRecord(null)}
+      subtitle={selected.email}
+      title={selected.displayName}
+      titleMeta={statusPill(selected.status === "active" ? "Active" : "Inactive")}
+      width={360}
+    >
+      <FieldGrid
+        columns={1}
+        fields={[
+          {label: "Role", value: selected.role === "administrator" ? "Administrator" : "Member"},
+          {label: "Admitted", mono: true, value: dateTimeOrDash(selected.admittedAt)},
+          {label: "Admitted by", value: admittedLabel(selected)},
+          {label: "Last active", mono: true, value: dateTimeOrDash(selected.lastActiveAt)},
+        ]}
+      />
+    </SlideOver>
+  );
   const activeCount = members.filter((member) => member.status === "active").length;
 
   return (
-    <PageScaffold
-      actions={(
-        <Button icon="bi-person-plus" onClick={() => setAdmitOpen(true)} size="sm">
-          Admit member
-        </Button>
-      )}
-      count={loading && members.length === 0 ? null : `${members.length} admitted · ${activeCount} active`}
-      meta="One installation has one closed member group. There is no public sign-up or project-specific membership."
-      title="Members"
-    >
+    <AdminConsole administrator area="members" inspector={inspector}>
       {error === null || admitOpen || deactivating !== null
         ? null
         : <RequestFailure error={error} onRetry={() => void load()} />}
       {loading && members.length === 0 ? (
         <SurfaceState loadingTitle="Loading members" noun="members" phase="loading" skeleton={3} />
       ) : (
-        <AdminPanel label="Installation members" padded={false}>
-          <Ledger
-            ariaLabel="Installation members"
+        <RecordPanel
+          actions={<AddRecordButton label="Admit member" onClick={() => setAdmitOpen(true)} />}
+          capAlign="center"
+          label="Members"
+          metaWrap
+          subtitle={`${members.length} members · ${activeCount} active`}
+        >
+          <DataGrid
+            ariaLabel="Members"
             columns={columns}
-            rowKey={(member) => member.id}
-            rows={members}
+            quickFilter
+            rowActions={(row: MemberRow) => row.member.status === "active"
+              ? [{danger: true, icon: "bi-person-dash", label: "Deactivate", onClick: () => setDeactivating(row.member)}]
+              : null}
+            rowActionsLabel={(row: MemberRow) => `Actions for ${row.name}`}
+            rows={rows}
+            selectable={false}
+            statusBar={false}
           />
-        </AdminPanel>
+        </RecordPanel>
       )}
-
       <Modal
         fullscreenBelow={768}
         icon="bi-person-plus"
@@ -182,7 +175,7 @@ export function MembersScreen() {
           label: pending ? "Admitting…" : "Admit member",
           onClick: () => void admit(),
         }}
-        subtitle="Admit one person to this installation. Every active member can manage artifacts in every project."
+        subtitle="Admit one person to this installation. Every active member can open every project."
         title="Admit member"
       >
         <AdminStack>
@@ -237,6 +230,6 @@ export function MembersScreen() {
       >
         {error === null ? null : <RequestFailure error={error} />}
       </Modal>
-    </PageScaffold>
+    </AdminConsole>
   );
 }
