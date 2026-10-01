@@ -1,5 +1,14 @@
 import {z} from "zod";
 
+import type {ActionAttribution} from "../../../src/core/action-attribution.js";
+import {
+  type ActionInsert,
+  attributedInsert,
+  positionalActionInsertSql,
+  positionalActionInsertWhereSql,
+  positionalActionValues,
+} from "../../../src/storage/action-insert.js";
+
 import {
   IdentityConflict,
   IdentityNotFound,
@@ -116,6 +125,24 @@ const apiKeySelect = `
 `;
 
 /** Build the installation identity repository over one D1 binding. */
+/** The `key_issue` activity row written beside every new key. */
+const keyIssueAction = (
+  key: StoredManagedApiKey,
+  attribution: ActionAttribution,
+): ActionInsert => attributedInsert(attribution, {
+  action: "key_issue",
+  createdAt: key.createdAt,
+  detail: {
+    capabilities: key.capabilities,
+    how: "administrator",
+    ownerPrincipalId: key.principalId,
+    subjectName: key.name,
+  },
+  idempotencyKey: `key_issue:${key.id}`,
+  projectId: null,
+  subjectId: key.id,
+});
+
 export function createD1IdentityRepository(
   database: D1Database,
 ): IdentityRepository {
@@ -164,24 +191,44 @@ export function createD1IdentityRepository(
       key.rotatedFromId,
     );
 
+  const actionStatement = (insert: ActionInsert): D1PreparedStatement =>
+    database.prepare(positionalActionInsertSql).bind(...positionalActionValues(insert));
+  const actionWhenStatement = (
+    insert: ActionInsert,
+    condition: string,
+    bindings: readonly (string | null)[],
+  ): D1PreparedStatement =>
+    database.prepare(positionalActionInsertWhereSql(condition))
+      .bind(...positionalActionValues(insert), ...bindings);
+
   return {
     admitMember: async (command: AdmitMemberRecord) => {
       try {
-        await database.prepare(`
-          INSERT INTO installation_members (
-            id, installation_id, email, display_name, role, status,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          command.id,
-          command.installationId,
-          command.email,
-          command.displayName,
-          command.role,
-          memberStatuses.active,
-          command.createdAt,
-          command.createdAt,
-        ).run();
+        await database.batch([
+          database.prepare(`
+            INSERT INTO installation_members (
+              id, installation_id, email, display_name, role, status,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            command.id,
+            command.installationId,
+            command.email,
+            command.displayName,
+            command.role,
+            memberStatuses.active,
+            command.createdAt,
+            command.createdAt,
+          ),
+          actionStatement(attributedInsert(command.attribution, {
+            action: "member_admit",
+            createdAt: command.createdAt,
+            detail: {how: command.admittedHow, role: command.role, subjectName: command.displayName},
+            idempotencyKey: `member_admit:${command.id}`,
+            projectId: null,
+            subjectId: command.id,
+          })),
+        ]);
       } catch (cause) {
         if (cause instanceof Error && isD1Constraint(cause)) {
           throw new IdentityConflict({
@@ -259,8 +306,8 @@ export function createD1IdentityRepository(
       return loginAttemptRowSchema.parse(row);
     },
 
-    createApiKey: async (key) => {
-      await insertApiKey(key).run();
+    createApiKey: async (key, attribution) => {
+      await database.batch([insertApiKey(key), actionStatement(keyIssueAction(key, attribution))]);
       return withoutSecretDigest(key);
     },
 
@@ -311,7 +358,7 @@ export function createD1IdentityRepository(
       ).run();
     },
 
-    deactivateMember: async (installationId, memberId, updatedAt) => {
+    deactivateMember: async (installationId, memberId, updatedAt, attribution) => {
       const existing = await findMember(installationId, memberId);
       if (existing === null) {
         throw new IdentityNotFound({message: "The member does not exist."});
@@ -372,6 +419,24 @@ export function createD1IdentityRepository(
           memberStatuses.inactive,
           updatedAt,
         ),
+        // Written only when an active member was just deactivated by this batch.
+        ...(existing.status === memberStatuses.active
+          ? [actionWhenStatement(
+            attributedInsert(attribution, {
+              action: "member_deactivate",
+              createdAt: updatedAt,
+              detail: {subjectName: existing.displayName},
+              idempotencyKey: `member_deactivate:${memberId}:${updatedAt}`,
+              projectId: null,
+              subjectId: memberId,
+            }),
+            `EXISTS (
+              SELECT 1 FROM installation_members
+              WHERE installation_id = ? AND id = ? AND status = ? AND updated_at = ?
+            )`,
+            [installationId, memberId, memberStatuses.inactive, updatedAt],
+          )]
+          : []),
       ]);
       if (results[0]?.meta.changes !== 1) {
         throw new IdentityConflict({
@@ -443,13 +508,34 @@ export function createD1IdentityRepository(
       return result.results.map((row) => memberRowSchema.parse(row));
     },
 
-    revokeApiKey: async (installationId, keyId, revokedAt) => {
-      const result = await database.prepare(`
-        UPDATE managed_api_keys SET revoked_at = COALESCE(revoked_at, ?)
-        WHERE installation_id = ? AND id = ?
-      `).bind(revokedAt, installationId, keyId).run();
-      if (result.meta.changes !== 1) {
+    revokeApiKey: async (installationId, keyId, revokedAt, attribution) => {
+      const existing = await findApiKey(installationId, keyId);
+      if (existing === null) {
         throw new IdentityNotFound({message: "The API key does not exist."});
+      }
+      // Revoking a revoked key changes nothing and writes nothing.
+      if (existing.revokedAt === null) {
+        await database.batch([
+          database.prepare(`
+            UPDATE managed_api_keys SET revoked_at = ?
+            WHERE installation_id = ? AND id = ? AND revoked_at IS NULL
+          `).bind(revokedAt, installationId, keyId),
+          actionWhenStatement(
+            attributedInsert(attribution, {
+              action: "key_revoke",
+              createdAt: revokedAt,
+              detail: {subjectName: existing.name},
+              idempotencyKey: `key_revoke:${keyId}`,
+              projectId: null,
+              subjectId: keyId,
+            }),
+            `EXISTS (
+              SELECT 1 FROM managed_api_keys
+              WHERE installation_id = ? AND id = ? AND revoked_at = ?
+            ) AND NOT EXISTS (SELECT 1 FROM actions WHERE idempotency_key = ?)`,
+            [installationId, keyId, revokedAt, `key_revoke:${keyId}`],
+          ),
+        ]);
       }
       const key = await findApiKey(installationId, keyId);
       if (key === null) throw new Error("The revoked API key disappeared.");
@@ -468,6 +554,7 @@ export function createD1IdentityRepository(
       previousKeyId,
       replacement,
       revokedAt,
+      attribution,
     ) => {
       const existing = await findApiKey(installationId, previousKeyId);
       if (existing === null) {
@@ -510,6 +597,21 @@ export function createD1IdentityRepository(
           installationId,
           previousKeyId,
           revokedAt,
+        ),
+        actionWhenStatement(
+          attributedInsert(attribution, {
+            action: "key_rotate",
+            createdAt: revokedAt,
+            detail: {replacedKeyId: previousKeyId, subjectName: replacement.name},
+            idempotencyKey: `key_rotate:${replacement.id}`,
+            projectId: null,
+            subjectId: replacement.id,
+          }),
+          `EXISTS (
+            SELECT 1 FROM managed_api_keys
+            WHERE installation_id = ? AND id = ? AND rotated_from_id = ?
+          )`,
+          [installationId, replacement.id, previousKeyId],
         ),
       ]);
       if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {

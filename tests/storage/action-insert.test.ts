@@ -19,6 +19,7 @@ import {
   maximumActionDetailBytes,
   positionalActionInsertOnceSql,
   positionalActionInsertSql,
+  positionalActionInsertWhereSql,
   positionalActionOnceValues,
   positionalActionValues,
   publicLinkTransition,
@@ -133,6 +134,27 @@ describe("the shared action writer", () => {
         "SELECT COUNT(*) AS count FROM actions WHERE idempotency_key = ?",
       ).get("dispatch_addressed:dsp_1")).count;
       expect(count).toBe(1);
+    } finally {
+      database.close();
+    }
+  });
+
+  test("a conditional row is written only when its condition holds", () => {
+    const insert = attributedInsert(systemAttribution, {
+      action: "member_admit",
+      createdAt: "2026-10-01T12:00:00.000Z",
+      detail: null,
+      idempotencyKey: "member_admit:member_conditional",
+      projectId: null,
+      subjectId: "member_conditional",
+    });
+    const database = new DatabaseSync(databasePath);
+    try {
+      const statement = database.prepare(positionalActionInsertWhereSql("? = 1"));
+      statement.run(...positionalActionValues(insert), 0);
+      expect(database.prepare("SELECT COUNT(*) AS count FROM actions").get()).toEqual({count: 0});
+      statement.run(...positionalActionValues(insert), 1);
+      expect(database.prepare("SELECT COUNT(*) AS count FROM actions").get()).toEqual({count: 1});
     } finally {
       database.close();
     }

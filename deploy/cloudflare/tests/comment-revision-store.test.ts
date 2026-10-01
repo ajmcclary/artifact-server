@@ -86,6 +86,7 @@ async function publishFixture(
   );
   await store.markUploadPrepared(uploadId, claim.attempts, createdAt);
   return store.commitNewArtifact({
+    actor: {displayName: "Test publisher", kind: "service"},
     accessSetting: "account_required",
     artifactId,
     authorizedByPrincipalId: null,
@@ -165,6 +166,7 @@ describe("D1 comment revision", () => {
       })).revision).toBe(1);
 
       await store.updateThread({
+        actor: {displayName: "Test publisher", kind: "service"},
         anchor: null,
         artifactId,
         authorizedByPrincipalId: null,
@@ -187,6 +189,7 @@ describe("D1 comment revision", () => {
       })).revision).toBe(2);
 
       await store.deleteThread({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: null,
         deletedAt: "2026-09-21T00:03:00.000Z",
@@ -268,6 +271,7 @@ describe("D1 comment revision", () => {
       })).revision).toBe(2);
 
       await store.updateReply({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: null,
         body: "Updated D1 reply.",
@@ -289,6 +293,7 @@ describe("D1 comment revision", () => {
       })).revision).toBe(3);
 
       await store.deleteReply({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: null,
         deletedAt: "2026-09-21T00:04:00.000Z",
@@ -373,6 +378,7 @@ describe("D1 comment revision", () => {
       })).revision).toBe(2);
 
       const cleared = await store.clearThreads({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: null,
         clearedAt: "2026-09-21T00:03:00.000Z",

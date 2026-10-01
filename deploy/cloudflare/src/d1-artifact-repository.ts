@@ -77,6 +77,9 @@ import {
   type StagedUploadFile,
   type VersionContent,
   type VersionRecord,
+  type AccessSetting,
+  type ActorSnapshot,
+  type ArtifactActionKind,
 } from "../../../src/core/model.js";
 import type {
   AgentDispatchRepository,
@@ -138,6 +141,16 @@ import {
   type GitHistoryJob,
   type GitHistoryMirrorStore,
 } from "../../../src/git-history/git-history-mirror.js";
+import {actorSnapshotOfAuthor} from "../../../src/core/action-attribution.js";
+import {
+  type ActionInsert,
+  attributedInsert,
+  companionIdempotencyKey,
+  positionalActionInsertSql,
+  positionalActionInsertWhereSql,
+  positionalActionValues,
+  publicLinkTransition,
+} from "../../../src/storage/action-insert.js";
 import {artifactHistoryActionKindSql} from "../../../src/storage/activity-log-schema.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
@@ -973,8 +986,11 @@ export function createD1ArtifactRepository(
     }
     return statements;
   };
-  const actionStatement = (
+  const actionStatement = (insert: ActionInsert): D1PreparedStatement =>
+    database.prepare(positionalActionInsertSql).bind(...positionalActionValues(insert));
+  const artifactAction = (
     command: {
+      readonly actor: ActorSnapshot;
       readonly artifactId: string;
       readonly authorizedByPrincipalId: string | null;
       readonly createdAt: string;
@@ -983,22 +999,50 @@ export function createD1ArtifactRepository(
       readonly projectId: string;
     },
     versionId: string,
-    action: ArtifactActionRecord["action"],
-  ) => database.prepare(`
-    INSERT INTO actions (
-      id, project_id, artifact_id, version_id, action, principal_id,
-      authorized_by_principal_id, idempotency_key, created_at
-    ) VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    command.projectId,
-    command.artifactId,
-    versionId,
+    action: ArtifactActionKind,
+    extra: Pick<ActionInsert, "accessFrom" | "accessTo" | "threadId"> = {},
+  ): D1PreparedStatement => actionStatement({
+    ...extra,
     action,
-    command.principalId,
-    command.authorizedByPrincipalId,
-    command.idempotencyKey,
-    command.createdAt,
-  );
+    actor: command.actor,
+    artifactId: command.artifactId,
+    authorizedByPrincipalId: command.authorizedByPrincipalId,
+    createdAt: command.createdAt,
+    idempotencyKey: command.idempotencyKey,
+    principalId: command.principalId,
+    projectId: command.projectId,
+    versionId,
+  });
+  /** The `public_link_*` companion an access change or public first publish writes. */
+  const publicLinkStatements = (
+    command: {
+      readonly actor: ActorSnapshot;
+      readonly artifactId: string;
+      readonly authorizedByPrincipalId: string | null;
+      readonly createdAt: string;
+      readonly idempotencyKey: string;
+      readonly principalId: string;
+      readonly projectId: string;
+    },
+    versionId: string,
+    from: AccessSetting | null,
+    to: AccessSetting,
+  ): D1PreparedStatement[] => {
+    const transition = publicLinkTransition(from, to);
+    return transition === null ? [] : [actionStatement({
+      accessFrom: from,
+      accessTo: to,
+      action: transition,
+      actor: command.actor,
+      artifactId: command.artifactId,
+      authorizedByPrincipalId: command.authorizedByPrincipalId,
+      createdAt: command.createdAt,
+      idempotencyKey: companionIdempotencyKey(command.idempotencyKey),
+      principalId: command.principalId,
+      projectId: command.projectId,
+      versionId,
+    })];
+  };
   const idempotencyStatement = (
     command: {
       readonly artifactId: string;
@@ -1289,22 +1333,26 @@ export function createD1ArtifactRepository(
   };
   const commentActionStatement = (
     entry: {
-      readonly action: ArtifactActionRecord["action"];
+      readonly action: ArtifactActionKind;
       readonly actionId: string | null;
+      readonly actor: ActorSnapshot;
       readonly authorizedByPrincipalId: string | null;
       readonly changedAt: string;
       readonly idempotencyKey: string;
       readonly principalId: string;
+      readonly replyId: string | null;
+      readonly threadId: string;
     },
     source: string,
     sourceBindings: readonly string[],
   ): D1PreparedStatement => database.prepare(`
     INSERT INTO actions (
       id, project_id, artifact_id, version_id, action, principal_id,
-      authorized_by_principal_id, idempotency_key, created_at
+      authorized_by_principal_id, idempotency_key, created_at,
+      thread_id, reply_id, actor_name, actor_kind
     )
     SELECT COALESCE(?, lower(hex(randomblob(16)))), t.project_id, t.artifact_id,
-      t.version_id, ?, ?, ?, ?, ?
+      t.version_id, ?, ?, ?, ?, ?, ?, ?, ?, ?
     ${source}
   `).bind(
     entry.actionId,
@@ -1313,6 +1361,10 @@ export function createD1ArtifactRepository(
     entry.authorizedByPrincipalId,
     entry.idempotencyKey,
     entry.changedAt,
+    entry.threadId,
+    entry.replyId,
+    entry.actor.displayName,
+    entry.actor.kind,
     ...sourceBindings,
   );
 
@@ -1596,16 +1648,26 @@ export function createD1ArtifactRepository(
         throw new ProjectConflict({message: "The project belongs to another installation."});
       }
       try {
-        await database.prepare(`
-          INSERT INTO projects (id, installation_id, name, created_at, archived_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(
-          command.id,
-          installationId,
-          command.name,
-          command.createdAt,
-          command.archivedAt,
-        ).run();
+        await database.batch([
+          database.prepare(`
+            INSERT INTO projects (id, installation_id, name, created_at, archived_at)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(
+            command.id,
+            installationId,
+            command.name,
+            command.createdAt,
+            command.archivedAt,
+          ),
+          actionStatement(attributedInsert(command.attribution, {
+            action: "project_create",
+            createdAt: command.createdAt,
+            detail: {subjectName: command.name},
+            idempotencyKey: `project_create:${command.id}`,
+            projectId: command.id,
+            subjectId: command.id,
+          })),
+        ]);
       } catch (cause) {
         if (cause instanceof Error && /constraint|unique/iu.test(cause.message)) {
           throw new ProjectConflict({message: "The project identity is already in use."});
@@ -2388,10 +2450,40 @@ export function createD1ArtifactRepository(
       return readProject(command.projectId);
     },
     setProjectArchive: async (command: SetProjectArchive) => {
-      const result = await database.prepare(`
-        UPDATE projects SET archived_at = ? WHERE installation_id = ? AND id = ?
-      `).bind(command.archivedAt, installationId, command.projectId).run();
-      if (result.meta.changes !== 1) throw new ProjectNotFound({message: "The project does not exist."});
+      const current = await readProjectOrNull(command.projectId);
+      if (current === null) throw new ProjectNotFound({message: "The project does not exist."});
+      // Only a real state change writes; repeating archive or unarchive is a no-op.
+      if ((current.archivedAt === null) === (command.archivedAt === null)) return current;
+      const action = command.archivedAt === null ? "project_unarchive" : "project_archive";
+      await database.batch([
+        database.prepare(command.archivedAt === null
+          ? `UPDATE projects SET archived_at = NULL
+             WHERE installation_id = ? AND id = ? AND archived_at IS NOT NULL`
+          : `UPDATE projects SET archived_at = ?
+             WHERE installation_id = ? AND id = ? AND archived_at IS NULL`)
+          .bind(...(command.archivedAt === null
+            ? [installationId, command.projectId]
+            : [command.archivedAt, installationId, command.projectId])),
+        // Written only when this batch's update reached the requested state.
+        database.prepare(positionalActionInsertWhereSql(`
+          EXISTS (
+            SELECT 1 FROM projects WHERE installation_id = ? AND id = ?
+              AND archived_at IS ${command.archivedAt === null ? "NULL" : "NOT NULL"}
+          ) AND NOT EXISTS (SELECT 1 FROM actions WHERE idempotency_key = ?)
+        `)).bind(
+          ...positionalActionValues(attributedInsert(command.attribution, {
+            action,
+            createdAt: command.changedAt,
+            detail: {subjectName: current.name},
+            idempotencyKey: `${action}:${command.projectId}:${command.changedAt}`,
+            projectId: command.projectId,
+            subjectId: command.projectId,
+          })),
+          installationId,
+          command.projectId,
+          `${action}:${command.projectId}:${command.changedAt}`,
+        ),
+      ]);
       return readProject(command.projectId);
     },
 
@@ -2754,7 +2846,8 @@ export function createD1ArtifactRepository(
           ...command.tags.map((tag) => database.prepare(`
             INSERT INTO artifact_tags (artifact_id, tag) VALUES (?, ?)
           `).bind(command.artifactId, tag)),
-          actionStatement(command, command.versionId, artifactActionKinds.publish),
+          artifactAction(command, command.versionId, artifactActionKinds.publish),
+          ...publicLinkStatements(command, command.versionId, null, command.accessSetting),
           idempotencyStatement(command, command.versionId, artifactActionKinds.publish),
           database.prepare(`
             UPDATE staged_uploads SET status = 'committed', committed_version_id = ?
@@ -2817,7 +2910,7 @@ export function createD1ArtifactRepository(
             command.expectedCurrentVersionId,
           ),
           ...versionStatements(command, nextNumber),
-          actionStatement(command, command.versionId, artifactActionKinds.publish),
+          artifactAction(command, command.versionId, artifactActionKinds.publish),
           idempotencyStatement(command, command.versionId, artifactActionKinds.publish),
           database.prepare(`
             UPDATE staged_uploads SET status = 'committed', committed_version_id = ?
@@ -3274,7 +3367,16 @@ export function createD1ArtifactRepository(
           command.artifactId,
           command.expectedCurrentVersionId,
         ),
-        actionStatement(command, command.expectedCurrentVersionId, artifactActionKinds.changeAccess),
+        artifactAction(command, command.expectedCurrentVersionId, artifactActionKinds.changeAccess, {
+          accessFrom: artifact.accessSetting,
+          accessTo: command.accessSetting,
+        }),
+        ...publicLinkStatements(
+          command,
+          command.expectedCurrentVersionId,
+          artifact.accessSetting,
+          command.accessSetting,
+        ),
         idempotencyStatement(
           command,
           command.expectedCurrentVersionId,
@@ -3314,7 +3416,7 @@ export function createD1ArtifactRepository(
         ...command.tags.map((tag) => database.prepare(`
           INSERT INTO artifact_tags (artifact_id, tag) VALUES (?, ?)
         `).bind(command.artifactId, tag)),
-        actionStatement(command, command.expectedCurrentVersionId, artifactActionKinds.changeTags),
+        artifactAction(command, command.expectedCurrentVersionId, artifactActionKinds.changeTags),
         idempotencyStatement(
           command,
           command.expectedCurrentVersionId,
@@ -3355,7 +3457,7 @@ export function createD1ArtifactRepository(
           command.artifactId,
           command.expectedCurrentVersionId,
         ),
-        actionStatement(command, command.versionId, artifactActionKinds.restore),
+        artifactAction(command, command.versionId, artifactActionKinds.restore),
         idempotencyStatement(
           command,
           command.versionId,
@@ -3400,7 +3502,7 @@ export function createD1ArtifactRepository(
             command.artifactId,
             command.expectedCurrentVersionId,
           ),
-          actionStatement(command, command.expectedCurrentVersionId, artifactActionKinds.delete),
+          artifactAction(command, command.expectedCurrentVersionId, artifactActionKinds.delete),
           idempotencyStatement(
             command,
             command.expectedCurrentVersionId,
@@ -3660,8 +3762,9 @@ export function createD1ArtifactRepository(
             command.createdAt,
             command.createdAt,
           ),
-          actionStatement(
+          artifactAction(
             {
+              actor: actorSnapshotOfAuthor(command.author),
               artifactId: command.artifactId,
               authorizedByPrincipalId: command.author.authorizedByPrincipalId,
               createdAt: command.createdAt,
@@ -3671,6 +3774,7 @@ export function createD1ArtifactRepository(
             },
             command.versionId,
             artifactActionKinds.commentCreate,
+            {threadId: command.id},
           ),
           bumpCommentRevisionStatement(command.artifactId),
         ]);
@@ -3815,10 +3919,13 @@ export function createD1ArtifactRepository(
             {
               action: commentUpdateActionKind(command),
               actionId: commentAction.actionId,
+              actor: command.actor,
               authorizedByPrincipalId: command.authorizedByPrincipalId,
               changedAt: command.updatedAt,
               idempotencyKey: commentAction.idempotencyKey,
               principalId: command.principalId,
+              replyId: null,
+              threadId: command.threadId,
             },
             `${commentThreadScope} AND t.updated_at = ?`,
             [
@@ -3880,10 +3987,13 @@ export function createD1ArtifactRepository(
             {
               action: artifactActionKinds.commentDelete,
               actionId: commentAction.actionId,
+              actor: command.actor,
               authorizedByPrincipalId: command.authorizedByPrincipalId,
               changedAt: command.deletedAt,
               idempotencyKey: commentAction.idempotencyKey,
               principalId: command.principalId,
+              replyId: null,
+              threadId: command.threadId,
             },
             commentThreadScope,
             [command.threadId, command.projectId, command.artifactId],
@@ -3972,10 +4082,13 @@ export function createD1ArtifactRepository(
               {
                 action: artifactActionKinds.commentDelete,
                 actionId: commentAction.actionId,
+                actor: command.actor,
                 authorizedByPrincipalId: command.authorizedByPrincipalId,
                 changedAt: command.clearedAt,
                 idempotencyKey: commentAction.idempotencyKey,
                 principalId: command.principalId,
+                replyId: null,
+                threadId: row.id,
               },
               commentThreadScope,
               [row.id, command.projectId, command.artifactId],
@@ -4034,11 +4147,14 @@ export function createD1ArtifactRepository(
             {
               action: artifactActionKinds.commentReply,
               actionId: null,
+              actor: actorSnapshotOfAuthor(command.author),
               authorizedByPrincipalId: command.author.authorizedByPrincipalId,
               changedAt: command.createdAt,
               idempotencyKey:
                 commentActionIdentity(command.threadId).idempotencyKey,
               principalId: command.author.principalId,
+              replyId: command.id,
+              threadId: command.threadId,
             },
             commentReplyScope,
             [
@@ -4054,6 +4170,35 @@ export function createD1ArtifactRepository(
             [command.id],
           ),
           bumpCommentRevisionStatement(command.artifactId),
+          // The first reply by a dispatch's own agent on a thread it holds records the answer.
+          database.prepare(`
+            INSERT INTO actions (
+              id, project_id, artifact_id, version_id, action, principal_id,
+              authorized_by_principal_id, idempotency_key, created_at, thread_id,
+              actor_name, actor_kind, subject_id, detail_json
+            )
+            SELECT lower(hex(randomblob(16))), t.project_id, NULL, NULL,
+              'dispatch_addressed', ?, ?, 'dispatch_addressed:' || d.id, ?, t.id, ?, ?,
+              d.id, json_object('subjectName', d.agent_display_name)
+            FROM comment_threads t
+            JOIN agent_dispatches d ON d.id = t.dispatch_id
+            JOIN registered_agents a ON a.id = d.agent_id
+            WHERE t.id = ? AND t.project_id = ?
+              AND d.state IN ('queued', 'claimed', 'delivered')
+              AND a.principal_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM actions WHERE idempotency_key = 'dispatch_addressed:' || d.id
+              )
+          `).bind(
+            command.author.principalId,
+            command.author.authorizedByPrincipalId,
+            command.createdAt,
+            command.author.displayName,
+            command.author.principalKind,
+            command.threadId,
+            command.projectId,
+            command.author.principalId,
+          ),
         ]);
       } catch (cause) {
         const raced = await readIdempotentReplyRowOrNull(
@@ -4113,10 +4258,13 @@ export function createD1ArtifactRepository(
             {
               action: artifactActionKinds.commentUpdate,
               actionId: commentAction.actionId,
+              actor: command.actor,
               authorizedByPrincipalId: command.authorizedByPrincipalId,
               changedAt: command.updatedAt,
               idempotencyKey: commentAction.idempotencyKey,
               principalId: command.principalId,
+              replyId: command.replyId,
+              threadId: command.threadId,
             },
             `${commentReplyScope} AND r.updated_at = ?`,
             [
@@ -4150,10 +4298,13 @@ export function createD1ArtifactRepository(
             {
               action: artifactActionKinds.commentDelete,
               actionId: commentAction.actionId,
+              actor: command.actor,
               authorizedByPrincipalId: command.authorizedByPrincipalId,
               changedAt: command.deletedAt,
               idempotencyKey: commentAction.idempotencyKey,
               principalId: command.principalId,
+              replyId: command.replyId,
+              threadId: command.threadId,
             },
             commentReplyScope,
             [
@@ -4386,6 +4537,22 @@ export function createD1ArtifactRepository(
           ...(command.threadIds.length === 0
             ? []
             : [bumpCommentRevisionForThreadsStatement(command.threadIds)]),
+          actionStatement(attributedInsert(
+            {
+              actor: actorSnapshotOfAuthor(command.sender),
+              authorizedByPrincipalId: command.sender.authorizedByPrincipalId,
+              principalId: command.sender.principalId,
+            },
+            {
+              action: "dispatch_create",
+              createdAt: command.createdAt,
+              // Thread ids stay on the dispatch row: a 100-thread bundle exceeds the detail bound.
+              detail: {agentId: command.agentId, subjectName: command.agentDisplayName},
+              idempotencyKey: `dispatch_create:${command.id}`,
+              projectId: command.projectId,
+              subjectId: command.id,
+            },
+          )),
         ]);
       } catch (cause) {
         const raced = await readIdempotentDispatchRowOrNull(

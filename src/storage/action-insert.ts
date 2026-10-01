@@ -60,6 +60,16 @@ export const positionalActionInsertOnceSql =
    SELECT COALESCE(?, lower(hex(randomblob(16)))), ${placeholders}
    WHERE NOT EXISTS (SELECT 1 FROM actions WHERE idempotency_key = ?)`;
 
+/**
+ * SQLite and D1 insert written only when `condition` holds, for batches that
+ * cannot branch (D1). Bind {@link positionalActionValues} then the condition's values.
+ */
+export function positionalActionInsertWhereSql(condition: string): string {
+  return `INSERT INTO actions (${columnList})
+   SELECT COALESCE(?, lower(hex(randomblob(16)))), ${placeholders}
+   WHERE ${condition}`;
+}
+
 /** Serialize bounded detail, refusing (not truncating) oversized history. */
 export function serializeActionDetail(
   detail: ActivityDetail | null | undefined,
