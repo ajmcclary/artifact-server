@@ -3174,7 +3174,7 @@ requirements:
       failure: {id: ADM-003-F, description: "A non-administrator direct route or mutation is forbidden, the UI does not claim to send an invitation, and current-member, last-administrator, and local-owner administrator deactivation remain refused without changing membership."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves member admission and deactivation in the canonical application. Equivalent browser evidence for a non-administrator and each team deployment remains unrecorded; service tests retain those authority boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; ADM-008 browser evidence proves the Admin console renders them. Local browser evidence proves member admission and deactivation in the canonical application. Equivalent browser evidence for a non-administrator and each team deployment remains unrecorded; service tests retain those authority boundaries.
     depends_on: [AUTH-001, AUTH-027, AUTH-028]
     evidence:
       - deployment: local
@@ -3198,7 +3198,7 @@ requirements:
       failure: {id: ADM-004-F, description: "A non-administrator, missing capability, missing future expiration, inactive owner, stale key, or repeated reveal attempt fails without exposing a full existing secret or leaving it recoverable from frontend state."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves issue, one-time display, frontend secret disposal, rotation, and revocation. Equivalent browser evidence for every rejected owner or capability case and each team deployment remains unrecorded; service tests retain those authority boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; ADM-008 browser evidence proves the Admin console renders them. Local browser evidence proves issue, one-time display, frontend secret disposal, rotation, and revocation. Equivalent browser evidence for every rejected owner or capability case and each team deployment remains unrecorded; service tests retain those authority boundaries.
     depends_on: [AUTH-009, AUTH-027]
     evidence:
       - deployment: local
@@ -3222,7 +3222,7 @@ requirements:
       failure: {id: ADM-005-F, description: "A non-administrator, oversized or duplicate selection, stale version, or cross-installation item is refused per item; the interface does not create links here or promise recall of downloaded or externally cached copies."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves cross-project inventory, one and bulk access reduction, partial success, and stale retry. Equivalent browser evidence for each authorization rejection and team deployment remains unrecorded; service tests retain those boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; ADM-008 browser evidence proves the Admin console renders them. Local browser evidence proves cross-project inventory, one and bulk access reduction, partial success, and stale retry. Equivalent browser evidence for each authorization rejection and team deployment remains unrecorded; service tests retain those boundaries.
     depends_on: [AUTH-007, AUTH-018, CMT-017]
     evidence:
       - deployment: local
@@ -3246,7 +3246,7 @@ requirements:
       failure: {id: ADM-006-F, description: "Direct unauthorized routes show a forbidden state rather than empty data, failed mutations retain recoverable input and offer bounded retry, settings do not cause page-level horizontal overflow, and no permanent settings navigation consumes Review viewport space."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local browser evidence proves accessible canonical settings, stable direct routes, preserved Review return context, and bounded failure states. The complete narrow-screen and non-administrator matrix for every settings page and team deployment remains unrecorded.
+    proof_gap: Local browser evidence proves accessible canonical settings, stable direct routes, the review navigation kept on every settings screen (Back to review is retired), and bounded failure states. The complete narrow-screen and non-administrator matrix for every settings page and team deployment remains unrecorded.
     depends_on: [AUTH-008, AUTH-026, ADM-001]
     evidence:
       - deployment: local
