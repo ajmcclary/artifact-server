@@ -45,38 +45,35 @@ const reviewInput: ShellNavInput = {
     project("prj_default", "Default"),
     project("prj_b", "Beta"),
   ],
-  queueActive: false,
+  activityActive: false,
+  projectsActive: false,
   returnHref: "/review?project=prj_b&artifact=art_c",
 };
 
 describe("shellNavItems in review mode", () => {
-  it("lists the queue, the design library, active projects by name, archived projects, then New project", () => {
+  it("ACT-005: lists Activity, Projects and the design library, then project folders, New project and administrator Tools", () => {
     expect(shellNavItems(reviewInput)).toEqual([
-      {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: "/review"},
+      {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: "/review"},
+      {icon: "bi-folder2-open", id: "projects", label: "Projects", link: "/review/projects"},
       {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library?project=prj_b"},
-      {
-        group: "Projects",
-        icon: "bi-folder2",
-        id: "project:prj_b",
-        label: "Beta",
-        link: "/review?project=prj_b",
-      },
-      {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review?project=prj_default"},
-      {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review?project=prj_old"},
+      {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review/projects?project=prj_b"},
+      {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review/projects?project=prj_default"},
+      {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review/projects?project=prj_old"},
       {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
+      {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: "/review/settings/members"},
     ]);
   });
 
-  it("omits New project for a principal that cannot manage projects", () => {
-    const items = shellNavItems({...reviewInput, canCreateProjects: false});
-    expect(items.map((item) => item.label)).toEqual(["Review queue", "Design library", "Beta", "Default", "Zeta"]);
+  it("ACT-005: gives a non-administrator MCP & WebMCP in Tools instead of Administration", () => {
+    const items = shellNavItems({...reviewInput, canCreateProjects: false, isAdministrator: false});
+    expect(items.map((item) => item.label)).toEqual(["Activity", "Projects", "Design library", "Beta", "Default", "Zeta", "MCP & WebMCP"]);
+    expect(items.at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
   });
 
   it("starts the Projects group with New project when there are no projects", () => {
-    expect(shellNavItems({...reviewInput, projects: []})).toEqual([
-      {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: "/review"},
-      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library"},
+    expect(shellNavItems({...reviewInput, projects: []}).slice(3)).toEqual([
       {group: "Projects", icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
+      {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: "/review/settings/members"},
     ]);
   });
 });
@@ -113,12 +110,15 @@ describe("shellNavItems in administration mode", () => {
 
 describe("shellActiveLink", () => {
   it("marks the queue, the active project, or the active administration screen", () => {
-    expect(shellActiveLink({...reviewInput, queueActive: true})).toBe("/review");
+    expect(shellActiveLink({...reviewInput, activityActive: true})).toBe("/review");
+    expect(shellActiveLink({...reviewInput, projectsActive: true})).toBe("/review/projects");
+    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", projectsActive: true}))
+      .toBe("/review/projects?project=prj_default");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library?project=prj_default");
+    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default"}))
+      .toBe("/review/projects?project=prj_default");
     expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
       .toBe("/review/library?project=prj_default");
-    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default"}))
-      .toBe("/review?project=prj_default");
     expect(shellActiveLink(reviewInput)).toBe("");
     expect(shellActiveLink({...reviewInput, activeSettings: "apiKeys", mode: "admin"}))
       .toBe("/review/settings/api-keys");

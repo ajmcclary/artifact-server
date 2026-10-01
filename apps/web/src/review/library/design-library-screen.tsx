@@ -99,7 +99,7 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
     const source = parsed === null ? undefined : bySource.get(parsed.artifactId);
     return parsed === null || source === undefined
       ? null
-      : workspaceHref({artifactId: source.artifactId, path: parsed.path, projectId: project.id, versionId: source.versionId, view: null});
+      : workspaceHref({artifactId: source.artifactId, path: parsed.path, projectId: project.id, threadId: null, versionId: source.versionId, view: null});
   };
   const media = (source: LibrarySource, path: string) => api.versionMediaUrl(project.id, source.artifactId, source.versionId, path);
   return (

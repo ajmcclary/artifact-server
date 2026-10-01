@@ -1,12 +1,15 @@
 import {describe, expect, it} from "vitest";
 
 import {
+  activityHref,
+  emptyActivityFilters,
   isApplicationPath,
   libraryHref,
   parseReviewRoute,
+  projectsHref,
   projectWorkspaceHref,
+  readActivityFilters,
   readReviewLocation,
-  reviewQueueHref,
   reviewReturnHref,
   workspaceHref,
   type ReviewLocation,
@@ -17,6 +20,7 @@ const emptyLocation: ReviewLocation = {
   artifactId: null,
   path: null,
   projectId: null,
+  threadId: null,
   versionId: null,
   view: null,
 };
@@ -35,13 +39,55 @@ describe("design library route", () => {
   });
 });
 
-describe("parseReviewRoute", () => {
-  it("resolves bare /review to the review queue", () => {
-    expect(routeOf("/review")).toEqual({kind: "queue"});
-    expect(routeOf("/review/")).toEqual({kind: "queue"});
-    expect(routeOf("/review?view=focus")).toEqual({kind: "queue"});
+describe("activity route", () => {
+  it("ACT-005: bare /review is Activity, and its filters round-trip through the URL", () => {
+    expect(routeOf("/review")).toEqual({kind: "activity", filters: emptyActivityFilters});
+    expect(routeOf("/review/")).toEqual({kind: "activity", filters: emptyActivityFilters});
+    expect(routeOf("/review?view=focus")).toEqual({kind: "activity", filters: emptyActivityFilters});
+    const filters = {projects: ["prj_a", "prj b"], q: "totals", segment: "needs_you", types: ["comments", "versions"]} as const;
+    const href = activityHref(filters);
+    expect(href).toBe("/review?segment=needs_you&projects=prj_a&projects=prj+b&type=comments&type=versions&q=totals");
+    expect(routeOf(href)).toEqual({kind: "activity", filters});
+    expect(activityHref()).toBe("/review");
+    expect(activityHref(emptyActivityFilters)).toBe("/review");
   });
 
+  it("ACT-005: unknown segments and types are dropped, and the search is trimmed to 100 characters", () => {
+    const filters = readActivityFilters(new URLSearchParams(
+      `segment=everything&type=comments&type=secrets&type=comments&q=${"x".repeat(140)}`,
+    ));
+    expect(filters.segment).toBe("all");
+    expect(filters.types).toEqual(["comments"]);
+    expect(filters.q).toHaveLength(100);
+  });
+
+  it("keeps a project-only URL on the workspace, never on Activity", () => {
+    expect(routeOf("/review?project=prj_default&segment=needs_you")).toEqual({
+      kind: "workspace",
+      location: {...emptyLocation, projectId: "prj_default"},
+    });
+  });
+});
+
+describe("projects route", () => {
+  it("ACT-005: /review/projects names its selected project", () => {
+    expect(projectsHref(null)).toBe("/review/projects");
+    expect(projectsHref("prj a")).toBe("/review/projects?project=prj+a");
+    expect(routeOf("/review/projects")).toEqual({kind: "projects", projectId: null});
+    expect(routeOf("/review/projects/?project=prj_a")).toEqual({kind: "projects", projectId: "prj_a"});
+    expect(routeOf("/review/projects?project=")).toEqual({kind: "projects", projectId: null});
+  });
+});
+
+describe("thread deep link", () => {
+  it("ACT-005: a workspace URL carries the thread to select after every other parameter", () => {
+    const location: ReviewLocation = {...emptyLocation, artifactId: "art_1", projectId: "prj_1", threadId: "thr_9", versionId: "ver_1"};
+    expect(workspaceHref(location)).toBe("/review?project=prj_1&artifact=art_1&version=ver_1&thread=thr_9");
+    expect(readReviewLocation(new URL(workspaceHref(location), origin).searchParams)).toEqual(location);
+  });
+});
+
+describe("parseReviewRoute", () => {
   it("keeps a project-only URL on the workspace so its first artifact is still selected", () => {
     expect(routeOf("/review?project=prj_default")).toEqual({
       kind: "workspace",
@@ -58,6 +104,7 @@ describe("parseReviewRoute", () => {
         artifactId: "art_b",
         path: "docs/a.html",
         projectId: "prj_a",
+        threadId: null,
         versionId: "ver_c",
         view: "focus",
       },
@@ -91,19 +138,16 @@ describe("parseReviewRoute", () => {
 });
 
 describe("review hrefs", () => {
-  it("names the queue with bare /review", () => {
-    expect(reviewQueueHref()).toBe("/review");
-  });
-
   it("builds workspace hrefs in the canonical parameter order", () => {
     expect(workspaceHref({
       artifactId: "art_b",
       path: "docs/a.html",
       projectId: "prj_a",
+      threadId: null,
       versionId: "ver_c",
       view: "focus",
     })).toBe("/review?project=prj_a&artifact=art_b&version=ver_c&path=docs%2Fa.html&view=focus");
-    expect(workspaceHref(emptyLocation)).toBe(reviewQueueHref());
+    expect(workspaceHref(emptyLocation)).toBe(activityHref());
     expect(workspaceHref({...emptyLocation, projectId: ""})).toBe("/review");
     expect(projectWorkspaceHref("prj a&b")).toBe("/review?project=prj+a%26b");
   });
@@ -113,6 +157,7 @@ describe("review hrefs", () => {
       artifactId: "art_1",
       path: "pages/index.html",
       projectId: "prj_1",
+      threadId: null,
       versionId: "ver_1",
       view: null,
     };

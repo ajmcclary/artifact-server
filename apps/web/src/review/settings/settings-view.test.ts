@@ -1,5 +1,5 @@
 import type {Principal} from "@/api/client";
-import {parseReviewRoute, reviewQueueHref} from "@/review/review-routes";
+import {parseReviewRoute, projectsHref} from "@/review/review-routes";
 import {
   canonicalReviewRoute,
   resolveSettingsView,
@@ -24,15 +24,19 @@ function reviewUrl(path: string): URL {
 }
 
 describe("settings routing", () => {
-  it("ADM-006-B: the retired projects list replaces itself with the review queue", () => {
+  it("ADM-006-B: old project settings URLs replace themselves with the Projects screen", () => {
     for (const path of ["/review/settings", "/review/settings/", "/review/settings/projects"]) {
       expect(canonicalReviewRoute(parseReviewRoute(reviewUrl(path)))).toEqual({
-        replaceWith: reviewQueueHref(),
-        route: {kind: "queue"},
+        replaceWith: projectsHref(null),
+        route: {kind: "projects", projectId: null},
       });
     }
-    const projectRoute = parseReviewRoute(reviewUrl("/review/settings/projects/prj_default"));
-    expect(canonicalReviewRoute(projectRoute)).toEqual({replaceWith: null, route: projectRoute});
+    expect(canonicalReviewRoute(parseReviewRoute(reviewUrl("/review/settings/projects/prj_default")))).toEqual({
+      replaceWith: projectsHref("prj_default"),
+      route: {kind: "projects", projectId: "prj_default"},
+    });
+    const library = parseReviewRoute(reviewUrl("/review/library?project=prj_default"));
+    expect(canonicalReviewRoute(library)).toEqual({replaceWith: null, route: library});
   });
 
   it("WMC-001-F: the MCP and WebMCP routes resolve to one MCP & WebMCP screen", () => {
@@ -66,7 +70,7 @@ describe("settings routing", () => {
     expect(resolveSettingsView({kind: "publicLinks"}, administrator)).toEqual({kind: "publicLinks"});
     expect(resolveSettingsView({kind: "notFound"}, administrator)).toEqual({kind: "notFound"});
     expect(resolveSettingsView({kind: "projects"}, administrator))
-      .toEqual({href: reviewQueueHref(), kind: "redirect"});
+      .toEqual({href: projectsHref(null), kind: "redirect"});
   });
 
 });

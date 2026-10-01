@@ -11,7 +11,7 @@ import {
 import {
   navigateReview,
   REVIEW_RETURN_URL_KEY,
-  reviewQueueHref,
+  activityHref,
   reviewReturnHref,
 } from "@/review/review-routes";
 import {readStored} from "@/lib/safe-storage";
@@ -77,13 +77,10 @@ export function AccountMenu({mode, rail, session}: AccountMenuProps) {
           reviewReturnHref(readStored("session", REVIEW_RETURN_URL_KEY)),
         ),
       }
-      : {
-        icon: "bi-sliders",
-        label: "Administration",
-        onClick: () => navigateReview(
-          administrationHref(isInstallationAdministrator(principal)),
-        ),
-      },
+      : isInstallationAdministrator(principal)
+        ? {icon: "bi-gear", label: "Administration", onClick: () => navigateReview(administrationHref(true))}
+        // Non-administrators keep their only route to the MCP & WebMCP setup screen.
+        : {icon: "bi-plug", label: "MCP & WebMCP", onClick: () => navigateReview(administrationHref(false))},
     {divider: true},
     {heading: "Appearance"},
     ...appearanceOptions.map((option): MenuItem => ({
@@ -174,6 +171,6 @@ function signOut(toasts: Toasts): void {
         return;
       }
     }
-    window.location.assign(reviewQueueHref());
+    window.location.assign(activityHref());
   })();
 }

@@ -1,9 +1,9 @@
 import type {Principal, Project} from "@/api/client";
 import type {NavItem} from "@/arkcase";
 import {
+  activityHref,
   libraryHref,
-  projectWorkspaceHref,
-  reviewQueueHref,
+  projectsHref,
   type SettingsRoute,
 } from "@/review/review-routes";
 
@@ -23,7 +23,8 @@ export interface ShellNavInput {
   readonly libraryActive: boolean;
   readonly mode: ShellMode;
   readonly projects: readonly Project[];
-  readonly queueActive: boolean;
+  readonly activityActive: boolean;
+  readonly projectsActive: boolean;
   readonly returnHref: string;
 }
 
@@ -54,7 +55,7 @@ export function administrationHref(isAdministrator: boolean): string {
 export function shellNavItems(input: ShellNavInput): NavItem[] {
   return input.mode === "admin"
     ? administrationItems(input.isAdministrator, input.returnHref)
-    : reviewItems(input.projects, input.canCreateProjects, libraryProjectId(input));
+    : reviewItems(input, libraryProjectId(input));
 }
 
 /** The `link` of the current row, or "" when no row is current. */
@@ -75,9 +76,10 @@ export function shellActiveLink(input: ShellNavInput): string {
         return "";
     }
   }
-  if (input.queueActive) return reviewQueueHref();
+  if (input.activityActive) return activityHref();
   if (input.libraryActive) return libraryHref(libraryProjectId(input));
-  return input.activeProjectId === null ? "" : projectWorkspaceHref(input.activeProjectId);
+  if (input.projectsActive && input.activeProjectId === null) return projectsHref(null);
+  return input.activeProjectId === null ? "" : projectsHref(input.activeProjectId);
 }
 
 function isDirectHuman(principal: Principal): boolean {
@@ -89,26 +91,32 @@ function libraryProjectId(input: ShellNavInput): string | null {
   return input.activeProjectId ?? orderedProjects(input.projects)[0]?.id ?? null;
 }
 
-function reviewItems(projects: readonly Project[], canCreateProjects: boolean, libraryProject: string | null): NavItem[] {
+function reviewItems(input: ShellNavInput, libraryProject: string | null): NavItem[] {
   const items: NavItem[] = [
-    {group: "Review", icon: "bi-inbox", id: "queue", label: "Review queue", link: reviewQueueHref()},
+    {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: activityHref()},
+    {icon: "bi-folder2-open", id: "projects", label: "Projects", link: projectsHref(null)},
     {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref(libraryProject)},
   ];
-  for (const project of orderedProjects(projects)) {
+  const firstProjectIndex = items.length;
+  for (const project of orderedProjects(input.projects)) {
     const item: NavItem = {
       icon: project.archivedAt === null ? "bi-folder2" : "bi-archive",
       id: `project:${project.id}`,
       label: project.name,
-      link: projectWorkspaceHref(project.id),
+      link: projectsHref(project.id),
     };
-    if (items.length === 2) item.group = "Projects";
+    if (items.length === firstProjectIndex) item.group = "Projects";
     items.push(item);
   }
-  if (canCreateProjects) {
+  if (input.canCreateProjects) {
     const create: NavItem = {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"};
-    if (items.length === 2) create.group = "Projects";
+    if (items.length === firstProjectIndex) create.group = "Projects";
     items.push(create);
   }
+  // Non-administrators keep their only route to the MCP & WebMCP setup screen.
+  items.push(input.isAdministrator
+    ? {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: administrationHref(true)}
+    : {group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: administrationHref(false)});
   return items;
 }
 

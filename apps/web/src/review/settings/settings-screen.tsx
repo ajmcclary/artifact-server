@@ -2,7 +2,7 @@ import {useEffect} from "react";
 
 import type {Project, Session} from "@/api/client";
 import {PageScaffold, SurfaceState} from "@/arkcase";
-import {navigateReview, reviewQueueHref, type SettingsRoute} from "../review-routes.ts";
+import {navigateReview, activityHref, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
 import {MembersScreen} from "./members-screen.tsx";
@@ -108,7 +108,7 @@ function SettingsState({
         emptyIcon={icon}
         emptyTitle={title}
         noun="settings"
-        onAction={() => navigateReview(reviewQueueHref())}
+        onAction={() => navigateReview(activityHref())}
         phase="ready"
         titleLevel={3}
         variant="dashed"

@@ -1,3 +1,5 @@
+import type {ActivitySegment, ActivityType} from "@/api/client";
+
 /** One canonical settings destination inside the Artifact Server application. */
 export type SettingsRoute =
   | {readonly kind: "projects"}
@@ -14,13 +16,16 @@ export interface ReviewLocation {
   readonly artifactId: string | null;
   readonly path: string | null;
   readonly projectId: string | null;
+  /** The conversation to select once the version's threads load. */
+  readonly threadId: string | null;
   readonly versionId: string | null;
   readonly view: "focus" | null;
 }
 
 /** The screen one application URL resolves to. */
 export type ReviewRoute =
-  | {readonly kind: "queue"}
+  | {readonly kind: "activity"; readonly filters: ActivityFilters}
+  | {readonly kind: "projects"; readonly projectId: string | null}
   | {readonly kind: "settings"; readonly settings: SettingsRoute}
   | {readonly kind: "workspace"; readonly location: ReviewLocation}
   | {readonly kind: "library"; readonly projectId: string | null};
@@ -74,6 +79,56 @@ export function parseSettingsRoute(pathname: string): SettingsRoute {
 }
 
 const libraryPathname = "/review/library";
+/**
+ * The Activity feed's filters, all carried in the bare /review URL.
+ * The project filter uses `projects=`, never `project=`: a `/review?project=` URL is the workspace.
+ */
+export interface ActivityFilters {
+  readonly projects: readonly string[];
+  readonly q: string;
+  readonly segment: ActivitySegment;
+  readonly types: readonly ActivityType[];
+}
+
+export const emptyActivityFilters: ActivityFilters = {projects: [], q: "", segment: "all", types: []};
+
+const activitySegments: readonly ActivitySegment[] = ["all", "needs_you", "with_agent"];
+const activityTypes: readonly ActivityType[] = ["comments", "versions", "agents", "access", "admin"];
+/** The server's own search limit; a longer value would only be refused. */
+const activitySearchLimit = 100;
+const projectsPathname = "/review/projects";
+
+/** Read the feed filters from a query string, dropping values the server does not accept. */
+export function readActivityFilters(search: URLSearchParams): ActivityFilters {
+  const segment = search.get("segment");
+  const types = [...new Set(search.getAll("type"))].flatMap((type) => {
+    const known = activityTypes.find((candidate) => candidate === type);
+    return known === undefined ? [] : [known];
+  });
+  return {
+    projects: [...new Set(search.getAll("projects").filter((id) => id !== ""))],
+    q: (search.get("q") ?? "").trim().slice(0, activitySearchLimit),
+    segment: activitySegments.find((candidate) => candidate === segment) ?? "all",
+    types,
+  };
+}
+
+/** The Activity feed's canonical URL: bare /review, with only the filters that narrow it. */
+export function activityHref(filters: ActivityFilters = emptyActivityFilters): string {
+  const search = new URLSearchParams();
+  if (filters.segment !== "all") search.set("segment", filters.segment);
+  for (const project of filters.projects) search.append("projects", project);
+  for (const type of filters.types) search.append("type", type);
+  if (filters.q !== "") search.set("q", filters.q);
+  return search.size === 0 ? "/review" : `/review?${search}`;
+}
+
+/** The Projects screen, optionally with one project selected. */
+export function projectsHref(projectId: string | null): string {
+  return projectId === null || projectId === ""
+    ? projectsPathname
+    : `${projectsPathname}?${new URLSearchParams({project: projectId})}`;
+}
 
 /** The project design library: every gallery in one project, following current versions. */
 export function libraryHref(projectId: string | null): string {
@@ -82,10 +137,14 @@ export function libraryHref(projectId: string | null): string {
     : `${libraryPathname}?${new URLSearchParams({project: projectId})}`;
 }
 
-/** Resolve one application URL to its screen. Bare `/review` is the review queue. */
+/** Resolve one application URL to its screen. Bare `/review` is the Activity feed. */
 export function parseReviewRoute(url: URL): ReviewRoute {
   if (isSettingsPath(url.pathname)) {
     return {kind: "settings", settings: parseSettingsRoute(url.pathname)};
+  }
+  if (url.pathname === projectsPathname || url.pathname === `${projectsPathname}/`) {
+    const projectId = url.searchParams.get("project");
+    return {kind: "projects", projectId: projectId === null || projectId === "" ? null : projectId};
   }
   if (url.pathname === libraryPathname || url.pathname === `${libraryPathname}/`) {
     const projectId = url.searchParams.get("project");
@@ -93,7 +152,7 @@ export function parseReviewRoute(url: URL): ReviewRoute {
   }
   const location = readReviewLocation(url.searchParams);
   return location.projectId === null && location.artifactId === null
-    ? {kind: "queue"}
+    ? {kind: "activity", filters: readActivityFilters(url.searchParams)}
     : {kind: "workspace", location};
 }
 
@@ -103,14 +162,10 @@ export function readReviewLocation(search: URLSearchParams): ReviewLocation {
     artifactId: search.get("artifact"),
     path: search.get("path"),
     projectId: search.get("project"),
+    threadId: search.get("thread"),
     versionId: search.get("version"),
     view: search.get("view") === "focus" ? "focus" : null,
   };
-}
-
-/** The review queue's canonical URL. */
-export function reviewQueueHref(): string {
-  return "/review";
 }
 
 /** Build the canonical review URL for one location, in project, artifact, version, path, view order. */
@@ -122,8 +177,9 @@ export function workspaceHref(location: ReviewLocation): string {
   if (location.artifactId !== null) search.set("artifact", location.artifactId);
   if (location.versionId !== null) search.set("version", location.versionId);
   if (location.path !== null) search.set("path", location.path);
+  if (location.threadId !== null) search.set("thread", location.threadId);
   if (location.view !== null) search.set("view", location.view);
-  return search.size === 0 ? reviewQueueHref() : `/review?${search}`;
+  return search.size === 0 ? activityHref() : `/review?${search}`;
 }
 
 /** The URL that opens one project's workspace on its first artifact. */
@@ -132,17 +188,18 @@ export function projectWorkspaceHref(projectId: string): string {
     artifactId: null,
     path: null,
     projectId,
+    threadId: null,
     versionId: null,
     view: null,
   });
 }
 
-/** The stored review URL when it names a review workspace, otherwise the queue. */
+/** The stored review URL when it names a review workspace, otherwise Activity. */
 export function reviewReturnHref(stored: string | null): string {
   if (stored !== null && (stored === "/review" || stored.startsWith("/review?"))) {
     return stored;
   }
-  return reviewQueueHref();
+  return activityHref();
 }
 
 /** Rewrite the review URL in place and tell the shell the location changed. */

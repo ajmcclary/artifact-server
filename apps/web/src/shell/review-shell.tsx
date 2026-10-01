@@ -13,7 +13,7 @@ import {
 import {
   inAppLinkTarget,
   navigateReview,
-  projectWorkspaceHref,
+  projectsHref,
   REVIEW_RETURN_URL_KEY,
   reviewReturnHref,
   type ReviewRoute,
@@ -81,16 +81,17 @@ function ReviewShellFrame({
 
   const mode = route.kind === "settings" ? "admin" : "review";
   const navInput: ShellNavInput = {
+    activityActive: route.kind === "activity",
     activeProjectId: route.kind === "workspace"
       ? route.location.projectId
-      : route.kind === "library" ? route.projectId : null,
+      : route.kind === "library" || route.kind === "projects" ? route.projectId : null,
     activeSettings: route.kind === "settings" ? route.settings.kind : null,
     canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
     libraryActive: route.kind === "library",
     mode,
     projects,
-    queueActive: route.kind === "queue",
+    projectsActive: route.kind === "projects",
     returnHref: reviewReturnHref(readStored("session", REVIEW_RETURN_URL_KEY)),
   };
   const items = shellNavItems(navInput);
@@ -212,7 +213,7 @@ function ReviewShellFrame({
           onCreate={onCreateProject}
           onCreated={(project) => {
             setCreateOpen(false);
-            navigateReview(projectWorkspaceHref(project.id));
+            navigateReview(projectsHref(project.id));
           }}
           open={createOpen}
         />
@@ -279,7 +280,7 @@ const settingsTitles = {
   members: "Members",
   notFound: "Page not found",
   project: "Project settings",
-  projects: "Review queue",
+  projects: "Projects",
   publicLinks: "Public links",
   webmcp: "MCP & WebMCP",
 } as const;
@@ -287,7 +288,11 @@ const settingsTitles = {
 function routeTitle(route: ReviewRoute, projects: readonly Project[]): string {
   const projectName = (projectId: string | null): string | null =>
     projects.find((project) => project.id === projectId)?.name ?? null;
-  if (route.kind === "queue") return "Review queue";
+  if (route.kind === "activity") return "Activity";
+  if (route.kind === "projects") {
+    const name = projectName(route.projectId);
+    return name === null ? "Projects" : `Projects · ${name}`;
+  }
   if (route.kind === "settings") return settingsTitles[route.settings.kind];
   if (route.kind === "library") {
     const name = projectName(route.projectId);

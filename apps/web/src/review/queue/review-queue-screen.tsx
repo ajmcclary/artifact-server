@@ -93,6 +93,7 @@ function openEntry(entry: QueueEntry, event: SyntheticEvent): void {
     artifactId: entry.artifact.artifact.id,
     path: null,
     projectId: entry.project.id,
+    threadId: null,
     versionId: null,
     view: null,
   });

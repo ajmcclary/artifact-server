@@ -102,6 +102,7 @@ export function useDesignGalleryCanvas({
             artifactId,
             path,
             projectId,
+            threadId: null,
             versionId,
             view: focusMode ? "focus" : null,
           })}

@@ -220,6 +220,7 @@ export function ReviewCommandPalette({
       artifactId: hit.artifact.id,
       path: null,
       projectId: hit.project.id,
+      threadId: null,
       versionId: null,
       view: null,
     }), `${hit.artifact.name} opened.`),

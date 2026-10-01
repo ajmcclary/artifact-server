@@ -19,7 +19,7 @@ import {
   SurfaceState,
 } from "@/arkcase";
 import {accessSettingLabel, errorMessage, formatBytes, formatTimestamp} from "@/lib/presentation";
-import {navigateReview, reviewQueueHref} from "../review-routes.ts";
+import {navigateReview, activityHref} from "../review-routes.ts";
 import {
   AdminActions,
   AdminInset,
@@ -164,7 +164,7 @@ export function ProjectSettings({
           emptyIcon="bi-question-circle"
           emptyTitle="Project not found"
           noun="projects"
-          onAction={() => navigateReview(reviewQueueHref())}
+          onAction={() => navigateReview(activityHref())}
           phase="ready"
           titleLevel={3}
           variant="dashed"

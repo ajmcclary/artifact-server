@@ -22,6 +22,7 @@ import {
 } from "@/api/client";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
+import {canManageProjects} from "@/shell/nav-model";
 import {ReviewShell} from "@/shell/review-shell";
 import {dismissInnermost, SurfaceState} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
@@ -71,6 +72,7 @@ import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {writeStored} from "@/lib/safe-storage";
+import {ProjectSettings} from "./settings/project-settings.tsx";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -318,8 +320,15 @@ export function ReviewApp() {
           route={route.settings}
           session={session}
         />
-      ) : route.kind === "queue" ? (
+      ) : route.kind === "activity" ? (
         <ReviewQueueScreen projects={projects} />
+      ) : route.kind === "projects" ? (
+        <InterimProjectsScreen
+          onProjectsChanged={loadProjects}
+          projectId={route.projectId}
+          projects={projects}
+          session={session}
+        />
       ) : route.kind === "library" ? (
         <DesignLibraryScreen projectId={route.projectId} projects={projects} />
       ) : (
@@ -537,6 +546,7 @@ function ProjectReview({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
+      threadId: null,
       versionId: selectedVersionId,
       view: focusMode ? "focus" : null,
     });
@@ -638,6 +648,7 @@ function ProjectReview({
       artifactId: selectedArtifactId,
       path,
       projectId,
+      threadId: null,
       versionId: selectedVersionId,
       view: focusMode ? "focus" : null,
     }), "push");
@@ -757,6 +768,7 @@ function ProjectReview({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
+      threadId: null,
       versionId: selectedVersionId,
       view: "focus",
     }), "push");
@@ -769,6 +781,7 @@ function ProjectReview({
       artifactId: selectedArtifactId,
       path: selectedPath,
       projectId,
+      threadId: null,
       versionId: selectedVersionId,
       view: null,
     }), "push");
@@ -1308,4 +1321,28 @@ function reviewPreviewKind(
     return "media";
   }
   return "other";
+}
+
+/** Slice 5's Projects route: the selected (else first active) project's settings; slice 6 docks the list beside it. */
+function InterimProjectsScreen({onProjectsChanged, projectId, projects, session}: {
+  readonly onProjectsChanged: () => Promise<readonly Project[]>;
+  readonly projectId: string | null;
+  readonly projects: readonly Project[];
+  readonly session: Session;
+}) {
+  const selected = projectId ?? projects.find((project) => project.archivedAt === null)?.id ?? projects[0]?.id ?? null;
+  if (selected === null) {
+    return <SurfaceState count={0} emptyBody="Create a project to publish into." emptyIcon="bi-folder2-open"
+      emptyTitle="No projects yet" noun="projects" phase="ready" titleLevel={1} />;
+  }
+  return (
+    <ProjectSettings
+      canManage={canManageProjects(session.principal)}
+      gitHistory={session.capabilities.gitHistory}
+      key={selected}
+      onProjectsChanged={onProjectsChanged}
+      projectId={selected}
+      projects={projects}
+    />
+  );
 }

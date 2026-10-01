@@ -1,5 +1,5 @@
 import type {Principal} from "@/api/client";
-import {reviewQueueHref, type ReviewRoute, type SettingsRoute} from "../review-routes.ts";
+import {projectsHref, type ReviewRoute, type SettingsRoute} from "../review-routes.ts";
 
 /** What the signed-in principal may administer. */
 export interface SettingsAccess {
@@ -35,10 +35,14 @@ export function settingsAccess(principal: Principal): SettingsAccess {
   };
 }
 
-/** Old bookmarks of the retired projects list land on the review queue with a replaced history entry. */
+/** Old project settings bookmarks land on the Projects screen with a replaced history entry. */
 export function canonicalReviewRoute(route: ReviewRoute): CanonicalReviewRoute {
   if (route.kind === "settings" && route.settings.kind === "projects") {
-    return {replaceWith: reviewQueueHref(), route: {kind: "queue"}};
+    return {replaceWith: projectsHref(null), route: {kind: "projects", projectId: null}};
+  }
+  if (route.kind === "settings" && route.settings.kind === "project") {
+    const projectId = route.settings.projectId;
+    return {replaceWith: projectsHref(projectId), route: {kind: "projects", projectId}};
   }
   return {replaceWith: null, route};
 }
@@ -47,7 +51,7 @@ export function canonicalReviewRoute(route: ReviewRoute): CanonicalReviewRoute {
 export function resolveSettingsView(route: SettingsRoute, access: SettingsAccess): SettingsView {
   switch (route.kind) {
     case "projects":
-      return {href: reviewQueueHref(), kind: "redirect"};
+      return {href: projectsHref(null), kind: "redirect"};
     case "notFound":
       return {kind: "notFound"};
     case "project":
