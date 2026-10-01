@@ -1346,9 +1346,11 @@ function InterimProjectsScreen({onProjectsChanged, projectId, projects, session}
   }
   return (
     <ProjectSettings
+      artifactCount={null}
       canManage={canManageProjects(session.principal)}
       gitHistory={session.capabilities.gitHistory}
       key={selected}
+      principalId={session.principal.id}
       onProjectsChanged={onProjectsChanged}
       projectId={selected}
       projects={projects}

@@ -1377,7 +1377,7 @@ test.describe("Artifact Server frontend MVP", () => {
       // A project's settings address now opens it on the Projects screen.
       await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
       const compactSettingsActions = [
-        fixture.page.getByRole("link", {name: "Open artifacts"}),
+        fixture.page.getByRole("link", {name: "Open latest artifact"}),
         fixture.page.getByRole("button", {name: "Save name"}),
         fixture.page.getByRole("button", {name: "Archive project"}),
       ];

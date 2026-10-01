@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useState, type ReactNode} from "react";
 
 import {
   api,
@@ -19,7 +19,8 @@ import {
   SurfaceState,
 } from "@/arkcase";
 import {accessSettingLabel, errorMessage, formatBytes, formatTimestamp} from "@/lib/presentation";
-import {navigateReview, activityHref} from "../review-routes.ts";
+import {ActivityFeedSection} from "../activity/activity-feed-section.tsx";
+import {navigateReview, projectsHref} from "../review-routes.ts";
 import {
   AdminActions,
   AdminInset,
@@ -38,8 +39,14 @@ import {EmptyProjectState} from "./empty-project.tsx";
 type ProjectArtifact = ArtifactPage["artifacts"][number];
 
 export interface ProjectSettingsProps {
+  /** From the activity summary; null when unknown. */
+  readonly artifactCount: number | null;
   readonly canManage: boolean;
   readonly gitHistory: DeploymentCapabilities["gitHistory"];
+  /** Extra head actions, such as the phone "Projects" button. */
+  readonly headActions?: ReactNode;
+  /** The signed-in principal, for inline Reply drafts in the Activity section. */
+  readonly principalId: string;
   readonly onProjectsChanged: () => Promise<readonly Project[]>;
   readonly projectId: string;
   readonly projects: readonly Project[];
@@ -111,8 +118,11 @@ const projectArtifactColumns: readonly LedgerColumn<ProjectArtifact>[] = [
 
 /** Manage one project's identity, lifecycle, optional Git history, and see its artifacts. */
 export function ProjectSettings({
+  artifactCount,
   canManage,
   gitHistory,
+  headActions,
+  principalId,
   onProjectsChanged,
   projectId,
   projects,
@@ -155,16 +165,16 @@ export function ProjectSettings({
 
   if (project === null) {
     return (
-      <PageScaffold title="Project settings">
+      <PageScaffold head="scroll" maxWidth="none" title="Project not found">
         <SurfaceState
           actionIcon="bi-arrow-left"
-          actionLabel="Open Activity"
+          actionLabel="Open projects"
           count={0}
-          emptyBody="The project named by this settings URL is unavailable."
+          emptyBody="No project in this installation has this ID."
           emptyIcon="bi-question-circle"
           emptyTitle="Project not found"
           noun="projects"
-          onAction={() => navigateReview(activityHref())}
+          onAction={() => navigateReview(projectsHref(null))}
           phase="ready"
           titleLevel={3}
           variant="dashed"
@@ -231,16 +241,23 @@ export function ProjectSettings({
   return (
     <PageScaffold
       actions={(
-        <Button
-          href={`/review?project=${encodeURIComponent(project.id)}`}
-          icon="bi-box-arrow-up-right"
-          outline
-          size="sm"
-          variant="secondary"
-        >
-          Open artifacts
-        </Button>
+        <>
+          {headActions}
+          {artifactCount === 0 ? null : (
+            <Button
+              href={`/review?project=${encodeURIComponent(project.id)}`}
+              icon="bi-box-arrow-up-right"
+              outline
+              size="sm"
+              variant="secondary"
+            >
+              Open latest artifact
+            </Button>
+          )}
+        </>
       )}
+      head="scroll"
+      maxWidth="none"
       meta={archived
         ? "This project is archived. Existing artifacts and immutable versions remain readable."
         : "Manage this project's name, lifecycle, and optional history."}
@@ -346,6 +363,10 @@ export function ProjectSettings({
 
       <AdminPanel label="Artifacts in this project" padded={false} subtitle={artifactCountLabel(artifacts)}>
         <ProjectArtifactsBody artifacts={artifacts} project={project} />
+      </AdminPanel>
+
+      <AdminPanel label="Activity" padded={false} subtitle="newest first">
+        <ActivityFeedSection principalId={principalId} projectId={project.id} />
       </AdminPanel>
 
       <Modal

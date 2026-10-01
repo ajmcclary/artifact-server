@@ -27,7 +27,7 @@ export function EmptyProjectState({project}: EmptyProjectStateProps) {
     <AdminStack>
       <SurfaceState
         count={0}
-        emptyBody="Publish from the CLI to populate this project."
+        emptyBody="Publish a file or folder to create version 1."
         emptyIcon="bi-collection"
         emptyTitle="Nothing is published here yet"
         noun="artifacts"
