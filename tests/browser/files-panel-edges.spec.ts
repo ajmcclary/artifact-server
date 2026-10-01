@@ -48,6 +48,14 @@ test("Files panel: every icon shares one edge, folder files sit under the folder
     const folderButton = inventory.getByRole("button", {name: /^assets\//u});
     const folderFiles = inventory.getByRole("list", {name: "Files in assets"});
     await expect(folderFiles).toBeVisible();
+    // The inspector settles its width after opening; measure only once it stops moving.
+    let previous = Number.NaN;
+    await expect.poll(async () => {
+      const left = (await box(inventory)).left;
+      const settled = left === previous;
+      previous = left;
+      return settled;
+    }, {intervals: [100]}).toBe(true);
 
     const panel = await box(inventory);
     const topIcon = await box(topLevel.getByRole("listitem").first().locator("i.bi"));
