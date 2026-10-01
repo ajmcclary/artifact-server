@@ -39,6 +39,7 @@ const reviewInput: ShellNavInput = {
   canCreateProjects: true,
   isAdministrator: true,
   libraryActive: false,
+  needsYou: null,
   projects: [
     project("prj_old", "Zeta", "2026-09-02T00:00:00.000Z"),
     project("prj_default", "Default"),
@@ -124,5 +125,14 @@ describe("settings routes keep the review navigation", () => {
     const member = {...reviewInput, activeSettings: "mcp" as const, canCreateProjects: false, isAdministrator: false};
     expect(shellNavItems(member).at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
     expect(shellActiveLink(member)).toBe("/review/settings/mcp");
+  });
+});
+
+describe("Activity's Needs-you badge", () => {
+  it("ACT-005: counts waiting conversations on the Activity row, and shows nothing when none wait or the count is unknown", () => {
+    const activity = (needsYou: number | null) => shellNavItems({...reviewInput, needsYou}).find((item) => item.id === "activity");
+    expect(activity(3)?.count).toBe(3);
+    expect(activity(0)).not.toHaveProperty("count");
+    expect(activity(null)).not.toHaveProperty("count");
   });
 });

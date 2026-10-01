@@ -18,6 +18,8 @@ export interface ShellNavInput {
   readonly isAdministrator: boolean;
   /** The design library is open. */
   readonly libraryActive: boolean;
+  /** Conversations waiting on a person, from the activity summary; null while unknown or failed. */
+  readonly needsYou: number | null;
   readonly projects: readonly Project[];
   readonly activityActive: boolean;
   readonly projectsActive: boolean;
@@ -67,9 +69,16 @@ function isDirectHuman(principal: Principal): boolean {
   return principal.kind === "human" && principal.authorizedByPrincipalId === null;
 }
 
+/** Activity's row, with the Needs-you count only when something waits. */
+function activityItem(needsYou: number | null): NavItem {
+  const item: NavItem = {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: activityHref()};
+  if (needsYou !== null && needsYou > 0) item.count = needsYou;
+  return item;
+}
+
 function reviewItems(input: ShellNavInput): NavItem[] {
   const items: NavItem[] = [
-    {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: activityHref()},
+    activityItem(input.needsYou),
     {icon: "bi-folder2-open", id: "projects", label: "Projects", link: projectsHref(null)},
     {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref()},
   ];

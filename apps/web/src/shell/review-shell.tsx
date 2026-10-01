@@ -32,6 +32,8 @@ import {
   shellNavItems,
   type ShellNavInput,
 } from "./nav-model.ts";
+import {useActivitySummary} from "@/review/activity/use-activity-summary";
+
 import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, navigationWidth, reviewPanelStore} from "./shell-layout.ts";
 import {NAV_BOOT_WIDTH_KEY} from "./shell-layout-keys.ts";
 import {ShellLayoutProvider, ShellNavigationProvider, useShellLayoutState} from "./shell-layout-context.tsx";
@@ -51,6 +53,9 @@ interface ReviewShellProps {
 }
 
 /** Every signed-in screen's frame: navigation rail or drawer, main landmark, live regions. */
+/** Every project: the badge counts across the installation. */
+const noProjects: readonly string[] = [];
+
 export function ReviewShell(props: ReviewShellProps) {
   return (
     <ShellLayoutProvider>
@@ -77,6 +82,16 @@ function ReviewShellFrame({
   const [navWidth, setNavWidth] = useState<number | null>(() => reviewPanelStore.width(NAV_PANEL_ID) ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  // The Needs-you badge re-reads on focus and whenever the screen changes; a failed read hides it.
+  const summary = useActivitySummary(noProjects);
+  const reloadSummary = summary.reload;
+  const summaryRouteKind = useRef(route.kind);
+  useEffect(() => {
+    // The hook reads once on mount; re-read only when the screen actually changes.
+    if (summaryRouteKind.current === route.kind) return;
+    summaryRouteKind.current = route.kind;
+    reloadSummary();
+  }, [reloadSummary, route.kind]);
 
   const navInput: ShellNavInput = {
     activityActive: route.kind === "activity",
@@ -87,6 +102,7 @@ function ReviewShellFrame({
     canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
     libraryActive: route.kind === "library",
+    needsYou: summary.phase === "ready" && summary.summary !== null ? summary.summary.needsYou : null,
     projects,
     projectsActive: route.kind === "projects",
   };

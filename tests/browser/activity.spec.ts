@@ -101,6 +101,8 @@ test.describe("Activity", () => {
       await localLogin(fixture);
       const page = fixture.page;
       await page.goto(`${fixture.server.baseUrl}/review`);
+      // The Activity row carries the Needs-you count.
+      await expect(page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: /^Activity/u})).toContainText("1");
       await page.getByRole("button", {name: "Publish artifact"}).click();
       await expect(page.getByRole("dialog", {name: "Publish artifact"}).getByText("artifactserver publish ./dist")).toBeVisible();
       await page.keyboard.press("Escape");
@@ -146,6 +148,8 @@ test.describe("Activity", () => {
       await page.route(/\/api\/v1\/activity\?/u, (route) => route.fulfill(fail));
       await page.goto(`${fixture.server.baseUrl}/review`);
       await expect(page.getByText("Activity could not load")).toBeVisible();
+      // A failed summary hides the Needs-you badge rather than showing a guess.
+      await expect(page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: /^Activity/u})).not.toContainText(/\d/u);
       await page.unroute(/\/api\/v1\/activity\?/u);
       await page.getByRole("button", {name: "Retry"}).click();
       await expect(page.getByText(/published v1 of Activity retry fixture/u)).toBeVisible();
