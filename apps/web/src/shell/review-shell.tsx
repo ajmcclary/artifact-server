@@ -3,6 +3,7 @@ import {type CSSProperties, type ReactNode, useEffect, useRef, useState} from "r
 import type {Project, Session} from "@/api/client";
 import {
   AppShell,
+  Button,
   IconButton,
   LeftNav,
   MobileNavDrawer,
@@ -121,15 +122,15 @@ function ReviewShellFrame({
     setNavPinned(next);
     reviewPanelStore.setPinned(NAV_PANEL_ID, next);
   };
-  const paletteButton = (tone: "ghost" | "navy"): ReactNode => (onOpenPalette === undefined ? null : (
-    <Tooltip fixed label="Search everything" placement={tone === "navy" ? "bottom" : "right"}>
+  const paletteButton = (): ReactNode => (onOpenPalette === undefined ? null : (
+    <Tooltip fixed label="Search everything" placement="right">
       <IconButton
         ariaLabel="Search everything"
         icon="bi-search"
         keyshortcuts="Meta+K Control+K /"
         onClick={onOpenPalette}
         size="sm"
-        variant={tone}
+        variant="ghost"
       />
     </Tooltip>
   ));
@@ -139,16 +140,11 @@ function ReviewShellFrame({
     <LeftNav
       account={<AccountMenu mode={mode} rail={false} session={session} />}
       activeLink={activeLink}
-      brand={(
-        <>
-          <ArtifactServerBrand showProduct={false} />
-          <span style={{flex: "1 1 auto"}} />
-          {paletteButton("navy")}
-        </>
-      )}
+      brand={<ArtifactServerBrand showProduct={false} />}
       brandRail={<ArtifactServerBrand compact />}
       currentLabel="Current"
       footerRail={<AccountMenu mode={mode} rail session={session} />}
+      header={false}
       items={items}
       mode={expanded ? "expanded" : "rail"}
       maxWidth={navigationWidth.maximum}
@@ -161,7 +157,22 @@ function ReviewShellFrame({
         reviewPanelStore.setWidth(NAV_PANEL_ID, width);
       }}
       pinned={expanded}
-      searchRail={paletteButton("ghost")}
+      search={onOpenPalette === undefined ? undefined : (
+        <Button
+          aria-keyshortcuts="Meta+K Control+K /"
+          aria-label="Search everything"
+          block
+          icon="bi-search"
+          onClick={onOpenPalette}
+          outline
+          size="sm"
+          style={{background: "var(--surface-card, #fff)", color: "var(--text-secondary, #5a6268)", fontWeight: 400, justifyContent: "flex-start"}}
+          variant="secondary"
+        >
+          Quick Search
+        </Button>
+      )}
+      searchRail={paletteButton()}
       resizable={expanded}
       style={{width: expanded ? expandedWidth : "var(--navigator-rail-width, 52px)"}}
       title={navTitle}

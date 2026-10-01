@@ -66,6 +66,15 @@ test.describe("Shell navigation", () => {
       await localLogin(fixture);
       const page = fixture.page;
       const nav = page.getByRole("navigation", {name: "Review and projects"});
+      // Quick Search sits under the lock-up when the menu is pinned open; the rail keeps its icon.
+      await page.getByRole("button", {name: "Pin the menu"}).click();
+      const quickSearch = page.getByRole("button", {name: "Search everything"}).filter({hasText: "Quick Search"});
+      await expect(quickSearch).toBeVisible();
+      await expect(quickSearch).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K /");
+      await quickSearch.click();
+      await expect(page.getByRole("combobox", {name: "Search"})).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", {name: "Unpin the menu"}).click();
       await expect(artifactTitle(page)).toHaveText("Navigation home fixture");
       await markDocument(page);
 
