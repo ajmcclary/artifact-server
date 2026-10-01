@@ -1160,11 +1160,15 @@ requirements:
       behavior: {id: ACT-003-B, description: "Publish, comment, reply, dispatch, and admit through HTTP; read the feed newest first with actor names; observe one entry per thread carrying its newest two replies; filter by type, project, segment, and literal search; walk every page without gaps or duplicates on SQLite, Postgres, and D1; parse every response with the web client's schemas."}
       failure: {id: ACT-003-F, description: "Malformed or extended cursors, out-of-range limits, overlong searches, unknown types or segments, path-shaped or excessive project filters fail with INVALID_INPUT; forged well-formed cursors cannot inject SQL; unknown and other-installation projects return nothing; a thread replied to across a page boundary appears once; hostile comment text stays byte-exact; a demoted administrator loses member and key events on the next request; anonymous and capability-less callers are refused."}
     deployments: *all
-    status: specified
-    proof_gap: The SQLite feed tests are being written; Postgres and D1 parity, the summary endpoint, and evidence are not attached.
+    status: behavior_verified
+    proof_gap: Local SQLite HTTP evidence, Postgres integration, and D1 repository evidence prove the read model. No team deployment or Cloudflare runtime evidence is recorded.
     depends_on: [ACT-001, AUD-001, PRJ-002, CMT-011]
-    evidence: []
-
+    evidence:
+      - deployment: local
+        tests: [ACT-003-B, ACT-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T16:27:44.652Z"
   - id: ACT-004
     kind: behavior
     behavior: The activity summary counts conversations that need a person and those with an agent per open thread, open conversations, artifacts in review, and each project's artifacts, open conversations, and latest activity.
@@ -1174,10 +1178,15 @@ requirements:
       behavior: {id: ACT-004-B, description: "Open, dispatch, and resolve threads across two artifacts and read summary totals and per-project counts that equal the feed's segment entry counts."}
       failure: {id: ACT-004-F, description: "Resolved threads, threads on deleted artifacts, deleted threads, and threads whose dispatch was canceled are never counted as with an agent; unknown project filters return zero counts and no projects."}
     deployments: *all
-    status: specified
-    proof_gap: The SQLite summary tests are being written; Postgres and D1 parity and evidence are not attached.
-    depends_on: [ACT-003]
-    evidence: []
+    status: behavior_verified
+    proof_gap: Local SQLite HTTP evidence plus Postgres and D1 repository evidence. No team deployment evidence is recorded.
+    depends_on: [ACT-003, DSP-010]
+    evidence:
+      - deployment: local
+        tests: [ACT-004-B, ACT-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T16:27:44.652Z"
   - id: CNT-001
     kind: behavior
     behavior: HTML and complete client-side directories open in the browser without rebuilding their files.
