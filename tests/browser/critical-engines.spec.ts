@@ -231,8 +231,8 @@ test.describe("critical engine review paths @critical", () => {
         target: {kind: "new_artifact", accessSetting: "account_required", name: "Claims Workspace", tags: []},
       }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
       await localLogin(fixture);
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/library?project=prj_default`);
-      const card = fixture.page.getByRole("region", {name: "Default design library gallery"})
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
+      const card = fixture.page.getByRole("region", {name: "Design library gallery"})
         .getByRole("link", {name: "Open Primary button · Component · Claims Workspace · Actions"});
       await card.click();
       const exact = new URL(fixture.page.url());

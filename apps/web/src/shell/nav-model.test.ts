@@ -55,7 +55,7 @@ describe("shellNavItems in review mode", () => {
     expect(shellNavItems(reviewInput)).toEqual([
       {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: "/review"},
       {icon: "bi-folder2-open", id: "projects", label: "Projects", link: "/review/projects"},
-      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library?project=prj_b"},
+      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library"},
       {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review/projects?project=prj_b"},
       {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review/projects?project=prj_default"},
       {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review/projects?project=prj_old"},
@@ -109,16 +109,17 @@ describe("shellNavItems in administration mode", () => {
 });
 
 describe("shellActiveLink", () => {
-  it("marks the queue, the active project, or the active administration screen", () => {
+  it("marks Activity, the active project, the library, or the active administration screen", () => {
     expect(shellActiveLink({...reviewInput, activityActive: true})).toBe("/review");
     expect(shellActiveLink({...reviewInput, projectsActive: true})).toBe("/review/projects");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", projectsActive: true}))
       .toBe("/review/projects?project=prj_default");
-    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library?project=prj_default");
+    expect(shellActiveLink({...reviewInput, libraryActive: true})).toBe("/review/library");
+    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default"}))
       .toBe("/review/projects?project=prj_default");
     expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
-      .toBe("/review/library?project=prj_default");
+      .toBe("/review/library");
     expect(shellActiveLink(reviewInput)).toBe("");
     expect(shellActiveLink({...reviewInput, activeSettings: "apiKeys", mode: "admin"}))
       .toBe("/review/settings/api-keys");

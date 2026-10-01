@@ -85,7 +85,7 @@ test.describe("Shell navigation", () => {
       await expectSameDocument(page);
 
       await nav.getByRole("link", {name: "Design library"}).click();
-      await expect(page).toHaveURL(new RegExp(`/review/library\\?project=${secondProjectId}`, "u"));
+      await expect(page).toHaveURL(/\/review\/library$/u);
       await expectSameDocument(page);
 
       // A modified click still opens the screen in a new tab and leaves this one in place.

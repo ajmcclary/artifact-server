@@ -30,12 +30,11 @@ function routeOf(href: string) {
 }
 
 describe("design library route", () => {
-  it("round-trips the project the library shows and tolerates a missing one", () => {
-    expect(libraryHref("prj_a b")).toBe("/review/library?project=prj_a+b");
-    expect(routeOf(libraryHref("prj_a b"))).toEqual({kind: "library", projectId: "prj_a b"});
-    expect(routeOf("/review/library")).toEqual({kind: "library", projectId: null});
-    expect(routeOf("/review/library/?project=")).toEqual({kind: "library", projectId: null});
-    expect(libraryHref(null)).toBe("/review/library");
+  it("DSN-005: one library spans every project, and pre-rollup project links still load it", () => {
+    expect(libraryHref()).toBe("/review/library");
+    expect(routeOf("/review/library")).toEqual({kind: "library"});
+    expect(routeOf("/review/library/?project=")).toEqual({kind: "library"});
+    expect(routeOf("/review/library?project=prj_default")).toEqual({kind: "library"});
   });
 });
 

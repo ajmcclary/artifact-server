@@ -8,6 +8,8 @@ export interface LibrarySource {
   readonly artifactName: string;
   readonly indexTitle: string;
   readonly items: readonly GalleryIndexItem[];
+  readonly projectId: string;
+  readonly projectName: string;
   readonly versionId: string;
 }
 

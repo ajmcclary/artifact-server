@@ -119,7 +119,7 @@ test.describe("Screen continuity", () => {
       await page.getByRole("button", {name: "Open menu"}).click();
       const drawer = page.getByRole("dialog", {name: "Review and projects"});
       await drawer.getByRole("link", {name: "Design library"}).click();
-      await expect(page).toHaveURL(/\/review\/library\?project=prj_default/u);
+      await expect(page).toHaveURL(/\/review\/library$/u);
       await expect(drawer).toHaveCount(0);
       await page.getByRole("button", {name: "Open menu"}).click();
       await drawer.getByRole("link", {exact: true, name: "Activity"}).click();

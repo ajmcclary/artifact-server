@@ -28,7 +28,7 @@ export type ReviewRoute =
   | {readonly kind: "projects"; readonly projectId: string | null}
   | {readonly kind: "settings"; readonly settings: SettingsRoute}
   | {readonly kind: "workspace"; readonly location: ReviewLocation}
-  | {readonly kind: "library"; readonly projectId: string | null};
+  | {readonly kind: "library"};
 
 /** Session-storage key holding the last review workspace URL that "Back to review" returns to. */
 export const REVIEW_RETURN_URL_KEY = "artifact-review-return-url";
@@ -130,11 +130,9 @@ export function projectsHref(projectId: string | null): string {
     : `${projectsPathname}?${new URLSearchParams({project: projectId})}`;
 }
 
-/** The project design library: every gallery in one project, following current versions. */
-export function libraryHref(projectId: string | null): string {
-  return projectId === null || projectId === ""
-    ? libraryPathname
-    : `${libraryPathname}?${new URLSearchParams({project: projectId})}`;
+/** The design library: every gallery across all projects, following current versions. */
+export function libraryHref(): string {
+  return libraryPathname;
 }
 
 /** Resolve one application URL to its screen. Bare `/review` is the Activity feed. */
@@ -147,8 +145,8 @@ export function parseReviewRoute(url: URL): ReviewRoute {
     return {kind: "projects", projectId: projectId === null || projectId === "" ? null : projectId};
   }
   if (url.pathname === libraryPathname || url.pathname === `${libraryPathname}/`) {
-    const projectId = url.searchParams.get("project");
-    return {kind: "library", projectId: projectId === "" ? null : projectId};
+    // A pre-rollup `?project=` link still loads; the library always spans every project.
+    return {kind: "library"};
   }
   const location = readReviewLocation(url.searchParams);
   return location.projectId === null && location.artifactId === null

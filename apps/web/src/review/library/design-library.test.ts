@@ -16,10 +16,10 @@ const item = (path: string, overrides: Partial<LibrarySource["items"][number]> =
 const sources: LibrarySource[] = [
   {artifactId: "art_a", artifactName: "workers-compensation", indexTitle: "Workers' Compensation", items: [
     item("project/App.dc.html", {thumbnailPath: "preview-thumbnails/app.webp"}),
-  ], versionId: "ver_a2"},
+  ], projectId: "prj_comp", projectName: "Compensation", versionId: "ver_a2"},
   {artifactId: "art_b", artifactName: "Court of Claims", indexTitle: "Court of Claims", items: [
     item("project/App.dc.html", {related: [{path: "project/App.README.md", title: "App guide"}]}),
-  ], versionId: "ver_b1"},
+  ], projectId: "prj_claims", projectName: "Claims", versionId: "ver_b1"},
 ];
 
 describe("design library", () => {

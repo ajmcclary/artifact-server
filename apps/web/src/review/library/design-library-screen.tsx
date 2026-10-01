@@ -1,4 +1,4 @@
-import {useLayoutEffect, useState, type CSSProperties} from "react";
+import {useState, type CSSProperties} from "react";
 
 import {api, type Project} from "@/api/client";
 import {Alert, Button, SurfaceState} from "@/arkcase";
@@ -6,7 +6,7 @@ import {usTime} from "@/ui/activity-model";
 import {useAnnounce} from "@/ui/announcer";
 import {DesignGallery} from "@/ui/review-ui";
 
-import {libraryHref, navigateReview, workspaceHref, writeReviewHistory} from "../review-routes.ts";
+import {libraryHref, navigateReview, workspaceHref} from "../review-routes.ts";
 import {useViewportWidth} from "../workspace/use-viewport-size.ts";
 import {isPhoneWidth} from "../workspace/workspace-layout.ts";
 import {initialGalleryViewState, type GalleryViewState} from "../workspace/design-gallery.ts";
@@ -20,45 +20,18 @@ const metaStyle = {color: "var(--text-secondary)", fontSize: 12} satisfies CSSPr
 
 // Search, kind, layout, scroll and the tile left from survive the trip to a page and back.
 const viewStates = new Map<string, GalleryViewState>();
+const libraryViewKey = "all";
+const media = (source: LibrarySource, path: string) => api.versionMediaUrl(source.projectId, source.artifactId, source.versionId, path);
 
 /**
- * Every design gallery in one project, following each artifact's current version.
+ * Every design gallery across all projects, following each artifact's current version.
  * It is a moving view, not a frozen collection: tiles open the exact version that
  * was current when the library loaded, and Refresh re-reads current versions.
  */
-export function DesignLibraryScreen({
-  projectId,
-  projects,
-}: {
-  readonly projectId: string | null;
-  readonly projects: readonly Project[];
-}) {
-  const project = projects.find((candidate) => candidate.id === projectId)
-    ?? (projectId === null
-      ? projects.find((candidate) => candidate.archivedAt === null) ?? projects[0]
-      : undefined);
-  const resolvedId = project?.id ?? null;
-  useLayoutEffect(() => {
-    // Tell the shell too, so its navigation marks the project this library shows.
-    if (projectId === null && resolvedId !== null) writeReviewHistory(libraryHref(resolvedId), "replace");
-  }, [projectId, resolvedId]);
-
-  if (project === undefined) {
-    return (
-      <div style={stateStyle}>
-        <SurfaceState count={0} emptyBody="Choose a project you can open to see its design galleries."
-          emptyIcon="bi-question-circle" emptyTitle="Project unavailable" noun="projects" phase="ready" titleLevel={1} />
-      </div>
-    );
-  }
-  // Keyed by project: another project's galleries and refresh state never show here.
-  return <ProjectDesignLibrary key={project.id} project={project} />;
-}
-
-function ProjectDesignLibrary({project}: {readonly project: Project}) {
+export function DesignLibraryScreen({projects}: {readonly projects: readonly Project[]}) {
   const announce = useAnnounce();
   const phone = isPhoneWidth(useViewportWidth());
-  const {refresh, state} = useDesignLibrary(project.id);
+  const {refresh, state} = useDesignLibrary(projects);
   const [, setRevision] = useState(0);
 
   if (state.status === "loading") {
@@ -83,15 +56,15 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
       <div style={stateStyle}>
         <SurfaceState count={0} titleLevel={1} noun="galleries" phase="ready" emptyIcon="bi-collection"
           emptyTitle="No design galleries yet"
-          emptyBody={`None of the ${library.scanned} artifacts in ${project.name} has a design gallery. Publish a design export to add one.`}
+          emptyBody={`None of the ${library.scanned} artifacts has a design gallery. Publish a design export to add one.`}
           actionLabel="Refresh" actionIcon="bi-arrow-clockwise" onAction={refresh} />
       </div>
     );
   }
   const bySource = new Map(library.sources.map((source) => [source.artifactId, source]));
-  const view = viewStates.get(project.id) ?? initialGalleryViewState;
+  const view = viewStates.get(libraryViewKey) ?? initialGalleryViewState;
   const update = (patch: Partial<GalleryViewState>, render: boolean): void => {
-    viewStates.set(project.id, {...(viewStates.get(project.id) ?? initialGalleryViewState), ...patch});
+    viewStates.set(libraryViewKey, {...(viewStates.get(libraryViewKey) ?? initialGalleryViewState), ...patch});
     if (render) setRevision((revision) => revision + 1);
   };
   const exactHref = (id: string): string | null => {
@@ -99,17 +72,16 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
     const source = parsed === null ? undefined : bySource.get(parsed.artifactId);
     return parsed === null || source === undefined
       ? null
-      : workspaceHref({artifactId: source.artifactId, path: parsed.path, projectId: project.id, threadId: null, versionId: source.versionId, view: null});
+      : workspaceHref({artifactId: source.artifactId, path: parsed.path, projectId: source.projectId, threadId: null, versionId: source.versionId, view: null});
   };
-  const media = (source: LibrarySource, path: string) => api.versionMediaUrl(project.id, source.artifactId, source.versionId, path);
   return (
     <div style={screenStyle}>
       <DesignGallery
-        description={`Every design gallery in ${project.name}, following each artifact's current version.`}
+        description="Every design gallery across all projects, following each artifact’s current version."
         focusPath={view.focusPath}
-        hrefFor={(id) => exactHref(id) ?? libraryHref(project.id)}
+        hrefFor={(id) => exactHref(id) ?? libraryHref()}
         items={libraryItems(library.sources, media)}
-        key={`${project.id}:${library.loadedAt.getTime()}`}
+        key={`${libraryViewKey}:${library.loadedAt.getTime()}`}
         kind={view.kind}
         notice={(
           <>
@@ -147,7 +119,7 @@ function ProjectDesignLibrary({project}: {readonly project: Project}) {
         phone={phone}
         query={view.query}
         scrollTop={view.scrollTop}
-        title={`${project.name} design library`}
+        title="Design library"
         view={view.view}
       />
     </div>

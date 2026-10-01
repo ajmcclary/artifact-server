@@ -85,7 +85,7 @@ function ReviewShellFrame({
     activityActive: route.kind === "activity",
     activeProjectId: route.kind === "workspace"
       ? route.location.projectId
-      : route.kind === "library" || route.kind === "projects" ? route.projectId : null,
+      : route.kind === "projects" ? route.projectId : null,
     activeSettings: route.kind === "settings" ? route.settings.kind : null,
     canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
@@ -305,9 +305,6 @@ function routeTitle(route: ReviewRoute, projects: readonly Project[]): string {
     return name === null ? "Projects" : `Projects · ${name}`;
   }
   if (route.kind === "settings") return settingsTitles[route.settings.kind];
-  if (route.kind === "library") {
-    const name = projectName(route.projectId);
-    return name === null ? "Design library" : `Design library · ${name}`;
-  }
+  if (route.kind === "library") return "Design library";
   return projectName(route.location.projectId) ?? "Review";
 }

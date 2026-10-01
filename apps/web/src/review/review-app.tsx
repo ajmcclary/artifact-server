@@ -330,7 +330,7 @@ export function ReviewApp() {
           session={session}
         />
       ) : route.kind === "library" ? (
-        <DesignLibraryScreen projectId={route.projectId} projects={projects} />
+        <DesignLibraryScreen projects={projects} />
       ) : (
         <ArtifactReview projects={projects} session={session} />
       )}

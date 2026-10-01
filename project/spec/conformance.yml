@@ -1071,11 +1071,11 @@ requirements:
 
   - id: DSN-005
     kind: behavior
-    behavior: A project design library gathers every readable current-version gallery into one searchable moving view grouped by kind and gallery, opens each preview as an exact artifact, version and path, refreshes on request, and names galleries it cannot read.
+    behavior: The design library gathers every readable current-version gallery across all projects into one searchable moving view grouped by kind and gallery, opens each preview as an exact artifact, version and path, refreshes on request, and names galleries it cannot read.
     owner: web-application
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
-      behavior: {id: DSN-005-B, description: "Open the library from navigation; see galleries from several artifacts grouped per gallery with thumbnails; omit artifacts without galleries; search across galleries; open an exact page and return by history with search and focus restored; Refresh follows a newly current version; show an empty state for projects without galleries."}
+      behavior: {id: DSN-005-B, description: "Open the library from navigation; see galleries from several artifacts in several projects grouped per gallery with thumbnails; omit artifacts without galleries; search across galleries; open an exact page and return by history with search and focus restored; Refresh follows a newly current version; show an empty state when no artifact has a gallery; a pre-rollup project link still opens the library."}
       failure: {id: DSN-005-F, description: "Keep repeated paths distinct per artifact, reject item identities that do not name an artifact and a path, and name unreadable galleries instead of showing their items."}
     deployments: *all
     status: behavior_verified
@@ -1090,8 +1090,8 @@ requirements:
       - deployment: local
         tests: [DSN-005-B]
         result: pass
-        run: project/evidence/design-gallery-browser-2026-09-30.json
-        recorded_at: "2026-09-30T20:12:55Z"
+        run: project/evidence/browser.json
+        recorded_at: "2026-10-01T17:45:27.043Z"
 
   - id: AUD-001
     kind: security
@@ -3253,7 +3253,7 @@ requirements:
         tests: [NAV-001-B, NAV-001-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T17:29:56.201Z"
+        recorded_at: "2026-10-01T17:45:27.043Z"
 
   - id: ACT-005
     kind: behavior
@@ -3272,7 +3272,7 @@ requirements:
         tests: [ACT-005-B, ACT-005-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T17:29:56.201Z"
+        recorded_at: "2026-10-01T17:45:27.043Z"
 
   - id: ADM-007
     kind: behavior

@@ -19,7 +19,7 @@ export interface ShellNavInput {
   readonly activeSettings: SettingsRoute["kind"] | null;
   readonly canCreateProjects: boolean;
   readonly isAdministrator: boolean;
-  /** The design library is open (for `activeProjectId`, or the first active project). */
+  /** The design library is open. */
   readonly libraryActive: boolean;
   readonly mode: ShellMode;
   readonly projects: readonly Project[];
@@ -55,7 +55,7 @@ export function administrationHref(isAdministrator: boolean): string {
 export function shellNavItems(input: ShellNavInput): NavItem[] {
   return input.mode === "admin"
     ? administrationItems(input.isAdministrator, input.returnHref)
-    : reviewItems(input, libraryProjectId(input));
+    : reviewItems(input);
 }
 
 /** The `link` of the current row, or "" when no row is current. */
@@ -77,7 +77,7 @@ export function shellActiveLink(input: ShellNavInput): string {
     }
   }
   if (input.activityActive) return activityHref();
-  if (input.libraryActive) return libraryHref(libraryProjectId(input));
+  if (input.libraryActive) return libraryHref();
   if (input.projectsActive && input.activeProjectId === null) return projectsHref(null);
   return input.activeProjectId === null ? "" : projectsHref(input.activeProjectId);
 }
@@ -86,16 +86,11 @@ function isDirectHuman(principal: Principal): boolean {
   return principal.kind === "human" && principal.authorizedByPrincipalId === null;
 }
 
-/** The library follows the project in view, else the first active project. */
-function libraryProjectId(input: ShellNavInput): string | null {
-  return input.activeProjectId ?? orderedProjects(input.projects)[0]?.id ?? null;
-}
-
-function reviewItems(input: ShellNavInput, libraryProject: string | null): NavItem[] {
+function reviewItems(input: ShellNavInput): NavItem[] {
   const items: NavItem[] = [
     {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: activityHref()},
     {icon: "bi-folder2-open", id: "projects", label: "Projects", link: projectsHref(null)},
-    {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref(libraryProject)},
+    {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref()},
   ];
   const firstProjectIndex = items.length;
   for (const project of orderedProjects(input.projects)) {
