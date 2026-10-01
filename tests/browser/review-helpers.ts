@@ -88,7 +88,7 @@ export async function openInspectorTab(
 export async function openSettings(page: Page, section: SettingsSection): Promise<void> {
   const current = new URL(page.url());
   const pathname = section === "project"
-    ? `/review/settings/projects/${encodeURIComponent(current.searchParams.get("project") ?? "prj_default")}`
+    ? `/review/projects?project=${encodeURIComponent(current.searchParams.get("project") ?? "prj_default")}`
     : `/review/settings/${section}`;
   await page.goto(new URL(pathname, current.origin).toString());
 }

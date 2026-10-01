@@ -270,7 +270,7 @@ test.describe("CSP-clean administration", () => {
           await expect(dialog).toHaveCount(0);
         };
 
-        await visit("/review/settings/projects/prj_default");
+        await visit("/review/projects?project=prj_default");
         await expect(page.getByRole("region", {name: "Project identity"})).toBeVisible();
         await page.getByRole("button", {name: "Archive project"}).click();
         await cancelDialog("Archive project?");

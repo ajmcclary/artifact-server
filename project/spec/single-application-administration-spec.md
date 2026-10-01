@@ -36,14 +36,14 @@ That is a security boundary, not a second application.
 | Route | Purpose | Who can use it |
 | --- | --- | --- |
 | `/review` | Browse, inspect, review, and share artifacts. | Admitted humans and authorized service principals. |
-| `/review/settings/projects` | List active and archived projects; create a project. | Admitted humans and principals with `project:manage`. |
-| `/review/settings/projects/:projectId` | Rename, archive or unarchive, and manage optional Git history for one project. | Admitted humans and principals with `project:manage`. |
+| `/review/projects` | List active and archived projects beside the selected project's details: identity, lifecycle, optional Git history, artifacts, and activity; create a project. | Admitted users; changing a project requires an admitted human or `project:manage`. |
 | `/review/settings/mcp` | Show the exact MCP address, local connection and diagnostic commands, agent-skill setup, and the per-browser WebMCP preference. | Admitted users. |
 | `/review/settings/members` | List, admit, and deactivate installation members. | Installation administrators. |
 | `/review/settings/api-keys` | Issue, rotate, and revoke scoped API keys. | Installation administrators. |
 | `/review/settings/public-links` | Inventory active public links and make selected links account-required. | Installation administrators. |
 
-`/review/settings` redirects to `/review/settings/projects`. Unknown settings
+`/review/settings`, `/review/settings/projects`, and `/review/settings/projects/:projectId`
+replace themselves with `/review/projects` (selecting the named project). Unknown settings
 routes show the application's normal not-found state and do not fall back to
 Review or another settings page.
 
@@ -78,16 +78,21 @@ its usable width; tables may scroll inside their own region.
 
 ## Project settings
 
-### Project list
+### Projects screen {#projects-screen}
 
-The page lists active projects before archived projects. Each row shows the
-project name and state, opens the project settings route, and can return to that
-project in Review. Stable IDs stay available as secondary copyable metadata,
-not primary labels.
+The Projects screen docks the project list beside the selected project's details,
+the way the artifact catalog docks beside an artifact. The list shows each
+project's name, an Archived pill, its unresolved-conversation count, and its
+artifact count with the date of its latest activity; it searches by name and
+states "x of y" while searching. Below 768 px the list is a sheet opened from the
+page head. Navigation project folders open this screen with that project selected.
 
-Creating a project uses the existing name contract. A successful create opens
-the new project's settings page. Failure leaves the entered name in place and
-shows the server error beside the action.
+Selecting a project replaces the URL (`?project=`) without adding history. A named
+project that does not exist is reported as not found. A search that hides the
+selected project closes its details. When activity counts cannot load, every
+project is still listed by name.
+
+Creating a project uses the existing name contract and opens the new project.
 
 ### One project
 
@@ -221,7 +226,7 @@ remain so bookmarks do not strand users:
 | --- | --- |
 | `/?...` | `/review?...` |
 | `/workbench?...` | `/review?...` |
-| `/projects` | `/review/settings/projects` |
+| `/projects` | `/review/projects` |
 | `/projects/:projectId/artifacts` | `/review?project=:projectId` |
 | `/projects/:projectId/artifacts/:artifactId` | `/review?project=:projectId&artifact=:artifactId` |
 | `/projects/:projectId/artifacts/:artifactId/versions/:versionId/review` | `/review?project=:projectId&artifact=:artifactId&version=:versionId&view=focus` |

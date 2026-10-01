@@ -3128,9 +3128,9 @@ requirements:
 
   - id: ADM-002
     kind: behavior
-    behavior: Canonical settings list active and archived projects, create and open a project, and provide one project-local surface for rename, archive, unarchive, and capability-gated optional Git history with estimate confirmation before enablement.
+    behavior: The Projects screen lists active and archived projects beside one project's surface for rename, archive, unarchive, and capability-gated optional Git history with estimate confirmation before enablement.
     owner: web-application
-    source: {file: single-application-administration-spec.md, anchor: project-settings}
+    source: {file: single-application-administration-spec.md, anchor: projects-screen}
     acceptance:
       behavior: {id: ADM-002-B, description: "Create and rename a project, archive and unarchive it, return to it in Review, and—when an optional Git provider is available—review an estimate before enabling and later disabling Git history while the displayed state follows the server result."}
       failure: {id: ADM-002-F, description: "A failed create or rename preserves the entered name, archive cannot erase reads or immutable history, unavailable Git cannot be enabled, enablement without estimate confirmation is refused, and the interface never invents project ACLs or exposes provider secrets and internals."}
@@ -3144,6 +3144,20 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+
+  - id: ACT-006
+    kind: behavior
+    behavior: The Projects screen docks a searchable project list with archived state, unresolved-conversation and artifact counts, and latest activity beside the selected project's identity, lifecycle, optional Git history, artifacts, and project-filtered activity; navigation folders and retired project-settings URLs open it.
+    owner: web-application
+    source: {file: single-application-administration-spec.md, anchor: projects-screen}
+    acceptance:
+      behavior: {id: ACT-006-B, description: "Open Projects, observe active-before-archived rows with unresolved and artifact counts and US-dated latest activity, select a project and see its details, artifacts, activity, and latest-artifact action, search with an x-of-y footer, create a project, open the screen from a navigation folder and from retired settings URLs, and use the list as a sheet on a phone without horizontal overflow."}
+      failure: {id: ACT-006-F, description: "A search that hides the selection closes its details and keeps focus in the list, an unknown project is reported as not found rather than replaced, a failed summary still lists every project by name without counts, and no Publishing defaults, project membership, or copy-all-URLs panel is invented."}
+    deployments: *all
+    status: implementing
+    proof_gap: Local browser evidence is attached by the final slice; team deployments remain unrecorded.
+    depends_on: [ACT-004, ADM-002, NAV-001]
+    evidence: []
 
   - id: ADM-003
     kind: security

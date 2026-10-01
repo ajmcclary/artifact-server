@@ -1358,15 +1358,15 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(isolated.status()).toBe(404);
       expect(isolated.headers()["content-type"]).toContain("application/json");
 
-      // The old projects list and bare settings replace themselves with the Projects screen.
+      // Retired project-settings routes replace themselves with the Projects screen.
       const historyLength = await fixture.page.evaluate(() => window.history.length);
       await fixture.page.goto(`${fixture.server.baseUrl}/projects`);
-      await expect(fixture.page).toHaveURL(/\/review\/projects(?:\?project=prj_default)?$/u);
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
       expect(await fixture.page.evaluate(() => window.history.length)).toBe(historyLength + 1);
       await fixture.page.goto(`${fixture.server.baseUrl}/review/settings`);
-      await expect(fixture.page).toHaveURL(/\/review\/projects(?:\?project=prj_default)?$/u);
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
 
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/prj_default`);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/projects?project=prj_default`);
       await expect(fixture.page.getByRole("region", {name: "Project identity"})).toBeVisible();
       await expect(fixture.page.getByRole("region", {name: "Git history"})).toHaveCount(0);
       // Geometry at the DS display ladder: the 1680 px spec viewport is the desktop profile.
@@ -1431,10 +1431,11 @@ test.describe("Artifact Server frontend MVP", () => {
         {exact: true},
       )).toBeVisible();
 
-      await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/projects/${project.id}`);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review/projects?project=${encodeURIComponent(project.id)}`);
       const artifactsPanel = fixture.page.getByRole("region", {name: "Artifacts in this project"});
       await expect(artifactsPanel.getByRole("heading", {name: "Nothing is published here yet"}))
         .toBeVisible();
+      await expect(fixture.page.getByRole("link", {name: "Open latest artifact"})).toHaveCount(0);
 
       const published = await publishNew(fixture.server, fixture.installation, {
         accessSetting: "account_required",

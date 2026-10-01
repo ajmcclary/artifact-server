@@ -92,7 +92,7 @@ try {
   await previewFrame(page).getByText("Version two").waitFor();
   await capture(page, "workspace-high-contrast.png");
 
-  await page.goto(`${server.baseUrl}/review/settings/projects/prj_default?theme=default`);
+  await page.goto(`${server.baseUrl}/review/projects?project=prj_default&theme=default`);
   await page.getByRole("heading", {exact: true, name: "Default"}).waitFor();
   await capture(page, "project-settings.png");
 
