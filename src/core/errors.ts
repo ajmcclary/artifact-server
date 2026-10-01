@@ -377,6 +377,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "clearCommentThreads",
       "commitNewArtifact",
       "commitVersion",
+      "countActivity",
       "countPreparedManifestEntries",
       "createAgentDispatch",
       "createCommentReply",

@@ -141,6 +141,7 @@ import {permitsSpaEntryFallback} from "./spa-navigation.js";
 import {
   defaultActivityPageSize,
   maximumActivityPageSize,
+  maximumActivityPersonFilters,
   maximumActivityProjectFilters,
   maximumActivitySearchCharacters,
   maximumCommentPageSize,
@@ -391,16 +392,22 @@ const artifactPageQuerySchema = pageQuerySchema.extend({
 const publicLinksPageQuerySchema = pageQuerySchema.omit({search: true});
 /** Activity filters name projects by identifier only; path-shaped values are refused. */
 const activityProjectFilterSchema = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
-const activityQuerySchema = z.object({
-  cursor: z.string().max(1_024).optional(),
-  limit: z.coerce.number().int().min(1).max(maximumActivityPageSize)
-    .default(defaultActivityPageSize),
+/** The people filter names principals by identifier only (`member_…`, `service:key_…`); path-shaped values are refused. */
+const activityPersonFilterSchema = z.string().regex(/^[A-Za-z0-9_:-]{1,200}$/u);
+const activityFiltersSchema = z.object({
+  person: z.array(activityPersonFilterSchema).max(maximumActivityPersonFilters)
+    .default([]),
   project: z.array(activityProjectFilterSchema).max(maximumActivityProjectFilters)
     .default([]),
   q: z.string().max(maximumActivitySearchCharacters).optional(),
   segment: z.enum(["all", "needs_you", "with_agent"]).default("all"),
   type: z.array(z.enum(["access", "admin", "agents", "comments", "versions"]))
     .max(5).default([]),
+});
+const activityQuerySchema = activityFiltersSchema.extend({
+  cursor: z.string().max(1_024).optional(),
+  limit: z.coerce.number().int().min(1).max(maximumActivityPageSize)
+    .default(defaultActivityPageSize),
 });
 const makePublicLinkPrivateItemSchema = z.object({
   artifactId: z.string().min(1).max(200),
@@ -1385,6 +1392,7 @@ export function createHttpApp(
   app.get("/api/v1/activity", async (context) => {
     const query = activityQuerySchema.parse({
       ...context.req.query(),
+      person: context.req.queries("person") ?? [],
       project: context.req.queries("project") ?? [],
       type: context.req.queries("type") ?? [],
     });
@@ -1393,6 +1401,7 @@ export function createHttpApp(
       dependencies,
       ActivityService.use((activity) =>
         activity.list(context.get("principal"), {
+          actorIds: query.person,
           cursor: decodePageCursor(query.cursor),
           limit: query.limit,
           projectIds: query.project,
@@ -1405,6 +1414,38 @@ export function createHttpApp(
     return context.json({
       items: page.items,
       nextCursor: encodePageCursor(page.nextCursor),
+    });
+  });
+
+  app.get("/api/v1/activity/facets", async (context) => {
+    const query = activityFiltersSchema.parse({
+      ...context.req.query(),
+      person: context.req.queries("person") ?? [],
+      project: context.req.queries("project") ?? [],
+      type: context.req.queries("type") ?? [],
+    });
+    const facets = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ActivityService.use((activity) =>
+        activity.facets(context.get("principal"), {
+          actorIds: query.person,
+          projectIds: query.project,
+          search: query.q ?? null,
+          segment: query.segment,
+          types: query.type,
+        })
+      ),
+    );
+    return context.json({
+      matching: facets.matching,
+      people: facets.people.map((person) => ({
+        count: person.entryCount,
+        id: person.principalId,
+        kind: person.kind,
+        name: person.displayName,
+      })),
+      total: facets.total,
     });
   });
 

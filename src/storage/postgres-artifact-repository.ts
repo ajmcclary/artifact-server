@@ -76,6 +76,8 @@ import {
 } from "../core/model.js";
 import type {
   ActivityLog,
+  ActivityCountQuery,
+  ActivityFacets,
   ActivityPage,
   ActivityQuery,
   ActivitySummary,
@@ -145,8 +147,12 @@ import {
   activityProjectSummarySchema,
   activitySummaryTotalsSchema,
   buildSummaryStatements,
+  activityCountRowSchema,
+  activityPersonRowSchema,
   activitySqlRowSchema,
+  assembleActivityFacets,
   assembleActivityPage,
+  buildActivityFacetStatements,
   buildListActivityStatement,
   buildNewestRepliesStatement,
   snapshotThreadIds,
@@ -2162,6 +2168,25 @@ export class PostgresArtifactRepository implements
       return pageFromRows(
         z.array(artifactActionRowSchema).parse(rows),
         command.limit,
+      );
+    }));
+  }
+  async countActivity(query: ActivityCountQuery): Promise<ActivityFacets> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const {matching, people, total} = buildActivityFacetStatements(
+        "postgres",
+        query,
+        installationId,
+      );
+      const matchingRows = yield* sql.unsafe<object>(matching.text, [...matching.values]);
+      const totalRows = yield* sql.unsafe<object>(total.text, [...total.values]);
+      const peopleRows = yield* sql.unsafe<object>(people.text, [...people.values]);
+      return assembleActivityFacets(
+        activityCountRowSchema.parse(matchingRows[0]).count,
+        activityCountRowSchema.parse(totalRows[0]).count,
+        z.array(activityPersonRowSchema).parse(peopleRows),
       );
     }));
   }

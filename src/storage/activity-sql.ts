@@ -9,7 +9,10 @@ import {
   installationActionKinds,
 } from "../core/model.js";
 import type {
+  ActivityCountQuery,
+  ActivityFacets,
   ActivityPage,
+  ActivityPerson,
   ActivityQuery,
   ActivityRow,
   ActivitySegment,
@@ -76,6 +79,17 @@ const actionKindSchema = z.union([
   z.enum(installationActionKinds),
 ]);
 
+const accessSettingSchema = z.enum(["account_required", "public_link"]);
+const principalKindSchema = z.enum(["human", "service"]);
+const dispatchStateSchema = z.enum([
+  "addressed",
+  "canceled",
+  "claimed",
+  "delivered",
+  "failed",
+  "queued",
+]);
+
 const activeDispatchStates = "('queued', 'claimed', 'delivered')";
 
 /** Positional values bound in textual order. */
@@ -115,7 +129,7 @@ function scope(dialect: ActivitySqlDialect, alias: string, owner: string): strin
     : "";
 }
 
-function visibleKinds(query: ActivityQuery): readonly ActionKind[] {
+function visibleKinds(query: ActivityCountQuery): readonly ActionKind[] {
   const types: readonly ActivityType[] = query.types.length === 0
     ? ["access", "admin", "agents", "comments", "versions"]
     : query.types;
@@ -154,13 +168,29 @@ function searchPredicate(
           AND ${find}(lower(sr.body), ${needle()}) > 0))`;
 }
 
-/** Build the one-page feed statement for a dialect. */
-export function buildListActivityStatement(
+/** The feed's rows joined with the records they name; binds nothing. */
+function feedSource(dialect: ActivitySqlDialect): string {
+  return `FROM actions x
+    LEFT JOIN projects p ON p.id = x.project_id${scope(dialect, "p", "x")}
+    LEFT JOIN artifacts a ON a.id = x.artifact_id${scope(dialect, "a", "x")}
+    LEFT JOIN versions v ON v.id = x.version_id${scope(dialect, "v", "x")}
+    LEFT JOIN comment_threads t ON t.id = x.thread_id${scope(dialect, "t", "x")}
+    LEFT JOIN agent_dispatches held ON held.id = t.dispatch_id${scope(dialect, "held", "t")}
+      AND held.state IN ${activeDispatchStates}
+    LEFT JOIN agent_dispatches d ON d.id = x.subject_id${scope(dialect, "d", "x")}
+      AND x.action IN (${kindLiterals(feedKindsByType.agents)})`;
+}
+
+/**
+ * The predicates every feed read shares, bound in textual order: the installation, the
+ * visible kinds, one row per conversation (its newest comment or reply), then each filter.
+ */
+function feedConditions(
   dialect: ActivitySqlDialect,
-  query: ActivityQuery,
+  values: StatementValues,
+  query: ActivityCountQuery,
   installationId: string,
-): ActivityStatement {
-  const values = new StatementValues(dialect);
+): string[] {
   const heads = kindLiterals(threadHeadKinds);
   const where: string[] = [];
   if (dialect === "postgres") {
@@ -176,10 +206,25 @@ export function buildListActivityStatement(
   if (query.projectIds.length > 0) {
     where.push(`x.project_id IN ${values.bindList(query.projectIds)}`);
   }
+  // A conversation is kept when its newest comment or reply is by one of these people.
+  if (query.actorIds.length > 0) {
+    where.push(`x.principal_id IN ${values.bindList(query.actorIds)}`);
+  }
   const segment = segmentPredicate(query.segment, heads);
   if (segment !== null) where.push(segment);
   const search = searchPredicate(dialect, values, query.search);
   if (search !== null) where.push(search);
+  return where;
+}
+
+/** Build the one-page feed statement for a dialect. */
+export function buildListActivityStatement(
+  dialect: ActivitySqlDialect,
+  query: ActivityQuery,
+  installationId: string,
+): ActivityStatement {
+  const values = new StatementValues(dialect);
+  const where = feedConditions(dialect, values, query, installationId);
   if (query.cursor !== null) {
     const createdAt = values.bind(query.cursor.createdAt);
     const sameCreatedAt = values.bind(query.cursor.createdAt);
@@ -217,19 +262,113 @@ export function buildListActivityStatement(
       t.state AS "threadState",
       CASE WHEN held.id IS NULL THEN 0 ELSE 1 END AS "threadHeld",
       substr(t.body, 1, 280) AS "threadExcerpt"
-    FROM actions x
-    LEFT JOIN projects p ON p.id = x.project_id${scope(dialect, "p", "x")}
-    LEFT JOIN artifacts a ON a.id = x.artifact_id${scope(dialect, "a", "x")}
-    LEFT JOIN versions v ON v.id = x.version_id${scope(dialect, "v", "x")}
-    LEFT JOIN comment_threads t ON t.id = x.thread_id${scope(dialect, "t", "x")}
-    LEFT JOIN agent_dispatches held ON held.id = t.dispatch_id${scope(dialect, "held", "t")}
-      AND held.state IN ${activeDispatchStates}
-    LEFT JOIN agent_dispatches d ON d.id = x.subject_id${scope(dialect, "d", "x")}
-      AND x.action IN (${kindLiterals(feedKindsByType.agents)})
+    ${feedSource(dialect)}
     WHERE ${where.join("\n      AND ")}
     ORDER BY x.created_at DESC, x.id DESC
     LIMIT ${limit}`;
   return {text, values: values.values};
+}
+
+/** The three statements behind the Activity filter row's counts. */
+export interface ActivityFacetStatements {
+  readonly matching: ActivityStatement;
+  readonly people: ActivityStatement;
+  readonly total: ActivityStatement;
+}
+
+/** Visibility alone: every type, project, person, segment and search. */
+function unfiltered(query: ActivityCountQuery): ActivityCountQuery {
+  return {
+    actorIds: [],
+    includeAdministration: query.includeAdministration,
+    projectIds: [],
+    search: null,
+    segment: "all",
+    types: [],
+  };
+}
+
+/** Count the feed's entries for a query, for no filters, and per person. */
+export function buildActivityFacetStatements(
+  dialect: ActivitySqlDialect,
+  query: ActivityCountQuery,
+  installationId: string,
+): ActivityFacetStatements {
+  const count = (filters: ActivityCountQuery): ActivityStatement => {
+    const values = new StatementValues(dialect);
+    const where = feedConditions(dialect, values, filters, installationId);
+    return {
+      text: `SELECT COUNT(*) AS "count"
+        ${feedSource(dialect)}
+        WHERE ${where.join("\n        AND ")}`,
+      values: values.values,
+    };
+  };
+  const peopleValues = new StatementValues(dialect);
+  const peopleWhere = feedConditions(dialect, peopleValues, unfiltered(query), installationId);
+  // One row per name a principal acted under; assembleActivityFacets keeps the newest name.
+  const people = {
+    text: `SELECT
+        x.principal_id AS "principalId",
+        x.actor_name AS "displayName",
+        x.actor_kind AS "kind",
+        COUNT(*) AS "entryCount",
+        MAX(x.created_at) AS "lastAt"
+      ${feedSource(dialect)}
+      WHERE ${peopleWhere.join("\n        AND ")}
+        AND x.principal_id IS NOT NULL
+        AND x.actor_name IS NOT NULL
+        AND x.actor_kind IS NOT NULL
+      GROUP BY x.principal_id, x.actor_name, x.actor_kind`,
+    values: peopleValues.values,
+  };
+  return {matching: count(query), people, total: count(unfiltered(query))};
+}
+
+/** Postgres returns COUNT as a bigint string; SQLite and D1 as a number. */
+export const activityCountRowSchema = z.object({
+  count: z.coerce.number().int().nonnegative(),
+});
+
+/** One principal under one display name, as the people statement returns it. */
+export const activityPersonRowSchema = z.object({
+  displayName: z.string(),
+  entryCount: z.coerce.number().int().nonnegative(),
+  kind: principalKindSchema,
+  lastAt: z.string(),
+  principalId: z.string(),
+});
+
+/** People the filter offers at most; the most active are kept. */
+export const maximumActivityPeople = 100;
+
+/**
+ * Fold the people rows into one person per principal, named by their newest action and
+ * counting every entry they acted in, most active first, then by name.
+ */
+export function assembleActivityFacets(
+  matching: number,
+  total: number,
+  rows: readonly z.infer<typeof activityPersonRowSchema>[],
+): ActivityFacets {
+  const byPrincipal = new Map<string, {person: ActivityPerson; lastAt: string}>();
+  for (const row of rows) {
+    const known = byPrincipal.get(row.principalId);
+    const entryCount = (known?.person.entryCount ?? 0) + row.entryCount;
+    const newer = known === undefined || row.lastAt > known.lastAt;
+    byPrincipal.set(row.principalId, newer
+      ? {
+        lastAt: row.lastAt,
+        person: {displayName: row.displayName, entryCount, kind: row.kind, principalId: row.principalId},
+      }
+      : {lastAt: known.lastAt, person: {...known.person, entryCount}});
+  }
+  const people = [...byPrincipal.values()].map(({person}) => person)
+    .toSorted((left, right) => right.entryCount - left.entryCount ||
+      left.displayName.localeCompare(right.displayName) ||
+      left.principalId.localeCompare(right.principalId))
+    .slice(0, maximumActivityPeople);
+  return {matching, people, total};
 }
 
 /** The newest two replies of each thread, oldest first within a thread. */
@@ -267,17 +406,6 @@ export function buildNewestRepliesStatement(
   };
 }
 
-const accessSettingSchema = z.enum(["account_required", "public_link"]);
-const principalKindSchema = z.enum(["human", "service"]);
-const dispatchStateSchema = z.enum([
-  "addressed",
-  "canceled",
-  "claimed",
-  "delivered",
-  "failed",
-  "queued",
-]);
-
 /** One flat feed row exactly as every dialect's statement returns it. */
 export const activitySqlRowSchema = z.object({
   accessFrom: accessSettingSchema.nullable(),
@@ -310,8 +438,14 @@ export const activitySqlRowSchema = z.object({
 
 export type ActivitySqlRow = z.infer<typeof activitySqlRowSchema>;
 
-const isThreadHead = (action: ActionKind): boolean =>
-  threadHeadKinds.some((kind) => kind === action);
+/** Rows that show the conversation they belong to: its newest comment or reply, a resolve or a reopen. */
+const snapshotKinds: ReadonlySet<ActionKind> = new Set<ActionKind>([
+  ...threadHeadKinds,
+  artifactActionKinds.commentResolve,
+  artifactActionKinds.commentReopen,
+]);
+
+const showsThread = (action: ActionKind): boolean => snapshotKinds.has(action);
 
 /** Live thread IDs on the returned page whose snapshot must be read. */
 export function snapshotThreadIds(
@@ -319,7 +453,7 @@ export function snapshotThreadIds(
   limit: number,
 ): readonly string[] {
   return [...new Set(rows.slice(0, limit).flatMap((row) =>
-    isThreadHead(row.action) && row.liveThreadId !== null
+    showsThread(row.action) && row.liveThreadId !== null
       ? [row.liveThreadId]
       : []
   ))];
@@ -356,7 +490,7 @@ function snapshotFor(
   threads: ReadonlyMap<string, CommentThreadRecord>,
   replies: ReadonlyMap<string, readonly CommentReplyRecord[]>,
 ): ActivityThreadSnapshot | null {
-  if (!isThreadHead(row.action) || row.liveThreadId === null) return null;
+  if (!showsThread(row.action) || row.liveThreadId === null) return null;
   const opener = threads.get(row.liveThreadId);
   if (opener === undefined) return null;
   const isResolved = opener.state === "resolved";

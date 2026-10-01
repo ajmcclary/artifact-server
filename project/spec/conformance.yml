@@ -1187,6 +1187,19 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-01T19:24:10.236Z"
+  - id: ACT-008
+    kind: behavior
+    behavior: Members narrow the activity feed to the people who acted, a conversation counting for whoever spoke last in it, and read the filter row's counts in feed entries under the feed's own visibility rules — everyone with a visible entry and how many entries each has, every visible entry, and the entries the current filters match.
+    owner: http-api
+    source: {file: single-application-administration-spec.md, anchor: activity-screen}
+    acceptance:
+      behavior: {id: ACT-008-B, description: "Publish, comment, and reply as two principals through HTTP; read the facets and see each person once under their newest name with their entry count, most active first; filter the feed by one and by two people, alone and with a type, walking every page; see the matching count equal the entries read and the total and people unchanged by filters; parse every response with the web client's schemas; select a person from the Activity People menu, see the URL, the live 'Showing N of M entries' count and a removable chip, and remove it."}
+      failure: {id: ACT-008-F, description: "Unknown people match nothing while the total stays; path-shaped, quoted, empty, or more than 50 person filters fail with INVALID_INPUT on the feed and the counts; member and key administration is never counted or offered to a member; anonymous and capability-less callers cannot read the counts."}
+    deployments: *all
+    status: implementing
+    proof_gap: "Local SQLite HTTP tests (tests/conformance/act-008-activity-people.test.ts), D1 (deploy/cloudflare/tests/d1-activity-feed.test.ts) and Postgres (tests/integration/postgres-activity-feed.test.ts) repository tests and the Chromium Activity spec pass in local runs, but no evidence report has been attached yet. Counts are server feed entries (one per conversation, per version publish, per access change); the web feed groups bursts and an artifact's day of conversations further, so the shown count can exceed the number of grouped rows. The person filter scans by time without a principal index."
+    depends_on: [ACT-003]
+    evidence: []
   - id: CNT-001
     kind: behavior
     behavior: HTML and complete client-side directories open in the browser without rebuilding their files.

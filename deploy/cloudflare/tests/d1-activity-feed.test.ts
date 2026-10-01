@@ -29,6 +29,7 @@ const author = {
 
 function query(overrides: Partial<ActivityQuery> = {}): ActivityQuery {
   return {
+    actorIds: [],
     cursor: null,
     includeAdministration: false,
     limit: 30,
@@ -109,7 +110,44 @@ async function publishArtifact(
   });
 }
 
+const rosa = {...author, displayName: "Rosa Santoro", principalId: "member_activity_d1_rosa"};
+
 describe("D1 activity read model", () => {
+  it("ACT-008: D1 narrows to people and counts entries per person, for the filters and in all", async () => {
+    const proxy = await openLocalD1();
+    const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+    const installationId = "d1-activity-people";
+    try {
+      await migrateD1(binding, installationId);
+      const store = createD1ArtifactRepository(binding, installationId);
+      const published = await publishArtifact(store, "art_d1_people", "2026-10-01T10:00:00.000Z");
+      const thread = await store.createThread({
+        anchor: null, artifactId: published.artifact.id, author, body: "Dana opens", createdAt: "2026-10-01T10:01:00.000Z",
+        id: "cmt_d1_people", idempotencyKey: "d1-people-thread", installationId, path: null,
+        projectId: defaultProjectId, versionId: published.version.id,
+      });
+      await store.createReply({
+        artifactId: published.artifact.id, author: rosa, body: "Rosa answers", createdAt: "2026-10-01T10:02:00.000Z",
+        id: "rpl_d1_people", idempotencyKey: "d1-people-reply", projectId: defaultProjectId, threadId: thread.thread.id,
+      });
+
+      // The conversation belongs to whoever spoke last.
+      expect((await store.listActivity(query({actorIds: [rosa.principalId]}))).items.map((row) => row.action.action))
+        .toEqual(["comment_reply"]);
+      expect((await store.listActivity(query({actorIds: [principalId], types: ["versions", "comments"]}))).items
+        .map((row) => row.action.action)).toEqual(["publish"]);
+      const {cursor: _cursor, limit: _limit, ...filters} = query({actorIds: [rosa.principalId]});
+      const counted = await store.countActivity(filters);
+      expect(counted.matching).toBe(1);
+      expect(counted.people.map((person) => [person.displayName, person.entryCount, person.principalId])).toEqual(
+        expect.arrayContaining([["Rosa Santoro", 1, rosa.principalId], ["Dana Okonkwo", 1, principalId]]),
+      );
+      expect(counted.total).toBe((await store.listActivity(query({limit: 100}))).items.length);
+    } finally {
+      await proxy.dispose();
+    }
+  });
+
   it("ACT-003: D1 folds threads, filters by project and counts waiting conversations", async () => {
     const proxy = await openLocalD1();
     const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;

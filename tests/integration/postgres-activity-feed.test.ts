@@ -18,6 +18,8 @@ const author = {
   principalKind: "human" as const,
 };
 
+const rosa = {...author, displayName: "Rosa Santoro", principalId: "member_activity_pg_rosa"};
+
 function readDatabaseUrl(): string {
   const databaseUrl = process.env["ARTIFACT_SERVER_TEST_DATABASE_URL"];
   if (databaseUrl === undefined) {
@@ -28,6 +30,7 @@ function readDatabaseUrl(): string {
 
 function query(overrides: Partial<ActivityQuery> = {}): ActivityQuery {
   return {
+    actorIds: [],
     cursor: null,
     includeAdministration: false,
     limit: 30,
@@ -196,6 +199,35 @@ describe("Postgres activity read model", () => {
 
     const summary = await first.summarizeActivity([]);
     expect(summary).toMatchObject({needsYou: 1, openConversations: 1, withAgent: 0});
+  });
+
+  test("ACT-008: Postgres narrows to people and counts entries per person, for the filters and in all", async () => {
+    const published = await publishArtifact(first, "art_pg_people", "People target", "2026-10-01T10:00:00.000Z");
+    const thread = await first.createThread({
+      anchor: null, artifactId: published.artifact.id, author, body: "Dana opens", createdAt: "2026-10-01T10:01:00.000Z",
+      id: "cmt_pg_people", idempotencyKey: "pg-people-thread", installationId: firstInstallationId, path: null,
+      projectId: defaultProjectId, versionId: published.version.id,
+    });
+    await first.createReply({
+      artifactId: published.artifact.id, author: rosa, body: "Rosa answers", createdAt: "2026-10-01T10:02:00.000Z",
+      id: "rpl_pg_people", idempotencyKey: "pg-people-reply", projectId: defaultProjectId, threadId: thread.thread.id,
+    });
+    await publishArtifact(second, "art_pg_other", "Other installation", "2026-10-01T10:03:00.000Z");
+
+    // The conversation belongs to whoever spoke last.
+    expect((await first.listActivity(query({actorIds: [rosa.principalId]}))).items.map((row) => row.action.action))
+      .toEqual(["comment_reply"]);
+    expect((await first.listActivity(query({actorIds: [principalId]}))).items.map((row) => row.action.action))
+      .toEqual(["publish"]);
+    const {cursor: _cursor, limit: _limit, ...filters} = query({actorIds: [rosa.principalId]});
+    const counted = await first.countActivity(filters);
+    expect(counted.matching).toBe(1);
+    // Every visible entry in this installation only, whatever is filtered.
+    expect(counted.total).toBe((await first.listActivity(query({limit: 100}))).items.length);
+    expect(counted.people).toEqual(expect.arrayContaining([
+      {displayName: "Dana Okonkwo", entryCount: 1, kind: "human", principalId},
+      {displayName: "Rosa Santoro", entryCount: 1, kind: "human", principalId: rosa.principalId},
+    ]));
   });
 
   test("ACT-003: Postgres never returns another installation's activity", async () => {

@@ -17,6 +17,8 @@ import type {
 import {isHumanAdministrator, type Principal} from "../core/identity.js";
 import type {PageCursor} from "../core/model.js";
 import type {
+  ActivityCountQuery,
+  ActivityFacets,
   ActivityPage,
   ActivityQuery,
   ActivitySegment,
@@ -27,6 +29,9 @@ import {maximumActivitySearchCharacters} from "../core/publishing-limits.js";
 
 /** Activity reads, as the application consumes them. */
 export interface ActivityPersistence {
+  readonly countActivity: (
+    query: ActivityCountQuery,
+  ) => Effect.Effect<ActivityFacets, ArtifactRepositoryFailure>;
   readonly listActivity: (
     query: ActivityQuery,
   ) => Effect.Effect<ActivityPage, ArtifactRepositoryFailure>;
@@ -53,14 +58,20 @@ export interface ActivityDependencies {
   readonly persistence: ActivityPersistence;
 }
 
-/** One parsed feed request. Bounds are enforced at the protocol boundary. */
-export interface ActivityRequest {
-  readonly cursor: PageCursor | null;
-  readonly limit: number;
+/** The filters one feed request or count applies. Bounds are enforced at the protocol boundary. */
+export interface ActivityFilterRequest {
+  /** Principal IDs whose entries the feed keeps; empty means everyone. */
+  readonly actorIds: readonly string[];
   readonly projectIds: readonly string[];
   readonly search: string | null;
   readonly segment: ActivitySegment;
   readonly types: readonly ActivityType[];
+}
+
+/** One parsed feed request. Bounds are enforced at the protocol boundary. */
+export interface ActivityRequest extends ActivityFilterRequest {
+  readonly cursor: PageCursor | null;
+  readonly limit: number;
 }
 
 /** One feed page; the protocol adapter encodes the cursor. */
@@ -76,6 +87,10 @@ export type ActivityFailure =
   | IdentityRepositoryFailure;
 
 interface ActivityOperations {
+  readonly facets: (
+    principal: Principal,
+    request: ActivityFilterRequest,
+  ) => Effect.Effect<ActivityFacets, ActivityFailure>;
   readonly list: (
     principal: Principal,
     request: ActivityRequest,
@@ -116,6 +131,20 @@ function normalizeActivitySearch(candidate: string | null): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+function countQuery(
+  request: ActivityFilterRequest,
+  includeAdministration: boolean,
+): ActivityCountQuery {
+  return {
+    actorIds: request.actorIds,
+    includeAdministration,
+    projectIds: request.projectIds,
+    search: normalizeActivitySearch(request.search),
+    segment: request.segment,
+    types: request.types,
+  };
+}
+
 function makeActivityService(
   dependencies: ActivityDependencies,
   authorization: AuthorizationOperations,
@@ -142,13 +171,9 @@ function makeActivityService(
     yield* authorization.requireArtifactListing(principal);
     const includeAdministration = isHumanAdministrator(principal);
     const page = yield* dependencies.persistence.listActivity({
+      ...countQuery(request, includeAdministration),
       cursor: request.cursor,
-      includeAdministration,
       limit: request.limit,
-      projectIds: request.projectIds,
-      search: normalizeActivitySearch(request.search),
-      segment: request.segment,
-      types: request.types,
     });
     const names = includeAdministration ? yield* subjectNames(page) : emptyNames;
     return {
@@ -160,6 +185,17 @@ function makeActivityService(
     } satisfies ActivityResponse;
   });
 
+  // Counted under the same visibility as the feed, so a member's counts never include administration.
+  const facets = Effect.fn("ActivityService.facets")(function*(
+    principal: Principal,
+    request: ActivityFilterRequest,
+  ) {
+    yield* authorization.requireArtifactListing(principal);
+    return yield* dependencies.persistence.countActivity(
+      countQuery(request, isHumanAdministrator(principal)),
+    );
+  });
+
   const summary = Effect.fn("ActivityService.summary")(function*(
     principal: Principal,
     projectIds: readonly string[],
@@ -168,5 +204,5 @@ function makeActivityService(
     return yield* dependencies.persistence.summarizeActivity(projectIds);
   });
 
-  return {list, summary};
+  return {facets, list, summary};
 }

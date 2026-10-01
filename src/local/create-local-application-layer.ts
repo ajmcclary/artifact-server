@@ -1188,6 +1188,11 @@ export function createApplicationLayer(
       ),
     },
     persistence: {
+      countActivity: (query) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.countActivity(query),
+          catch: (cause) => repositoryFailure("countActivity", cause),
+        }),
       listActivity: (query) =>
         Effect.tryPromise({
           try: () => adapters.repository.listActivity(query),

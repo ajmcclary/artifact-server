@@ -83,6 +83,8 @@ import {
 } from "../../../src/core/model.js";
 import type {
   ActivityLog,
+  ActivityCountQuery,
+  ActivityFacets,
   ActivityPage,
   ActivityQuery,
   ActivitySummary,
@@ -160,8 +162,12 @@ import {
   activityProjectSummarySchema,
   activitySummaryTotalsSchema,
   buildSummaryStatements,
+  activityCountRowSchema,
+  activityPersonRowSchema,
   activitySqlRowSchema,
+  assembleActivityFacets,
   assembleActivityPage,
+  buildActivityFacetStatements,
   buildListActivityStatement,
   buildNewestRepliesStatement,
   snapshotThreadIds,
@@ -3309,6 +3315,19 @@ export function createD1ArtifactRepository(
         tags: await readTags(row.artifactId),
       })));
       return publicLinkPageFromRows(parsedRows, artifacts, command.limit);
+    },
+    countActivity: async (query: ActivityCountQuery): Promise<ActivityFacets> => {
+      const {matching, people, total} = buildActivityFacetStatements("sqlite", query, installationId);
+      const [matchingResult, totalResult, peopleResult] = await database.batch([
+        database.prepare(matching.text).bind(...matching.values),
+        database.prepare(total.text).bind(...total.values),
+        database.prepare(people.text).bind(...people.values),
+      ]);
+      return assembleActivityFacets(
+        activityCountRowSchema.parse(matchingResult?.results[0]).count,
+        activityCountRowSchema.parse(totalResult?.results[0]).count,
+        z.array(activityPersonRowSchema).parse(peopleResult?.results ?? []),
+      );
     },
     listActivity: async (query: ActivityQuery): Promise<ActivityPage> => {
       const statement = buildListActivityStatement("sqlite", query, installationId);

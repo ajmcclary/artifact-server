@@ -82,6 +82,8 @@ import {
 } from "../core/model.js";
 import type {
   ActivityLog,
+  ActivityCountQuery,
+  ActivityFacets,
   ActivityPage,
   ActivityQuery,
   ActivitySummary,
@@ -158,11 +160,16 @@ import {
   activityProjectSummarySchema,
   activitySummaryTotalsSchema,
   buildSummaryStatements,
+  activityCountRowSchema,
+  activityPersonRowSchema,
   activitySqlRowSchema,
+  assembleActivityFacets,
   assembleActivityPage,
+  buildActivityFacetStatements,
   buildListActivityStatement,
   buildNewestRepliesStatement,
   snapshotThreadIds,
+  type ActivityStatement,
 } from "./activity-sql.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
@@ -2340,6 +2347,27 @@ export class SqliteArtifactRepository implements
       return pageFromRows(
         z.array(artifactActionRowSchema).parse(rows),
         command.limit,
+      );
+    });
+  }
+  countActivity(query: ActivityCountQuery): Promise<ActivityFacets> {
+    return Promise.resolve().then(() => {
+      const statements = buildActivityFacetStatements(
+        "sqlite",
+        query,
+        this.#installationId,
+      );
+      const count = (statement: ActivityStatement): number =>
+        activityCountRowSchema.parse(
+          this.#database.prepare(statement.text).get(...statement.values),
+        ).count;
+      return assembleActivityFacets(
+        count(statements.matching),
+        count(statements.total),
+        z.array(activityPersonRowSchema).parse(
+          this.#database.prepare(statements.people.text)
+            .all(...statements.people.values),
+        ),
       );
     });
   }

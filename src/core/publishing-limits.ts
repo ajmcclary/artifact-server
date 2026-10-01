@@ -63,3 +63,6 @@ export const maximumActivitySearchCharacters = 100;
 
 /** Maximum project filters accepted by one activity read. */
 export const maximumActivityProjectFilters = 50;
+
+/** Maximum people filters accepted by one activity read. */
+export const maximumActivityPersonFilters = 50;

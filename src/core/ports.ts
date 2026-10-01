@@ -250,6 +250,11 @@ export type ActivitySegment = "all" | "needs_you" | "with_agent";
 
 /** Values used to read one bounded page of the installation activity log. */
 export interface ActivityQuery {
+  /**
+   * Principal IDs whose actions the feed keeps; empty means everyone. A conversation is
+   * kept when its newest comment or reply is by one of them. Unknown IDs match nothing.
+   */
+  readonly actorIds: readonly string[];
   readonly cursor: PageCursor | null;
   /** False excludes member_* and key_* rows. project_* stays visible. */
   readonly includeAdministration: boolean;
@@ -295,7 +300,10 @@ export interface ActivityRow {
   /** First line of the thread opener for resolution rows, otherwise null. */
   readonly excerpt: string | null;
   readonly project: {readonly id: string; readonly name: string} | null;
-  /** Present only on the newest create or reply row of a live thread. */
+  /**
+   * Present on the newest create or reply row of a live thread, and on the resolve and
+   * reopen rows of a live thread, so each can show the conversation it changed.
+   */
   readonly thread: ActivityThreadSnapshot | null;
   readonly versionNumber: number | null;
 }
@@ -323,8 +331,31 @@ export interface ActivitySummary {
   readonly withAgent: number;
 }
 
+/** The feed filters a count applies: everything a page read takes except its position. */
+export type ActivityCountQuery = Omit<ActivityQuery, "cursor" | "limit">;
+
+/** One principal the visible activity log names, with the feed entries they acted in. */
+export interface ActivityPerson {
+  /** The display name of their newest visible action. */
+  readonly displayName: string;
+  readonly entryCount: number;
+  readonly kind: ActorSnapshot["kind"];
+  readonly principalId: string;
+}
+
+/** Counts behind the Activity filter row, in feed entries (one per conversation). */
+export interface ActivityFacets {
+  /** Entries matching every filter in the query. */
+  readonly matching: number;
+  /** Everyone with a visible entry, ignoring the query's other filters, most active first. */
+  readonly people: readonly ActivityPerson[];
+  /** Every visible entry, ignoring the query's filters. */
+  readonly total: number;
+}
+
 /** Read side of the installation activity log. */
 export interface ActivityLog {
+  countActivity(query: ActivityCountQuery): Promise<ActivityFacets>;
   listActivity(query: ActivityQuery): Promise<ActivityPage>;
   summarizeActivity(projectIds: readonly string[]): Promise<ActivitySummary>;
 }

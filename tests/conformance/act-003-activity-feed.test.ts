@@ -229,6 +229,29 @@ describe("installation activity feed", () => {
     expect(withAgent.items[1]?.thread?.state).toBe("with_agent");
   });
 
+  test("ACT-003: resolve and reopen entries carry the live conversation they changed", async () => {
+    expect.hasAssertions();
+    const published = await publish("feed-resolution", "Resolution target");
+    clock.advance(1_000);
+    const thread = await reader.openThread(published, "Close me, then open me.", "feed-resolution-thread");
+    clock.advance(1_000);
+    expect((await reader.setThreadState(published, thread.id, "resolved")).status).toBe(200);
+    clock.advance(1_000);
+    expect((await reader.setThreadState(published, thread.id, "open")).status).toBe(200);
+
+    const entries = (await readFeed(reader, "?type=comments")).items;
+    expect(entries.map((entry) => [entry.kind, entry.verb, entry.threadId ?? entry.thread?.id])).toEqual([
+      ["resolution", "reopened", thread.id],
+      ["resolution", "resolved", thread.id],
+      ["thread", "commented", thread.id],
+    ]);
+    // Each carries the conversation as it is now, for the feed's card.
+    for (const entry of entries) {
+      expect(entry.thread).toMatchObject({id: thread.id, isResolved: false, state: "needs_you"});
+      expect(entry.thread?.opener.body).toBe("Close me, then open me.");
+    }
+  });
+
   test("ACT-003: search matches actor, artifact, project and comment text literally", async () => {
     expect.hasAssertions();
     const published = await publish("feed-search", "Quarterly revenue");

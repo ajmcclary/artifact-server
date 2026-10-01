@@ -2,6 +2,7 @@ import type {AccessSetting, AgentDispatchState} from "../core/model.js";
 import type {PrincipalKind} from "../core/identity.js";
 import type {
   ActivityRow,
+  ActivityThreadSnapshot,
   ActivityThreadState,
 } from "../core/ports.js";
 
@@ -43,6 +44,7 @@ export interface ActivityEntry {
   readonly kind: ActivityEntryKind;
   readonly project: {readonly id: string; readonly name: string} | null;
   readonly subject?: {readonly id: string; readonly name: string | null};
+  /** The live conversation, on thread entries and on resolution entries whose thread remains. */
   readonly thread?: {
     readonly anchor: unknown;
     readonly id: string;
@@ -108,6 +110,20 @@ function wireComment(comment: {
   };
 }
 
+function wireThread(thread: ActivityThreadSnapshot): NonNullable<ActivityEntry["thread"]> {
+  return {
+    anchor: thread.anchor,
+    id: thread.id,
+    isResolved: thread.isResolved,
+    opener: wireComment(thread.opener),
+    path: thread.opener.path,
+    replies: thread.replies.map(wireComment),
+    replyCount: thread.replyCount,
+    state: thread.state,
+    versionId: thread.opener.versionId,
+  };
+}
+
 function subjectOf(
   row: ActivityRow,
   names: SubjectNames,
@@ -151,27 +167,16 @@ export function toActivityEntry(
   };
   switch (kind) {
     case "thread":
-      return row.thread === null
-        ? null
-        : {
-          ...base,
-          thread: {
-            anchor: row.thread.anchor,
-            id: row.thread.id,
-            isResolved: row.thread.isResolved,
-            opener: wireComment(row.thread.opener),
-            path: row.thread.opener.path,
-            replies: row.thread.replies.map(wireComment),
-            replyCount: row.thread.replyCount,
-            state: row.thread.state,
-            versionId: row.thread.opener.versionId,
-          },
-        };
+      return row.thread === null ? null : {...base, thread: wireThread(row.thread)};
     case "resolution":
     case "thread_deleted": {
       const threadId = row.action.threadId;
       const withThread = threadId === null ? base : {...base, threadId};
-      return row.excerpt === null ? withThread : {...withThread, excerpt: row.excerpt};
+      const withExcerpt = row.excerpt === null ? withThread : {...withThread, excerpt: row.excerpt};
+      // A resolve or reopen carries the live conversation it changed; a deleted one has none.
+      return row.thread === null || kind !== "resolution"
+        ? withExcerpt
+        : {...withExcerpt, thread: wireThread(row.thread)};
     }
     case "agent":
       return row.dispatch === null
