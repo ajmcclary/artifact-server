@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Context, DateTime, Effect, Layer, type Redacted } from "effect";
 
+import {actorSnapshotOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
   ArtifactRepositoryFailure,
@@ -581,6 +582,7 @@ function makeLinkedArtifactService(
           return yield* dependencies.bindings.commitLinkedArtifact({
             accessSetting: accessSettings.accountRequired,
             artifactId: dependencies.ids.artifactId(),
+            actor: actorSnapshotOf(command.principal),
             authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
             binding: {
               fingerprint: capture.fingerprint,
@@ -685,6 +687,7 @@ function makeLinkedArtifactService(
         );
         return yield* dependencies.bindings.commitCapturedVersion({
           artifactId: input.artifactId,
+          actor: actorSnapshotOf(input.principal),
           authorizedByPrincipalId: input.principal.authorizedByPrincipalId,
           binding: {
             fingerprint: capture.fingerprint,
@@ -809,6 +812,7 @@ function makeLinkedArtifactService(
       const relinkedAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.bindings.relinkSource({
         artifactId: command.artifactId,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         binding: {
           fingerprint: capture.fingerprint,

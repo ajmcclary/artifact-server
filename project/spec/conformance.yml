@@ -1106,6 +1106,19 @@ requirements:
     depends_on: []
     evidence: []
 
+  - id: ACT-001
+    kind: security
+    behavior: Every mutation, including member, key, project, and agent-dispatch administration, appends exactly one immutable activity-log action in the same transaction, with the acting principal, its authorizer, and a display-name snapshot taken at write time.
+    owner: authorization
+    source: {file: artifact-server-product-spec.html, anchor: safety}
+    acceptance:
+      behavior: {id: ACT-001-B, description: "Perform artifact, comment, access, member, key, project, and dispatch mutations through human and agent principals and inspect one action per mutation carrying its kind, actor snapshot, thread, reply, subject, access direction, and bounded detail."}
+      failure: {id: ACT-001-F, description: "Replaying a mutation writes no further action, repeating a no-op administration change writes nothing, and a mutation whose action is refused does not commit."}
+    deployments: *all
+    status: specified
+    depends_on: [AUD-001]
+    evidence: []
+
   - id: ACT-002
     kind: release_gate
     behavior: Existing installations upgrade their action history into the installation activity log without changing any action identity, idempotency key, timestamp, or attribution, and recover only activity the installation already recorded.

@@ -65,6 +65,7 @@ async function publishFixture(
   await repository.writePreparedManifestEntries(uploadId, 1, manifest.entries);
   await repository.markUploadPrepared(uploadId, 1, createdAt);
   const published = await repository.commitNewArtifact({
+    actor: {displayName: "Test publisher", kind: "service"},
     accessSetting: "account_required",
     artifactId,
     authorizedByPrincipalId: null,
@@ -165,6 +166,7 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(1);
 
     await repository.updateThread({
+      actor: {displayName: "Test publisher", kind: "service"},
       anchor: null,
       artifactId,
       authorizedByPrincipalId: null,
@@ -187,6 +189,7 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(2);
 
     await repository.deleteThread({
+      actor: {displayName: "Test publisher", kind: "service"},
       artifactId,
       authorizedByPrincipalId: null,
       deletedAt: "2026-09-21T00:03:00.000Z",
@@ -261,6 +264,7 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(2);
 
     await repository.updateReply({
+      actor: {displayName: "Test publisher", kind: "service"},
       artifactId,
       authorizedByPrincipalId: null,
       body: "Updated reply.",
@@ -282,6 +286,7 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(3);
 
     await repository.deleteReply({
+      actor: {displayName: "Test publisher", kind: "service"},
       artifactId,
       authorizedByPrincipalId: null,
       deletedAt: "2026-09-21T00:04:00.000Z",
@@ -359,6 +364,7 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(2);
 
     const cleared = await repository.clearThreads({
+      actor: {displayName: "Test publisher", kind: "service"},
       artifactId,
       authorizedByPrincipalId: null,
       clearedAt: "2026-09-21T00:03:00.000Z",
@@ -398,6 +404,7 @@ describe("SQLite comment revision", () => {
       versionId: published.version.id,
     });
     const skippedClear = await repository.clearThreads({
+      actor: {displayName: "Test publisher", kind: "service"},
       artifactId,
       authorizedByPrincipalId: null,
       clearedAt: "2026-09-21T00:05:00.000Z",

@@ -150,6 +150,7 @@ export async function populateActivityHistory(
   await artifacts.writePreparedManifestEntries(uploadId, claim.attempts, manifest.entries);
   await artifacts.markUploadPrepared(uploadId, claim.attempts, t.published);
   const published = await artifacts.commitNewArtifact({
+    actor: {displayName: dana.displayName, kind: dana.principalKind},
     accessSetting: "account_required",
     artifactId: "art_activity_fixture",
     authorizedByPrincipalId: null,
@@ -192,6 +193,7 @@ export async function populateActivityHistory(
     threadId: resolved.thread.id,
   });
   await artifacts.updateThread({
+    actor: {displayName: rosa.displayName, kind: rosa.principalKind},
     anchor: null,
     artifactId,
     authorizedByPrincipalId: null,
@@ -228,6 +230,7 @@ export async function populateActivityHistory(
     threadIds: [dispatched.thread.id],
   });
   await artifacts.changeTags({
+    actor: {displayName: dana.displayName, kind: dana.principalKind},
     artifactId,
     authorizedByPrincipalId: null,
     createdAt: t.tagged,
@@ -239,6 +242,7 @@ export async function populateActivityHistory(
     tags: ["claims"],
   });
   await artifacts.changeAccessSetting({
+    actor: {displayName: dana.displayName, kind: dana.principalKind},
     accessSetting: "public_link",
     artifactId,
     authorizedByPrincipalId: null,

@@ -133,6 +133,12 @@ import {
   registeredAgentRetentionMilliseconds,
 } from "../core/publishing-limits.js";
 import { createManifest } from "../manifest/create-manifest.js";
+import {actorSnapshotOfAuthor} from "../core/action-attribution.js";
+import {
+  type ActionInsert,
+  positionalActionInsertSql,
+  positionalActionValues,
+} from "./action-insert.js";
 import {
   artifactHistoryActionKindSql,
   sqliteActionsRebuildStatements,
@@ -1411,16 +1417,17 @@ export class SqliteArtifactRepository implements
           command.artifactId,
           command.binding,
         );
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          artifact.currentVersionId,
-          command.idempotencyKey,
-          command.createdAt,
-          artifactActionKinds.relink,
-          command.principalId,
-          command.authorizedByPrincipalId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.relink,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          versionId: artifact.currentVersionId,
+        });
         return this.#readSourceBinding(command.projectId, command.artifactId);
       }),
     );
@@ -1479,16 +1486,17 @@ export class SqliteArtifactRepository implements
     this.#database
       .prepare("UPDATE artifacts SET current_version_id = ? WHERE id = ?")
       .run(command.versionId, command.artifactId);
-    this.#insertAction(
-      command.projectId,
-      command.artifactId,
-      command.versionId,
-      command.idempotencyKey,
-      command.createdAt,
-      binding === null ? artifactActionKinds.publish : artifactActionKinds.link,
-      command.principalId,
-      command.authorizedByPrincipalId,
-    );
+    this.#insertAction({
+      action: binding === null ? artifactActionKinds.publish : artifactActionKinds.link,
+      actor: command.actor,
+      artifactId: command.artifactId,
+      authorizedByPrincipalId: command.authorizedByPrincipalId,
+      createdAt: command.createdAt,
+      idempotencyKey: command.idempotencyKey,
+      principalId: command.principalId,
+      projectId: command.projectId,
+      versionId: command.versionId,
+    });
     this.#insertIdempotency(
       command.projectId,
       command.idempotencyKey,
@@ -1591,18 +1599,17 @@ export class SqliteArtifactRepository implements
       );
     }
 
-    this.#insertAction(
-      command.projectId,
-      command.artifactId,
-      command.versionId,
-      command.idempotencyKey,
-      command.createdAt,
-      binding === null
-        ? artifactActionKinds.publish
-        : artifactActionKinds.capture,
-      command.principalId,
-      command.authorizedByPrincipalId,
-    );
+    this.#insertAction({
+      action: binding === null ? artifactActionKinds.publish : artifactActionKinds.capture,
+      actor: command.actor,
+      artifactId: command.artifactId,
+      authorizedByPrincipalId: command.authorizedByPrincipalId,
+      createdAt: command.createdAt,
+      idempotencyKey: command.idempotencyKey,
+      principalId: command.principalId,
+      projectId: command.projectId,
+      versionId: command.versionId,
+    });
     this.#insertIdempotency(
       command.projectId,
       command.idempotencyKey,
@@ -1731,16 +1738,19 @@ export class SqliteArtifactRepository implements
         if (update.changes !== 1) {
           throw changedDuringManagement();
         }
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          command.expectedCurrentVersionId,
-          command.idempotencyKey,
-          command.createdAt,
-          "change_access",
-          command.principalId,
-          command.authorizedByPrincipalId,
-        );
+        this.#insertAction({
+          accessFrom: artifact.accessSetting,
+          accessTo: command.accessSetting,
+          action: "change_access",
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          versionId: command.expectedCurrentVersionId,
+        });
         this.#insertIdempotency(
           command.projectId,
           command.idempotencyKey,
@@ -1777,16 +1787,17 @@ export class SqliteArtifactRepository implements
           command.expectedCurrentVersionId,
         );
         this.#replaceTags(command.artifactId, command.tags);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          command.expectedCurrentVersionId,
-          command.idempotencyKey,
-          command.createdAt,
-          artifactActionKinds.changeTags,
-          command.principalId,
-          command.authorizedByPrincipalId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.changeTags,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          versionId: command.expectedCurrentVersionId,
+        });
         this.#insertIdempotency(
           command.projectId,
           command.idempotencyKey,
@@ -1840,16 +1851,17 @@ export class SqliteArtifactRepository implements
         if (update.changes !== 1) {
           throw changedDuringManagement();
         }
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          command.expectedCurrentVersionId,
-          command.idempotencyKey,
-          command.createdAt,
-          artifactActionKinds.delete,
-          command.principalId,
-          command.authorizedByPrincipalId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.delete,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          versionId: command.expectedCurrentVersionId,
+        });
         this.#insertIdempotency(
           command.projectId,
           command.idempotencyKey,
@@ -2271,16 +2283,17 @@ export class SqliteArtifactRepository implements
         if (update.changes !== 1) {
           throw changedDuringManagement();
         }
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          command.versionId,
-          command.idempotencyKey,
-          command.createdAt,
-          "restore",
-          command.principalId,
-          command.authorizedByPrincipalId,
-        );
+        this.#insertAction({
+          action: "restore",
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          versionId: command.versionId,
+        });
         this.#insertIdempotency(
           command.projectId,
           command.idempotencyKey,
@@ -3458,38 +3471,12 @@ export class SqliteArtifactRepository implements
     return this.#readPublishedVersion(projectId, parsed.versionId, true);
   }
 
-  #insertAction(
-    projectId: string,
-    artifactId: string,
-    versionId: string,
-    idempotencyKey: string,
-    createdAt: string,
-    action: ArtifactActionRecord["action"],
-    principalId: string,
-    authorizedByPrincipalId: string | null,
-    actionId: string | null = null,
-  ): void {
+  #insertAction(insert: ActionInsert): void {
     this.#database
-      .prepare(
-        `INSERT INTO actions (
-          id, project_id, artifact_id, version_id, action, principal_id,
-          authorized_by_principal_id, idempotency_key, created_at
-        ) VALUES (
-          COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?, ?, ?, ?, ?
-        )`,
-      )
-      .run(
-        actionId,
-        projectId,
-        artifactId,
-        versionId,
-        action,
-        principalId,
-        authorizedByPrincipalId,
-        idempotencyKey,
-        createdAt,
-      );
+      .prepare(positionalActionInsertSql)
+      .run(...positionalActionValues(insert));
   }
+
 
   #assertStagedUploadReady(
     source: PublicationSource,
@@ -3780,17 +3767,19 @@ export class SqliteArtifactRepository implements
             command.createdAt,
           );
         const createAction = commentActionIdentity(command.id);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          command.versionId,
-          createAction.idempotencyKey,
-          command.createdAt,
-          artifactActionKinds.commentCreate,
-          command.author.principalId,
-          command.author.authorizedByPrincipalId,
-          createAction.actionId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.commentCreate,
+          actionId: createAction.actionId,
+          actor: actorSnapshotOfAuthor(command.author),
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.author.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: createAction.idempotencyKey,
+          principalId: command.author.principalId,
+          projectId: command.projectId,
+          threadId: command.id,
+          versionId: command.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
@@ -3948,17 +3937,19 @@ export class SqliteArtifactRepository implements
           this.#releaseSpentDispatchMarker(command.threadId);
         }
         const commentAction = commentActionIdentity(command.threadId);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          row.versionId,
-          commentAction.idempotencyKey,
-          command.updatedAt,
-          commentUpdateActionKind(command),
-          command.principalId,
-          command.authorizedByPrincipalId,
-          commentAction.actionId,
-        );
+        this.#insertAction({
+          action: commentUpdateActionKind(command),
+          actionId: commentAction.actionId,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.updatedAt,
+          idempotencyKey: commentAction.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          threadId: command.threadId,
+          versionId: row.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentThreadFromRow(this.#readThreadRow(
           command.projectId,
@@ -4001,17 +3992,19 @@ export class SqliteArtifactRepository implements
           )
           .run(command.threadId, command.projectId, command.artifactId);
         const commentAction = commentActionIdentity(command.threadId);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          row.versionId,
-          commentAction.idempotencyKey,
-          command.deletedAt,
-          artifactActionKinds.commentDelete,
-          command.principalId,
-          command.authorizedByPrincipalId,
-          commentAction.actionId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.commentDelete,
+          actionId: commentAction.actionId,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.deletedAt,
+          idempotencyKey: commentAction.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          threadId: command.threadId,
+          versionId: row.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.deletedAt);
         return {
           deletedReplyCount: Number(removedReplies.changes),
@@ -4064,17 +4057,19 @@ export class SqliteArtifactRepository implements
             )
             .run(row.id, command.projectId, command.artifactId);
           const commentAction = commentActionIdentity(row.id);
-          this.#insertAction(
-            command.projectId,
-            command.artifactId,
-            row.versionId,
-            commentAction.idempotencyKey,
-            command.clearedAt,
-            artifactActionKinds.commentDelete,
-            command.principalId,
-            command.authorizedByPrincipalId,
-            commentAction.actionId,
-          );
+          this.#insertAction({
+            action: artifactActionKinds.commentDelete,
+            actionId: commentAction.actionId,
+            actor: command.actor,
+            artifactId: command.artifactId,
+            authorizedByPrincipalId: command.authorizedByPrincipalId,
+            createdAt: command.clearedAt,
+            idempotencyKey: commentAction.idempotencyKey,
+            principalId: command.principalId,
+            projectId: command.projectId,
+            threadId: row.id,
+            versionId: row.versionId,
+          });
           deleted += 1;
         }
         if (deleted > 0) {
@@ -4143,17 +4138,20 @@ export class SqliteArtifactRepository implements
         }
         this.#touchThread(command.threadId, command.createdAt);
         const replyAction = commentActionIdentity(command.threadId);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          thread.versionId,
-          replyAction.idempotencyKey,
-          command.createdAt,
-          artifactActionKinds.commentReply,
-          command.author.principalId,
-          command.author.authorizedByPrincipalId,
-          replyAction.actionId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.commentReply,
+          actionId: replyAction.actionId,
+          actor: actorSnapshotOfAuthor(command.author),
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.author.authorizedByPrincipalId,
+          createdAt: command.createdAt,
+          idempotencyKey: replyAction.idempotencyKey,
+          principalId: command.author.principalId,
+          projectId: command.projectId,
+          replyId: command.id,
+          threadId: command.threadId,
+          versionId: thread.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.createdAt);
         return {
           replayed: false,
@@ -4200,17 +4198,20 @@ export class SqliteArtifactRepository implements
           .run(command.body, command.updatedAt, command.replyId, command.threadId);
         this.#touchThread(command.threadId, command.updatedAt);
         const commentAction = commentActionIdentity(command.threadId);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          thread.versionId,
-          commentAction.idempotencyKey,
-          command.updatedAt,
-          artifactActionKinds.commentUpdate,
-          command.principalId,
-          command.authorizedByPrincipalId,
-          commentAction.actionId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.commentUpdate,
+          actionId: commentAction.actionId,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.updatedAt,
+          idempotencyKey: commentAction.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          replyId: command.replyId,
+          threadId: command.threadId,
+          versionId: thread.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.updatedAt);
         return commentReplyFromRow(this.#readReplyRow(command.replyId));
       }),
@@ -4226,17 +4227,20 @@ export class SqliteArtifactRepository implements
           .run(command.replyId, command.threadId);
         this.#touchThread(command.threadId, command.deletedAt);
         const commentAction = commentActionIdentity(command.threadId);
-        this.#insertAction(
-          command.projectId,
-          command.artifactId,
-          thread.versionId,
-          commentAction.idempotencyKey,
-          command.deletedAt,
-          artifactActionKinds.commentDelete,
-          command.principalId,
-          command.authorizedByPrincipalId,
-          commentAction.actionId,
-        );
+        this.#insertAction({
+          action: artifactActionKinds.commentDelete,
+          actionId: commentAction.actionId,
+          actor: command.actor,
+          artifactId: command.artifactId,
+          authorizedByPrincipalId: command.authorizedByPrincipalId,
+          createdAt: command.deletedAt,
+          idempotencyKey: commentAction.idempotencyKey,
+          principalId: command.principalId,
+          projectId: command.projectId,
+          replyId: command.replyId,
+          threadId: command.threadId,
+          versionId: thread.versionId,
+        });
         this.#bumpCommentRevision(command.artifactId, command.deletedAt);
       }),
     );

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 
+import {actorSnapshotOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
   type ArtifactRepositoryFailure,
@@ -288,6 +289,7 @@ function makePublishArtifactService(
       name,
       principalId: command.principal.id,
       projectId: command.projectId,
+      actor: actorSnapshotOf(command.principal),
       authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
       source: command.source,
       tags,
@@ -347,6 +349,7 @@ function makePublishArtifactService(
       manifest: command.manifest,
       principalId: command.principal.id,
       projectId: command.projectId,
+      actor: actorSnapshotOf(command.principal),
       authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
       source: command.source,
       versionId: dependencies.ids.versionId(),

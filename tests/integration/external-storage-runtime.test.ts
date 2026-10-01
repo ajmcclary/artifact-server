@@ -2195,6 +2195,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
       );
       const sameInstant = "2026-08-18T09:15:00.000Z";
       const sameInstantEdit = (body: string) => repository.updateThread({
+        actor: {displayName: "Test publisher", kind: "service"},
         anchor: null,
         artifactId,
         authorizedByPrincipalId: commentPrincipal.authorizedByPrincipalId,
@@ -2622,6 +2623,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
         return commentCreationSchema.parse(created.body).thread.id;
       };
       const remove = (threadId: string) => repository.deleteThread({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: sender.authorizedByPrincipalId,
         deletedAt: now(),
@@ -2689,6 +2691,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
         _tag: "DispatchStateConflict",
       });
       await expect(repository.clearThreads({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: sender.authorizedByPrincipalId,
         clearedAt: now(),
@@ -2709,6 +2712,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
         now(),
       )).toMatchObject({state: "addressed"});
       await expect(repository.clearThreads({
+        actor: {displayName: "Test publisher", kind: "service"},
         artifactId,
         authorizedByPrincipalId: sender.authorizedByPrincipalId,
         clearedAt: now(),

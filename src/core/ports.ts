@@ -1,5 +1,6 @@
 import type {
   AccessSetting,
+  ActorSnapshot,
   AgentDispatchCreation,
   ManifestEntry,
   ManifestEntryPage,
@@ -124,6 +125,8 @@ export interface PublicationSource {
 }
 
 export interface CommitNewArtifact {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly accessSetting: AccessSetting;
   readonly artifactId: string;
   readonly contentToken: string;
@@ -141,6 +144,8 @@ export interface CommitNewArtifact {
 }
 
 export interface CommitArtifactVersion {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly contentToken: string;
   readonly createdAt: string;
@@ -157,6 +162,8 @@ export interface CommitArtifactVersion {
 
 /** Values used to atomically restore one existing saved version. */
 export interface RestoreArtifactVersion {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly createdAt: string;
@@ -170,6 +177,8 @@ export interface RestoreArtifactVersion {
 
 /** Values used to atomically change one artifact's read setting. */
 export interface ChangeArtifactAccessSetting {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly accessSetting: AccessSetting;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
@@ -183,6 +192,8 @@ export interface ChangeArtifactAccessSetting {
 
 /** Values used to atomically replace one artifact's complete tag set. */
 export interface ChangeArtifactTags {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly createdAt: string;
@@ -196,6 +207,8 @@ export interface ChangeArtifactTags {
 
 /** Values used to atomically tombstone one artifact. */
 export interface DeleteArtifact {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly createdAt: string;
@@ -275,6 +288,8 @@ export interface CommentStateChange {
  * command carries a state change, and `comment_update` otherwise.
  */
 export interface UpdateCommentThread {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly anchor: CommentAnchorChange | null;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
@@ -288,6 +303,8 @@ export interface UpdateCommentThread {
 
 /** Values used to delete one comment thread together with its replies. */
 export interface DeleteCommentThread {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly deletedAt: string;
@@ -310,6 +327,8 @@ export interface CreateCommentReply {
 
 /** Values used to change one reply's body. */
 export interface UpdateCommentReply {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly body: string;
@@ -327,6 +346,8 @@ export interface UpdateCommentReply {
  * by a queued, claimed, or delivered dispatch are skipped and counted.
  */
 export interface ClearCommentThreads {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly clearedAt: string;
@@ -339,6 +360,8 @@ export interface ClearCommentThreads {
 
 /** Values used to delete one reply from one comment thread. */
 export interface DeleteCommentReply {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly deletedAt: string;
@@ -427,6 +450,8 @@ export interface RecordSourceFreshness {
 
 /** Values used to re-point one binding at a moved source file. */
 export interface RelinkSourceBinding {
+  /** Display-name snapshot recorded with the action (ACT-001). */
+  readonly actor: ActorSnapshot;
   readonly artifactId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly binding: SourceBindingWrite;

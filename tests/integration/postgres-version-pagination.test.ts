@@ -93,6 +93,7 @@ async function commitVersion(
   const inputDigest = `digest-${uploadId}`;
   if (expectedCurrentVersionId === null) {
     return repository.commitNewArtifact({
+      actor: {displayName: "Test publisher", kind: "service"},
       accessSetting: "account_required",
       artifactId,
       authorizedByPrincipalId: null,
@@ -110,6 +111,7 @@ async function commitVersion(
     });
   }
   return repository.commitVersion({
+    actor: {displayName: "Test publisher", kind: "service"},
     artifactId,
     authorizedByPrincipalId: null,
     contentToken,

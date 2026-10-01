@@ -301,6 +301,7 @@ async function commitLink(
     createdAt,
   );
   return repository.commitLinkedArtifact({
+    actor: {displayName: "Test publisher", kind: "service"},
     accessSetting: "account_required",
     artifactId: linkedArtifactId,
     authorizedByPrincipalId: null,
@@ -336,6 +337,7 @@ async function commitCapture(
   const uploadId = overrides.uploadId ?? "upl_capture";
   const source = await stageUpload(repository, manifest, uploadId, createdAt);
   return repository.commitCapturedVersion({
+    actor: {displayName: "Test publisher", kind: "service"},
     artifactId: overrides.artifactId ?? linkedArtifactId,
     authorizedByPrincipalId: null,
     binding: {
@@ -368,6 +370,7 @@ function relink(
   } = {},
 ) {
   return repository.relinkSource({
+    actor: {displayName: "Test publisher", kind: "service"},
     artifactId: overrides.artifactId ?? linkedArtifactId,
     authorizedByPrincipalId: null,
     binding: overrides.binding ?? {
@@ -388,6 +391,7 @@ async function commitPlainPublication(repository: SqliteArtifactRepository) {
   const manifest = manifestFor("<p>ordinary</p>");
   const source = await stageUpload(repository, manifest, "upl_plain", createdAt);
   return repository.commitNewArtifact({
+    actor: {displayName: "Test publisher", kind: "service"},
     accessSetting: "account_required",
     artifactId: plainArtifactId,
     authorizedByPrincipalId: null,

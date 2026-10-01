@@ -14,6 +14,7 @@ import {
   type ProjectManagementFailure,
   ProjectManagementService,
 } from "./project-management.js";
+import {actorSnapshotOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
   type ArtifactRepositoryFailure,
@@ -657,6 +658,7 @@ function makeArtifactCommentService(
       return yield* dependencies.repository.updateThread({
         anchor: command.anchor === undefined ? null : {anchor: command.anchor},
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         body,
         principalId: command.principal.id,
@@ -687,6 +689,7 @@ function makeArtifactCommentService(
       const deletedAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.deleteThread({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         deletedAt,
         principalId: command.principal.id,
@@ -712,6 +715,7 @@ function makeArtifactCommentService(
       const clearedAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.clearThreads({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         clearedAt,
         principalId: command.principal.id,
@@ -770,6 +774,7 @@ function makeArtifactCommentService(
       const updatedAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.updateReply({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         body,
         principalId: command.principal.id,
@@ -799,6 +804,7 @@ function makeArtifactCommentService(
       const deletedAt = DateTime.formatIso(yield* dependencies.clock.now);
       yield* dependencies.repository.deleteReply({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         deletedAt,
         principalId: command.principal.id,

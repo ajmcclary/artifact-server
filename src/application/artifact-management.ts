@@ -16,6 +16,7 @@ import {
   type ProjectManagementFailure,
   ProjectManagementService,
 } from "./project-management.js";
+import {actorSnapshotOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
   type ArtifactMutationConflict,
@@ -564,6 +565,7 @@ function makeArtifactManagementService(
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.restoreVersion({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         createdAt,
         expectedCurrentVersionId: command.expectedCurrentVersionId,
@@ -596,6 +598,7 @@ function makeArtifactManagementService(
       return yield* dependencies.repository.changeAccessSetting({
         accessSetting: command.accessSetting,
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         createdAt,
         expectedCurrentVersionId: command.expectedCurrentVersionId,
@@ -627,6 +630,7 @@ function makeArtifactManagementService(
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.changeTags({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         createdAt,
         expectedCurrentVersionId: command.expectedCurrentVersionId,
@@ -661,6 +665,7 @@ function makeArtifactManagementService(
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.deleteArtifact({
         artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
         authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
         createdAt,
         expectedCurrentVersionId: command.expectedCurrentVersionId,
