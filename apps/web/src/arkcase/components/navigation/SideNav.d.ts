@@ -34,7 +34,12 @@ export interface SideNavProps {
   isOpen?: boolean;
   /** Close handler — shows a backdrop + close button when provided. */
   onClose?: () => void;
-  /** Items are reached by Tab, and by ArrowDown / ArrowUp, Home / End between the visible items — focus only; Enter or Space selects. */
+  /**
+   * Called with the item on an unmodified primary activation (click, Enter or Space). Items are
+   * reached by Tab, and by ArrowDown / ArrowUp, Home / End between the visible items — focus
+   * only; Enter or Space selects. On a link row a Cmd/Ctrl/Shift/Alt or non-primary click follows
+   * the `href` natively (a new tab or window): `onSelect` is not called and a peek stays open.
+   */
   onSelect?: (item: NavItem) => void;
   /** Header title; the landmark's `aria-label`. @default "Navigation" */
   title?: string;

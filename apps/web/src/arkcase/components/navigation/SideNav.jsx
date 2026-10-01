@@ -15,6 +15,9 @@ const MINI_COUNT_NEUTRAL = { ...MINI_COUNT, background: 'var(--pill-neutral-bg, 
 const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_COUNT_NEUTRAL : COUNT_NEUTRAL) : (rail ? MINI_COUNT : COUNT));
 const matchesMedia = (q) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false);
 const countText = (n) => (Number(n) > 99 ? '99+' : String(n));
+/* A modified or non-primary click on a link row — Cmd/Ctrl for a new tab, Shift for a new window,
+   Alt to download — belongs to the browser: it follows the href natively and selects nothing. */
+const leftToBrowser = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
 
 /**
  * ArkCase SideNav — the primary navigation in four modes. `drawer` is the
@@ -130,6 +133,11 @@ export function SideNav({
     if (had && peekToggleRef.current) peekToggleRef.current.focus({ preventScroll: true });
   };
   const select = (item) => { onSelect && onSelect(item); if (isPeek) closePeek(); };
+  /* A link row leaves a modified click to the browser — no onSelect, and the peek stays open. */
+  const onItemClick = (item) => (e) => {
+    if (item.link != null && leftToBrowser(e)) return;
+    e.preventDefault(); select(item);
+  };
 
   /* The Angular twin's keyboard model: ArrowDown / ArrowUp move focus between the items of the
      list that has focus, Home / End to its ends, the ends hold, every item stays a tab stop and
@@ -213,7 +221,7 @@ export function SideNav({
       Tag,
       {
         key: i, ...base,
-        onClick: (e) => { e.preventDefault(); select(item); },
+        onClick: onItemClick(item),
         onMouseEnter: () => setHover(i),
         onMouseLeave: () => setHover(null),
         style,
@@ -239,7 +247,7 @@ export function SideNav({
       isLink ? 'a' : 'button',
       {
         ...base, 'aria-label': name,
-        onClick: (e) => { e.preventDefault(); select(item); },
+        onClick: onItemClick(item),
         onMouseEnter: () => setHover(i),
         onMouseLeave: () => setHover(null),
         style: {

@@ -10,10 +10,12 @@ export function safePagePath(path) {
 }
 
 const entry = (path, size = 1024) => ({ path, size, sha256: digest, disposition: 'inline',
-  mediaType: /\.html?$/i.test(path) ? 'text/html; charset=utf-8'
+  mediaType: /\.html?$/i.test(path) ? 'text/html; charset=utf-8' : path.endsWith('.md') ? 'text/markdown; charset=utf-8'
     : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'application/json' });
 
 export function fixtureManifest(artifact, number, fixture = 'Standard') {
+  // Design publications carry their own inventory whatever example inventory is chosen.
+  if (artifact.gallery && galleryFixtures[artifact.gallery]) return galleryManifest(galleryFixtures[artifact.gallery], number);
   const multi = artifact.id === 'art_01JQ7F8C4WQ';
   let entries = [entry('index.html', multi ? 82400 : 4200)];
   let designMetadata;
@@ -148,4 +150,139 @@ export function groupGallery(items) {
       .map((section) => ({ section, items: inKind.filter((item) => item.section === section) }));
     return { ...kind, count: inKind.length, sections };
   }).filter((group) => group.count > 0);
+}
+
+/* Preview index. A generated catalog publishes `artifact-server-previews/index.json`
+   beside it; Review opens such a version on its gallery. The fixture carries the parsed
+   index as `manifest.previewIndex`, a presentation input like `designMetadata`. */
+export const previewIndexPath = 'artifact-server-previews/index.json';
+/** Guides and other text files render as text, never as markup, up to this size. */
+export const maximumTextPreviewBytes = 1024 * 1024;
+const essence = (mediaType) => String(mediaType).split(';')[0].trim().toLowerCase();
+
+/**
+ * The version's gallery, read as untrusted data. `absent` when the entry is not the
+ * generated catalog or no index was published (root index.html, explicit entries and
+ * pre-index versions keep their first page); `invalid` falls back to the catalog.
+ */
+export function previewIndex(manifest) {
+  if (manifest.entryPath !== catalogPath || !manifest.entries.some((item) => item.path === previewIndexPath)) return { status: 'absent' };
+  const index = manifest.previewIndex;
+  const invalid = (reason) => ({ status: 'invalid', reason });
+  if (!index || index.format !== 'artifact-server.preview-index') return invalid('The preview index does not match format version 2.');
+  if (index.version !== 1 && index.version !== 2) return invalid(`Preview index version ${index.version} is not supported by this Review.`);
+  const byPath = new Map(manifest.entries.map((item) => [item.path, item]));
+  const seen = new Set();
+  const items = [];
+  for (const item of Array.isArray(index.items) ? index.items : []) {
+    const page = byPath.get(item?.path);
+    if (!page || essence(page.mediaType) !== 'text/html') return invalid('The preview index names a page that is not an HTML file of this version.');
+    if (!galleryKinds.some((kind) => kind.id === item.kind)) return invalid(`The preview index does not match format version ${index.version}.`);
+    if (seen.has(item.path)) return invalid('The preview index lists a page more than once.');
+    seen.add(item.path);
+    const thumbnail = item.thumbnail && byPath.get(item.thumbnail.path);
+    const links = new Set();
+    items.push({ kind: item.kind, section: item.section, title: item.title, description: item.description || '',
+      path: item.path, viewport: item.viewport,
+      thumbnailPath: thumbnail && essence(thumbnail.mediaType) === item.thumbnail.mediaType ? thumbnail.path : null,
+      // Version 1 has no related links; links to files outside this exact version are dropped.
+      related: index.version === 2 && Array.isArray(item.related) ? item.related.filter((link) => {
+        if (!byPath.has(link.path) || links.has(link.path)) return false;
+        links.add(link.path);
+        return true;
+      }).map((link) => ({ title: link.title, path: link.path })) : [] });
+  }
+  if (!items.length) return invalid(`The preview index does not match format version ${index.version}.`);
+  return { status: 'ready', title: index.title, description: index.description || '', items };
+}
+
+/** Text of a fixture file. The prototype carries a few files' contents, not every file's. */
+export function fixtureText(manifest, path) {
+  return manifest.texts?.[path] ?? standardTexts[path]
+    ?? `This local fixture carries no contents for ${path}. A published version serves its exact bytes.`;
+}
+
+const standardTexts = {
+  'docking.css': '[data-ak-panel][data-side="end"] {\n  border-left: 1px solid var(--border-color);\n}\n\n'
+    + '[data-ak-panel][data-pinned="true"] {\n  flex: none;\n  width: var(--ak-panel-width, 344px);\n}\n',
+};
+
+const galleryItem = (kind, section, title, path, width, height, description, related = []) =>
+  ({ kind, section, title, description, path, viewport: { width, height }, thumbnail: null,
+    related: related.map(([linkTitle, linkPath]) => ({ title: linkTitle, path: linkPath })) });
+const guide = (title, lead) => `# ${title}\n\n${lead}\n\nThis guide is a local fixture; a published version serves`
+  + ' the producer\'s own text.\n';
+
+/* Design publications. `since` is the first version that carried a preview index;
+   earlier versions keep their original catalog as their first page. */
+const galleryFixtures = {
+  'design-system': {
+    since: 2,
+    title: 'ArkCase design system',
+    description: 'Components, guidelines, templates and their guides.',
+    items: [
+      galleryItem('template', 'Templates', 'Case review', 'templates/Case review.dc.html', 1440, 900,
+        'A complete record workspace with its inspector.', [['Templates guide', 'templates/README.md']]),
+      galleryItem('template', 'Templates', 'Record list', 'templates/Record list.dc.html', 1440, 900,
+        'A queue with filters and a docked record.', [['Templates guide', 'templates/README.md']]),
+      galleryItem('component', 'Actions', 'Buttons', 'components/actions/Button.card.html', 1100, 460,
+        'Primary, secondary and link actions.', [['Button guide', 'components/actions/Button.README.md'],
+          ['IconButton guide', 'components/actions/IconButton.README.md']]),
+      galleryItem('component', 'Forms', 'Input', 'components/forms/Input.card.html', 1100, 460,
+        'Labelled fields with helper and error text.', [['Input guide', 'components/forms/Input.README.md']]),
+      galleryItem('component', 'Data display', 'Data grid', 'components/data-display/DataGrid.card.html', 1100, 700,
+        'Sort, select and filter.', [['DataGrid guide', 'components/data-display/DataGrid.README.md']]),
+      galleryItem('component', 'Feedback', 'Alert', 'components/feedback/Alert.card.html', 1100, 460,
+        'Messages that sit in the flow of a page.', [['Alert guide', 'components/feedback/Alert.README.md']]),
+      galleryItem('guideline', 'Foundations', 'Color', 'guidelines/Color.card.html', 1100, 700, 'Semantic surface and text pairs.'),
+      galleryItem('guideline', 'Foundations', 'Typography', 'guidelines/Typography.card.html', 1100, 700, 'Display, body and data faces.'),
+      galleryItem('documentation', 'Guides', 'Getting started', 'docs/Getting started.html', 1100, 800,
+        'Loading order and theme boot for portable pages.', [['Design system readme', 'readme.md']]),
+    ],
+    texts: {
+      'readme.md': guide('ArkCase design system', 'Token sheets load in order: fonts, icons, colors, typography, spacing, elevation, base.'),
+      'templates/README.md': guide('Templates', 'A template is a complete composition that a project copies and owns.'),
+      'components/actions/Button.README.md': guide('Button', 'One primary action per region; secondary actions are outlined.'),
+      'components/actions/IconButton.README.md': guide('IconButton', 'Every icon-only button carries an accessible name.'),
+      'components/forms/Input.README.md': guide('Input', 'Every field has a visible label; helper text sits below it.'),
+      'components/data-display/DataGrid.README.md': guide('DataGrid', 'Sorting and selection are announced; filters are named.'),
+      'components/feedback/Alert.README.md': guide('Alert', 'An alert reports a message; a condition belongs in a ribbon.'),
+    },
+  },
+  prototypes: {
+    since: 1,
+    title: 'Claims examiner',
+    description: 'Examiner app, claimant portal and design studies.',
+    items: [
+      galleryItem('prototype', 'Prototypes', 'App', 'project/App.dc.html', 1440, 900,
+        'The examiner workstation.', [['App guide', 'docs/App.README.md']]),
+      galleryItem('prototype', 'Prototypes', 'Portal', 'project/Portal.dc.html', 390, 844,
+        'The claimant portal on a phone.', [['Portal guide', 'docs/Portal.README.md']]),
+      galleryItem('prototype', 'Prototypes', 'Sign in', 'project/Auth.dc.html', 1440, 900, 'Sign-in scenarios.'),
+      galleryItem('artboard', 'Design studies', 'Inspector dock', 'project/studies/Inspector dock.dc.html', 1440, 900, ''),
+      galleryItem('artboard', 'Design studies', 'Stage bar', 'project/studies/Stage bar.dc.html', 390, 844, ''),
+      galleryItem('artboard', 'Design studies', 'Coverage ribbon', 'project/studies/Coverage ribbon.dc.html', 1280, 800, ''),
+    ],
+    texts: {
+      'docs/App.README.md': guide('App', 'The workstation opens on the queue; a record docks its inspector at the end edge.'),
+      'docs/Portal.README.md': guide('Portal', 'Hit targets hold at 44px below the tablet floor.'),
+    },
+  },
+  // An index this Review cannot read: the version falls back to its original catalog.
+  unreadable: {
+    since: 1, title: 'Correspondence', description: '', version: 3,
+    items: [galleryItem('template', 'Letters', 'Letter', 'project/Letter.dc.html', 816, 1056, ''),
+      galleryItem('template', 'Letters', 'Memo', 'project/Memo.dc.html', 816, 1056, '')],
+    texts: {},
+  },
+};
+
+function galleryManifest(fixture, number) {
+  const indexed = number >= fixture.since;
+  const paths = [...new Set(fixture.items.flatMap((preview) => [preview.path, ...preview.related.map((link) => link.path)])
+    .concat(Object.keys(fixture.texts)))];
+  const entries = [entry(catalogPath), ...(indexed ? [entry(previewIndexPath, 2600)] : []), ...paths.map((path) => entry(path))];
+  return { digest, entryPath: catalogPath, routingMode: 'static', entries, texts: fixture.texts,
+    previewIndex: indexed ? { format: 'artifact-server.preview-index', version: fixture.version || 2, origin: 'producer',
+      title: fixture.title, description: fixture.description, cover: null, items: fixture.items } : undefined };
 }

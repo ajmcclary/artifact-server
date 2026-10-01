@@ -79,6 +79,68 @@ test.describe("Screen continuity", () => {
     }
   });
 
+  test("NAV-001-F: a startup that does not answer in time offers Try again instead of loading forever", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const page = fixture.page;
+      const sessionHeld = Promise.withResolvers<undefined>();
+      await page.route("**/api/v1/session", async (route) => {
+        await sessionHeld.promise;
+        await route.continue();
+      });
+      await page.clock.install();
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.getByRole("heading", {name: "Loading Artifact Server"})).toBeVisible();
+      await page.clock.fastForward(21_000);
+      await expect(page.getByRole("heading", {name: "Artifact Server unavailable"})).toBeVisible();
+      await expect(page.getByText("Artifact Server did not answer in time. Check the connection, then try again.")).toBeVisible();
+      sessionHeld.resolve(undefined);
+      await page.getByRole("button", {name: "Try again"}).click();
+      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("NAV-001-B: on a phone the menu drawer changes screens in place and the startup frame has no navigation column", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const page = fixture.page;
+      await localLogin(fixture);
+      await page.setViewportSize({height: 844, width: 390});
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      await page.evaluate(() => {
+        document.documentElement.dataset["navigationProbe"] = "same-document";
+      });
+      const probe = () => page.evaluate(() => document.documentElement.dataset["navigationProbe"] ?? null);
+
+      await page.getByRole("button", {name: "Open menu"}).click();
+      const drawer = page.getByRole("dialog", {name: "Review and projects"});
+      await drawer.getByRole("link", {name: "Design library"}).click();
+      await expect(page).toHaveURL(/\/review\/library\?project=prj_default/u);
+      await expect(drawer).toHaveCount(0);
+      await page.getByRole("button", {name: "Open menu"}).click();
+      await drawer.getByRole("link", {name: "Review queue"}).click();
+      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+      expect(await probe()).toBe("same-document");
+
+      const sessionHeld = Promise.withResolvers<undefined>();
+      await page.route("**/api/v1/session", async (route) => {
+        await sessionHeld.promise;
+        await route.continue();
+      });
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.locator(".as-boot")).toBeVisible();
+      await expect(page.locator(".as-boot__nav")).toBeHidden();
+      sessionHeld.resolve(undefined);
+      await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("NAV-001-B: opening a project, searching the catalog, and switching artifacts never blank what is already known", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {

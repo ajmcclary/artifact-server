@@ -25,7 +25,10 @@ export interface LeftNavProps {
   items?: NavItem[];
   /** `link` of the active item. */
   activeLink?: string;
-  /** Called with the item selected by the user. */
+  /**
+   * Called with the item selected by the user — an unmodified primary activation. On a link row
+   * a Cmd/Ctrl/Shift/Alt or non-primary click follows the `href` natively and is not reported.
+   */
   onSelect?: (item: NavItem) => void;
   /**
    * Custom navigation node replacing the `SideNav` — for rows that carry

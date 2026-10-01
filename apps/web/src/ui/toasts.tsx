@@ -8,6 +8,7 @@ import {
   removeToast,
   toastExitMilliseconds,
   toastLifetime,
+  toastsAwaitingRemoval,
   type AppToast,
   type QueuedToast,
 } from "./toast-queue.ts";
@@ -59,9 +60,7 @@ export function ToastProvider(props: {readonly children: ReactNode}): JSX.Elemen
     queueRef.current = queue;
     // A toast pushed out by a newer one leaves too, even while the region is
     // paused under the pointer or when it had no lifetime of its own.
-    for (const entry of queue) {
-      if (entry.leaving && !exits.current.has(entry.id)) scheduleRemoval(entry.id);
-    }
+    for (const id of toastsAwaitingRemoval(queue, new Set(exits.current.keys()))) scheduleRemoval(id);
   }, [queue, scheduleRemoval]);
 
   const dismiss = useCallback((id: string) => {

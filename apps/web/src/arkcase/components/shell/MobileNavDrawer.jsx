@@ -4,6 +4,10 @@ import { displayProfileContext } from './DisplayProfile.jsx';
 
 const matchesMedia = (q) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false);
 const countText = (n) => (Number(n) > 99 ? '99+' : String(n));
+/* A modified or non-primary click on a link row — Cmd/Ctrl for a new tab, Shift for a new window,
+   Alt to download — belongs to the browser: it follows the href natively, selects nothing and
+   leaves the drawer open. */
+const leftToBrowser = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /**
@@ -156,7 +160,7 @@ export function MobileNavDrawer({
                 <a
                   href={m.link}
                   aria-current={active ? 'page' : undefined}
-                  onClick={(e) => { e.preventDefault(); onSelect && onSelect(m); close(); }}
+                  onClick={(e) => { if (m.link != null && leftToBrowser(e)) return; e.preventDefault(); onSelect && onSelect(m); close(); }}
                   onMouseEnter={() => setHover(i)}
                   onMouseLeave={() => setHover(null)}
                   style={{

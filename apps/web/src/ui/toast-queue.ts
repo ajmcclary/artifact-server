@@ -54,6 +54,15 @@ export function markToastLeaving(queue: readonly QueuedToast[], id: string): rea
   return queue.map((entry) => entry.id === id ? leavingEntry(entry) : entry);
 }
 
+/**
+ * Leaving toasts whose removal is not yet scheduled. A toast pushed out by a
+ * newer one leaves too, whatever its own lifetime: none (`durationMs: null`)
+ * or paused because the pointer rests on the region.
+ */
+export function toastsAwaitingRemoval(queue: readonly QueuedToast[], scheduled: ReadonlySet<string>): readonly string[] {
+  return queue.flatMap((entry) => entry.leaving && !scheduled.has(entry.id) ? [entry.id] : []);
+}
+
 export function removeToast(queue: readonly QueuedToast[], id: string): readonly QueuedToast[] {
   return queue.filter((entry) => entry.id !== id);
 }

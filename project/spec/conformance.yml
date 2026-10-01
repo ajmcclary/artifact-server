@@ -3150,14 +3150,14 @@ requirements:
       failure: {id: NAV-001-F, description: "While another artifact loads its record, the previous artifact's name, versions, Share, and Delete never show; a failed or empty activity history is requested once, not in a loop; a refused sign-out reports the failure and keeps the reviewer signed in on the same screen."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local Chromium browser evidence proves in-place navigation, the startup frame, re-read continuity, stale-record isolation, bounded activity reads, and refused sign-out. Firefox and WebKit, narrow viewports, the startup deadline, and team deployments are not yet recorded.
+    proof_gap: Local Chromium browser evidence proves in-place navigation at desktop and phone widths, the startup frame, the startup deadline, re-read continuity, stale-record isolation, bounded activity reads, and refused sign-out. Firefox and WebKit pass the same specs in local runs but are outside the recorded critical-engine matrix, and no team deployment is recorded.
     depends_on: [CMT-015, CMT-016, ADM-006]
     evidence:
       - deployment: local
         tests: [NAV-001-B, NAV-001-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-09-30T23:17:43.314Z"
+        recorded_at: "2026-10-01T00:12:27.582Z"
 
   - id: ADM-007
     kind: behavior

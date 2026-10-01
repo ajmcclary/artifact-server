@@ -81,6 +81,18 @@ test.describe("Shell navigation", () => {
       await expect(page).toHaveURL(new RegExp(`/review/library\\?project=${secondProjectId}`, "u"));
       await expectSameDocument(page);
 
+      // A modified click still opens the screen in a new tab and leaves this one in place.
+      const libraryUrl = page.url();
+      const [opened] = await Promise.all([
+        fixture.context.waitForEvent("page"),
+        nav.getByRole("link", {name: "Review queue"}).click({modifiers: ["ControlOrMeta"]}),
+      ]);
+      await opened.waitForLoadState();
+      expect(new URL(opened.url()).pathname).toBe("/review");
+      await opened.close();
+      expect(page.url()).toBe(libraryUrl);
+      await expectSameDocument(page);
+
       await nav.getByRole("link", {name: "Review queue"}).click();
       await expect(page.getByRole("heading", {exact: true, name: "Review queue"})).toBeVisible();
       await expect(page).toHaveTitle(/Review queue/u);

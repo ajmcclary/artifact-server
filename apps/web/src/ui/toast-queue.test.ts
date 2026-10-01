@@ -7,6 +7,7 @@ import {
   queueToast,
   removeToast,
   toastLifetime,
+  toastsAwaitingRemoval,
   type QueuedToast,
 } from "./toast-queue.ts";
 
@@ -41,6 +42,18 @@ describe("toast queue", () => {
     const visible = queue.filter((entry) => !entry.leaving).map((entry) => entry.toast.message);
     expect(visible).toEqual(["three", "four", "five"]);
     expect(visible).toHaveLength(maximumVisibleToasts);
+  });
+
+  test("a toast pushed out by newer ones is due for removal even with no lifetime of its own", () => {
+    const kept = queueToast([], "sign-out-failed", {durationMs: null, message: "Sign-out failed"});
+    const queue = ["two", "three", "four"].reduce<readonly QueuedToast[]>(
+      (current, message) => queueToast(current, message, {message}),
+      kept,
+    );
+    expect(queue.find((entry) => entry.id === "sign-out-failed")?.leaving).toBe(true);
+    expect(toastsAwaitingRemoval(queue, new Set())).toEqual(["sign-out-failed"]);
+    // Once its exit is scheduled it is not scheduled twice.
+    expect(toastsAwaitingRemoval(queue, new Set(["sign-out-failed"]))).toEqual([]);
   });
 
   test("a toast without a duration uses the default and null stays until dismissed", () => {

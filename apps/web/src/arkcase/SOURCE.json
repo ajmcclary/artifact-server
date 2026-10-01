@@ -1,5 +1,5 @@
 {
-  "commit": "34f9d153af6d1a11312e0d185a51c066fb23440e",
+  "commit": "804cd4a8f87afaa3fbb9fbc8f25dadcafc4fe5c4",
   "entriesSha256": "56738e0f04056211f94dced26f2f1942731b8caa1bfd06e641dcf44dc09c8df5",
   "files": {
     "README.md": {
@@ -319,7 +319,7 @@
       "source": "arkcase/project/components/forms/Textarea.jsx"
     },
     "components/navigation/LeftNav.d.ts": {
-      "sha256": "0e3225ce53424672bf31c7b8de6f8461fb0c1bfebc13b4bd4bbca198e0bdf768",
+      "sha256": "cb7cc8c8ad3ce76c08f73b93e54b60069b95e1f666d48e27b6d7a63e835697f2",
       "source": "arkcase/project/components/navigation/LeftNav.d.ts"
     },
     "components/navigation/LeftNav.jsx": {
@@ -343,11 +343,11 @@
       "source": "arkcase/project/components/navigation/SegmentedControl.jsx"
     },
     "components/navigation/SideNav.d.ts": {
-      "sha256": "1e61333a5d18fbe9e42bf90eff830cdbd744e6e11377d0ed0799a2a4cf294a4e",
+      "sha256": "570b82cd61806a784882efca2999ffec18c72c81a40353a8a6d7764c3432bf66",
       "source": "arkcase/project/components/navigation/SideNav.d.ts"
     },
     "components/navigation/SideNav.jsx": {
-      "sha256": "098e3d7a2b96d7629c872ada6a7e7ed96f97c86c87a640a4b4bcaf59ac52d3c4",
+      "sha256": "dcd74f9d9afb109dd9faf79451bf843c203b9106d71bd43e9771e3023369e1f6",
       "source": "arkcase/project/components/navigation/SideNav.jsx"
     },
     "components/navigation/Tabs.d.ts": {
@@ -567,11 +567,11 @@
       "source": "arkcase/project/components/shell/DisplayProfile.jsx"
     },
     "components/shell/MobileNavDrawer.d.ts": {
-      "sha256": "a1a2117637513a37fa373531c24cc9319a6d658d48e79f04fcf732b9e2f9a5cb",
+      "sha256": "9271d6b7ee54b699763a6e9d960cd58b40e565dc31d5a1fd9c387c2ffb394789",
       "source": "arkcase/project/components/shell/MobileNavDrawer.d.ts"
     },
     "components/shell/MobileNavDrawer.jsx": {
-      "sha256": "6b536bf011d34d87c3f37944919da49bf43cce9ceb3c6b8527d8b8b8d062e87d",
+      "sha256": "8b9f32ffd9001fcac93cd4cbc887128b2b0f8e6a40e1cdc703dd51aab4c9f9f9",
       "source": "arkcase/project/components/shell/MobileNavDrawer.jsx"
     },
     "components/utilities/VisuallyHidden.d.ts": {
@@ -639,11 +639,11 @@
       "source": "arkcase/project/components/utilities/tones.jsx"
     },
     "index.ts": {
-      "sha256": "7810f55e67d92782a6f40f1865f2f36cfd2d09ec1d288c268f7d9adee5bf7559",
+      "sha256": "171c77467644813c466d22220de379e55423521341597d9229d03846d69cdcd4",
       "source": null
     },
     "review-ui/page-model.js": {
-      "sha256": "aa9105df538ede8ce1a88ad88faf2c8979d7c21cedec478a0566252acef0e9b7",
+      "sha256": "18e3c7d141e9c13ad3a34359b6973dd5313faf43d736bc9a25732b251ae6148c",
       "source": "workspace/projects/arkcase-artifacts/page-model.js"
     },
     "review-ui/review-ui.d.ts": {

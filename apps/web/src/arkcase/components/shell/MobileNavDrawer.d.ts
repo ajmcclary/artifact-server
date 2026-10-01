@@ -12,7 +12,11 @@ export interface MobileNavDrawerProps {
   items?: NavItem[];
   /** `link` of the active item — marked `aria-current="page"`. */
   activeLink?: string;
-  /** Called with the item, then `onClose`. */
+  /**
+   * Called with the item, then `onClose`, on an unmodified primary activation. On a link row a
+   * Cmd/Ctrl/Shift/Alt or non-primary click follows the `href` natively (a new tab or window):
+   * neither is called and the drawer stays open.
+   */
   onSelect?: (item: NavItem) => void;
   /** Brand mark in the 56px navy header. */
   brand?: React.ReactNode;
