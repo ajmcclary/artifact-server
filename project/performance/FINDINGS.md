@@ -478,3 +478,9 @@ conditions) must be qualified per adapter before any claim there.
 - Aggregate workload limits prevent command-line flags from accidentally creating a stress test.
 - Set tighter regression budgets only after repeated runs on a controlled runner establish normal variance.
 - Run the same behavior on local disk, every blob driver, Postgres, Kubernetes, and Cloudflare as those adapters are implemented.
+
+## Activity feed read path (2026-10)
+
+- Local SQLite, 100,000 actions (`pnpm perf:activity-feed`, Apple M1 Max, Node v24.15.0): first page p50 1.51 ms / p95 2.15 ms; summary p50 10.08 ms / p95 11.78 ms. Evidence: `project/evidence/activity-feed-baseline.json`. Two reruns on the same machine stayed within 2.14–2.37 ms (first page p95) and 11.05–11.61 ms (summary p95).
+- Two-process Postgres/MinIO (`pnpm verify:external-storage-performance`, 16 reads): activityFeed p95 16.223 ms; activitySummary p95 13.424 ms.
+- Risk: latest-per-thread folding probes `actions.thread_id` per candidate row; the summary scans open threads per request. Revisit if open threads exceed 10,000 per installation.

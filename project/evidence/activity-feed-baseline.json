@@ -1,0 +1,34 @@
+{
+  "arch": "arm64",
+  "availableParallelism": 10,
+  "capturedAt": "2026-10-01T16:25:58.705Z",
+  "commit": "c7dcff6b6768aad7a7d72a1c53e8e16edafca53c",
+  "cpu": "Apple M1 Max",
+  "details": null,
+  "lockfileDigest": "8aff5a0b504e23ea2ae0b5959f7c382533402e54c616640b937f77edd2c91ec4",
+  "node": "v24.15.0",
+  "operatingSystem": "darwin 27.2.0",
+  "platform": "darwin",
+  "temporaryFilesystem": "apfs",
+  "workingTreeDirty": true,
+  "completedAt": "2026-10-01T16:25:58.705Z",
+  "configuration": {
+    "actions": 100000,
+    "output": "project/evidence/activity-feed-baseline.json",
+    "reads": 200
+  },
+  "firstPage": {
+    "count": 200,
+    "p50Milliseconds": 1.51,
+    "p95Milliseconds": 2.15,
+    "p99Milliseconds": 3.66
+  },
+  "note": "First activity page (30 entries, latest-per-thread folding) and summary over a seeded SQLite action log: one row in five opens a thread, three reply, one publishes. Seeding time is excluded from the measured phases.",
+  "seedMilliseconds": 6207,
+  "summary": {
+    "count": 200,
+    "p50Milliseconds": 10.08,
+    "p95Milliseconds": 11.78,
+    "p99Milliseconds": 12.12
+  }
+}

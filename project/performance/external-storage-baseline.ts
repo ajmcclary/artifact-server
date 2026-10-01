@@ -128,6 +128,8 @@ export interface ExternalStorageOperationSummary {
 /** Durable diagnostic evidence from one real external-storage-runtime baseline. */
 export interface ExternalStorageBaselineReport {
   readonly artifactList: ExternalStorageOperationSummary;
+  readonly activityFeed: ExternalStorageOperationSummary;
+  readonly activitySummary: ExternalStorageOperationSummary;
   readonly checks: {
     readonly compiledProcesses: "passed";
     readonly crossProcessDirectoryRead: "passed";
@@ -319,6 +321,22 @@ export async function runExternalStorageBaseline(
         await assertArtifactList(server, apiToken, publications.results[0]);
       },
     );
+    const activityFeeds = await runMeasured(
+      configuration.listReads,
+      configuration.operationConcurrency,
+      async (index) => {
+        const server = initialProcesses[index % initialProcesses.length] ?? first;
+        await assertActivityRead(server, apiToken, "/api/v1/activity?limit=30");
+      },
+    );
+    const activitySummaries = await runMeasured(
+      configuration.listReads,
+      configuration.operationConcurrency,
+      async (index) => {
+        const server = initialProcesses[index % initialProcesses.length] ?? first;
+        await assertActivityRead(server, apiToken, "/api/v1/activity/summary");
+      },
+    );
 
     await second.stop();
     runningProcesses.delete(second);
@@ -340,6 +358,8 @@ export async function runExternalStorageBaseline(
 
     const reportWithoutWarnings = {
       artifactList: artifactLists.summary,
+      activityFeed: activityFeeds.summary,
+      activitySummary: activitySummaries.summary,
       checks: {
         compiledProcesses: "passed" as const,
         crossProcessDirectoryRead: "passed" as const,
@@ -640,6 +660,20 @@ function publishFile(
       Effect.provide(NodeFileSystem.layer),
     ),
   );
+}
+
+async function assertActivityRead(
+  server: ExternalStorageProcess,
+  apiToken: string,
+  pathname: string,
+): Promise<void> {
+  const response = await fetch(`${server.baseUrl}${pathname}`, {
+    headers: {Authorization: `Bearer ${apiToken}`},
+  });
+  if (response.status !== 200) {
+    throw new Error(`An external-storage activity read returned ${response.status}.`);
+  }
+  await response.arrayBuffer();
 }
 
 async function assertArtifactList(
