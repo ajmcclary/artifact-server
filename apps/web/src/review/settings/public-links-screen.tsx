@@ -7,8 +7,8 @@ import {
   type PublicLinkMutationResult,
   type PublicLinkPage,
 } from "@/api/client";
-import {Alert, Button, Checkbox, Modal, PageScaffold, StatusPill, SurfaceState} from "@/arkcase";
-import {errorMessage, formatTimestamp} from "@/lib/presentation";
+import {Alert, Button, Checkbox, Modal, StatusPill, SurfaceState} from "@/arkcase";
+import {errorMessage} from "@/lib/presentation";
 import {CopyAction} from "@/ui/copy-action";
 import {
   AdminActions,
@@ -20,9 +20,12 @@ import {
   Ledger,
   ledgerLinkStyle,
   RequestFailure,
+  RowActionsMenu,
   useDsDensity,
   type LedgerColumn,
 } from "./admin-parts.tsx";
+import {AdminConsole} from "./admin-console.tsx";
+import {dateOrDash} from "./admin-areas.ts";
 
 const maximumBulkSize = 100;
 
@@ -247,14 +250,14 @@ export function PublicLinksScreen() {
 
   if (loading && pages.length === 0) {
     return (
-      <PageScaffold title="Public links">
+      <AdminConsole administrator area="publicLinks">
         <SurfaceState loadingTitle="Loading public links" noun="public links" phase="loading" skeleton={3} />
-      </PageScaffold>
+      </AdminConsole>
     );
   }
   if (error !== null && pages.length === 0) {
     return (
-      <PageScaffold title="Public links">
+      <AdminConsole administrator area="publicLinks">
         <SurfaceState
           failedBody={errorMessage(error)}
           failedTitle="Public links could not load"
@@ -262,10 +265,15 @@ export function PublicLinksScreen() {
           onRetry={() => void loadFirstPage()}
           phase="failed"
         />
-      </PageScaffold>
+      </AdminConsole>
     );
   }
 
+  const reloadButton = (
+    <Button icon="bi-arrow-counterclockwise" onClick={() => void loadFirstPage()} outline size="sm" variant="secondary">
+      Reload
+    </Button>
+  );
   const columns: readonly LedgerColumn<PublicLinkItem>[] = [
     {
       align: "left",
@@ -294,18 +302,10 @@ export function PublicLinksScreen() {
       cell: (item) => ({
         value: (
           <IdentityCell
-            badge={item.project.archivedAt === null
-              ? null
-              : <StatusPill label="Archived" tone="neutral" />}
+            badge={item.project.archivedAt === null ? null : <StatusPill label="Archived" tone="neutral" />}
             detail={item.project.name}
             primary={(
-              <Button
-                flush
-                href={artifactReviewHref(item.project.id, item.artifact.id)}
-                size="sm"
-                style={ledgerLinkStyle}
-                variant="link"
-              >
+              <Button flush href={artifactReviewHref(item.project.id, item.artifact.id)} size="sm" style={ledgerLinkStyle} variant="link">
                 {item.artifact.name}
               </Button>
             )}
@@ -318,90 +318,65 @@ export function PublicLinksScreen() {
       width: "minmax(0, 1fr)",
     },
     {
+      align: "right",
+      cell: (item) => ({mono: true, value: `v${item.currentVersion.number}`}),
+      key: "version",
+      kind: "field",
+      label: "Version",
+      width: "80px",
+    },
+    {
       align: "left",
       cell: (item) => ({
         value: (
-          <IdentityCell
-            detail={(
-              <>
-                <span>Version {item.currentVersion.number}</span>
-                <span aria-hidden="true"> · </span>
-                <span>Saved {formatTimestamp(item.currentVersion.createdAt)}</span>
-              </>
-            )}
-            primary={(
-              <Button
-                flush
-                href={item.links.public}
-                size="sm"
-                style={publicUrlStyle}
-                target="_blank"
-                title={item.links.public}
-                variant="link"
-              >
-                {item.links.public}
-              </Button>
-            )}
-          />
+          <span style={linkCellStyle}>
+            <Button flush href={item.links.public} size="sm" style={publicUrlStyle} target="_blank" title={item.links.public} variant="link">
+              {item.links.public}
+            </Button>
+            <CopyAction label={`Copy link to ${item.artifact.name}`} text={item.links.public} />
+          </span>
         ),
       }),
       key: "link",
       kind: "field",
-      label: "Public link",
+      label: "Link",
       width: "minmax(0, 1.4fr)",
+    },
+    {
+      align: "left",
+      cell: (item) => ({
+        value: (
+          <IdentityCell
+            detail={item.madePublicBy?.name ?? "—"}
+            detailMono={false}
+            primary={<span style={{fontFamily: "var(--font-data, monospace)", fontWeight: 400}}>{dateOrDash(item.madePublicAt)}</span>}
+          />
+        ),
+      }),
+      key: "madePublic",
+      kind: "field",
+      label: "Made public",
+      width: "150px",
     },
     {
       align: "right",
       cell: (item) => ({
         value: (
-          <AdminActions>
-            <Button
-              href={item.links.public}
-              icon="bi-box-arrow-up-right"
-              outline
-              size="sm"
-              target="_blank"
-              variant="secondary"
-            >
-              Open
-            </Button>
-            <CopyAction label="Copy public link" text={item.links.public} />
-            <Button
-              disabled={pending}
-              icon="bi-lock"
-              onClick={() => setConfirmation([item])}
-              outline
-              size="sm"
-              variant="secondary"
-            >
-              Make private
-            </Button>
-          </AdminActions>
+          <RowActionsMenu
+            items={[{danger: true, disabled: pending, icon: "bi-lock", label: "Make private", onClick: () => setConfirmation([item])}]}
+            label={`Actions for ${item.artifact.name}`}
+          />
         ),
       }),
       key: "actions",
       kind: "action",
       label: "",
-      width: "264px",
+      width: "56px",
     },
   ];
 
   return (
-    <PageScaffold
-      actions={(
-        <Button
-          icon="bi-arrow-counterclockwise"
-          onClick={() => void loadFirstPage()}
-          outline
-          size="sm"
-          variant="secondary"
-        >
-          Reload
-        </Button>
-      )}
-      meta="See every active artifact that currently allows public-link access, then make individual links or a bounded selection private."
-      title="Public links"
-    >
+    <AdminConsole administrator area="publicLinks">
       {error === null ? null : <RequestFailure error={error} onRetry={() => void loadFirstPage()} />}
       {notice === null ? null : (
         <Alert density={density} title="Public access changed" variant="success">{notice}</Alert>
@@ -495,7 +470,7 @@ export function PublicLinksScreen() {
             </AdminStack>
           </AdminPanel>
 
-          <AdminPanel label="Public-link access" padded={false}>
+          <AdminPanel actions={reloadButton} label="Public links" padded={false} subtitle={`${loadedItems.length} loaded`}>
             <Ledger
               ariaLabel="Public links inventory"
               columns={columns}
@@ -553,7 +528,7 @@ export function PublicLinksScreen() {
           refreshing its version.
         </AdminNote>
       </Modal>
-    </PageScaffold>
+    </AdminConsole>
   );
 }
 
@@ -578,6 +553,7 @@ function resultKey(result: PublicLinkMutationResult): string {
   return `${result.projectId}\0${result.artifactId}`;
 }
 
+const linkCellStyle: CSSProperties = {alignItems: "center", display: "inline-flex", gap: 6, minWidth: 0};
 const publicUrlStyle: CSSProperties = {
   display: "inline-block",
   fontWeight: 400,
