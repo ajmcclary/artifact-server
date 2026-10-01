@@ -248,7 +248,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         expect(await registeredToolNames(page)).toEqual([]);
 
         await page.goto(`${fixture.server.baseUrl}/review/settings/mcp`);
-        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+        await expect(page.getByRole("heading", {level: 1, name: "MCP & WebMCP"})).toBeVisible();
         await expect(page.getByText(`${fixture.server.baseUrl}/mcp`, {exact: true})).toBeVisible();
         await expect(page.getByText("artifactserver connect", {exact: true})).toBeVisible();
         await expect(page.getByRole("checkbox", {name: /Browser agent tools/})).toHaveCount(1);
@@ -256,7 +256,7 @@ test.describe("WMC-001 WebMCP review tools", () => {
         await expect(mcpNavLink).toHaveAttribute("aria-current", "page");
         await page.goto(`${fixture.server.baseUrl}/review/settings/webmcp`);
         await expect(page).toHaveURL(`${fixture.server.baseUrl}/review/settings/webmcp`);
-        await expect(page.getByRole("heading", {level: 2, name: "MCP & WebMCP"})).toBeVisible();
+        await expect(page.getByRole("heading", {level: 1, name: "MCP & WebMCP"})).toBeVisible();
         await expect(mcpNavLink).toHaveAttribute("aria-current", "page");
         await waitForSettledPaint(page);
         const accessibility = await new AxeBuilder({page})
