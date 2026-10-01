@@ -1,7 +1,9 @@
 import type {ActionAttribution} from "./action-attribution.js";
+import type {PrincipalActivityRecorder} from "./ports.js";
 import type {
   ApplicationSession,
   InstallationMember,
+  ListedApiKey,
   ListedMember,
   LoginAttempt,
   ManagedApiKey,
@@ -52,7 +54,7 @@ export interface CreateApplicationSessionRecord {
 }
 
 /** Persistent identity operations required by the Node application composition. */
-export interface IdentityRepository {
+export interface IdentityRepository extends PrincipalActivityRecorder {
   admitMember(command: AdmitMemberRecord): Promise<InstallationMember>;
   bindExternalIdentity(command: BindExternalIdentityRecord): Promise<void>;
   consumeLoginAttempt(
@@ -94,7 +96,7 @@ export interface IdentityRepository {
     memberId: string,
   ): Promise<InstallationMember | null>;
   hasMembers(installationId: string): Promise<boolean>;
-  listApiKeys(installationId: string): Promise<readonly ManagedApiKey[]>;
+  listApiKeys(installationId: string): Promise<readonly ListedApiKey[]>;
   listMembers(installationId: string): Promise<readonly ListedMember[]>;
   revokeApiKey(
     installationId: string,

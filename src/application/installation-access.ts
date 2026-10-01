@@ -29,6 +29,7 @@ import {
   type ApplicationSession,
   type ExternalIdentity,
   type InstallationMember,
+  type ListedApiKey,
   type ListedMember,
   type IssuedApplicationSession,
   type IssuedManagedApiKey,
@@ -135,7 +136,7 @@ export interface InstallationIdentityRepository {
   ) => Effect.Effect<boolean, IdentityRepositoryFailure>;
   readonly listApiKeys: (
     installationId: string,
-  ) => Effect.Effect<readonly ManagedApiKey[], IdentityRepositoryFailure>;
+  ) => Effect.Effect<readonly ListedApiKey[], IdentityRepositoryFailure>;
   readonly listMembers: (
     installationId: string,
   ) => Effect.Effect<readonly ListedMember[], IdentityRepositoryFailure>;

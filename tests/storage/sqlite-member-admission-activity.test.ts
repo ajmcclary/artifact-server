@@ -124,6 +124,139 @@ describe("SQLite member admission and activity facts", () => {
     ]);
   });
 
+  test("touch advances last active only when the stored instant is five minutes older, and never backwards", async () => {
+    await identity.admitMember({
+      admittedHow: memberAdmissions.manual,
+      attribution: systemAttribution,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      displayName: "Ada Lovelace",
+      email: "ada@example.test",
+      id: "member_ada",
+      installationId,
+      role: "member",
+    });
+    const lastActive = async () =>
+      (await identity.listMembers(installationId))[0]?.lastActiveAt;
+
+    await identity.touch("member_ada", "2026-10-01T12:00:00.000Z");
+    expect(await lastActive()).toBe("2026-10-01T12:00:00.000Z");
+
+    await identity.touch("member_ada", "2026-10-01T12:04:59.999Z");
+    expect(await lastActive()).toBe("2026-10-01T12:00:00.000Z");
+
+    await identity.touch("member_ada", "2026-10-01T11:00:00.000Z");
+    expect(await lastActive()).toBe("2026-10-01T12:00:00.000Z");
+
+    await identity.touch("member_ada", "2026-10-01T12:05:00.001Z");
+    expect(await lastActive()).toBe("2026-10-01T12:05:00.001Z");
+
+    await expect(identity.touch("member_unknown", "2026-10-01T12:10:00.000Z"))
+      .resolves.toBeUndefined();
+  });
+
+  test("touchApiKey records last used, and the key listing names the owner", async () => {
+    await identity.admitMember({
+      admittedHow: memberAdmissions.manual,
+      attribution: systemAttribution,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      displayName: "Ada Lovelace",
+      email: "ada@example.test",
+      id: "member_ada",
+      installationId,
+      role: "member",
+    });
+    const base = {
+      authorizedByPrincipalId: "member_ada",
+      capabilities: ["artifact:read"] as const,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      installationId,
+      revokedAt: null,
+      rotatedFromId: null,
+    };
+    await identity.createApiKey({
+      ...base,
+      id: "key_member",
+      name: "Ada's key",
+      prefix: "as_key_key_member_prefix",
+      principalId: "member_ada",
+      principalKind: "human",
+      secretDigest: "digest-member",
+    }, systemAttribution);
+    await identity.createApiKey({
+      ...base,
+      id: "key_service",
+      name: "Release bot",
+      prefix: "as_key_key_service_prefix",
+      principalId: "service:key_service",
+      principalKind: "service",
+      secretDigest: "digest-service",
+    }, systemAttribution);
+
+    await identity.touchApiKey("key_service", "2026-10-01T12:00:00.000Z");
+    await identity.touchApiKey("key_service", "2026-10-01T12:01:00.000Z");
+
+    const keys = await identity.listApiKeys(installationId);
+    expect(keys.map((key) => ({
+      id: key.id,
+      lastUsedAt: key.lastUsedAt,
+      ownerName: key.ownerName,
+      revokedByName: key.revokedByName,
+    }))).toEqual(expect.arrayContaining([
+      {id: "key_member", lastUsedAt: null, ownerName: "Ada Lovelace", revokedByName: null},
+      {id: "key_service", lastUsedAt: "2026-10-01T12:00:00.000Z", ownerName: null, revokedByName: null},
+    ]));
+    expect(keys.every((key) => !("secretDigest" in key))).toBe(true);
+  });
+
+  test("a key revoked by rotation names the administrator who rotated it", async () => {
+    const owner = await identity.admitMember({
+      admittedHow: memberAdmissions.owner,
+      attribution: systemAttribution,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      displayName: "Local administrator",
+      email: "owner@example.test",
+      id: "member_owner",
+      installationId,
+      role: "administrator",
+    });
+    const rotator = {actor: {displayName: owner.displayName, kind: "human" as const}, authorizedByPrincipalId: null, principalId: owner.id};
+    const key = {
+      authorizedByPrincipalId: owner.id,
+      capabilities: ["artifact:read"] as const,
+      createdAt: "2026-10-01T09:00:00.000Z",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      installationId,
+      principalKind: "service" as const,
+      revokedAt: null,
+    };
+    await identity.createApiKey({
+      ...key,
+      id: "key_old",
+      name: "Release bot",
+      prefix: "as_key_key_old_prefix",
+      principalId: "service:key_old",
+      rotatedFromId: null,
+      secretDigest: "digest-old",
+    }, rotator);
+    await identity.rotateApiKey(installationId, "key_old", {
+      ...key,
+      createdAt: "2026-10-01T10:00:00.000Z",
+      id: "key_new",
+      name: "Release bot",
+      prefix: "as_key_key_new_prefix",
+      principalId: "service:key_new",
+      rotatedFromId: "key_old",
+      secretDigest: "digest-new",
+    }, "2026-10-01T10:00:00.000Z", rotator);
+
+    const keys = await identity.listApiKeys(installationId);
+    expect(keys.map((listed) => [listed.id, listed.revokedByName])).toEqual(expect.arrayContaining([
+      ["key_old", "Local administrator"],
+      ["key_new", null],
+    ]));
+  });
+
   test("the actions table has a partial subject index for administration lookups", () => {
     const indexes = z.array(z.object({name: z.string(), partial: z.number()}))
       .parse(new DatabaseSync(databasePath).prepare("PRAGMA index_list(actions)").all());

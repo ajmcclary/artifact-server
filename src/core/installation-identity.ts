@@ -95,6 +95,15 @@ export interface StoredManagedApiKey extends ManagedApiKey {
   readonly secretDigest: string;
 }
 
+/** Administrator-facing key record with use and revocation facts. */
+export interface ListedApiKey extends ManagedApiKey {
+  readonly lastUsedAt: string | null;
+  /** The owning member's display name; null for a service key. */
+  readonly ownerName: string | null;
+  /** Actor of the newest revoke or rotate action on this key, when recorded. */
+  readonly revokedByName: string | null;
+}
+
 /** An application session credential returned once to the browser adapter. */
 export interface IssuedApplicationSession {
   readonly csrfToken: string;

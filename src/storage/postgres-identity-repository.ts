@@ -17,6 +17,7 @@ import type {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedApiKey,
   type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
@@ -33,6 +34,7 @@ import {
   systemAttribution,
 } from "../core/action-attribution.js";
 import {memberAdmissions} from "../core/identity-ports.js";
+import {principalActivityThreshold} from "../core/principal-activity.js";
 import {attributedInsert} from "./action-insert.js";
 import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
@@ -108,6 +110,11 @@ const apiKeyRowSchema = z.object({
   revokedAt: z.string().nullable(),
   rotatedFromId: z.string().nullable(),
   secretDigest: z.string(),
+});
+const listedApiKeyRowSchema = z.object({
+  lastUsedAt: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  revokedByName: z.string().nullable(),
 });
 const loginAttemptRowSchema = z.object({
   codeVerifier: z.string(),
@@ -497,18 +504,70 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
     return this.#database.run(this.#findApiKey(installationId, keyId, false));
   }
 
-  async listApiKeys(installationId: string): Promise<readonly ManagedApiKey[]> {
+  async listApiKeys(installationId: string): Promise<readonly ListedApiKey[]> {
     this.#assertInstallationScope(installationId);
     return this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
-      const rows = yield* sql.unsafe<object>(apiKeySelect(
-        "WHERE installation_id = $1 ORDER BY created_at DESC, id DESC",
-      ), [installationId]);
-      return z.array(apiKeyRowSchema).parse(rows).map((row) =>
-        withoutSecretDigest(parseApiKey(row))
+      const rows = yield* sql.unsafe<object>(
+        `SELECT managed.id, managed.installation_id AS "installationId", managed.name,
+          managed.prefix, managed.secret_digest AS "secretDigest",
+          managed.principal_id AS "principalId", managed.principal_kind AS "principalKind",
+          managed.capabilities_json AS "capabilitiesJson",
+          managed.authorized_by_principal_id AS "authorizedByPrincipalId",
+          managed.created_at AS "createdAt", managed.expires_at AS "expiresAt",
+          managed.revoked_at AS "revokedAt", managed.rotated_from_id AS "rotatedFromId",
+          managed.last_used_at AS "lastUsedAt",
+          owner.display_name AS "ownerName",
+          (
+            SELECT entry.actor_name FROM actions AS entry
+            WHERE entry.installation_id = managed.installation_id
+              AND ((entry.action = 'key_revoke' AND entry.subject_id = managed.id)
+                -- A rotation's subject is the replacement; it revoked the key it replaced.
+                OR (entry.action = 'key_rotate' AND entry.subject_id IN (
+                  SELECT replacement.id FROM managed_api_keys AS replacement
+                  WHERE replacement.installation_id = managed.installation_id
+                    AND replacement.rotated_from_id = managed.id
+                )))
+            ORDER BY entry.created_at DESC, entry.id DESC
+            LIMIT 1
+          ) AS "revokedByName"
+        FROM managed_api_keys AS managed
+        LEFT JOIN installation_members AS owner
+          ON owner.installation_id = managed.installation_id
+          AND owner.id = managed.principal_id
+        WHERE managed.installation_id = $1
+        ORDER BY managed.created_at DESC, managed.id DESC`,
+        [installationId],
       );
+      return rows.map((row) => Object.assign(
+        withoutSecretDigest(parseApiKey(apiKeyRowSchema.parse(row))),
+        listedApiKeyRowSchema.parse(row),
+      ));
     }));
   }
+
+  async touch(principalId: string, at: string): Promise<void> {
+    const installationId = this.#installationId;
+    const threshold = principalActivityThreshold(at);
+    await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`UPDATE installation_members SET last_active_at = ${at}
+        WHERE installation_id = ${installationId} AND id = ${principalId}
+          AND (last_active_at IS NULL OR last_active_at < ${threshold})`;
+    }));
+  }
+
+  async touchApiKey(keyId: string, at: string): Promise<void> {
+    const installationId = this.#installationId;
+    const threshold = principalActivityThreshold(at);
+    await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`UPDATE managed_api_keys SET last_used_at = ${at}
+        WHERE installation_id = ${installationId} AND id = ${keyId}
+          AND (last_used_at IS NULL OR last_used_at < ${threshold})`;
+    }));
+  }
+
 
   async revokeApiKey(
     installationId: string,

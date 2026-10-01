@@ -882,6 +882,17 @@ export interface StagedUploadRepository {
   ): Promise<boolean>;
 }
 
+/** Throttled last-active and last-used persistence (spec §3). */
+export interface PrincipalActivityRecorder {
+  /**
+   * Advance one member's last-active instant to `at` when the stored instant
+   * is missing or at least five minutes older. An unknown ID changes nothing.
+   */
+  readonly touch: (principalId: string, at: string) => Promise<void>;
+  /** Advance one managed API key's last-used instant under the same rule. */
+  readonly touchApiKey: (keyId: string, at: string) => Promise<void>;
+}
+
 export interface Clock {
   now(): Date;
 }

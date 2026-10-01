@@ -10,6 +10,7 @@ import {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedApiKey,
   type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
@@ -26,6 +27,7 @@ import {
   systemAttribution,
 } from "../core/action-attribution.js";
 import {memberAdmissions} from "../core/identity-ports.js";
+import {principalActivityThreshold} from "../core/principal-activity.js";
 import {
   type ActionInsert,
   attributedInsert,
@@ -80,6 +82,11 @@ const listedMemberRowSchema = memberRowSchema.extend({
   ]).nullable(),
   admittedByName: z.string().nullable(),
   lastActiveAt: z.string().nullable(),
+});
+const listedApiKeyRowSchema = z.object({
+  lastUsedAt: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  revokedByName: z.string().nullable(),
 });
 const sessionRowSchema = z.object({
   createdAt: z.string(),
@@ -595,28 +602,62 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     return row === undefined ? null : parseApiKey(row);
   }
 
-  async listApiKeys(installationId: string): Promise<readonly ManagedApiKey[]> {
+  async listApiKeys(installationId: string): Promise<readonly ListedApiKey[]> {
     const rows = this.#database.prepare(`
       SELECT
-        id,
-        installation_id AS installationId,
-        name,
-        prefix,
-        secret_digest AS secretDigest,
-        principal_id AS principalId,
-        principal_kind AS principalKind,
-        capabilities_json AS capabilitiesJson,
-        authorized_by_principal_id AS authorizedByPrincipalId,
-        created_at AS createdAt,
-        expires_at AS expiresAt,
-        revoked_at AS revokedAt,
-        rotated_from_id AS rotatedFromId
-      FROM managed_api_keys
-      WHERE installation_id = ?
-      ORDER BY created_at DESC, id DESC
+        managed.id,
+        managed.installation_id AS installationId,
+        managed.name,
+        managed.prefix,
+        managed.secret_digest AS secretDigest,
+        managed.principal_id AS principalId,
+        managed.principal_kind AS principalKind,
+        managed.capabilities_json AS capabilitiesJson,
+        managed.authorized_by_principal_id AS authorizedByPrincipalId,
+        managed.created_at AS createdAt,
+        managed.expires_at AS expiresAt,
+        managed.revoked_at AS revokedAt,
+        managed.rotated_from_id AS rotatedFromId,
+        managed.last_used_at AS lastUsedAt,
+        owner.display_name AS ownerName,
+        (
+          SELECT entry.actor_name FROM actions AS entry
+          WHERE (entry.action = 'key_revoke' AND entry.subject_id = managed.id)
+            -- A rotation's subject is the replacement; it revoked the key it replaced.
+            OR (entry.action = 'key_rotate' AND entry.subject_id IN (
+              SELECT replacement.id FROM managed_api_keys AS replacement
+              WHERE replacement.rotated_from_id = managed.id
+            ))
+          ORDER BY entry.created_at DESC, entry.id DESC
+          LIMIT 1
+        ) AS revokedByName
+      FROM managed_api_keys AS managed
+      LEFT JOIN installation_members AS owner
+        ON owner.installation_id = managed.installation_id
+        AND owner.id = managed.principal_id
+      WHERE managed.installation_id = ?
+      ORDER BY managed.created_at DESC, managed.id DESC
     `).all(installationId);
-    return rows.map((row) => withoutSecretDigest(parseApiKey(row)));
+    return rows.map((row) => Object.assign(
+      withoutSecretDigest(parseApiKey(row)),
+      listedApiKeyRowSchema.parse(row),
+    ));
   }
+
+  async touch(principalId: string, at: string): Promise<void> {
+    this.#database.prepare(`
+      UPDATE installation_members SET last_active_at = ?
+      WHERE id = ? AND (last_active_at IS NULL OR last_active_at < ?)
+    `).run(at, principalId, principalActivityThreshold(at));
+  }
+
+  async touchApiKey(keyId: string, at: string): Promise<void> {
+    this.#database.prepare(`
+      UPDATE managed_api_keys SET last_used_at = ?
+      WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)
+    `).run(at, keyId, principalActivityThreshold(at));
+  }
+
 
   async revokeApiKey(
     installationId: string,

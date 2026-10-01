@@ -2,6 +2,7 @@ import {z} from "zod";
 
 import type {ActionAttribution} from "../../../src/core/action-attribution.js";
 import {memberAdmissions} from "../../../src/core/identity-ports.js";
+import {principalActivityThreshold} from "../../../src/core/principal-activity.js";
 import {
   type ActionInsert,
   attributedInsert,
@@ -24,6 +25,7 @@ import type {
 import {
   type ApplicationSession,
   type InstallationMember,
+  type ListedApiKey,
   type ListedMember,
   type LoginAttempt,
   type ManagedApiKey,
@@ -107,6 +109,11 @@ const apiKeyRowSchema = z.object({
   revokedAt: z.string().nullable(),
   rotatedFromId: z.string().nullable(),
   secretDigest: z.string(),
+});
+const listedApiKeyRowSchema = z.object({
+  lastUsedAt: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  revokedByName: z.string().nullable(),
 });
 const loginAttemptRowSchema = z.object({
   codeVerifier: z.string(),
@@ -507,11 +514,53 @@ export function createD1IdentityRepository(
       return presenceRowSchema.parse(row).present === 1;
     },
 
-    listApiKeys: async (installationId) => {
-      const result = await database.prepare(`${apiKeySelect}
-        WHERE installation_id = ? ORDER BY created_at DESC, id DESC
+    listApiKeys: async (installationId): Promise<readonly ListedApiKey[]> => {
+      const result = await database.prepare(`
+        SELECT managed.id, managed.installation_id AS installationId, managed.name,
+          managed.prefix, managed.secret_digest AS secretDigest,
+          managed.principal_id AS principalId, managed.principal_kind AS principalKind,
+          managed.capabilities_json AS capabilitiesJson,
+          managed.authorized_by_principal_id AS authorizedByPrincipalId,
+          managed.created_at AS createdAt, managed.expires_at AS expiresAt,
+          managed.revoked_at AS revokedAt, managed.rotated_from_id AS rotatedFromId,
+          managed.last_used_at AS lastUsedAt,
+          owner.display_name AS ownerName,
+          (
+            SELECT entry.actor_name FROM actions AS entry
+            WHERE (entry.action = 'key_revoke' AND entry.subject_id = managed.id)
+              -- A rotation's subject is the replacement; it revoked the key it replaced.
+              OR (entry.action = 'key_rotate' AND entry.subject_id IN (
+                SELECT replacement.id FROM managed_api_keys AS replacement
+                WHERE replacement.rotated_from_id = managed.id
+              ))
+            ORDER BY entry.created_at DESC, entry.id DESC
+            LIMIT 1
+          ) AS revokedByName
+        FROM managed_api_keys AS managed
+        LEFT JOIN installation_members AS owner
+          ON owner.installation_id = managed.installation_id
+          AND owner.id = managed.principal_id
+        WHERE managed.installation_id = ?
+        ORDER BY managed.created_at DESC, managed.id DESC
       `).bind(installationId).all<z.input<typeof apiKeyRowSchema>>();
-      return result.results.map((row) => withoutSecretDigest(parseApiKey(row)));
+      return result.results.map((row) => Object.assign(
+        withoutSecretDigest(parseApiKey(row)),
+        listedApiKeyRowSchema.parse(row),
+      ));
+    },
+
+    touch: async (principalId: string, at: string): Promise<void> => {
+      await database.prepare(`
+        UPDATE installation_members SET last_active_at = ?
+        WHERE id = ? AND (last_active_at IS NULL OR last_active_at < ?)
+      `).bind(at, principalId, principalActivityThreshold(at)).run();
+    },
+
+    touchApiKey: async (keyId: string, at: string): Promise<void> => {
+      await database.prepare(`
+        UPDATE managed_api_keys SET last_used_at = ?
+        WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)
+      `).bind(at, keyId, principalActivityThreshold(at)).run();
     },
 
     listMembers: async (installationId): Promise<readonly ListedMember[]> => {

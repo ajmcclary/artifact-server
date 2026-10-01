@@ -59,4 +59,56 @@ describe("D1 member admission and principal activity", () => {
       await proxy.dispose();
     }
   });
+
+  it("touch and touchApiKey advance at most once per five minutes", async () => {
+    const proxy = await openLocalD1();
+    try {
+      const database = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+      await migrateD1(database, installationId);
+      const identity = createD1IdentityRepository(database);
+      await identity.admitMember({
+        admittedHow: memberAdmissions.manual,
+        attribution: systemAttribution,
+        createdAt: "2026-10-01T09:00:00.000Z",
+        displayName: "Ada Lovelace",
+        email: "ada@example.test",
+        id: "member_ada",
+        installationId,
+        role: "member",
+      });
+      await identity.createApiKey({
+        authorizedByPrincipalId: "member_ada",
+        capabilities: ["artifact:read"],
+        createdAt: "2026-10-01T09:00:00.000Z",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        id: "key_service",
+        installationId,
+        name: "Release bot",
+        prefix: "as_key_key_service_prefix",
+        principalId: "service:key_service",
+        principalKind: "service",
+        revokedAt: null,
+        rotatedFromId: null,
+        secretDigest: "digest-service",
+      }, systemAttribution);
+
+      await identity.touch("member_ada", "2026-10-01T12:00:00.000Z");
+      await identity.touch("member_ada", "2026-10-01T12:03:00.000Z");
+      await identity.touchApiKey("key_service", "2026-10-01T12:00:00.000Z");
+      await identity.touchApiKey("key_service", "2026-10-01T12:06:00.000Z");
+
+      expect((await identity.listMembers(installationId))[0]?.lastActiveAt)
+        .toBe("2026-10-01T12:00:00.000Z");
+      expect(await identity.listApiKeys(installationId)).toEqual([
+        expect.objectContaining({
+          id: "key_service",
+          lastUsedAt: "2026-10-01T12:06:00.000Z",
+          ownerName: null,
+          revokedByName: null,
+        }),
+      ]);
+    } finally {
+      await proxy.dispose();
+    }
+  });
 });
