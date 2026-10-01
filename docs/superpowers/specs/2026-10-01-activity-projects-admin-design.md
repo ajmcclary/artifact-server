@@ -285,7 +285,7 @@ There is no streaming or polling.
   at most one write per principal every five minutes. It is safe across
   processes and an idempotent no-op otherwise.
 - A failure is logged and swallowed. It never fails or delays the request; the
-  touch runs after the response.
+  touch runs after the response (`waitUntil` on Workers).
 
 ### Admitted by
 
