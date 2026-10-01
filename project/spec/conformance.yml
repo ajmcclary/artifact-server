@@ -3114,11 +3114,11 @@ requirements:
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: members}
     acceptance:
-      behavior: {id: ADM-003-B, description: "As an administrator, list active and inactive members, admit a member and administrator by provider email, and deactivate an eligible member while durable attributed records remain."}
+      behavior: {id: ADM-003-B, description: "As an administrator, list active and inactive members with when, how, and by whom each was admitted and when each was last active, admit a member and administrator by provider email, and deactivate an eligible member while durable attributed records remain."}
       failure: {id: ADM-003-F, description: "A non-administrator direct route or mutation is forbidden, the UI does not claim to send an invitation, and current-member, last-administrator, and local-owner administrator deactivation remain refused without changing membership."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local browser evidence proves member admission and deactivation in the canonical application. Equivalent browser evidence for a non-administrator and each team deployment remains unrecorded; service tests retain those authority boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves member admission and deactivation in the canonical application. Equivalent browser evidence for a non-administrator and each team deployment remains unrecorded; service tests retain those authority boundaries.
     depends_on: [AUTH-001, AUTH-027, AUTH-028]
     evidence:
       - deployment: local
@@ -3126,6 +3126,11 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+      - deployment: local
+        tests: [ADM-003-B]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:58:20.713Z"
 
   - id: ADM-004
     kind: security
@@ -3133,11 +3138,11 @@ requirements:
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: api-keys}
     acceptance:
-      behavior: {id: ADM-004-B, description: "Issue a minimally scoped expiring member or service key, copy its one-time secret, rotate it and copy the replacement, then revoke the active key and observe its status."}
+      behavior: {id: ADM-004-B, description: "Issue a minimally scoped expiring member or service key, copy its one-time secret, rotate it and copy the replacement, then revoke the active key and observe its owner, last use, derived active, expired, or revoked status, and who revoked it."}
       failure: {id: ADM-004-F, description: "A non-administrator, missing capability, missing future expiration, inactive owner, stale key, or repeated reveal attempt fails without exposing a full existing secret or leaving it recoverable from frontend state."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local browser evidence proves issue, one-time display, frontend secret disposal, rotation, and revocation. Equivalent browser evidence for every rejected owner or capability case and each team deployment remains unrecorded; service tests retain those authority boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves issue, one-time display, frontend secret disposal, rotation, and revocation. Equivalent browser evidence for every rejected owner or capability case and each team deployment remains unrecorded; service tests retain those authority boundaries.
     depends_on: [AUTH-009, AUTH-027]
     evidence:
       - deployment: local
@@ -3145,6 +3150,11 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+      - deployment: local
+        tests: [ADM-004-B]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:58:20.713Z"
 
   - id: ADM-005
     kind: security
@@ -3152,11 +3162,11 @@ requirements:
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: public-links}
     acceptance:
-      behavior: {id: ADM-005-B, description: "Page through active public links from multiple projects, open their public and Review destinations, make one and a bounded selection private, and retry a stale failed item without rolling back successful items."}
+      behavior: {id: ADM-005-B, description: "Page through active public links from multiple projects with when and by whom each was made public, open their public and Review destinations, make one and a bounded selection private, and retry a stale failed item without rolling back successful items."}
       failure: {id: ADM-005-F, description: "A non-administrator, oversized or duplicate selection, stale version, or cross-installation item is refused per item; the interface does not create links here or promise recall of downloaded or externally cached copies."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local browser evidence proves cross-project inventory, one and bulk access reduction, partial success, and stale retry. Equivalent browser evidence for each authorization rejection and team deployment remains unrecorded; service tests retain those boundaries.
+    proof_gap: Local SQLite HTTP tests prove the administration facts; the canonical Admin console rendering them is proved in Slice 7. Local browser evidence proves cross-project inventory, one and bulk access reduction, partial success, and stale retry. Equivalent browser evidence for each authorization rejection and team deployment remains unrecorded; service tests retain those boundaries.
     depends_on: [AUTH-007, AUTH-018, CMT-017]
     evidence:
       - deployment: local
@@ -3164,6 +3174,11 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+      - deployment: local
+        tests: [ADM-005-B]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:58:20.713Z"
 
   - id: ADM-006
     kind: behavior
@@ -3222,6 +3237,25 @@ requirements:
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
 
+
+  - id: ACT-007
+    kind: behavior
+    behavior: Administrators see when each member was last active and when each API key was last used, advanced at most once per principal every five minutes, without failing or holding the request that used the credential.
+    owner: authorization
+    source: {file: single-application-administration-spec.md, anchor: members}
+    acceptance:
+      behavior: {id: ACT-007-B, description: "Use a browser session, a service key, and a member-bound key across two processes and observe last active and last used advance at most once per five minutes per principal."}
+      failure: {id: ACT-007-F, description: "A refused tracking write, the installation token, a malformed key, or a revoked key never fails a request or records activity, and a refused write is retried on the next use."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local SQLite HTTP evidence proves session, key, cross-process, refusal and retry behavior; Postgres and D1 repository tests prove the conditional write; no team deployment is recorded.
+    depends_on: [AUTH-009, AUTH-027]
+    evidence:
+      - deployment: local
+        tests: [ACT-007-B, ACT-007-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-01T15:58:20.713Z"
   - id: DSP-001
     kind: behavior
     behavior: An agent registers itself with one upsert on its connection key within its own principal, listing derives whether it is connected from its claim polling, and a stale agent row is removed without touching dispatch history.
