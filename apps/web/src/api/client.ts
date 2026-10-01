@@ -1,6 +1,21 @@
 import { z } from "zod";
 
 import {readBoundedReviewHtml} from "./bounded-text";
+import {
+  activityPageSchema,
+  type ActivityListParams,
+  activityQueryString,
+  activitySummarySchema,
+} from "./activity-contract";
+
+export type {
+  ActivityEntry,
+  ActivityListParams,
+  ActivityPageResponse,
+  ActivitySegment,
+  ActivitySummary,
+  ActivityType,
+} from "./activity-contract";
 
 const accessSettingSchema = z.enum(["account_required", "public_link"]);
 const membershipRoleSchema = z.enum(["administrator", "member"]);
@@ -895,6 +910,13 @@ export const api = {
     method: "POST",
   }),
   session: () => request(sessionSchema, "/api/v1/session"),
+  listActivity: (params: ActivityListParams) =>
+    request(activityPageSchema, `/api/v1/activity${activityQueryString(params)}`),
+  activitySummary: (projects: readonly string[] = []) =>
+    request(
+      activitySummarySchema,
+      `/api/v1/activity/summary${activityQueryString({ projects })}`,
+    ),
   logout: async () => {
     await requestNoContent("/api/v1/session/logout", {
       headers: mutationHeaders(),
