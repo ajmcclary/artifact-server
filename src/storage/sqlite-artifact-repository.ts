@@ -6418,6 +6418,8 @@ export class SqliteArtifactRepository implements
       this.#tableExists("managed_api_keys");
     try {
       this.#transaction(() => {
+        // Another process on this file may have migrated between the check above and this lock.
+        if (this.#tableColumns("actions").includes("subject_id")) return;
         for (const statement of [
           ...sqliteActionsRebuildStatements({strict: true}),
           ...sqliteActionTriggerStatements,

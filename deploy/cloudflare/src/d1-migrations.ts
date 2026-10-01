@@ -696,6 +696,10 @@ async function addInstallationActivityLogIfMissing(
       ...sqliteActivityRecoveryStatements({identity: true}),
     ].map((statement) => database.prepare(statement)));
   } catch (cause) {
+    // A concurrent isolate migrated between the column check and this batch; the copy check
+    // refused to rebuild the migrated table, so the batch changed nothing.
+    const after = await database.prepare("PRAGMA table_info(actions)").all<{name: string}>();
+    if (after.results.some((column) => column.name === "subject_id")) return;
     const detail = cause instanceof Error ? cause.message : String(cause);
     throw new Error(`D1 migration installation_activity_log failed: ${detail}`, {cause});
   }

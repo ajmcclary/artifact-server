@@ -11,6 +11,7 @@ import {
   recoveredRowColumns,
   recoveredRowSchema,
 } from "../../../tests/support/activity-history-fixture.js";
+import {sqliteActionsRebuildStatements, sqliteActivityRecoveryStatements} from "../../../src/storage/activity-log-schema.js";
 import {createD1ArtifactRepository} from "../src/d1-artifact-repository.js";
 import {createD1IdentityRepository} from "../src/d1-identity-repository.js";
 import {migrateD1, requiredD1SchemaVersion} from "../src/d1-migrations.js";
@@ -90,6 +91,14 @@ describe("D1 activity log migration", () => {
       // A repeated migration changes nothing.
       const before = (await binding.prepare("SELECT * FROM actions ORDER BY id").all()).results;
       await migrateD1(binding, installationId);
+      expect((await binding.prepare("SELECT * FROM actions ORDER BY id").all()).results).toEqual(before);
+
+      // An isolate that read the legacy shape before a concurrent one committed must not rebuild
+      // the migrated table: the batch is refused and nothing changes.
+      await expect(binding.batch([
+        ...sqliteActionsRebuildStatements({strict: false}),
+        ...sqliteActivityRecoveryStatements({identity: true}),
+      ].map((statement) => binding.prepare(statement)))).rejects.toThrow(/CHECK constraint failed/u);
       expect((await binding.prepare("SELECT * FROM actions ORDER BY id").all()).results).toEqual(before);
 
       const history = await createD1ArtifactRepository(binding, installationId).listArtifactActions({

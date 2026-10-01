@@ -130,13 +130,16 @@ export function sqliteActionsRebuildStatements(
     )${strict}`,
     `INSERT INTO actions_next (${legacyColumns})
       SELECT ${legacyColumns} FROM actions`,
+    // The migrated column refuses a table a concurrent migrator already rebuilt: copying only the legacy
+    // columns from it would drop every activity-log column.
     `CREATE TABLE actions_copy_check (
       expected INTEGER NOT NULL,
       copied INTEGER NOT NULL,
       missing INTEGER NOT NULL,
-      CHECK (expected = copied AND missing = 0)
+      migrated INTEGER NOT NULL,
+      CHECK (expected = copied AND missing = 0 AND migrated = 0)
     )`,
-    `INSERT INTO actions_copy_check (expected, copied, missing)
+    `INSERT INTO actions_copy_check (expected, copied, missing, migrated)
       SELECT
         (SELECT count(*) FROM actions),
         (SELECT count(*) FROM actions_next),
@@ -144,7 +147,9 @@ export function sqliteActionsRebuildStatements(
           SELECT ${legacyColumns} FROM actions
           EXCEPT
           SELECT ${legacyColumns} FROM actions_next
-        ))`,
+        )),
+        (SELECT count(*) FROM sqlite_schema
+          WHERE type = 'table' AND name = 'actions' AND instr(sql, 'subject_id') > 0)`,
     "DROP TABLE actions_copy_check",
     "DROP TABLE actions",
     "ALTER TABLE actions_next RENAME TO actions",

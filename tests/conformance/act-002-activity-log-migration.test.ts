@@ -7,6 +7,7 @@ import path from "node:path";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
 import {defaultProjectId} from "../../src/core/model.js";
+import {sqliteActionsRebuildStatements, sqliteActivityRecoveryStatements} from "../../src/storage/activity-log-schema.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {expectRecoveredActivity, populateActivityHistory} from "../support/activity-history-fixture.js";
@@ -161,6 +162,23 @@ describe("ACT-002 activity log migration (SQLite)", () => {
 
     // A repeated startup changes nothing.
     new SqliteArtifactRepository(databasePath, installationId).close();
+    expect(withSqliteDatabase(databasePath, fullActionsDigest)).toEqual(migrated);
+
+    // A migrator that read the legacy shape just before a concurrent one committed must not
+    // rebuild the migrated table: the copy check refuses, and nothing changes.
+    withSqliteDatabase(databasePath, (database) => {
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        expect(() => {
+          for (const statement of [
+            ...sqliteActionsRebuildStatements({strict: true}),
+            ...sqliteActivityRecoveryStatements({identity: true}),
+          ]) database.exec(statement);
+        }).toThrow(/CHECK constraint failed/u);
+      } finally {
+        database.exec("ROLLBACK");
+      }
+    });
     expect(withSqliteDatabase(databasePath, fullActionsDigest)).toEqual(migrated);
   });
 });
