@@ -4,13 +4,13 @@ import {
   Alert,
   AutoGrid,
   Button,
-  PageScaffold,
   SectionHeading,
   Switch,
   Tag,
 } from "@/arkcase";
 import {CopyableCode} from "@/ui/copyable-code";
-import {setWebmcpEnabled, webmcpEnabled} from "../webmcp.tsx";
+import {setWebmcpEnabled, webmcpEnabled, webmcpToolNames} from "../webmcp.tsx";
+import {AdminConsole} from "./admin-console.tsx";
 import {AdminActions, AdminNote, AdminPanel, AdminStack, useDsDensity} from "./admin-parts.tsx";
 
 const supportedClients = ["codex", "claude", "cursor", "vscode"] as const;
@@ -30,10 +30,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
   };
 
   return (
-    <PageScaffold
-      meta="Give AI clients authenticated access to projects, artifacts, versions, and comments. Choose the setup that matches where Artifact Server runs."
-      title="MCP & WebMCP"
-    >
+    <AdminConsole administrator={administrator} area="mcp">
       {failure === null ? null : (
         <Alert density={density} live="assertive" variant="danger">{failure}</Alert>
       )}
@@ -58,7 +55,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
             </AdminActions>
           </AdminStack>
         </AdminPanel>
-        <AdminPanel label="Team or remote server" subtitle="one endpoint, browser sign-in">
+        <AdminPanel label="Remote server" subtitle="one endpoint, browser sign-in">
           <AdminStack>
             <SectionHeading level={3} size="sm" title="Connect with the server address" />
             <AdminNote>
@@ -119,7 +116,7 @@ export function McpWebmcpScreen({administrator}: McpWebmcpScreenProps) {
       </AdminPanel>
 
       <WebmcpPreference />
-    </PageScaffold>
+    </AdminConsole>
   );
 }
 
@@ -163,6 +160,9 @@ function WebmcpPreference() {
           This preference applies to this browser profile. It does not change MCP connections in
           Codex, Claude Code, Cursor, VS Code, or other clients.
         </AdminNote>
+        <AdminActions>
+          {webmcpToolNames().map((name) => <Tag key={name}>{name}</Tag>)}
+        </AdminActions>
       </AdminStack>
     </AdminPanel>
   );

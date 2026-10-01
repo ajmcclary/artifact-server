@@ -504,6 +504,25 @@ function reviewTools(ref: BindingsRef): readonly ModelContextToolLike[] {
   ];
 }
 
+const inertBindings: WebmcpBindings = {
+  getSnapshot: () => ({
+    artifact: null,
+    loading: true,
+    projectId: "",
+    projectName: null,
+    replies: new Map(),
+    threads: [],
+    version: null,
+  }),
+  openArtifact: () => undefined,
+  reloadComments: async () => undefined,
+};
+
+/** The names of the review tools this browser registers, read from the same definitions. */
+export function webmcpToolNames(): readonly string[] {
+  return reviewTools({current: inertBindings}).map((tool) => tool.name);
+}
+
 function stateTool(
   ref: BindingsRef,
   operation: "reopen" | "resolve",
