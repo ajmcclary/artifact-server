@@ -1,0 +1,91 @@
+import {useEffect, useState, type CSSProperties} from "react";
+
+import type {Project, Session} from "@/api/client";
+import {Button, Popover} from "@/arkcase";
+import {activityHref, navigateReview, type ActivityFilters} from "@/review/review-routes";
+import {ActivityHeader, ActivityToolbar} from "@/ui/review-ui";
+import {CopyableCode} from "@/ui/copyable-code";
+
+import {ActivityFeedBody} from "./activity-feed-section";
+import {useActivityFeed} from "./use-activity-feed";
+import {useActivitySummary} from "./use-activity-summary";
+
+const screenStyle = {margin: "0 auto", maxWidth: 1180, padding: "20px 20px 48px", width: "100%"} satisfies CSSProperties;
+const segmentIds = {"All": "all", "Needs you": "needs_you", "With an agent": "with_agent"} as const;
+const segmentLabels = {all: "All", needs_you: "Needs you", with_agent: "With an agent"} as const;
+type ToolbarType = "comments" | "versions" | "agents" | "access";
+const toolbarTypes: readonly ToolbarType[] = ["comments", "versions", "agents", "access"];
+
+/** The toolbar reports labels and ids as strings; keep only the ones this screen knows. */
+function segmentOf(label: string): ActivityFilters["segment"] {
+  return label === "Needs you" || label === "With an agent" ? segmentIds[label] : "all";
+}
+function toolbarTypesOf(ids: readonly string[]): ToolbarType[] {
+  return ids.flatMap((id) => toolbarTypes.find((type) => type === id) ?? []);
+}
+const searchDebounceMilliseconds = 250;
+
+/** Everything that happened across the installation, newest first, with what needs you one click away. */
+export function ActivityScreen({filters, projects, session}: {
+  readonly filters: ActivityFilters; readonly projects: readonly Project[]; readonly session: Session;
+}) {
+  const feed = useActivityFeed(filters);
+  const {phase: summaryPhase, reload: reloadSummary, summary} = useActivitySummary([]);
+  const [query, setQuery] = useState(filters.q);
+  const [dock, setDock] = useState(0);
+  const [publishOpen, setPublishOpen] = useState(false);
+  // A filter choice is a history step Back can undo. Starting a search is one step too; refining it replaces that step.
+  const change = (next: Partial<ActivityFilters>): void => navigateReview(activityHref({...filters, ...next}));
+  const changeQuery = (q: string): void => navigateReview(activityHref({...filters, q}), {replace: filters.q !== ""});
+  useEffect(() => setQuery(filters.q), [filters.q]);
+  useEffect(() => {
+    if (query.trim() === filters.q) return undefined;
+    const timer = setTimeout(() => changeQuery(query.trim().slice(0, 100)), searchDebounceMilliseconds);
+    return () => clearTimeout(timer);
+  });
+  const filtered = filters.segment !== "all" || filters.projects.length > 0 || filters.types.length > 0 || filters.q !== "";
+  const count = (value: number | undefined): string => summaryPhase === "ready" && value !== undefined ? String(value) : "—";
+  const artifactCount = summary?.projects.reduce((total, project) => total + project.artifactCount, 0);
+  const command = "artifactserver publish ./dist";
+
+  return (
+    <section aria-label="Activity" style={screenStyle}>
+      <ActivityHeader
+        action={(
+          <Popover label="Publish artifact" onOpenChange={setPublishOpen} open={publishOpen} placement="bottom-end"
+            trigger={<Button icon="bi-upload" variant="primary">Publish artifact</Button>}>
+            <CopyableCode code={command} copiedLabel="Publish command copied" copyLabel="Copy publish command" tone="navy" />
+          </Popover>
+        )}
+        metrics={[
+          {id: "needs", label: "Needs you", onClick: () => change({segment: filters.segment === "needs_you" ? "all" : "needs_you"}), pressed: filters.segment === "needs_you", value: count(summary?.needsYou)},
+          {id: "agent", label: "With an agent", onClick: () => change({segment: filters.segment === "with_agent" ? "all" : "with_agent"}), pressed: filters.segment === "with_agent", value: count(summary?.withAgent)},
+          {id: "open", label: "Open conversations", value: count(summary?.openConversations)},
+          {id: "review", label: "Artifacts in review", value: count(summary?.artifactsInReview)},
+        ]}
+        summary={`${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${artifactCount === undefined ? "—" : artifactCount} artifacts`}
+        title="Activity"
+      />
+      <ActivityToolbar
+        counts={summary === null ? {} : {"Needs you": summary.needsYou, "With an agent": summary.withAgent}}
+        onHeight={setDock}
+        onProjects={(ids) => change({projects: ids})}
+        onQuery={setQuery}
+        onSegment={(label) => change({segment: segmentOf(label)})}
+        onTypes={(ids) => change({types: toolbarTypesOf(ids)})}
+        projects={projects.map((project) => ({id: project.id, name: project.name}))}
+        query={query}
+        segment={segmentLabels[filters.segment]}
+        selectedProjects={[...filters.projects]}
+        types={toolbarTypesOf(filters.types)}
+      />
+      <ActivityFeedBody
+        feed={feed} filtered={filtered} label="Activity"
+        onClearFilters={() => navigateReview(activityHref())}
+        onRetry={() => { feed.reload(); reloadSummary(); }}
+        principalId={session.principal.id}
+        stickyTop={dock}
+      />
+    </section>
+  );
+}

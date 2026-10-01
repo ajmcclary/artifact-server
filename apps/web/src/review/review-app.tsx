@@ -67,7 +67,7 @@ import {
 } from "./review-routes.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
 import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
-import {ReviewQueueScreen} from "./queue/review-queue-screen.tsx";
+import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
@@ -321,7 +321,7 @@ export function ReviewApp() {
           session={session}
         />
       ) : route.kind === "activity" ? (
-        <ReviewQueueScreen projects={projects} />
+        <ActivityScreen filters={route.filters} projects={projects} session={session} />
       ) : route.kind === "projects" ? (
         <InterimProjectsScreen
           onProjectsChanged={loadProjects}

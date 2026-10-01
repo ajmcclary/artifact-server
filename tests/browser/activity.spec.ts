@@ -1,0 +1,164 @@
+import {expect, test} from "@playwright/test";
+
+import {ApiClient, dispatchCreationSchema} from "../support/agent-dispatch.js";
+import {publishNew, publishVersion, type PublishResponse} from "../support/publishing.js";
+import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
+import {createReplyOverApi, createThreadOverApi} from "./comment-api.js";
+
+const key = (name: string): string => `activity-spec-${name}-key`;
+
+async function publish(fixture: BrowserFixture, name: string, keyName: string, projectId = "prj_default"): Promise<PublishResponse> {
+  return (await publishNew(fixture.server, fixture.installation, {
+    accessSetting: "account_required",
+    content: `<!doctype html><html lang="en"><head><title>${name}</title></head><body><h1 id="title">${name}</h1></body></html>`,
+    idempotencyKey: key(keyName), mediaType: "text/html; charset=utf-8", name, path: "index.html", projectId,
+  })).body;
+}
+
+async function thread(fixture: BrowserFixture, published: PublishResponse, body: string, keyName: string): Promise<string> {
+  return (await createThreadOverApi(fixture, {
+    artifactId: published.artifact.id, body, idempotencyKey: key(keyName), path: "index.html",
+    projectId: published.artifact.projectId, versionId: published.version.id,
+  })).id;
+}
+
+test.describe("Activity", () => {
+  test("ACT-005-B: the feed shows versions, bursts and conversations under day headers, folds long threads, replies and resolves inline, filters through the URL, and opens the thread", async ({browser}) => {
+    test.setTimeout(120_000);
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const burst = await publish(fixture, "Activity burst fixture", "burst-1");
+      // Each version names the one before it, so they publish in order.
+      await [2, 3].reduce(async (previous, n) => (await publishVersion(fixture.server, fixture.installation, {
+        artifactId: burst.artifact.id, content: `<!doctype html><html lang="en"><title>v${n}</title><h1>v${n}</h1></html>`,
+        expectedCurrentVersionId: await previous, idempotencyKey: key(`burst-${n}`),
+      })).body.version.id, Promise.resolve(burst.version.id));
+      const talked = await publish(fixture, "Activity conversation fixture", "talk");
+      const threadId = await thread(fixture, talked, "Tighten the headline.", "talk-thread");
+      // Replies post in order so "Reply number 5." is the newest.
+      await [1, 2, 3, 4, 5].reduce(async (previous, n) => {
+        await previous;
+        await createReplyOverApi(fixture, {artifactId: talked.artifact.id, body: `Reply number ${n}.`, idempotencyKey: key(`reply-${n}`), projectId: talked.artifact.projectId, threadId});
+      }, Promise.resolve());
+
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
+      await expect(page.getByRole("heading", {exact: true, level: 2, name: "Today"})).toBeVisible();
+      await expect(page.getByText(/published v1–v3 of Activity burst fixture/u)).toBeVisible();
+      await expect(page.locator("[data-activity-feed]")).toContainText(/\d{1,2}:\d{2} (AM|PM)/u);
+
+      const conversation = page.getByRole("region", {name: "Conversation on Activity conversation fixture"}).or(
+        page.getByLabel("Conversation on Activity conversation fixture"));
+      await expect(conversation.getByText("Reply number 5.")).toBeVisible();
+      await expect(conversation.getByText("Reply number 1.")).toHaveCount(0);
+      await conversation.getByRole("button", {name: "Show 3 earlier replies"}).click();
+      await expect(conversation.getByText("Reply number 1.")).toBeVisible();
+
+      await conversation.getByRole("button", {name: "Reply"}).first().click();
+      await page.getByRole("textbox", {name: "Reply on Activity conversation fixture"}).fill("Inline from Activity.");
+      await page.getByRole("button", {exact: true, name: "Reply"}).last().click();
+      await expect(conversation.getByText("Inline from Activity.")).toBeVisible();
+
+      await page.getByRole("radio", {name: /Needs you/u}).click();
+      await expect(page).toHaveURL(/\/review\?segment=needs_you$/u);
+      await expect(page.getByText(/Activity burst fixture/u)).toHaveCount(0);
+      await page.getByRole("searchbox", {name: "Search activity"}).fill("headline");
+      await expect(page).toHaveURL(/q=headline/u);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/review\?segment=needs_you$/u);
+      await page.getByRole("radio", {name: /^All/u}).click();
+
+      await conversation.getByRole("button", {name: "Resolve"}).first().click();
+      await expect(page.getByText(/resolved a conversation on Activity conversation fixture/u)).toBeVisible();
+
+      await page.getByRole("button", {name: "Open Activity conversation fixture in review"}).first().click();
+      await expect(page).toHaveURL(new RegExp(`artifact=${talked.artifact.id}`, "u"));
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ACT-005-B: the Publish artifact popover offers the CLI command and the metric cards switch the segment", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publish(fixture, "Activity metric fixture", "metric");
+      await thread(fixture, published, "Count me.", "metric-thread");
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await page.getByRole("button", {name: "Publish artifact"}).click();
+      await expect(page.getByRole("dialog", {name: "Publish artifact"}).getByText("artifactserver publish ./dist")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", {name: /Needs you/u}).first().click();
+      await expect(page).toHaveURL(/segment=needs_you/u);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ACT-005-F: a hostile comment body renders as inert text inside its card and stays searchable", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publish(fixture, "Activity hostile fixture", "hostile");
+      const hostile = `‮evil‬​<img src=x onerror="window.pwnedMarker=1">${"W".repeat(10_000 - 64)}`;
+      await thread(fixture, published, hostile.slice(0, 8_192), "hostile-thread");
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      const card = page.getByLabel("Conversation on Activity hostile fixture");
+      await expect(card).toBeVisible();
+      expect(await page.evaluate(() => "pwnedMarker" in window)).toBe(false);
+      await expect(card.locator("img")).toHaveCount(0);
+      const width = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(width).toBeLessThanOrEqual(0);
+      await page.getByRole("searchbox", {name: "Search activity"}).fill("onerror");
+      await expect(page.getByLabel("Conversation on Activity hostile fixture")).toBeVisible();
+      await page.getByRole("searchbox", {name: "Search activity"}).fill("%_\\");
+      await expect(page.getByText("Nothing matches these filters")).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ACT-005-F: a failed feed read offers Retry, and a failed summary leaves the feed working", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await publish(fixture, "Activity retry fixture", "retry");
+      await localLogin(fixture);
+      const page = fixture.page;
+      const fail = {body: JSON.stringify({error: {code: "INTERNAL_ERROR", message: "Storage is unavailable."}}), contentType: "application/json", status: 500};
+      await page.route("**/api/v1/activity/summary**", (route) => route.fulfill(fail));
+      await page.route(/\/api\/v1\/activity\?/u, (route) => route.fulfill(fail));
+      await page.goto(`${fixture.server.baseUrl}/review`);
+      await expect(page.getByText("Activity could not load")).toBeVisible();
+      await page.unroute(/\/api\/v1\/activity\?/u);
+      await page.getByRole("button", {name: "Retry"}).click();
+      await expect(page.getByText(/published v1 of Activity retry fixture/u)).toBeVisible();
+      await expect(page.getByRole("button", {name: /Needs you/u}).first()).toContainText("—");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("ACT-005-F: the agent segment shows only threads held by an active send", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const owner = new ApiClient(fixture.server, fixture.installation.apiToken);
+      const agent = await owner.registerAgent({agentSessionId: "activity-session", connectionKey: "activity-connection-key", displayName: "solo", workingDirectory: "/work/solo"});
+      const held = await publish(fixture, "Activity held fixture", "held");
+      const heldThread = await thread(fixture, held, "Agent, take this.", "held-thread");
+      const response = await owner.sendDispatch({agentId: agent.id, idempotencyKey: key("held-send"), projectId: "prj_default", threadIds: [heldThread]});
+      expect(dispatchCreationSchema.parse(await response.json()).dispatch.state).toBe("queued");
+      const free = await publish(fixture, "Activity free fixture", "free");
+      await thread(fixture, free, "Still mine.", "free-thread");
+      await localLogin(fixture);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review?segment=with_agent`);
+      await expect(fixture.page.getByLabel("Conversation on Activity held fixture")).toBeVisible();
+      await expect(fixture.page.getByLabel("Conversation on Activity free fixture")).toHaveCount(0);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+});

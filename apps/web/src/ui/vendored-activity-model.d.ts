@@ -7,8 +7,8 @@
 declare module "@/arkcase/review-ui/activity-model.js" {
   import type {ActivityEvent} from "@/arkcase/review-ui/review-ui.jsx";
 
-  export interface ActivityDayGroup {
-    readonly events: ActivityEvent[];
+  export interface ActivityDayGroup<Event extends ActivityEvent = ActivityEvent> {
+    readonly events: Event[];
     readonly key: string;
     readonly label: string;
   }
@@ -16,9 +16,10 @@ declare module "@/arkcase/review-ui/activity-model.js" {
   export function usDate(ms: number): string;
   export function usTime(ms: number): string;
   export function usDateTime(ms: number): string;
-  export function sortEvents(events: readonly ActivityEvent[]): ActivityEvent[];
-  export function mergeBursts(events: readonly ActivityEvent[]): ActivityEvent[];
+  export function sortEvents<Event extends ActivityEvent>(events: readonly Event[]): Event[];
+  /** Merged events keep every field of their newest member (the model spreads it). */
+  export function mergeBursts<Event extends ActivityEvent>(events: readonly Event[]): Event[];
   export function dayKey(ms: number): string;
   export function dayLabel(key: string, now: number): string;
-  export function groupByDay(events: readonly ActivityEvent[], now: number): ActivityDayGroup[];
+  export function groupByDay<Event extends ActivityEvent>(events: readonly Event[], now: number): ActivityDayGroup<Event>[];
 }
