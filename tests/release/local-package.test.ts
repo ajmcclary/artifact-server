@@ -220,7 +220,7 @@ describe("direct local release package", () => {
       const redirects = [
         ["/?source=legacy", "/review?source=legacy"],
         ["/workbench?project=prj_default&view=focus", "/review?project=prj_default&view=focus"],
-        ["/projects?source=legacy", "/review/settings/projects?source=legacy"],
+        ["/projects?source=legacy", "/review/projects?source=legacy"],
         ["/administration/members?source=legacy", "/review/settings/members?source=legacy"],
         ["/administration/api-keys?source=legacy", "/review/settings/api-keys?source=legacy"],
         ["/administration/public-links?source=legacy", "/review/settings/public-links?source=legacy"],

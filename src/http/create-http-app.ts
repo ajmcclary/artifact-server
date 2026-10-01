@@ -799,7 +799,7 @@ export function createHttpApp(
     return context.redirect(`/review${requestUrl.search}`, 308);
   });
   app.on(["GET", "HEAD"], "/projects", (context) =>
-    redirectWithRequestQuery(context, "/review/settings/projects"));
+    redirectWithRequestQuery(context, "/review/projects"));
   app.on(["GET", "HEAD"], "/administration/members", (context) =>
     redirectWithRequestQuery(context, "/review/settings/members"));
   app.on(["GET", "HEAD"], "/administration/api-keys", (context) =>

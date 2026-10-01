@@ -6,7 +6,6 @@ import {navigateReview, activityHref, type SettingsRoute} from "../review-routes
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
 import {MembersScreen} from "./members-screen.tsx";
-import {ProjectSettings} from "./project-settings.tsx";
 import {PublicLinksScreen} from "./public-links-screen.tsx";
 import {resolveSettingsView, settingsAccess} from "./settings-view.ts";
 
@@ -18,7 +17,7 @@ export interface SettingsScreenProps {
 }
 
 /** Route one canonical settings URL to its administration screen or its permission state. */
-export function SettingsScreen({onProjectsChanged, projects, route, session}: SettingsScreenProps) {
+export function SettingsScreen({route, session}: SettingsScreenProps) {
   const view = resolveSettingsView(route, settingsAccess(session.principal));
   switch (view.kind) {
     case "redirect":
@@ -31,32 +30,12 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
           title="Page not found"
         />
       );
-    case "projectPermission":
-      return (
-        <SettingsState
-          body="This account cannot manage projects."
-          icon="bi-lock"
-          title="Project permission required"
-        />
-      );
     case "administratorPermission":
       return (
         <SettingsState
           body="Only an installation administrator can manage members, API keys, and public links."
           icon="bi-shield-lock"
           title="Administrator permission required"
-        />
-      );
-    case "project":
-      return (
-        <ProjectSettings
-          canManage
-          gitHistory={session.capabilities.gitHistory}
-          // One project's estimate, dialogs and pages never carry over to another.
-          key={view.projectId}
-          onProjectsChanged={onProjectsChanged}
-          projectId={view.projectId}
-          projects={projects}
         />
       );
     case "members":
@@ -72,8 +51,8 @@ export function SettingsScreen({onProjectsChanged, projects, route, session}: Se
 }
 
 /**
- * Only reachable if a caller skipped `canonicalReviewRoute`: leave the retired
- * projects list for the queue without adding a history entry.
+ * Only reachable if a caller skipped `canonicalReviewRoute`: leave a retired
+ * project-settings URL for the Projects screen without adding a history entry.
  */
 function SettingsRedirect({href}: {readonly href: string}) {
   useEffect(() => {
@@ -82,7 +61,7 @@ function SettingsRedirect({href}: {readonly href: string}) {
   return (
     <SurfaceState
       loadingStyle="spinner"
-      loadingTitle="Opening Activity"
+      loadingTitle="Opening projects"
       noun="artifacts"
       phase="loading"
     />

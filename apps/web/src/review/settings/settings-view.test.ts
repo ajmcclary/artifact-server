@@ -53,9 +53,6 @@ describe("settings routing", () => {
     for (const kind of ["members", "apiKeys", "publicLinks"] as const) {
       expect(resolveSettingsView({kind}, member)).toEqual({kind: "administratorPermission"});
     }
-    const service = settingsAccess(principal({kind: "service"}));
-    expect(resolveSettingsView({kind: "project", projectId: "prj_default"}, service))
-      .toEqual({kind: "projectPermission"});
     const delegated = settingsAccess(principal({
       authorizedByPrincipalId: "prn_owner",
       capabilities: ["project:manage"],
@@ -64,13 +61,14 @@ describe("settings routing", () => {
     expect(delegated).toEqual({administrator: false, canManageProjects: true});
     expect(resolveSettingsView({kind: "members"}, delegated))
       .toEqual({kind: "administratorPermission"});
-    expect(resolveSettingsView({kind: "project", projectId: "prj_default"}, delegated))
-      .toEqual({kind: "project", projectId: "prj_default"});
     const administrator = settingsAccess(principal({membershipRole: "administrator"}));
     expect(resolveSettingsView({kind: "publicLinks"}, administrator)).toEqual({kind: "publicLinks"});
     expect(resolveSettingsView({kind: "notFound"}, administrator)).toEqual({kind: "notFound"});
     expect(resolveSettingsView({kind: "projects"}, administrator))
       .toEqual({href: projectsHref(null), kind: "redirect"});
+    expect(resolveSettingsView({kind: "project", projectId: "prj_default"}, member))
+      .toEqual({href: projectsHref("prj_default"), kind: "redirect"});
   });
+
 
 });

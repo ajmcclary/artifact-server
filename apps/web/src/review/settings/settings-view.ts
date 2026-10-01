@@ -14,8 +14,6 @@ export type SettingsView =
   | {readonly kind: "mcp"; readonly administrator: boolean}
   | {readonly kind: "members"}
   | {readonly kind: "notFound"}
-  | {readonly kind: "project"; readonly projectId: string}
-  | {readonly kind: "projectPermission"}
   | {readonly kind: "publicLinks"}
   | {readonly kind: "redirect"; readonly href: string};
 
@@ -55,9 +53,7 @@ export function resolveSettingsView(route: SettingsRoute, access: SettingsAccess
     case "notFound":
       return {kind: "notFound"};
     case "project":
-      return access.canManageProjects
-        ? {kind: "project", projectId: route.projectId}
-        : {kind: "projectPermission"};
+      return {href: projectsHref(route.projectId), kind: "redirect"};
     case "mcp":
     case "webmcp":
       return {administrator: access.administrator, kind: "mcp"};

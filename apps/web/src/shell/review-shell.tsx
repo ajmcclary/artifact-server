@@ -290,7 +290,7 @@ const settingsTitles = {
   mcp: "MCP & WebMCP",
   members: "Members",
   notFound: "Page not found",
-  project: "Project settings",
+  project: "Projects",
   projects: "Projects",
   publicLinks: "Public links",
   webmcp: "MCP & WebMCP",

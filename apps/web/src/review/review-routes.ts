@@ -210,11 +210,6 @@ export function writeReviewHistory(href: string, entry: "push" | "replace"): voi
   window.dispatchEvent(new Event(REVIEW_LOCATION_EVENT));
 }
 
-/** Build the canonical settings URL for one project. */
-export function projectSettingsHref(projectId: string): string {
-  return `/review/settings/projects/${encodeURIComponent(projectId)}`;
-}
-
 function parsePathSegment(segment: string | undefined): string | null {
   if (segment === undefined || segment === "") return null;
   try {
