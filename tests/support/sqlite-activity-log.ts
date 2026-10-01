@@ -5,6 +5,8 @@ import {z} from "zod";
 
 import {artifactHistoryActionKinds} from "../../src/core/model.js";
 
+import {type RecoveredActionRow, recoveredRowColumns, recoveredRowSchema} from "./activity-history-fixture.js";
+
 const legacyColumns = `id, project_id, artifact_id, version_id, action, principal_id,
   authorized_by_principal_id, idempotency_key, created_at`;
 const historyKindSql = artifactHistoryActionKinds.map((kind) => `'${kind}'`).join(", ");
@@ -148,4 +150,12 @@ export function tableNames(database: DatabaseSync): readonly string[] {
   return z.array(z.object({name: z.string()}))
     .parse(database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all())
     .map((table) => table.name);
+}
+
+/** Every `actions` row of one SQLite file, in the shared recovered-row shape. */
+export function readSqliteActionRows(databasePath: string): readonly RecoveredActionRow[] {
+  return withSqliteDatabase(databasePath, (database) =>
+    z.array(recoveredRowSchema).parse(
+      database.prepare(`SELECT ${recoveredRowColumns} FROM actions ORDER BY created_at, id`).all(),
+    ));
 }

@@ -9,13 +9,14 @@ import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {defaultProjectId} from "../../src/core/model.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
-import {populateActivityHistory} from "../support/activity-history-fixture.js";
+import {expectRecoveredActivity, populateActivityHistory} from "../support/activity-history-fixture.js";
 import {
   actionColumns,
   downgradeSqliteActionsToLegacy,
   fullActionsDigest,
   insertBulkLegacyActions,
   legacyActionsDigest,
+  readSqliteActionRows,
   tableNames,
   withSqliteDatabase,
 } from "../support/sqlite-activity-log.js";
@@ -73,6 +74,48 @@ describe("ACT-002 activity log migration (SQLite)", () => {
 
   afterEach(async () => {
     await rm(directory, {force: true, recursive: true});
+  });
+
+  test("ACT-002-B a populated SQLite installation keeps every action and recovers recorded activity", async () => {
+    const databasePath = path.join(directory, "artifact-server.db");
+    const fixture = await legacyInstallation(databasePath);
+    // The agent answered before the upgrade; only its dispatch row recorded that.
+    withSqliteDatabase(databasePath, (database) => {
+      database.prepare(`
+        UPDATE agent_dispatches
+           SET state = 'addressed', addressed_at = ?, updated_at = ?
+         WHERE id = ?
+      `).run("2026-09-03T11:00:00.000Z", "2026-09-03T11:00:00.000Z", fixture.dispatchId);
+    });
+    const legacy = withSqliteDatabase(databasePath, legacyActionsDigest);
+    const legacyArtifactIds = withSqliteDatabase(databasePath, (database) =>
+      database.prepare("SELECT id FROM actions WHERE artifact_id = ? ORDER BY id")
+        .all(fixture.artifactId).map((row) => String(row["id"])));
+
+    const upgraded = new SqliteArtifactRepository(databasePath, installationId);
+    try {
+      expect(withSqliteDatabase(databasePath, legacyActionsDigest)).toEqual(legacy);
+      const rows = readSqliteActionRows(databasePath);
+      expectRecoveredActivity(rows, fixture);
+      expect(rows.find((row) => row.id === `recovered:dispatch_addressed:${fixture.dispatchId}`))
+        .toMatchObject({
+          actor_kind: "service",
+          actor_name: "Codex",
+          created_at: "2026-09-03T11:00:00.000Z",
+          project_id: defaultProjectId,
+        });
+
+      // The per-artifact history endpoint still returns exactly the legacy rows.
+      const history = await upgraded.listArtifactActions({
+        artifactId: fixture.artifactId,
+        cursor: null,
+        limit: 100,
+        projectId: defaultProjectId,
+      });
+      expect(history.items.map((item) => item.id).toSorted()).toEqual(legacyArtifactIds);
+    } finally {
+      upgraded.close();
+    }
   });
 
   test("ACT-002-F an interrupted or repeated migration cannot duplicate, drop or alter rows, or invent actors", {timeout: 180_000}, async () => {
