@@ -163,8 +163,7 @@ test.describe("Screen continuity", () => {
         await catalogHeld.promise;
         await route.continue();
       });
-      // Project folders open Projects; the project's review is its workspace address.
-      await page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
+      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Default"}).click();
       await expect(page.getByText("Opening project")).toBeVisible();
       await expect(page.getByText("Select an artifact", {exact: true})).toHaveCount(0);
       await expect(page.getByText("Nothing selected")).toHaveCount(0);

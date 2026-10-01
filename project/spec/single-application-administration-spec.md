@@ -85,7 +85,8 @@ the way the artifact catalog docks beside an artifact. The list shows each
 project's name, an Archived pill, its unresolved-conversation count, and its
 artifact count with the date of its latest activity; it searches by name and
 states "x of y" while searching. Below 768 px the list is a sheet opened from the
-page head. Navigation project folders open this screen with that project selected.
+page head. The Projects navigation item opens this screen; a project folder opens
+that project's artifacts in Review.
 
 Selecting a project replaces the URL (`?project=`) without adding history. A named
 project that does not exist is reported as not found. A search that hides the

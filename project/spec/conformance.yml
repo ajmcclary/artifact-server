@@ -1091,7 +1091,7 @@ requirements:
         tests: [DSN-005-B]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: AUD-001
     kind: security
@@ -3143,15 +3143,15 @@ requirements:
         tests: [ADM-002-B, ADM-002-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: ACT-006
     kind: behavior
-    behavior: The Projects screen docks a searchable project list with archived state, unresolved-conversation and artifact counts, and latest activity beside the selected project's identity, lifecycle, optional Git history, artifacts, and project-filtered activity; navigation folders and retired project-settings URLs open it.
+    behavior: The Projects screen docks a searchable project list with archived state, unresolved-conversation and artifact counts, and latest activity beside the selected project's identity, lifecycle, optional Git history, artifacts, and project-filtered activity; the Projects navigation item and retired project-settings URLs open it, while a project folder opens that project's artifacts.
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: projects-screen}
     acceptance:
-      behavior: {id: ACT-006-B, description: "Open Projects, observe active-before-archived rows with unresolved and artifact counts and US-dated latest activity, select a project and see its details, artifacts, activity, and latest-artifact action, search with an x-of-y footer, create a project, open the screen from a navigation folder and from retired settings URLs, and use the list as a sheet on a phone without horizontal overflow."}
+      behavior: {id: ACT-006-B, description: "Open Projects, observe active-before-archived rows with unresolved and artifact counts and US-dated latest activity, select a project and see its details, artifacts, activity, and latest-artifact action, search with an x-of-y footer, create a project, open the screen from the Projects navigation item and see a project folder open that project's artifacts, open it from retired settings URLs, and use the list as a sheet on a phone without horizontal overflow."}
       failure: {id: ACT-006-F, description: "A search that hides the selection closes its details and keeps focus in the list, an unknown project is reported as not found rather than replaced, a failed summary still lists every project by name without counts, and no Publishing defaults, project membership, or copy-all-URLs panel is invented."}
     deployments: *all
     status: behavior_verified
@@ -3162,7 +3162,7 @@ requirements:
         tests: [ACT-006-B, ACT-006-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: ADM-003
     kind: security
@@ -3181,7 +3181,7 @@ requirements:
         tests: [ADM-003-B, ADM-003-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
       - deployment: local
         tests: [ADM-003-B]
         result: pass
@@ -3205,7 +3205,7 @@ requirements:
         tests: [ADM-004-B, ADM-004-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
       - deployment: local
         tests: [ADM-004-B]
         result: pass
@@ -3229,7 +3229,7 @@ requirements:
         tests: [ADM-005-B, ADM-005-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
       - deployment: local
         tests: [ADM-005-B]
         result: pass
@@ -3253,7 +3253,7 @@ requirements:
         tests: [ADM-006-B, ADM-006-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: NAV-001
     kind: behavior
@@ -3272,7 +3272,7 @@ requirements:
         tests: [NAV-001-B, NAV-001-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: ACT-005
     kind: behavior
@@ -3291,7 +3291,7 @@ requirements:
         tests: [ACT-005-B, ACT-005-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
 
   - id: ADM-007
     kind: behavior
@@ -3331,7 +3331,7 @@ requirements:
         tests: [ADM-008-B, ADM-008-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-01T19:48:35.491Z"
+        recorded_at: "2026-10-01T20:29:26.538Z"
   - id: ACT-007
     kind: behavior
     behavior: Administrators see when each member was last active and when each API key was last used, advanced at most once per principal every five minutes, without failing or holding the request that used the credential.

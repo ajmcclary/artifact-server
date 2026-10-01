@@ -27,7 +27,7 @@ async function archiveProject(fixture: BrowserFixture, projectId: string): Promi
 }
 
 test.describe("Projects screen", () => {
-  test("ACT-006-B: projects list with counts beside their details and activity, folders and legacy URLs open it", async ({browser}) => {
+  test("ACT-006-B: projects list with counts beside their details and activity; the Projects item and legacy URLs open it while folders open artifacts", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const alphaId = await createProject(fixture, "Projects alpha", "projects-alpha");
@@ -93,11 +93,15 @@ test.describe("Projects screen", () => {
       await expect(list.getByText("1 of 3", {exact: true})).toBeVisible();
       await page.getByLabel("Search projects").fill("");
 
-      // A navigation folder opens the Projects screen with that project selected.
-      await page.goto(`${fixture.server.baseUrl}/review`);
+      // A navigation folder opens that project's artifacts, not the Projects screen.
       await page.getByRole("navigation", {name: "Review and projects"})
         .getByRole("link", {exact: true, name: "Projects alpha"}).click();
-      await expect(page).toHaveURL(new RegExp(`/review/projects\\?project=${alphaId}$`, "u"));
+      await expect(page).toHaveURL(new RegExp(`/review\\?project=${alphaId}&artifact=`, "u"));
+      await expect(page.getByRole("list", {name: "Artifacts"}).getByRole("button", {name: /^Alpha page/u})).toBeVisible();
+      // The Projects row returns to the Projects screen.
+      await page.getByRole("navigation", {name: "Review and projects"})
+        .getByRole("link", {exact: true, name: "Projects"}).click();
+      await expect(page).toHaveURL(/\/review\/projects\?project=/u);
 
       // New project opens the created project's details.
       await list.getByRole("button", {name: "New project"}).click();

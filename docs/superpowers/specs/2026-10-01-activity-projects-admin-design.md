@@ -26,7 +26,8 @@ prototype text.
 - "Needs you" keeps the prototype rule: an open thread that no active dispatch
   holds. It is the same for every viewer.
 - Projects follows the prototype as of `e087280` (a docked list beside the
-  settings), adds a per-project Activity section, and project folders open it.
+  settings) and adds a per-project Activity section. The Projects item opens it;
+  a project folder opens that project's artifacts (corrected October 1, 2026).
 - Approach 1: the existing `actions` table becomes the installation's single
   activity log.
 - Conversation cards show real thumbnails, loaded lazily.
@@ -38,7 +39,7 @@ the gaps that commit leaves unfinished:
 
 - admin events in the feed;
 - the full copy cleanup;
-- folders opening Projects.
+- the Projects item opening Projects (project folders keep opening their artifacts).
 
 Where the prototype shows something the server cannot back, the server's real
 behaviour wins and the control is omitted. It is not shown disabled.
@@ -363,7 +364,8 @@ are replaced by the vendored US formatters on every screen.
   - Projects: `/review/projects?project=`.
   - Design library: `/review/library`, rolled up across all projects.
 - **Projects group:** one folder per project, plus New project. A folder opens
-  `/review/projects?project=<id>`.
+  that project's artifacts (`/review?project=<id>`); New project opens the new
+  project's artifacts.
 - **Tools group:** Administration (`bi-gear`), for administrators only. It
   opens Members. The account menu also has Administration.
 - Admin mode and "Back to review" are removed.
@@ -562,7 +564,7 @@ prose in `artifact-server-product-spec.html` (Activity and Projects sections):
 | ACT-003 | The feed API pages, folds threads, filters, segments and searches. | Forged cursors, oversized limits, other installations' IDs and non-admin admin-kind requests fail safely without disclosure. |
 | ACT-004 | Summary and segment counts agree with the per-thread rule. | Resolved, canceled-dispatch and deleted threads are never counted. |
 | ACT-005 | The Activity screen shows the feed, folding, inline Reply and Resolve, bursts, sticky days, US dates, URL filters and lazy sandboxed thumbnails. | A thumbnail cannot escape the Review sandbox or load a version other than the thread's. Failures degrade to tiles and states. |
-| ACT-006 | The Projects screen lists projects with counts and shows settings and project activity. Folders open it. | A filtered-out selection clears and returns focus. No invented ACL or panel. |
+| ACT-006 | The Projects screen lists projects with counts and shows settings and project activity. The Projects item and retired settings URLs open it; folders open artifacts. | A filtered-out selection clears and returns focus. No invented ACL or panel. |
 | ACT-007 | Last active and last used update at most once per five minutes per principal. | A tracking failure never fails or slows a request. |
 | ADM-008 | The Admin console areas, detail panes, deep links and confirmations work. | Non-administrators see no entry, and the server refuses admin reads. |
 

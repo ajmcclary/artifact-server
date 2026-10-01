@@ -343,15 +343,12 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(projectNameInput).toBeFocused();
       await projectNameInput.fill("Review project");
       await projectDialog.getByRole("button", {name: "Create project"}).click();
-      // A new project, like every project folder, opens on the Projects screen.
-      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=(?!prj_default)[^&]+$/u);
+      // A new project, like every project folder, opens that project's artifacts.
+      await expect(fixture.page).toHaveURL(/\/review\?project=(?!prj_default)[^&]+/u);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review project"}))
         .toHaveAttribute("aria-current", "page");
       await reviewNavigation.getByRole("link", {exact: true, name: "Default"}).click();
-      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
-      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
-        .toHaveAttribute("aria-current", "page");
-      await fixture.page.goto(`${fixture.server.baseUrl}/review?project=prj_default`);
+      await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
         .toHaveAttribute("aria-current", "page");
       const navigationBox = await fixture.page.locator("[data-ac-left-nav]").boundingBox();

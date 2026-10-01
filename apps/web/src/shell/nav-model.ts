@@ -4,6 +4,7 @@ import {
   activityHref,
   libraryHref,
   projectsHref,
+  projectWorkspaceHref,
   type SettingsRoute,
 } from "@/review/review-routes";
 
@@ -61,8 +62,9 @@ export function shellActiveLink(input: ShellNavInput): string {
   }
   if (input.activityActive) return activityHref();
   if (input.libraryActive) return libraryHref();
-  if (input.projectsActive && input.activeProjectId === null) return projectsHref(null);
-  return input.activeProjectId === null ? "" : projectsHref(input.activeProjectId);
+  // The Projects screen marks the Projects row; a project's artifacts mark its folder.
+  if (input.projectsActive) return projectsHref(null);
+  return input.activeProjectId === null ? "" : projectWorkspaceHref(input.activeProjectId);
 }
 
 function isDirectHuman(principal: Principal): boolean {
@@ -88,7 +90,8 @@ function reviewItems(input: ShellNavInput): NavItem[] {
       icon: project.archivedAt === null ? "bi-folder2" : "bi-archive",
       id: `project:${project.id}`,
       label: project.name,
-      link: projectsHref(project.id),
+      // A folder opens the project's artifacts; the Projects row opens its settings and activity.
+      link: projectWorkspaceHref(project.id),
     };
     if (items.length === firstProjectIndex) item.group = "Projects";
     items.push(item);

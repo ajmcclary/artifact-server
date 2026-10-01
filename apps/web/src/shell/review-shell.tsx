@@ -14,7 +14,7 @@ import {
 import {
   inAppLinkTarget,
   navigateReview,
-  projectsHref,
+  projectWorkspaceHref,
   type ReviewRoute,
 } from "@/review/review-routes";
 import {removeStored, writeStored} from "@/lib/safe-storage";
@@ -235,7 +235,7 @@ function ReviewShellFrame({
           onCreate={onCreateProject}
           onCreated={(project) => {
             setCreateOpen(false);
-            navigateReview(projectsHref(project.id));
+            navigateReview(projectWorkspaceHref(project.id));
           }}
           open={createOpen}
         />

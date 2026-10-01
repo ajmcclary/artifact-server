@@ -78,10 +78,13 @@ test.describe("Shell navigation", () => {
       await expect(artifactTitle(page)).toHaveText("Navigation home fixture");
       await markDocument(page);
 
-      // A project folder opens that project on the Projects screen.
+      // A project folder opens that project's artifacts, in place; catalog search text belongs to one project.
+      await page.getByRole("searchbox", {name: "Search artifacts"}).fill("home");
       await nav.getByRole("link", {name: "Navigation second project"}).click();
-      await expect(page).toHaveURL(new RegExp(`/review/projects\\?project=${secondProjectId}$`, "u"));
-      await expect(page.getByRole("main").getByRole("heading", {name: "Navigation second project"})).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/review\\?project=${secondProjectId}&artifact=`, "u"));
+      await expect(artifactTitle(page)).toHaveText("Navigation away fixture");
+      await expect(page.getByRole("list", {name: "Artifacts"})).toBeVisible();
+      await expect(page.getByRole("searchbox", {name: "Search artifacts"})).toHaveValue("");
       await expectSameDocument(page);
 
       await nav.getByRole("link", {name: "Design library"}).click();

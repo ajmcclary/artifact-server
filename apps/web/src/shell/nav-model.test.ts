@@ -55,9 +55,9 @@ describe("shellNavItems in review mode", () => {
       {group: "Review", icon: "bi-activity", id: "activity", label: "Activity", link: "/review"},
       {icon: "bi-folder2-open", id: "projects", label: "Projects", link: "/review/projects"},
       {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library"},
-      {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review/projects?project=prj_b"},
-      {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review/projects?project=prj_default"},
-      {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review/projects?project=prj_old"},
+      {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review?project=prj_b"},
+      {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review?project=prj_default"},
+      {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review?project=prj_old"},
       {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
       {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: "/review/settings/members"},
     ]);
@@ -81,12 +81,14 @@ describe("shellActiveLink", () => {
   it("marks Activity, the active project, the library, or the active administration screen", () => {
     expect(shellActiveLink({...reviewInput, activityActive: true})).toBe("/review");
     expect(shellActiveLink({...reviewInput, projectsActive: true})).toBe("/review/projects");
+    // The Projects screen marks the Projects row, whichever project it has selected.
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", projectsActive: true}))
-      .toBe("/review/projects?project=prj_default");
+      .toBe("/review/projects");
     expect(shellActiveLink({...reviewInput, libraryActive: true})).toBe("/review/library");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library");
+    // A project folder opens that project's artifacts, and is current while they show.
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default"}))
-      .toBe("/review/projects?project=prj_default");
+      .toBe("/review?project=prj_default");
     expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
       .toBe("/review/library");
     expect(shellActiveLink(reviewInput)).toBe("");
