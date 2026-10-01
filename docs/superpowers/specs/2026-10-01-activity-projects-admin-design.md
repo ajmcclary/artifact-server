@@ -397,7 +397,7 @@ the Activity screen proves parity.
 - SegmentedControl: All, Needs you (n), With an agent (n).
 - Projects and Types checkbox menus.
 - "Search activity", debounced at 250 ms.
-- Filters live in the URL (`?segment=&project=&type=&q=`).
+- Filters live in the URL (`?segment=&projects=&type=&q=`; `projects=` avoids the workspace's `project=` parameter).
 
 ### Timeline
 
