@@ -1,4 +1,5 @@
 import { filterGallery, filterPages, galleryKind, groupGallery } from './page-model.js';
+import { createActivityUI } from './activity-ui.jsx';
 
 // The host supplies its existing React runtime and ArkCase exports; no duplicated primitives.
 export function createReviewUI(React, DS) {
@@ -81,6 +82,9 @@ export function createReviewUI(React, DS) {
      assets and project internals stay out of the way until asked for. The folder holding
      `selected` opens itself, so choosing a page from elsewhere never hides its row. */
   const folderOf = (name) => (String(name).includes('/') ? String(name).split('/')[0] : '');
+  /* One edge for the Files panel, on both sides: as far in as the folder rows' chevron ends,
+     which is also FileList's own row padding. */
+  const EDGE = '14px';
   function FileGroups({ files, label, selected }) {
     const root = files.filter((file) => !folderOf(file.name));
     const folders = [...new Set(files.map((file) => folderOf(file.name)).filter(Boolean))];
@@ -95,14 +99,20 @@ export function createReviewUI(React, DS) {
       return set;
     });
     return <section aria-label={label}>
-      {root.length > 0 && <FileList label={folders.length ? 'Top-level files' : label} files={root} style={{ paddingLeft: 10 }} />}
+      {/* Rows run edge to edge with the same 14px on both sides as the folder rows' chevrons,
+          so icons share one column on the left and trailing labels one on the right. */}
+      {root.length > 0 && <FileList label={folders.length ? 'Top-level files' : label} files={root} inset={EDGE} />}
       {folders.map((folder) => {
         const inside = files.filter((file) => folderOf(file.name) === folder);
-        return <Disclosure key={folder} density="compact" title={folder + '/'} open={open.has(folder)}
+        return <Disclosure key={folder} density="compact" inset={EDGE} title={folder + '/'} open={open.has(folder)}
           onToggle={(next) => toggle(folder, next)}
           leading={<i className="bi bi-folder" aria-hidden="true" style={{ fontSize: 'var(--icon-xs, 14px)' }} />}
           trailing={inside.length}>
-          <FileList label={'Files in ' + folder} style={{ paddingLeft: 36 }}
+          {/* The folder body starts at the folder icon. The folder's name sits one icon and one gap
+              further in (12px + 12px); less the rows' own 14px inset, a 10px indent puts each file's
+              icon under it. Cancelling the body's end padding lets the rows reach the panel edge,
+              so their trailing labels line up with everything else's. */}
+          <FileList label={'Files in ' + folder} inset={EDGE} style={{ paddingLeft: 10, marginRight: 'calc(-1 * var(--space-4, 16px))' }}
             files={inside.map((file) => ({ ...file, name: file.name.slice(folder.length + 1) }))} />
         </Disclosure>;
       })}
@@ -235,5 +245,5 @@ export function createReviewUI(React, DS) {
         onClear={() => { onQueryChange(''); onKindChange('all'); announce('', 'all'); }} />}
     </section>;
   }
-  return { PagePicker, ArtifactLinks, FileGroups, DesignGallery };
+  return { PagePicker, ArtifactLinks, FileGroups, DesignGallery, ...createActivityUI(React, DS) };
 }

@@ -47,11 +47,16 @@ function Reply({ reply, d, muted }) {
 
 /* One top-level thread. When its reply composer closes while it held focus (posted or
    escaped), focus would fall to <body>; it returns to the thread's Reply action instead. */
-function Thread({ c, d, onReply, onResolve, renderReplyComposer, renderActions, selectable, selected, onSelect }) {
+function Thread({ c, d, onReply, onResolve, renderReplyComposer, renderActions, selectable, selected, onSelect, visibleReplies, repliesOpen, onToggleReplies }) {
   /* Selectable threads collapse to a two-line summary until selected; the selected thread
      opens its replies, its composer and its actions. */
   const expanded = !selectable || selected;
-  const replies = expanded ? (c.replies || []) : [];
+  const allReplies = expanded ? (c.replies || []) : [];
+  /* Folding a single reply behind a button costs more than it saves, so a thread folds
+     only when at least two replies would hide. */
+  const foldable = visibleReplies != null && allReplies.length > visibleReplies + 1;
+  const hiddenCount = foldable && !repliesOpen ? allReplies.length - visibleReplies : 0;
+  const replies = hiddenCount ? allReplies.slice(hiddenCount) : allReplies;
   const composer = expanded && renderReplyComposer ? renderReplyComposer(c.id) : null;
   const extra = expanded && renderActions ? renderActions(c.id) : null;
   const open = composer != null && composer !== false;
@@ -100,8 +105,16 @@ function Thread({ c, d, onReply, onResolve, renderReplyComposer, renderActions, 
             <div style={bodyStyle(d, c)}>{c.text}</div>
           </React.Fragment>
         )}
-        {replies.length > 0 && (
+        {allReplies.length > 0 && (
           <ul aria-label={`Replies to ${c.author}`} style={LIST}>
+            {foldable && (
+              <li key="toggle" style={{ margin: 'var(--space-input-padding-x, 0.625rem) 0 0 var(--space-3, 0.75rem)' }}>
+                <Button variant="ghost" size="xs" icon={repliesOpen ? 'bi-chevron-up' : 'bi-chevron-down'}
+                  aria-expanded={!!repliesOpen} onClick={() => onToggleReplies(c.id, !repliesOpen)}>
+                  {repliesOpen ? 'Show fewer replies' : `Show ${hiddenCount} earlier ${hiddenCount === 1 ? 'reply' : 'replies'}`}
+                </Button>
+              </li>
+            )}
             {replies.map((r) => <Reply key={r.id} reply={r} d={d} muted={!!c.resolved} />)}
           </ul>
         )}
@@ -140,9 +153,15 @@ function Thread({ c, d, onReply, onResolve, renderReplyComposer, renderActions, 
  */
 export function CommentThread({
   comments = [], onReply, onResolve, density = 'comfortable', renderReplyComposer, renderActions,
-  selectedId, onSelect, emptyMessage = 'No comments yet.', style, ...rest
+  selectedId, onSelect, visibleReplies, expandedIds, onToggleReplies, emptyMessage = 'No comments yet.', style, ...rest
 }) {
   const selectable = typeof onSelect === 'function';
+  const [ownExpanded, setOwnExpanded] = React.useState([]);
+  const expandedList = expandedIds || ownExpanded;
+  const toggleReplies = (id, next) => {
+    if (onToggleReplies) onToggleReplies(id, next);
+    if (!expandedIds) setOwnExpanded((all) => (next ? all.concat(id) : all.filter((x) => x !== id)));
+  };
   const d = DENSITY[density] || DENSITY.comfortable;
   if (!comments.length) {
     // No list, so no list name: a generic div must not carry aria-label.
@@ -157,7 +176,8 @@ export function CommentThread({
     <ul style={{ ...LIST, fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', ...style }} {...rest}>
       {comments.map((c) => (
         <Thread key={c.id} c={c} d={d} onReply={onReply} onResolve={onResolve} renderReplyComposer={renderReplyComposer}
-          renderActions={renderActions} selectable={selectable} selected={selectable && c.id === selectedId} onSelect={onSelect} />
+          renderActions={renderActions} selectable={selectable} selected={selectable && c.id === selectedId} onSelect={onSelect}
+          visibleReplies={visibleReplies} repliesOpen={expandedList.indexOf(c.id) > -1} onToggleReplies={toggleReplies} />
       ))}
     </ul>
   );

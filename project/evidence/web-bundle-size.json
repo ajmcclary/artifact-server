@@ -126,6 +126,46 @@
       "measuredAt": "2026-09-30T06:37:50.025Z",
       "node": "v24.15.0",
       "totalBytes": 2353414
+    },
+    {
+      "bytesByExtension": {
+        "css": 515473,
+        "html": 2045,
+        "js": 1285088,
+        "svg": 18058,
+        "woff2": 594468
+      },
+      "commit": "3f5b2b2a20c70bd6111919fd4460f4bd5b346bbb",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 84484,
+        "html": 1034,
+        "js": 384909
+      },
+      "label": "before-activity",
+      "measuredAt": "2026-10-01T14:10:16.626Z",
+      "node": "v24.15.0",
+      "totalBytes": 2415132
+    },
+    {
+      "bytesByExtension": {
+        "css": 529613,
+        "html": 2045,
+        "js": 1296394,
+        "svg": 18058,
+        "woff2": 594468
+      },
+      "commit": "3f5b2b2a20c70bd6111919fd4460f4bd5b346bbb",
+      "dirty": true,
+      "gzipBytes": {
+        "css": 86946,
+        "html": 1034,
+        "js": 388580
+      },
+      "label": "after-task-1.1",
+      "measuredAt": "2026-10-01T14:12:38.341Z",
+      "node": "v24.15.0",
+      "totalBytes": 2440578
     }
   ]
 }

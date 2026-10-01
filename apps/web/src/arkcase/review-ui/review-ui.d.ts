@@ -109,6 +109,76 @@ export interface DesignGalleryProps {
   phone?: boolean;
 }
 /** Reuses the host's React and ArkCase components, including in the portable runtime. */
+export interface ActivityEvent {
+  id: string;
+  type: 'comment' | 'version' | 'resolution' | 'agent' | 'access' | 'admin';
+  /** Epoch milliseconds; NaN when the record carries no readable time. */
+  at: number;
+  actor: string;
+  verb: string;
+  artifactId?: string; artifactName?: string; projectId?: string; projectName?: string; archived?: boolean;
+  version?: number; fromVersion?: number | null; firstVersion?: number; count?: number;
+  thread?: { key: string; author: string; when?: string; at?: string; body: string; isResolved: boolean; replies: Array<{ id?: string; author: string; when?: string; at?: string; body: string }> };
+  excerpt?: string; from?: string; to?: string; agent?: string; state?: string; detail?: string; icon?: string;
+  needsYou: boolean; withAgent: boolean; adminOnly: boolean;
+}
+export interface ActivityFeedProps {
+  /** One page of newest-first events. */
+  events: ActivityEvent[];
+  /** Reference time for the Today / Yesterday day labels. */
+  now: number;
+  hasMore: boolean;
+  remaining: number;
+  onShowOlder: () => void;
+  /** Thread keys whose folded replies are open. */
+  expandedIds?: string[];
+  onToggleReplies?: (threadKey: string, expanded: boolean) => void;
+  onOpen: (event: ActivityEvent) => void;
+  onCompare?: (event: ActivityEvent) => void;
+  onReply?: (threadKey: string) => void;
+  onResolve?: (threadKey: string, next: boolean) => void;
+  renderReplyComposer?: (threadKey: string) => React.ReactNode;
+  /** True when filters are narrowing the feed; the empty state then offers Clear filters. */
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  /** Names the feed's day lists ("Activity · Today"). @default "Activity" */
+  label?: string;
+  /** Height of whatever is docked above the feed (the filter row), so day bands and conversation headers pin beneath it. @default 0 */
+  stickyTop?: number;
+  /** The page a conversation refers to, rendered by the host at 800px wide; the feed scales it into a 160×100 thumbnail with the comment's pin. Omit for no thumbnails. */
+  renderThumbnail?: (event: ActivityEvent) => React.ReactNode;
+}
+export interface ActivityMetric {
+  id: string;
+  label: string;
+  value: string | number;
+  /** Makes the tile a toggle, e.g. a filter shortcut. */
+  onClick?: () => void;
+  pressed?: boolean;
+}
+export interface ActivityHeaderProps {
+  /** @default "Activity" */
+  title?: string;
+  /** One line of facts under the title. */
+  summary?: React.ReactNode;
+  /** The page's primary action, at the heading's end. */
+  action?: React.ReactNode;
+  metrics?: ActivityMetric[];
+}
+export interface ActivityToolbarProps {
+  segment: 'All' | 'Needs you' | 'With an agent';
+  onSegment: (segment: string) => void;
+  counts?: Record<string, number>;
+  projects: Array<{ id: string; name: string }>;
+  selectedProjects: string[];
+  onProjects: (ids: string[]) => void;
+  types: Array<'comments' | 'versions' | 'agents' | 'access'>;
+  onTypes: (ids: string[]) => void;
+  query: string;
+  onQuery: (text: string) => void;
+  /** Reports the docked row's height (including its padding) whenever it changes. */
+  onHeight?: (height: number) => void;
+}
 export function createReviewUI(react: typeof React, controls: Record<string, React.ElementType>): {
   PagePicker: React.ComponentType<PagePickerProps>;
   ArtifactLinks: React.ComponentType<ArtifactLinksProps>;
@@ -116,4 +186,10 @@ export function createReviewUI(react: typeof React, controls: Record<string, Rea
   FileGroups: React.ComponentType<FileGroupsProps>;
   /** Requires `SegmentedControl`, `Input`, `GroupBand` and `SurfaceState` in `controls`. */
   DesignGallery: React.ComponentType<DesignGalleryProps>;
+  /** Requires `SectionHeading`, `AutoGrid` and `MetricCard` in `controls`. */
+  ActivityHeader: React.ComponentType<ActivityHeaderProps>;
+  /** Requires `Timeline`, `CommentThread`, `StatusPill`, `Button`, `SurfaceState`, `GroupBand`, `ScrollDock` and `AnnotationPin` in `controls`. */
+  ActivityFeed: React.ComponentType<ActivityFeedProps>;
+  /** Requires `SegmentedControl`, `Button`, `Menu`, `Input` and `ScrollDock` in `controls`. */
+  ActivityToolbar: React.ComponentType<ActivityToolbarProps>;
 };

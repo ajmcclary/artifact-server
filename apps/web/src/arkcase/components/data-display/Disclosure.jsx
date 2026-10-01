@@ -57,6 +57,7 @@ export function Disclosure({
   disabled = false,
   actions,
   sticky = false,
+  inset,
   children: childrenProp,
   style,
   ...rest
@@ -83,9 +84,12 @@ export function Disclosure({
   const rail = tone ? RAIL_TONES[tone] || RAIL_TONES.neutral : null;
   /* With a rail the 3px border sits inside the 20px start padding, so titles align either way.
      The dense band keeps the builder's 10px inset (less the rail when one is drawn). */
+  /* `inset` replaces the 24px start (the rail still sits inside it), for rows that line up
+     with neighbours on a tighter edge; the detail keeps following the same indent. */
+  const startEdge = inset == null ? 'var(--space-5, 24px)' : (typeof inset === 'number' ? inset + 'px' : inset);
   const padStart = dense
     ? (rail ? '7px' : '10px')
-    : (rail ? 'calc(var(--space-5, 24px) - 3px)' : 'var(--space-5, 24px)');
+    : (rail ? 'calc(' + startEdge + ' - 3px)' : startEdge);
   const padEnd = dense ? '10px' : 'var(--space-3, 12px)';
   const gap = dense ? '6px' : 'var(--space-3, 12px)';
   const action = actionLabel ? (open ? actionLabel.open : actionLabel.closed) : null;

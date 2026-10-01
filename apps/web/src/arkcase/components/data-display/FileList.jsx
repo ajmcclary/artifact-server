@@ -53,9 +53,13 @@ const ROW = {
  * ArkCase FileList — the files of a version or upload: type icon, `name · size`
  * in the data face, and an optional trailing role ("entry", "asset"), one row
  * per file on the list-divider hairline. The icon derives from the extension
- * unless given. With `onSelect` a row is a full-width button.
+ * unless given. With `onSelect` a row is a full-width button. `inset` sets the rows' side
+ * padding (14px by default).
  */
-export function FileList({ files = [], label, style, ...rest }) {
+export function FileList({ files = [], label, inset, style, ...rest }) {
+  /* `inset` sets the rows' side padding, so a list can run edge to edge in a panel while its
+     icons line up with an indented heading above it. */
+  const row = inset == null ? ROW : { ...ROW, padding: '6px ' + (typeof inset === 'number' ? inset + 'px' : inset) };
   return (
     <ul
       role="list"
@@ -66,9 +70,9 @@ export function FileList({ files = [], label, style, ...rest }) {
       {files.map((f, i) => (
         <li key={f.name + ':' + i} style={{ borderBottom: 'var(--border-width, 1px) solid var(--list-divider, #e9ecef)' }}>
           {f.onSelect ? (
-            <FileButton file={f} />
+            <FileButton file={f} row={row} />
           ) : (
-            <div style={ROW}><RowContent file={f} /></div>
+            <div style={row}><RowContent file={f} /></div>
           )}
         </li>
       ))}
@@ -76,7 +80,7 @@ export function FileList({ files = [], label, style, ...rest }) {
   );
 }
 
-function FileButton({ file }) {
+function FileButton({ file, row = ROW }) {
   const [hover, setHover] = React.useState(false);
   return (
     <button
@@ -85,7 +89,7 @@ function FileButton({ file }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        ...ROW,
+        ...row,
         width: '100%',
         border: 0,
         background: hover ? 'var(--tint-primary-hover, rgba(0, 121, 168, 0.05))' : 'transparent',

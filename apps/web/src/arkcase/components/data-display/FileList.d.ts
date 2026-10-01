@@ -19,6 +19,8 @@ export interface FileListProps extends Omit<React.HTMLAttributes<HTMLUListElemen
   files: FileListItem[];
   /** Accessible name for the list, e.g. "Files in version 4". */
   label?: string;
+  /** Side padding of each row, in px or any CSS length — lets a list run edge to edge while its icons line up with an indented heading. @default 14 */
+  inset?: number | string;
   /** Style overrides for the FileList root. */
   style?: React.CSSProperties;
 }

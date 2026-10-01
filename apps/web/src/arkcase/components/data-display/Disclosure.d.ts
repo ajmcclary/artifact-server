@@ -35,6 +35,8 @@ export interface DisclosureProps {
   disabled?: boolean;
   /** Controls beside the header button, never inside it — e.g. a small outline "Download PDF" Button on a filing card. They sit at the row's end (12px end, 16px start padding, 8px gap), keep their own tab stops and names, and do not toggle the row. Framed and open, the header's ground and hairline run under them. */
   actions?: React.ReactNode;
+  /** Start padding of the header (and the detail's matching indent), in px or any CSS length; ignored at `dense`. @default 24 */
+  inset?: number | string;
   /** The detail revealed when open. Children marked `slot="title"`, `slot="meta"`, `slot="leading"` or `slot="trailing"` fill those header positions instead. */
   children?: React.ReactNode;
   /** Style overrides for the Disclosure root. */

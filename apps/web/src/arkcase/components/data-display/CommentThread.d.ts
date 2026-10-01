@@ -37,6 +37,12 @@ export interface CommentThreadProps {
   selectedId?: string | null;
   /** Makes the list selectable: each thread summary is a toggle button reporting its id (the host decides whether a second press collapses it). */
   onSelect?: (id: string) => void;
+  /** Newest replies kept visible per thread. A thread with more than `visibleReplies + 1` replies folds the earlier ones behind a "Show N earlier replies" toggle; fewer never fold. Omit to always show every reply. */
+  visibleReplies?: number;
+  /** Ids of threads whose folded replies are open. Omit to let the list keep its own expansion state. */
+  expandedIds?: string[];
+  /** Called when a thread's reply toggle is pressed, with the thread id and the requested state. */
+  onToggleReplies?: (id: string, expanded: boolean) => void;
   /** Text shown when there are no comments. @default "No comments yet." */
   emptyMessage?: string;
   /** Accessible name for the thread list, e.g. "Comments on Build 482". */

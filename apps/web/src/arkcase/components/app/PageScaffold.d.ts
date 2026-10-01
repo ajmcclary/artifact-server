@@ -11,6 +11,8 @@ export interface PageScaffoldProps {
   level?: 2 | 3 | 4 | 5 | 6;
   /** The screen's actions, at the end of the band. */
   actions?: React.ReactNode;
+  /** `fixed` keeps the title band above a scrolling body; `scroll` makes the band the body's first block, so it scrolls away with the content. @default "fixed" */
+  head?: 'fixed' | 'scroll';
   /** The content column's maximum width, in px or any CSS length. @default 1000 */
   maxWidth?: number | string;
   /** Padding of the scrolling body. @default "14px 18px 24px" */
