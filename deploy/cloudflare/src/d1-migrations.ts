@@ -2,13 +2,17 @@ import {
   defaultProjectId,
   defaultProjectName,
 } from "../../../src/core/model.js";
+import {
+  sqliteActionsRebuildStatements,
+  sqliteActivityRecoveryStatements,
+} from "../../../src/storage/activity-log-schema.js";
 import {normalizeArtifactSearchText} from
   "../../../src/application/artifact-tags.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 15;
+export const requiredD1SchemaVersion = 16;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -648,6 +652,7 @@ export async function migrateD1(
     await addStagedUploadCleanupClaimIfMissing(database);
     await addPreparedManifestEntriesTableIfMissing(database);
   }
+  await addInstallationActivityLogIfMissing(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -666,6 +671,28 @@ export async function migrateD1(
       new Date(0).toISOString(),
     ),
   ]);
+}
+
+/**
+ * Copy `actions` into the activity-log shape and recover recorded activity in
+ * one atomic batch. The copy-check CHECK aborts the batch unless every legacy
+ * row arrived unchanged.
+ */
+async function addInstallationActivityLogIfMissing(
+  database: D1Database,
+): Promise<void> {
+  const columns = await database.prepare("PRAGMA table_info(actions)")
+    .all<{name: string}>();
+  if (columns.results.some((column) => column.name === "subject_id")) return;
+  try {
+    await database.batch([
+      ...sqliteActionsRebuildStatements({strict: false}),
+      ...sqliteActivityRecoveryStatements({identity: true}),
+    ].map((statement) => database.prepare(statement)));
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(`D1 migration installation_activity_log failed: ${detail}`, {cause});
+  }
 }
 
 async function addArtifactSearchNameIfMissing(

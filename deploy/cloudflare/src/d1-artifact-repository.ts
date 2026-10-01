@@ -138,6 +138,7 @@ import {
   type GitHistoryJob,
   type GitHistoryMirrorStore,
 } from "../../../src/git-history/git-history-mirror.js";
+import {artifactHistoryActionKindSql} from "../../../src/storage/activity-log-schema.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 import type {GitHistoryPurgeStore} from
@@ -3193,6 +3194,7 @@ export function createD1ArtifactRepository(
           authorized_by_principal_id AS authorizedByPrincipalId,
           idempotency_key AS idempotencyKey, created_at AS createdAt
         FROM actions WHERE project_id = ? AND artifact_id = ?
+          AND action IN (${artifactHistoryActionKindSql})
           AND (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))
         ORDER BY created_at DESC, id DESC LIMIT ?
       `).bind(
