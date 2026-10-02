@@ -1,4 +1,5 @@
 import React from 'react';
+import { FIELD_PAD_X, FIELD_PAD_Y, FieldLabel, FieldMessage, fieldDescription, fieldLabelId, useFieldId } from './field-chrome.jsx';
 
 /**
  * ArkCase Textarea — labelled multiline input matching the Input palette:
@@ -21,12 +22,10 @@ export function Textarea({
   React.useEffect(() => {
     if (stripRef.current) stripRef.current.inert = !!disabled;
   }, [disabled, hasToolbar]);
-  const generatedId = React.useId();
-  const areaId = id || generatedId;
+  const areaId = useFieldId(id);
   const borderCol = error ? 'var(--bs-danger, #d83506)' : focus ? 'var(--bs-primary, #0079a8)' : 'var(--border-color-strong, #ced4da)';
-  const messageId = `${areaId}-${error ? 'error' : 'helper'}`;
-  const describedBy = [rest['aria-describedby'], (error || helper) ? messageId : null].filter(Boolean).join(' ') || undefined;
-  const labelId = `${areaId}-label`;
+  const { messageId, describedBy } = fieldDescription(areaId, { helper, error, describedBy: rest['aria-describedby'] });
+  const labelId = fieldLabelId(areaId);
   const boxFocus = hasToolbar && focusWithin;
   const boxBorder = error ? 'var(--bs-danger, #d83506)' : boxFocus ? 'var(--bs-primary, #0079a8)' : 'var(--border-color-strong, #ced4da)';
 
@@ -45,18 +44,17 @@ export function Textarea({
       onFocus={(event) => { setFocus(true); onFocus && onFocus(event); }}
       onBlur={(event) => { setFocus(false); onBlur && onBlur(event); }}
       aria-invalid={error ? true : undefined}
-      aria-describedby={describedBy}
       style={{
         width: '100%',
         minHeight: '2.5rem',
-        padding: '0.375rem 0.625rem',
-        fontSize: '1rem',
+        padding: `${FIELD_PAD_Y} ${FIELD_PAD_X}`,
+        fontSize: 'var(--font-size-md, 1rem)',
         fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
         lineHeight: 1.5,
         color: 'var(--text-body, #212529)',
         backgroundColor: disabled ? 'var(--bs-gray-200, #e9ecef)' : 'var(--surface-card, #fff)',
         border: `1px solid ${borderCol}`,
-        borderRadius: 'var(--radius-md, 6px)',
+        borderRadius: 'var(--radius-md, 5px)',
         boxShadow: focus ? 'var(--focus-ring, 0 0 0 0.25rem rgba(0,121,168,0.25))' : 'none',
         transition: 'border-color .15s ease, box-shadow .15s ease',
         resize: 'vertical',
@@ -65,7 +63,7 @@ export function Textarea({
           display: 'block',
           boxSizing: 'border-box',
           border: 0,
-          borderRadius: '0 0 var(--radius-md, 6px) var(--radius-md, 6px)',
+          borderRadius: '0 0 var(--radius-md, 5px) var(--radius-md, 5px)',
           boxShadow: 'none',
           outline: 'none',
           backgroundColor: 'transparent',
@@ -79,6 +77,7 @@ export function Textarea({
         ...inputStyle,
       }}
       {...rest}
+      aria-describedby={describedBy}
     />
   );
 
@@ -89,14 +88,7 @@ export function Textarea({
       aria-labelledby={hasToolbar && label ? labelId : undefined}
       data-textarea-group={hasToolbar ? '' : undefined}
     >
-      {label && (
-        <label htmlFor={areaId} id={hasToolbar ? labelId : undefined} style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem', color: 'var(--text-body, #212529)' }}>
-          {label}
-          {required && (
-            <span aria-hidden="true" data-required-mark="" style={{ color: 'var(--text-overdue, #991b1b)' }}> *</span>
-          )}
-        </label>
-      )}
+      {label && <FieldLabel htmlFor={areaId} id={hasToolbar ? labelId : undefined} required={required}>{label}</FieldLabel>}
       {hasToolbar ? (
         <div
           data-textarea-field=""
@@ -104,7 +96,7 @@ export function Textarea({
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }}
           style={{
             border: `1px solid ${boxBorder}`,
-            borderRadius: 'var(--radius-md, 6px)',
+            borderRadius: 'var(--radius-md, 5px)',
             backgroundColor: disabled ? 'var(--bs-gray-200, #e9ecef)' : 'var(--surface-card, #fff)',
             boxShadow: boxFocus ? 'var(--focus-ring, 0 0 0 0.25rem rgba(0,121,168,0.25))' : 'none',
             transition: 'border-color .15s ease, box-shadow .15s ease',
@@ -120,7 +112,7 @@ export function Textarea({
               padding: '4px 8px',
               background: 'var(--surface-secondary, #f8f9fa)',
               borderBottom: '1px solid var(--border-color, #dee2e6)',
-              borderRadius: 'var(--radius-md, 6px) var(--radius-md, 6px) 0 0',
+              borderRadius: 'var(--radius-md, 5px) var(--radius-md, 5px) 0 0',
               opacity: disabled ? 0.65 : undefined,
               pointerEvents: disabled ? 'none' : undefined,
             }}
@@ -130,9 +122,7 @@ export function Textarea({
           {area}
         </div>
       ) : area}
-      {(helper || error) && (
-        <div id={messageId} role={error ? 'alert' : undefined} style={{ fontSize: '0.8125rem', marginTop: '0.25rem', color: error ? 'var(--text-overdue, #991b1b)' : 'var(--text-secondary, #5a6268)' }}>{error || helper}</div>
-      )}
+      <FieldMessage id={messageId} helper={helper} error={error} />
     </div>
   );
 }

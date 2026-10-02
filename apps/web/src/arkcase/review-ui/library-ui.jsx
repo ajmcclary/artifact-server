@@ -3,22 +3,25 @@ import { usDateTime } from './activity-model.js';
 import { createThumbnailUI } from './placeholder-ui.jsx';
 import { createToolbarUI } from './toolbar-ui.jsx';
 
-/* The design library, laid out like Activity: the heading scrolls away, the shared page toolbar
+/* The Library, laid out like Activity: the heading scrolls away, the shared page toolbar
    docks and leads with the title, and each group's band pins beneath it. The host owns every view choice (search,
-   types, grouping, sort, layout, collapsed groups, scroll and the returning tile) so a return
+   projects, types, grouping, sort, layout, collapsed groups, scroll and the returning tile) so a return
    from an opened page restores them. Tiles render no live preview: a captured thumbnail when
    supplied, otherwise the kind's placeholder sketch. */
 export function createLibraryUI(React, DS) {
-  const { IconButton, Input, SegmentedControl, GroupBand, SurfaceState, SectionHeading, ToolbarSpacer } = DS;
+  const { IconButton, SegmentedControl, GroupBand, SurfaceState, SectionHeading } = DS;
   const { GalleryThumbnail, GalleryPlaceholder } = createThumbnailUI(React);
-  const { PageToolbar, FilterMenu, FilterSummary } = createToolbarUI(React, DS);
+  const { PageToolbar, FilterGroup, FilterMenu, FilterSummary, ToolbarSearch } = createToolbarUI(React, DS);
   const secondary = { fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5A6268)' };
   const data = { fontFamily: 'var(--font-data, "Source Code Pro", monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-data, #495057)' };
   const strong = { fontWeight: 600, color: 'var(--text-strong, #111827)', overflowWrap: 'anywhere' };
   const libraryId = (item) => item.id ?? item.path;
   const plainClick = (event) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-  const sortLabel = (sortBy, dir) => librarySorts.find((sort) => sort.id === sortBy).label
-    + (sortBy === 'name' ? (dir === 'asc' ? ' (A–Z)' : ' (Z–A)') : (dir === 'asc' ? ' (oldest)' : ' (newest)'));
+  const hidden = DS.visuallyHiddenStyle || { position: 'absolute', width: 1, height: 1, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
+  /* The order stays in the trigger's accessible name but not on screen, keeping the bar to one
+     row; the open menu shows it. */
+  const sortLabel = (sortBy, dir) => <>{librarySorts.find((sort) => sort.id === sortBy).label}
+    <span style={hidden}>{sortBy === 'name' ? (dir === 'asc' ? ' (A–Z)' : ' (Z–A)') : (dir === 'asc' ? ' (oldest)' : ' (newest)')}</span></>;
   const directions = (sortBy) => (sortBy === 'name' ? [['asc', 'A to Z'], ['desc', 'Z to A']] : [['desc', 'Newest first'], ['asc', 'Oldest first']]);
 
   function LibraryTile({ item, href, onOpen, list, context, dateLabel, dateText, zebra, first, phone }) {
@@ -66,7 +69,7 @@ export function createLibraryUI(React, DS) {
     </Element>;
   }
 
-  function DesignLibrary({ title = 'Design library', description, items, now, notice, query = '', onQueryChange, types = [], onTypesChange,
+  function DesignLibrary({ title = 'Library', description, items, now, notice, query = '', onQueryChange, types = [], onTypesChange, projects = [], onProjectsChange,
     groupBy = 'date', onGroupByChange, sortBy = 'activity', sortDir, onSortChange, view = 'grid', onViewChange,
     collapsed = [], onCollapsedChange, onRefresh, refreshedAt, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, phone = false }) {
     const rootRef = React.useRef(null);
@@ -74,10 +77,10 @@ export function createLibraryUI(React, DS) {
     const [menu, setMenu] = React.useState(null);
     const [dockHeight, setDockHeight] = React.useState(57);
     const dir = sortDir || defaultSortDir(sortBy);
-    const matches = filterLibrary(items, query, types);
+    const matches = filterLibrary(items, query, types, projects);
     const groups = groupLibrary(matches, { groupBy, sortBy, dir, now: now ?? Date.now() });
     const field = libraryDateField(sortBy);
-    const filtered = types.length > 0 || query.trim().length > 0;
+    const filtered = types.length > 0 || projects.length > 0 || query.trim().length > 0;
     const list = view === 'list';
     const gutter = phone ? 16 : 20;
     React.useLayoutEffect(() => {
@@ -88,13 +91,19 @@ export function createLibraryUI(React, DS) {
         .find((tile) => tile.getAttribute('data-gallery-path') === focusPath)?.focus({ preventScroll: scrollTop > 0 });
       // Restore once per mount; later prop changes come from this library's own scrolling.
     }, []);
-    const announce = (nextQuery, nextTypes) => onAnnounce?.(`${filterLibrary(items, nextQuery, nextTypes).length} matching previews.`);
-    const setTypes = (next) => { onTypesChange(next); announce(query, next); };
-    const clear = () => { onQueryChange(''); onTypesChange([]); announce('', []); };
+    const announce = (nextQuery, nextTypes, nextProjects) => onAnnounce?.(`${filterLibrary(items, nextQuery, nextTypes, nextProjects).length} matching previews.`);
+    const setTypes = (next) => { onTypesChange(next); announce(query, next, projects); };
+    const setProjects = (next) => { onProjectsChange?.(next); announce(query, types, next); };
+    const clear = () => { onQueryChange(''); onTypesChange([]); onProjectsChange?.([]); announce('', [], []); };
     const counts = {};
-    items.forEach((item) => { counts[item.kind] = (counts[item.kind] || 0) + 1; });
+    const projectCounts = {};
+    items.forEach((item) => {
+      counts[item.kind] = (counts[item.kind] || 0) + 1;
+      projectCounts[item.project] = (projectCounts[item.project] || 0) + 1;
+    });
+    const projectNames = Object.keys(projectCounts).sort((a, b) => a.localeCompare(b));
     const menuButton = (id, icon, label) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)} icon={icon} label={label}
-      menuLabel={{ group: 'Group by', sort: 'Sort by', types: 'Artifact types' }[id]} minWidth={220} triggerRef={id === 'types' ? typesRef : undefined}
+      menuLabel={{ group: 'Group by', sort: 'Sort by', projects: 'Projects', types: 'Artifact types' }[id]} minWidth={220} triggerRef={id === 'types' ? typesRef : undefined}
       items={{
         group: [{ heading: 'Group by' }, ...libraryGroupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
           onClick: () => onGroupByChange(option.id) }))],
@@ -102,11 +111,15 @@ export function createLibraryUI(React, DS) {
           onClick: () => onSortChange(option.id, defaultSortDir(option.id)) })),
         { divider: true }, { heading: 'Order' },
         ...directions(sortBy).map(([id, label]) => ({ type: 'radio', label, checked: dir === id, onClick: () => onSortChange(sortBy, id) }))],
+        projects: projectNames.map((name) => ({ type: 'checkbox', label: name, icon: 'bi-folder2', meta: projectCounts[name],
+          checked: projects.includes(name), keepOpen: true,
+          onClick: () => setProjects(projects.includes(name) ? projects.filter((x) => x !== name) : projects.concat(name)) })),
         types: galleryKinds.filter((kind) => counts[kind.id]).map((kind) => ({ type: 'checkbox', label: kind.label, icon: kind.icon,
           meta: counts[kind.id], checked: types.includes(kind.id), keepOpen: true,
           onClick: () => setTypes(types.includes(kind.id) ? types.filter((id) => id !== kind.id) : types.concat(kind.id)) })),
       }[id]} />;
-    const chips = types.map((id) => { const kind = galleryKind(id); return { key: 'type:' + id, label: kind.label, icon: kind.icon, remove: () => setTypes(types.filter((x) => x !== id)) }; });
+    const chips = projects.map((name) => ({ key: 'project:' + name, label: name, icon: 'bi-folder2', remove: () => setProjects(projects.filter((x) => x !== name)) }))
+      .concat(types.map((id) => { const kind = galleryKind(id); return { key: 'type:' + id, label: kind.label, icon: kind.icon, remove: () => setTypes(types.filter((x) => x !== id)) }; }));
     const groupName = libraryGroupings.find((option) => option.id === groupBy).label;
 
     return <section ref={rootRef} aria-label={title} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
@@ -116,24 +129,27 @@ export function createLibraryUI(React, DS) {
         <SectionHeading level={1} size="lg" title={title} subtitle={description} />
         {notice}
       </header>
-      <PageToolbar title={title} label="Library view" gutter={gutter} phone={phone} onHeight={setDockHeight}>
-        {menuButton('group', 'bi-layers', `Group: ${groupName}`)}
-        {menuButton('sort', 'bi-sort-alpha-down', `Sort: ${sortLabel(sortBy, dir)}`)}
-        {menuButton('types', 'bi-funnel', types.length ? `Types · ${types.length}` : 'All types')}
-        <ToolbarSpacer />
-        <Input icon="bi-search" size="sm" type="search" placeholder="Search previews" aria-label="Search previews" value={query}
-          onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types); }}
-          style={phone ? { width: '100%' } : { flex: '1 1 140px', maxWidth: 260 }} />
-        <SegmentedControl variant="pill" size="sm" mode="radio" label="Layout" value={view} onChange={onViewChange}
-          options={[{ id: 'grid', icon: 'bi-grid-3x3-gap', ariaLabel: 'Grid', title: 'Grid' }, { id: 'list', icon: 'bi-list-ul', ariaLabel: 'List', title: 'List' }]} />
-        {onRefresh && <IconButton icon="bi-arrow-clockwise" size="sm" ariaLabel="Refresh"
-          title={refreshedAt ? `Refresh · read ${refreshedAt}` : 'Refresh'} onClick={onRefresh} />}
+      <PageToolbar title={title} label="Library view" gutter={gutter} phone={phone} onHeight={setDockHeight}
+        end={<>
+          <ToolbarSearch label="Search previews" placeholder="Search previews" value={query}
+            onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types, projects); }} />
+          <SegmentedControl variant="pill" size="sm" mode="radio" label="Layout" value={view} onChange={onViewChange}
+            options={[{ id: 'grid', icon: 'bi-grid-3x3-gap', ariaLabel: 'Grid', title: 'Grid' }, { id: 'list', icon: 'bi-list-ul', ariaLabel: 'List', title: 'List' }]} />
+          {onRefresh && <IconButton icon="bi-arrow-clockwise" size="sm" ariaLabel="Refresh"
+            title={refreshedAt ? `Refresh · read ${refreshedAt}` : 'Refresh'} onClick={onRefresh} />}
+        </>}>
+        <FilterGroup label="View and filters">
+          {menuButton('group', 'bi-layers', `Group: ${groupName}`)}
+          {menuButton('sort', 'bi-sort-alpha-down', <>Sort: {sortLabel(sortBy, dir)}</>)}
+          {onProjectsChange && menuButton('projects', 'bi-folder2', projects.length ? `Projects · ${projects.length}` : 'All projects')}
+          {menuButton('types', 'bi-funnel', types.length ? `Types · ${types.length}` : 'All types')}
+        </FilterGroup>
       </PageToolbar>
       <FilterSummary filtered={filtered} status={<>Showing <span style={data}>{matches.length}</span> of <span style={data}>{items.length}</span> previews</>}
         chips={chips} onClear={clear} fallbackRef={typesRef} />
       {!matches.length && <div style={{ marginTop: 24 }}>
         <SurfaceState phase="ready" count={0} noun="previews" emptyIcon="bi-collection" emptyTitle="Nothing matches these filters"
-          emptyBody="Clear the search and type filters to see every preview." actionLabel="Clear filters" actionIcon="bi-x" onAction={clear} />
+          emptyBody="Clear the search, project and type filters to see every preview." actionLabel="Clear filters" actionIcon="bi-x" onAction={clear} />
       </div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 4 }}>
         {groups.map((group, index) => {

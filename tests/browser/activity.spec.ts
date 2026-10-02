@@ -135,9 +135,18 @@ test.describe("Activity", () => {
       await page.goto(`${fixture.server.baseUrl}/review`);
       // The Activity row carries the Needs-you count.
       await expect(page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: /^Activity/u})).toContainText("1");
-      await page.getByRole("button", {name: "Publish artifact"}).click();
+      // Publish is an icon-only primary button named by its label and a tooltip.
+      const publishButton = page.getByRole("button", {exact: true, name: "Publish artifact"});
+      await expect(publishButton).toHaveText("");
+      await publishButton.hover();
+      await expect(page.getByRole("tooltip", {name: "Publish artifact"})).toBeVisible();
+      await publishButton.click();
       await expect(page.getByRole("dialog", {name: "Publish artifact"}).getByText("artifactserver publish ./dist")).toBeVisible();
       await page.keyboard.press("Escape");
+      await expect(publishButton).toBeFocused();
+      // The people, project and type menus sit shoulder to shoulder in one group.
+      const filters = page.getByRole("toolbar", {name: "Activity filters"}).getByRole("group", {name: "Filters"});
+      await expect(filters.getByRole("button")).toHaveText([/^Everyone/u, /^All projects/u, /^All types/u]);
       await page.getByRole("button", {name: /Needs you/u}).first().click();
       await expect(page).toHaveURL(/segment=needs_you/u);
     } finally {

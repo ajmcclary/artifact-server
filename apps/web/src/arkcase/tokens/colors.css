@@ -7,7 +7,7 @@
   --bs-tertiary: #005a7d; /* Deep teal, the primary's darker partner: link hover (`text-link-hover`), the `SelectionBar` count, headers and depth. White text on it clears AA. */
   --bs-secondary: #757575; /* Neutral fill for secondary buttons and badges. Nudged from #777 so white text on it clears AA (4.61:1). */
   --bs-dark: #374151; /* Slate: dark UI surfaces, the `dark` button and badge, and `text-emphasis` as text. */
-  --bs-light: #f1f5f7; /* Cool off-white: the `light` button fill and the app canvas tint (same value as `surface-canvas`). */
+  --bs-light: #f1f5f7; /* Cool off-white: the `light` button fill and the app canvas tint (same default value as `surface-canvas`, #f1f5f7; dark #223547 vs #0b141c and high-contrast #e6eaee vs #f0f3f5 differ, so the two are not aliases). */
   --bs-muted: #babec4; /* Decorative neutral only: rules, placeholders on tinted chrome. 1.9:1 on white, so never text or a meaningful glyph. */
   --bs-primary-rgb: 0, 121, 168; /* RGB channels of `bs-primary` for Bootstrap `rgba(var(--bs-primary-rgb), a)` tints. */
   /* ---- Primary scale ---- */
@@ -56,21 +56,21 @@
   --surface-tertiary: #e9ecef; /* Deeper insets and dividers. Text on it: `text-body` or `text-secondary`; links take `text-link-on-tint`. */
   --surface-card: #ffffff; /* Card, panel and widget surface (white) on the canvas. */
   --surface-canvas: #f1f5f7; /* App shell tint behind content: the ground cards sit on. Text on it: `text-body`, `text-secondary`. */
-  --surface-header: #073652; /* The 60px app bar and the `PartBand`: deep navy-teal with `text-on-navy`. As ink (serif headings, tile numbers) the same value is `text-navy` in bundle.css. */
+  --surface-header: #073652; /* The 60px app bar and the `PartBand`: deep navy-teal with `text-on-navy`. As ink (serif headings, tile numbers) use `text-navy`: the same value in default and high-contrast, but dark keeps this #073652 ground while the ink lightens to #9ad7f0. */
   --surface-navy-strong: #0d4a6b; /* One step up from the app bar: sidebar and app-bar hover surfaces, with `text-on-navy`. */
   --surface-navy-subtle: #eaf1f6; /* Pale navy wash: selected rows, active nav, callouts. Text on it: `text-body`, `text-secondary` (5.44:1), links `text-link-on-tint`. */
   /* ---- Text ramp & related ---- */
-  --text-navy: #073652; /* The brand navy AS INK: Source Serif headings, feature values and tile numbers on `surface-body` and `surface-canvas` (12.4:1). Same value as `surface-header`, a different role: that one is the app bar's ground, this one is text. */
+  --text-navy: #073652; /* The brand navy AS INK: Source Serif headings, feature values and tile numbers on `surface-body` and `surface-canvas` (12.4:1). Same value as `surface-header` in default and high-contrast only (dark: #9ad7f0 ink vs the #073652 header), and a different role: that one is the app bar's ground, this one is text. */
   --text-strong: #111827; /* Headings, dense table headers and emphasis on `surface-body` and `surface-secondary` (16.9:1). */
   --text-body: #212529; /* Default body and UI copy on `surface-body`, `surface-canvas` and every light tint (15.9:1 on white). */
-  --text-emphasis: #374151; /* Sub-headings and active labels on light surfaces (9.7:1); equals `bs-dark`. */
+  --text-emphasis: #374151; /* Sub-headings and active labels on light surfaces (9.7:1); equals `bs-dark` in default (#374151) only. Dark (#d3dbe3) and high-contrast (#1c2530 vs #1f2933) differ. */
   --text-secondary: #5a6268; /* Labels, captions, metadata and eyebrows: the LIGHTEST sanctioned text color. 6.21:1 on white and at least 4.96:1 on every shipped tint (`surface-secondary`, `surface-navy-subtle`, `surface-tertiary`, `pill-primary-bg` at 5.4:1). Nothing lighter carries copy at any size. */
   --text-data: #495057; /* Data-font cell text, the one exception to the five-rung ramp: 8.18:1 on white and 7.8:1 on the `surface-secondary` zebra row. Only for `--font-data` values. */
   --text-disabled: #adb5bd; /* DISABLED CONTROLS ONLY. about 2.1:1 on white, exempt under WCAG 1.4.3 because it marks an inactive control; never an em dash, separator, counter or placeholder (those read `text-secondary`). */
   --text-muted: rgba(33, 37, 41, 0.75); /* Body ink at 75% alpha for de-emphasised copy on white (about 9.7:1). Prefer `text-secondary` for labels and metadata. */
   --text-on-primary: #ffffff; /* Text and glyphs on `bs-primary`, `bs-primary-hover`, `bs-tertiary` and `bs-danger` fills. */
-  --text-link: #0079a8; /* Links on `surface-body` and `surface-secondary` (4.88:1 and 4.63:1). On any deeper tint use `text-link-on-tint`. Equals `bs-primary`. */
-  --text-link-hover: #005a7d; /* Link hover and pressed state on white (7.61:1, AAA). Equals `bs-tertiary`. */
+  --text-link: #0079a8; /* Links on `surface-body` and `surface-secondary` (4.88:1 and 4.63:1). On any deeper tint use `text-link-on-tint`. Equals `bs-primary` in default (#0079a8) only: dark #5fbde8 (the fill keeps #0079a8) and high-contrast #004b69 vs #005a7d differ, so text and fill are not aliases. */
+  --text-link-hover: #005a7d; /* Link hover and pressed state on white (7.61:1, AAA). Equals `bs-tertiary` in default (#005a7d) only: dark #8dd2f2 (the fill keeps #005a7d) and high-contrast #00344a vs #003f57 differ. */
   --text-link-on-tint: #00688f; /* Interactive text on a tinted surface: links, ghost-button labels, selected nav items and active tab labels on `surface-tertiary` (5.2:1), the 10% primary tint and `surface-navy-subtle`. Glyphs may stay `bs-primary`. */
   --text-info-on-tint: #005a7d; /* Info-tone copy on the info tint `pill-primary-bg` (6.6:1): alerts, toasts, callouts. `bs-info` as text there would be 4.36:1. */
   --text-on-success: #212529; /* Dark text on the `bs-success` fill (5.62:1); the fill is too light for white. */
@@ -80,8 +80,8 @@
   --text-on-navy-secondary: rgba(255, 255, 255, 0.72); /* Secondary text on the navy app bar (7.1:1 over `surface-header`): subtitles, counts, the bar's placeholder. */
   --list-divider: #e9ecef; /* The `ListCard` row hairline. Not `border-color`: at row density the darker line reads as a table rule. */
   --list-rail: #0079a8; /* The 3px left selection rail on `ListCard` and `SelectableRow`: always present, transparent at rest, solid when selected. */
-  --text-overdue: #991b1b; /* Overdue clock labels and dates in list rows and detail headers (7.6:1 on white); equals `pill-danger-fg` so a tone and its pill never drift apart. */
-  --text-due-soon: #92400e; /* Due-soon clock labels and dates (7.0:1 on white); equals `pill-warning-fg`. */
+  --text-overdue: #991b1b; /* Overdue clock labels and dates in list rows and detail headers (7.6:1 on white). Matches `pill-danger-fg` in default (#991b1b) and high-contrast (#7a1c1c) but not in dark (#ff9d94 vs the pill's #ffa3a3), so the two stay separately tuned names, not an alias. */
+  --text-due-soon: #92400e; /* Due-soon clock labels and dates (7.0:1 on white). Matches `pill-warning-fg` in default (#92400e) and high-contrast (#6b3a0d) but not in dark (#f5c069 vs the pill's #f7cc72); not an alias. */
   --border-color-translucent: rgba(55, 65, 81, 0.175); /* Slate at 17.5% alpha: hairlines over tinted or photographic grounds where a solid gray would band. */
   --grid-scroll-fade: rgba(7, 54, 82, 0.16); /* The wash a scroll box paints over the edge its content continues past: a navy tint rather than a fade to a surface colour, so it does not band on zebra rows. */
   /* ---- Tint ladder ---- */
@@ -105,9 +105,9 @@
   --pill-success-bg: #dcfce7; /* Soft tint ground of the success pill (Active). Text on it: `pill-success-fg`. */
   --pill-success-fg: #15803d; /* Success pill text on `pill-success-bg` (AA); also a text-safe green for initials avatars with white text. */
   --pill-danger-bg: #fee2e2; /* Soft tint ground of the danger pill (Closed). Text on it: `pill-danger-fg`. */
-  --pill-danger-fg: #991b1b; /* Danger pill text on `pill-danger-bg` (AA); the same value is `text-overdue`. */
+  --pill-danger-fg: #991b1b; /* Danger pill text on `pill-danger-bg` (AA). Same value as `text-overdue` in default and high-contrast; dark differs (#ffa3a3 vs #ff9d94). */
   --pill-warning-bg: #fef3c7; /* Soft tint ground of the warning pill (Pending). Text on it: `pill-warning-fg`. */
-  --pill-warning-fg: #92400e; /* Warning pill text on `pill-warning-bg` (AA); the same value is `text-due-soon` and a text-safe amber for initials avatars. */
+  --pill-warning-fg: #92400e; /* Warning pill text on `pill-warning-bg` (AA) and a text-safe amber for initials avatars. Same value as `text-due-soon` in default and high-contrast; dark differs (#f7cc72 vs #f5c069). */
   --pill-success-border: #a7e3ba; /* The chip outline `StateRow` draws on a success pill; the `StatusPill` itself has none. */
   --pill-danger-border: #f5c2bd; /* The chip outline `StateRow` draws on a danger pill; the `StatusPill` itself has none. */
   --pill-warning-border: #ffd894; /* The chip outline `StateRow` draws on a warning pill; the `StatusPill` itself has none. */
@@ -116,7 +116,7 @@
   --pill-secondary-bg: #f3e8ff; /* Soft tint ground of the secondary pill (Inactive). Text on it: `pill-secondary-fg`. */
   --pill-secondary-fg: #6b21a8; /* Secondary pill text on `pill-secondary-bg` (AA). */
   --pill-neutral-bg: #e9ecef; /* Soft tint ground of the neutral pill (Medical Only, counts). Text on it: `pill-neutral-fg`. */
-  --pill-neutral-fg: #495057; /* Neutral pill text on `pill-neutral-bg` (AA); equals `text-data`. */
+  --pill-neutral-fg: #495057; /* Neutral pill text on `pill-neutral-bg` (AA); equals `text-data` in default and high-contrast, while dark differs (#c9d3dc vs #bcc7d1). */
   --pill-critical-bg: #d83506; /* The ONE solid pill fill, reserved for Critical and nothing else. Text on it: `pill-critical-fg`. */
   --pill-critical-fg: #ffffff; /* White text on the Critical pill (4.7:1 on `pill-critical-bg`). */
   /* ---- Icons (Icon Studio duotone roles) ---- */

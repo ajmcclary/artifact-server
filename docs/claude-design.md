@@ -107,11 +107,11 @@ gallery when they carry an index, falls back to that catalog otherwise, and the
 page opens with `path=artifact-server-design.html`. The name is no longer
 reserved, so a source file with that name publishes as an ordinary file.
 
-## Design library
+## Library
 
-**Design library** in the Review navigation (`/review/library?project=…`) gathers
-every readable gallery in one project into a single searchable view, grouped by
-kind and then by gallery. It is a moving view, not a frozen collection: it reads
+**Library** in the Review navigation (`/review/library`) gathers every readable
+gallery across all projects into a single searchable view. Its toolbar groups,
+sorts, and filters it by project and by kind. It is a moving view, not a frozen collection: it reads
 each artifact's current version when it loads, tiles open that exact version, and
 **Refresh** re-reads current versions. Galleries that cannot be read are named
 and omitted. Frozen, shareable collections that pin a complete version set

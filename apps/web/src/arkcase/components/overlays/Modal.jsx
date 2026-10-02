@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../actions/Button.jsx';
-import { useEscapeLayer, lockScroll } from './overlay-layer.jsx';
+import { useEscapeLayer, lockScroll, trapLayerTab } from './overlay-layer.jsx';
 
 const SIZES = { sm: 480, md: 620, lg: 820 };
 const BACKDROP = { navy: 'rgba(7,54,82,.45)', tint: 'rgba(7,54,82,.18)', none: 'transparent' };
@@ -135,22 +135,9 @@ export function Modal({ open = true, title, subtitle, icon, size = 'md', onClose
   }, [open, modal]);
   React.useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.defaultPrevented) return;
-      /* The trap cycles at the boundaries only — it never yanks focus that
-         sits outside the dialog, so a nested sheet keeps its own Tab order. */
-      if (e.key !== 'Tab' || !modal) return;
-      const root = ref.current;
-      if (!root || !root.contains(document.activeElement)) return;
-      if (document.activeElement.closest('[role="dialog"][aria-modal="true"]') !== root) return;
-      const items = Array.from(root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-        .filter((n) => (n.offsetWidth > 0 || n.offsetHeight > 0 || n === document.activeElement) && !(n.closest && n.closest('[inert]')));
-      if (items.length === 0) { e.preventDefault(); return; }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    };
+    /* The trap cycles at the boundaries only — it never yanks focus that
+       sits outside the dialog, so a nested sheet keeps its own Tab order. */
+    const onKey = (e) => { if (modal) trapLayerTab(e, ref.current); };
     document.addEventListener('keydown', onKey);
     const unlock = modal ? lockScroll(document) : null;
     return () => { document.removeEventListener('keydown', onKey); unlock?.(); };

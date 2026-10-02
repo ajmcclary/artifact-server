@@ -20,6 +20,7 @@ export interface LibraryViewState {
   readonly collapsed: readonly string[];
   readonly focusPath: string | null;
   readonly groupBy: LibraryGrouping;
+  readonly projects: readonly string[];
   readonly query: string;
   readonly scrollTop: number;
   readonly sortBy: LibrarySort;
@@ -32,6 +33,7 @@ const initialLibraryViewState: LibraryViewState = {
   collapsed: [],
   focusPath: null,
   groupBy: "date",
+  projects: [],
   query: "",
   scrollTop: 0,
   sortBy: "activity",
@@ -40,7 +42,7 @@ const initialLibraryViewState: LibraryViewState = {
   view: "grid",
 };
 
-// Search, types, grouping, sort, layout, collapsed groups, scroll and the tile left from
+// Search, projects, types, grouping, sort, layout, collapsed groups, scroll and the tile left from
 // survive the trip to a page and back.
 const viewStates = new Map<string, LibraryViewState>();
 const libraryViewKey = "all";
@@ -61,7 +63,7 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
   useEffect(() => {
     // A completed Refresh says so; the first load and a return from a page stay quiet.
     if (shownLoad.current !== null && loadedAt !== null && loadedAt !== shownLoad.current) {
-      announce("Design library refreshed from each artifact’s current version.");
+      announce("Library refreshed from each artifact’s current version.");
     }
     shownLoad.current = loadedAt;
   }, [announce, loadedAt]);
@@ -70,14 +72,14 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
     return (
       <div style={stateStyle}>
         <SurfaceState loadingBody="Reading each artifact's current version, history and preview index."
-          loadingStyle="spinner" loadingTitle="Loading the design library" noun="galleries" phase="loading" />
+          loadingStyle="spinner" loadingTitle="Loading the library" noun="galleries" phase="loading" />
       </div>
     );
   }
   if (state.status === "failed") {
     return (
       <div style={stateStyle}>
-        <SurfaceState failedBody={state.message} failedTitle="The design library could not load" noun="galleries"
+        <SurfaceState failedBody={state.message} failedTitle="The library could not load" noun="galleries"
           onRetry={refresh} phase="failed" />
       </div>
     );
@@ -109,7 +111,7 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
   const notices = [
     state.refresh === "failed" ? (
       <Alert key="refresh" variant="warning">
-        The design library could not be re-read, so these are the galleries as last read. Nothing was changed.
+        The library could not be re-read, so these are the galleries as last read. Nothing was changed.
       </Alert>
     ) : null,
     library.failures.length === 0 ? null : (
@@ -149,6 +151,7 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
           update({focusPath: id}, false);
           navigateReview(href);
         }}
+        onProjectsChange={(selected) => update({projects: selected}, true)}
         onQueryChange={(query) => update({query}, true)}
         onRefresh={refresh}
         onScroll={(scrollTop) => update({scrollTop}, false)}
@@ -156,12 +159,13 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
         onTypesChange={(types) => update({types}, true)}
         onViewChange={(layout) => update({view: layout}, true)}
         phone={phone}
+        projects={[...view.projects]}
         query={view.query}
         refreshedAt={usDateTime(library.loadedAt.getTime())}
         scrollTop={view.scrollTop}
         sortBy={view.sortBy}
         sortDir={view.sortDir}
-        title="Design library"
+        title="Library"
         types={[...view.types]}
         view={view.view}
       />

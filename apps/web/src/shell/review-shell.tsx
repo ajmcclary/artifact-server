@@ -316,6 +316,6 @@ function routeTitle(route: ReviewRoute, projects: readonly Project[]): string {
     return name === null ? "Projects" : `Projects · ${name}`;
   }
   if (route.kind === "settings") return settingsTitles[route.settings.kind];
-  if (route.kind === "library") return "Design library";
+  if (route.kind === "library") return "Library";
   return projectName(route.location.projectId) ?? "Review";
 }

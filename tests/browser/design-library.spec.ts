@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem";
-import {expect, test} from "@playwright/test";
+import {expect, test, type Locator} from "@playwright/test";
 import {Effect, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
@@ -22,9 +22,10 @@ function publish(fixture: BrowserFixture, inputPath: string, target: FilePublica
     entryPath === undefined ? command : {...command, entryPath},
   ).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
 }
+const top = async (locator: Locator) => (await locator.boundingBox())?.y ?? Number.NaN;
 const named = (name: string): FilePublicationTarget => ({kind: "new_artifact", accessSetting: "account_required", name, tags: []});
 
-test("DSN-005-B: the design library gathers every current gallery across all projects, dates pages from server records and opens exact pages", async ({browser}) => {
+test("DSN-005-B: the Library gathers every current gallery across all projects, dates pages from server records and opens exact pages", async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   const directory = await mkdtemp(path.join(tmpdir(), "design-library-browser-"));
   try {
@@ -63,15 +64,21 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     await localLogin(fixture);
     const page = fixture.page;
 
-    await page.getByRole("link", {name: "Design library"}).click();
+    await page.getByRole("link", {exact: true, name: "Library"}).click();
     await expect(page).toHaveURL(/\/review\/library$/u);
-    const library = page.getByRole("region", {name: "Design library", exact: true});
-    await expect(library.getByRole("heading", {name: "Design library", level: 1})).toBeVisible();
+    const library = page.getByRole("region", {name: "Library", exact: true});
+    await expect(library.getByRole("heading", {name: "Library", level: 1})).toBeVisible();
     await expect(page.getByText("These galleries could not be read and are not shown: Broken gallery.")).toBeVisible();
     const toolbar = library.getByRole("toolbar", {name: "Library view"});
     // Grouped by date and sorted by last activity by default; everything here happened today.
     await expect(toolbar.getByRole("button", {name: "Group: Date"})).toBeVisible();
-    await expect(toolbar.getByRole("button", {name: "Sort: Last activity (newest)"})).toBeVisible();
+    // The order stays in the trigger's accessible name but not on screen.
+    const sortTrigger = toolbar.getByRole("button", {name: "Sort: Last activity (newest)"});
+    await expect(sortTrigger).toBeVisible();
+    expect((await sortTrigger.getByText("(newest)").boundingBox())?.width).toBeLessThanOrEqual(1);
+    // The filter menus sit shoulder to shoulder in one group.
+    const filters = toolbar.getByRole("group", {name: "View and filters"});
+    await expect(filters.getByRole("button")).toHaveText([/^Group: Date/u, /^Sort: Last activity/u, /^All projects/u, /^All types/u]);
     await expect(library.getByRole("button", {name: /^Today · 12/u})).toHaveAttribute("aria-expanded", "true");
     const tiles = library.locator("a[data-gallery-path]");
     await expect(tiles).toHaveCount(12);
@@ -126,10 +133,25 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     await expect(library.locator("[data-active-filters]")).toHaveCount(0);
     await expect(toolbar.getByRole("button", {name: "All types"})).toBeFocused();
 
+    // Projects filter by the project each preview names, with counts; the match count is
+    // announced, and the project's chip removes it.
+    await toolbar.getByRole("button", {name: "All projects"}).click();
+    await expect(page.getByRole("menuitemcheckbox", {name: /^Default/u})).toContainText("8");
+    await page.getByRole("menuitemcheckbox", {name: /^Portal project/u}).click();
+    await page.keyboard.press("Escape");
+    await expect(toolbar.getByRole("button", {name: "Projects · 1"})).toBeVisible();
+    await expect(tiles).toHaveCount(4);
+    await expect(page.getByText("4 matching previews.")).toBeAttached();
+    await expect(summary).toContainText("Showing 4 of 12 previews");
+    await summary.getByRole("button", {name: "Remove Portal project filter"}).click();
+    await expect(tiles).toHaveCount(12);
+    await expect(toolbar.getByRole("button", {name: "All projects"})).toBeVisible();
+    await expect(page.getByText("12 matching previews.")).toBeAttached();
+
     // Docked at the scroller's top, the toolbar leads with the page title and no preview count.
     await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
     await library.evaluate((section) => section.scrollTo({top: 400}));
-    await expect(toolbar.locator("[data-toolbar-title]")).toHaveText("Design library");
+    await expect(toolbar.locator("[data-toolbar-title]")).toHaveText("Library");
     await expect(toolbar).not.toContainText(/\d+ previews?/u);
     await library.evaluate((section) => section.scrollTo({top: 0}));
     await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
@@ -170,6 +192,32 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     expect(new URL(await claimsApp.getAttribute("href") ?? "", page.url()).searchParams.get("version")).toBe(claimsRevised.version.id);
     await refresh.click();
     await expect.poll(async () => new URL(await claimsApp.getAttribute("href") ?? "", page.url()).searchParams.get("version")).toBe(next.version.id);
+
+    // Search, Grid/List and Refresh form one right-aligned cluster. At 1024px, docked with its
+    // title, the bar keeps one row; at 880px the search folds to an icon that opens the field.
+    const search = toolbar.getByRole("searchbox", {name: "Search previews"});
+    await search.fill("");
+    await portalBand.click();
+    await expect(tiles).toHaveCount(12);
+    await page.setViewportSize({height: 700, width: 1024});
+    await library.evaluate((section) => section.scrollTo({top: 400}));
+    await expect(toolbar.locator("[data-toolbar-title]")).toHaveText("Library");
+    await expect(search).toBeVisible();
+    await expect.poll(async () => Math.abs(await top(toolbar.getByRole("button", {name: "Group: Project"})) - await top(refresh))).toBeLessThan(8);
+    await page.setViewportSize({height: 700, width: 880});
+    const folded = toolbar.getByRole("button", {exact: true, name: "Search previews"});
+    await expect(folded).toBeVisible();
+    await expect(search).toHaveCount(0);
+    await expect.poll(async () => Math.abs(await top(folded) - await top(refresh))).toBeLessThan(8);
+    await folded.click();
+    const popoverSearch = page.getByRole("dialog", {name: "Search previews"}).getByRole("searchbox", {name: "Search previews"});
+    await expect(popoverSearch).toBeFocused();
+    await popoverSearch.fill("examiner");
+    await expect(tiles).toHaveCount(3);
+    await page.keyboard.press("Escape");
+    await expect(folded).toBeFocused();
+    // Folded with a query applied, the icon quotes it.
+    await expect(folded).toHaveAttribute("title", "Search previews: “examiner”");
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});

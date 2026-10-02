@@ -1920,6 +1920,19 @@ gate.
   the library's Clear filters returns focus to Types, not the first menu, as the
   design source does; and at 375px the Activity conversation card's Open button
   overflows the card's right edge, which predates this port.
+- **Progress, October 2 (design port 08c3899 → b200de6):** the Design library is
+  now the Library and filters by project (a Projects menu, chips, and the
+  announced match count). The filter menus sit shoulder to shoulder in a group.
+  Search, Grid/List and Refresh form one right-aligned cluster whose search folds
+  to an icon and popover when the row lacks room. In the browser suite the docked
+  Library bar holds one row at 1024px and folds search at 880px. The sort
+  trigger keeps its order in the accessible name only. Activity's Publish
+  artifact is an icon button with a tooltip. The administration menu collapses
+  to a plain rail whose footer pin is the only way back, and the heading's
+  breadcrumb shows only while that menu is a rail or absent. Remaining: at very
+  narrow desktop widths with the docked title showing, the bar can still wrap to
+  two rows with search folded. Hiding the docked title when there is no room
+  is a possible follow-up.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

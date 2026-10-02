@@ -133,7 +133,7 @@ export function projectsHref(projectId: string | null): string {
     : `${projectsPathname}?${new URLSearchParams({project: projectId})}`;
 }
 
-/** The design library: every gallery across all projects, following current versions. */
+/** The Library: every gallery across all projects, following current versions. */
 export function libraryHref(): string {
   return libraryPathname;
 }

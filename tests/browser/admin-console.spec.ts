@@ -38,6 +38,8 @@ test.describe("Admin console", () => {
       const areas = page.getByRole("navigation", {name: "Administration areas"});
       await Promise.all(["Members", "API keys", "Public links", "MCP & WebMCP"].map((label) =>
         expect(areas.getByRole("link", {exact: true, name: label})).toBeVisible()));
+      // The pinned menu's header names Administration, so the heading carries no breadcrumb.
+      await expect(page.getByRole("main").getByRole("link", {exact: true, name: "Administration"})).toHaveCount(0);
       await noWcagViolations(page);
 
       // Admit through the cap's "+", open the detail, and deep-link it.
@@ -107,10 +109,13 @@ test.describe("Admin console", () => {
       await areas.getByRole("link", {exact: true, name: "MCP & WebMCP"}).click();
       await expect(page.getByText("artifact_server_get_view", {exact: true})).toBeVisible();
 
-      // The area menu's pin persists across a reload.
+      // Unpinned, the menu is an icon rail: no expand button heads it, its footer pin is the
+      // only way back, and the heading's breadcrumb returns. The pin persists across a reload.
       await page.getByRole("button", {name: /Unpin the administration menu/u}).click();
       await page.reload();
-      await expect(page.getByRole("button", {name: /Pin the administration menu|Expand menu/u}).first()).toBeVisible();
+      await expect(areas.getByRole("button", {name: /^Pin the administration menu/u})).toBeVisible();
+      await expect(areas.getByRole("button", {name: /^Expand/u})).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("link", {exact: true, name: "Administration"})).toBeVisible();
 
       // Phones choose the area from a Select in the head.
       await page.setViewportSize({height: 800, width: 390});

@@ -1071,7 +1071,7 @@ requirements:
 
   - id: DSN-005
     kind: behavior
-    behavior: The design library gathers every readable current-version gallery across all projects into one searchable moving view grouped by kind and gallery, opens each preview as an exact artifact, version and path, refreshes on request, and names galleries it cannot read.
+    behavior: The Library gathers every readable current-version gallery across all projects into one searchable moving view, filtered by project and kind, opens each preview as an exact artifact, version and path, refreshes on request, and names galleries it cannot read.
     owner: web-application
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
@@ -3274,7 +3274,7 @@ requirements:
     owner: web-application
     source: {file: single-application-administration-spec.md, anchor: screen-transitions}
     acceptance:
-      behavior: {id: NAV-001-B, description: "Move between Activity, Projects, a project folder, a project's workspace, another project, the design library, and settings by navigation, account menu, brand mark, and history within one document and without the startup gate; startup paints the shell frame at the pinned navigation width; the catalog, Activity, and Comments view keep their content and choices across re-reads and artifact switches; native controls follow the chosen theme."}
+      behavior: {id: NAV-001-B, description: "Move between Activity, Projects, a project folder, a project's workspace, another project, the Library, and settings by navigation, account menu, brand mark, and history within one document and without the startup gate; startup paints the shell frame at the pinned navigation width; the catalog, Activity, and Comments view keep their content and choices across re-reads and artifact switches; native controls follow the chosen theme."}
       failure: {id: NAV-001-F, description: "While another artifact loads its record, the previous artifact's name, versions, Share, and Delete never show; a failed or empty activity history is requested once, not in a loop; a refused sign-out reports the failure and keeps the reviewer signed in on the same screen."}
     deployments: *all
     status: behavior_verified

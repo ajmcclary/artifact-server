@@ -1,7 +1,7 @@
-import {useEffect, useState, type CSSProperties} from "react";
+import {useEffect, useState, type CSSProperties, type MouseEvent, type Ref} from "react";
 
 import type {Project, Session} from "@/api/client";
-import {Button, Popover} from "@/arkcase";
+import {IconButton, Popover, Tooltip} from "@/arkcase";
 import {activityHref, navigateReview, type ActivityFilters} from "@/review/review-routes";
 import {useViewportWidth} from "@/review/workspace/use-viewport-size";
 import {isPhoneWidth} from "@/review/workspace/workspace-layout";
@@ -27,6 +27,26 @@ function toolbarTypesOf(ids: readonly string[]): ToolbarType[] {
   return ids.flatMap((id) => toolbarTypes.find((type) => type === id) ?? []);
 }
 const searchDebounceMilliseconds = 250;
+
+/** What Popover adds to the trigger it clones: its ref, press handler and dialog state. */
+interface PopoverTriggerProps {
+  readonly "aria-expanded"?: boolean;
+  readonly "aria-haspopup"?: "dialog";
+  readonly onClick?: (event: MouseEvent) => void;
+  readonly ref?: Ref<HTMLButtonElement>;
+}
+
+/**
+ * The header's icon-only Publish trigger. The Popover clones it with its ref, press handler
+ * and ARIA state, which pass through to the button rather than the tooltip around it.
+ */
+function PublishButton(trigger: PopoverTriggerProps) {
+  return (
+    <Tooltip label="Publish artifact" placement="bottom">
+      <IconButton {...trigger} ariaLabel="Publish artifact" icon="bi-upload" size="sm" variant="primary" />
+    </Tooltip>
+  );
+}
 
 /** Everything that happened across the installation, newest first, with what needs you one click away. */
 export function ActivityScreen({filters, projects, session}: {
@@ -63,7 +83,7 @@ export function ActivityScreen({filters, projects, session}: {
       <ActivityHeader
         action={(
           <Popover label="Publish artifact" onOpenChange={setPublishOpen} open={publishOpen} placement="bottom-end"
-            trigger={<Button icon="bi-upload" variant="primary">Publish artifact</Button>}>
+            trigger={<PublishButton />}>
             <CopyableCode code={command} copiedLabel="Publish command copied" copyLabel="Copy publish command" tone="navy" />
           </Popover>
         )}

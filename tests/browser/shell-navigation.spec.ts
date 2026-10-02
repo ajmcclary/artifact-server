@@ -94,7 +94,7 @@ test.describe("Shell navigation", () => {
       await expect(page.getByRole("searchbox", {name: "Search artifacts"})).toHaveValue("");
       await expectSameDocument(page);
 
-      await nav.getByRole("link", {name: "Design library"}).click();
+      await nav.getByRole("link", {exact: true, name: "Library"}).click();
       await expect(page).toHaveURL(/\/review\/library$/u);
       await expectSameDocument(page);
 

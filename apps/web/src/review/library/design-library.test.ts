@@ -1,5 +1,7 @@
 import {describe, expect, it} from "vitest";
 
+import {filterLibrary} from "@/arkcase/review-ui/page-model.js";
+
 import {
   galleryDates,
   historyWindow,
@@ -32,10 +34,11 @@ const sources: LibrarySource[] = [
   ], projectId: "prj_claims", projectName: "Claims", versionId: "ver_b1"},
 ];
 
+const titled = (filtered: readonly {readonly gallery?: string}[]) => filtered.map((candidate) => candidate.gallery);
 const at = (minute: number) => Date.UTC(2026, 8, 1, 9, minute);
 const version = (number: number, files: Record<string, string>): HistoryVersion => ({at: at(number), files: new Map(Object.entries(files)), number});
 
-describe("design library items", () => {
+describe("Library items", () => {
   it("DSN-005: keeps repeated paths distinct per artifact, names project and gallery, and pins media to the loaded version", () => {
     const items = libraryItems(sources, (source, path) => `/media/${source.artifactId}/${source.versionId}/${path}`);
     expect(items.map((candidate) => [candidate.id, candidate.project, candidate.gallery, candidate.kind, candidate.thumbnailUrl])).toEqual([
@@ -47,6 +50,17 @@ describe("design library items", () => {
     expect(Number.isNaN(items[1]?.createdAt)).toBe(true);
   });
 
+  it("DSN-005: filters by project name alone and together with types and search", () => {
+    const items = libraryItems(sources, (source, path) => `/media/${source.artifactId}/${source.versionId}/${path}`);
+    expect(titled(filterLibrary(items, "", [], ["Claims"]))).toEqual(["Court of Claims"]);
+    expect(titled(filterLibrary(items, "", [], ["Claims", "Compensation"]))).toHaveLength(2);
+    expect(titled(filterLibrary(items, "", ["prototype"], ["Claims", "Compensation"]))).toEqual(["Workers' Compensation"]);
+    expect(filterLibrary(items, "", ["prototype"], ["Claims"])).toEqual([]);
+    expect(filterLibrary(items, "workers", [], ["Claims"])).toEqual([]);
+    // An empty project list allows every project.
+    expect(filterLibrary(items, "", [], [])).toHaveLength(2);
+  });
+
   it("DSN-005-F: round-trips item identities and rejects ones that do not name an artifact and a path", () => {
     const id = libraryItemId("art_a", "project/a:b.dc.html");
     expect(parseLibraryItemId(id)).toEqual({artifactId: "art_a", path: "project/a:b.dc.html"});
@@ -56,7 +70,7 @@ describe("design library items", () => {
   });
 });
 
-describe("design library dates", () => {
+describe("Library dates", () => {
   it("DSN-005: a page is created by the first version whose manifest lists it", () => {
     const dates = galleryDates([
       version(1, {"a.html": "1"}),

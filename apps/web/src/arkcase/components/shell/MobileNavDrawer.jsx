@@ -1,13 +1,9 @@
 import React from 'react';
 import { NavigationIcon } from '../navigation/NavigationIcon.jsx';
 import { displayProfileContext } from './DisplayProfile.jsx';
+import { matchesMedia, countText, leftToBrowser } from '../navigation/nav-helpers.jsx';
+import { useEscapeLayer, lockScroll, trapLayerTab } from '../overlays/overlay-layer.jsx';
 
-const matchesMedia = (q) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false);
-const countText = (n) => (Number(n) > 99 ? '99+' : String(n));
-/* A modified or non-primary click on a link row — Cmd/Ctrl for a new tab, Shift for a new window,
-   Alt to download — belongs to the browser: it follows the href natively, selects nothing and
-   leaves the drawer open. */
-const leftToBrowser = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /**
@@ -35,6 +31,10 @@ export function MobileNavDrawer({
   const prevFocus = React.useRef(null);
   const [entered, setEntered] = React.useState(false);
   const [hover, setHover] = React.useState(null);
+  const close = () => { onClose && onClose(); onAnnounce && onAnnounce('Menu closed.'); };
+  /* The shared layer stack owns Escape, so a dialog or popover opened over the drawer closes
+     first; the drawer stays a barrier (the press is consumed) even without an `onClose`. */
+  const handleEscape = useEscapeLayer(open, navRef, close);
 
   // Slide in on the frame after mount so the transform has a start value to leave.
   React.useEffect(() => {
@@ -44,16 +44,16 @@ export function MobileNavDrawer({
     return () => cancelAnimationFrame(raf);
   }, [open, reduceMotion]);
 
-  // WCAG 2.4.3 — focus moves in on open and is restored on close; the body stops scrolling.
+  // WCAG 2.4.3 — focus moves in on open and is restored on close; the body stops scrolling
+  // through the shared, counted lock, so an overlapping dialog's lock is never undone early.
   React.useEffect(() => {
     if (!open) return undefined;
     prevFocus.current = document.activeElement;
     const el = navRef.current;
     if (el) { const f = el.querySelector(FOCUSABLE); (f || el).focus(); }
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll(document);
     return () => {
-      document.body.style.overflow = prevOverflow;
+      unlock();
       const fallback = returnFocusSelector ? document.querySelector(returnFocusSelector) : null;
       /* The launcher unmounts while the drawer is open, so the node that had focus is gone; the
          remounted launcher is already attached when this cleanup runs. */
@@ -65,20 +65,9 @@ export function MobileNavDrawer({
     };
   }, [open, returnFocusSelector]);
 
-  const close = () => { onClose && onClose(); onAnnounce && onAnnounce('Menu closed.'); };
-
   const onKeyDown = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-    if (e.key !== 'Tab') return;
-    const el = navRef.current;
-    /* v8 ignore next */
-    if (!el) return;
-    const f = el.querySelectorAll(FOCUSABLE);
-    /* v8 ignore next */
-    if (!f.length) return;
-    const first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    if (e.key === 'Escape') { handleEscape(e); return; }
+    if (e.key === 'Tab') trapLayerTab(e, navRef.current);
   };
 
   if (!open) {

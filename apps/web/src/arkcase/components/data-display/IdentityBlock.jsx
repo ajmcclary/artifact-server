@@ -27,7 +27,7 @@ export function IdentityBlock({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 'var(--space-2, 10px)',
+        gap: 'var(--space-2, 8px)',
         minWidth: 0,
         ...(framed ? {
           justifyContent: 'space-between',

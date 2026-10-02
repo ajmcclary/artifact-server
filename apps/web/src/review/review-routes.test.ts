@@ -28,7 +28,7 @@ function routeOf(href: string) {
   return parseReviewRoute(new URL(href, origin));
 }
 
-describe("design library route", () => {
+describe("Library route", () => {
   it("DSN-005: one library spans every project, and pre-rollup project links still load it", () => {
     expect(libraryHref()).toBe("/review/library");
     expect(routeOf("/review/library")).toEqual({kind: "library"});

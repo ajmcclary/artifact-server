@@ -284,7 +284,7 @@ export function useDesignLibrary(projects: readonly LibraryProject[]): DesignLib
         setState({status: "ready", library});
       } catch (caught) {
         if (!current) return;
-        const message = caught instanceof Error ? caught.message : "The design library could not be read.";
+        const message = caught instanceof Error ? caught.message : "The library could not be read.";
         setState((shown) => shown.status === "ready" ? {...shown, refresh: "failed"} : {status: "failed", message});
       }
     })();

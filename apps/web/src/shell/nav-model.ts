@@ -17,7 +17,7 @@ export interface ShellNavInput {
   readonly activeSettings: SettingsRoute["kind"] | null;
   readonly canCreateProjects: boolean;
   readonly isAdministrator: boolean;
-  /** The design library is open. */
+  /** The Library is open. */
   readonly libraryActive: boolean;
   /** Conversations waiting on a person, from the activity summary; null while unknown or failed. */
   readonly needsYou: number | null;
@@ -82,7 +82,7 @@ function reviewItems(input: ShellNavInput): NavItem[] {
   const items: NavItem[] = [
     activityItem(input.needsYou),
     {icon: "bi-briefcase", id: "projects", label: "Projects", link: projectsHref(null)},
-    {icon: "bi-collection", id: "library", label: "Design library", link: libraryHref()},
+    {icon: "bi-collection", id: "library", label: "Library", link: libraryHref()},
   ];
   const firstProjectIndex = items.length;
   for (const project of orderedProjects(input.projects)) {

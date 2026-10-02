@@ -1,5 +1,6 @@
 import { akStyleDocument } from '@/arkcase-style';
 import React from 'react';
+import { FIELD_PAD_X, FIELD_PAD_Y, FieldLabel, FieldMessage, fieldDescription, useFieldId } from './field-chrome.jsx';
 
 /* The viewer size steps down to 11px under 576px. A media query cannot be inline,
    so the size's font is a custom property the once-injected sheet redefines. */
@@ -44,7 +45,7 @@ function selectShownLabel(root) {
  */
 export function Select({ label, value, defaultValue, options = [], children, size = 'md', fit = false, helper, error, disabled = false, id, onChange, onBlur, onFocus, className, style, variant = 'default', required = false, placeholder, ...rest }) {
   const [focus, setFocus] = React.useState(false);
-  const selId = id || React.useId();
+  const selId = useFieldId(id);
   const rootRef = React.useRef(null);
   const fitSelected = fit === 'selected';
   const [shown, setShown] = React.useState('');
@@ -52,7 +53,7 @@ export function Select({ label, value, defaultValue, options = [], children, siz
     viewer: '4px 30px 4px 10px',
     dock: '2px 30px 2px 6px',
     sm: '0.25rem 1.75rem 0.25rem 0.5rem',
-    md: '0.375rem 2.25rem 0.375rem 0.625rem',
+    md: `${FIELD_PAD_Y} 2.25rem ${FIELD_PAD_Y} ${FIELD_PAD_X}`,
     lg: '0.5rem 2.25rem 0.5rem 0.875rem',
   };
   const fonts = {
@@ -90,8 +91,7 @@ export function Select({ label, value, defaultValue, options = [], children, siz
   const navy = variant === 'navy';
   const chevronOnNavy = 'data:image/svg+xml,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='#ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
   const intrinsic = !!fit || bare;
-  const messageId = `${selId}-${error ? 'error' : 'helper'}`;
-  const describedBy = [rest['aria-describedby'], (error || helper) ? messageId : null].filter(Boolean).join(' ') || undefined;
+  const { messageId, describedBy } = fieldDescription(selId, { helper, error, describedBy: rest['aria-describedby'] });
 
   const listed = options.length > 0 ? options.map((o, i) => {
     const opt = typeof o === 'string' ? { value: o, label: o } : o;
@@ -139,7 +139,7 @@ export function Select({ label, value, defaultValue, options = [], children, siz
     border: flush ? 0 : `1px solid ${error ? 'var(--bs-danger, #d83506)'
       : navy ? (focus ? 'var(--text-on-navy, #ffffff)' : 'var(--text-on-navy-secondary, rgba(255,255,255,0.72))')
       : focus ? 'var(--bs-primary, #0079a8)' : 'var(--border-color-strong, #ced4da)'}`,
-    borderRadius: flush ? 0 : size === 'viewer' ? 'var(--radius-sm, 4px)' : 'var(--radius-md, 6px)',
+    borderRadius: flush ? 0 : size === 'viewer' ? 'var(--radius-sm, 4px)' : 'var(--radius-md, 5px)',
     appearance: 'none',
     outline: 'none',
     boxShadow: !focus ? 'none'
@@ -165,9 +165,9 @@ export function Select({ label, value, defaultValue, options = [], children, siz
       required={required || undefined}
       aria-required={required || undefined}
       aria-invalid={error ? true : undefined}
-      aria-describedby={describedBy}
       style={selectStyle}
       {...rest}
+      aria-describedby={describedBy}
     >
       {renderedOptions}
     </select>
@@ -199,14 +199,9 @@ export function Select({ label, value, defaultValue, options = [], children, siz
 
   return (
     <div ref={rootRef} className={className} data-ak-select="" data-fit={fit ? (fitSelected ? 'selected' : '') : undefined} data-size={size} data-variant={bare || flush || navy ? variant : undefined} style={{ display: intrinsic ? 'inline-block' : 'block', width: intrinsic ? 'auto' : undefined, maxWidth: fitSelected ? '100%' : undefined, ...style }}>
-      {label && (
-        <label htmlFor={selId} style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem' }}>
-          {label}
-          {required && <span aria-hidden="true" data-required-mark="" style={{ color: 'var(--text-overdue, #991b1b)' }}> *</span>}
-        </label>
-      )}
+      {label && <FieldLabel htmlFor={selId} required={required} inheritInk>{label}</FieldLabel>}
       {control}
-      {(helper || error) && <div id={messageId} role={error ? 'alert' : undefined} style={{ fontSize: '0.8125rem', marginTop: '0.25rem', color: error ? 'var(--text-overdue, #991b1b)' : 'var(--text-secondary, #5a6268)' }}>{error || helper}</div>}
+      <FieldMessage id={messageId} helper={helper} error={error} />
     </div>
   );
 }

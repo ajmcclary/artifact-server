@@ -313,6 +313,7 @@ export interface LibraryItem {
 export type LibraryGrouping = 'date' | 'project' | 'type' | 'none';
 export type LibrarySort = 'name' | 'created' | 'activity';
 export interface DesignLibraryProps {
+  /** @default "Library" */
   title?: string;
   description?: string;
   items: LibraryItem[];
@@ -325,6 +326,10 @@ export interface DesignLibraryProps {
   /** Kinds shown; empty shows every kind. */
   types?: GalleryKind[];
   onTypesChange: (types: GalleryKind[]) => void;
+  /** Project names shown (matched against `LibraryItem.project`); empty shows every project. */
+  projects?: string[];
+  /** Shows the toolbar's Projects menu, listing each project the items name with its count. */
+  onProjectsChange?: (projects: string[]) => void;
   /** @default "date" */
   groupBy?: LibraryGrouping;
   onGroupByChange: (groupBy: LibraryGrouping) => void;
@@ -449,7 +454,7 @@ export interface ActivityMetric {
   pressed?: boolean;
 }
 export interface ActivityHeaderProps {
-  /** The level-1 title, set as the Design library's `SectionHeading` page title. @default "Activity" */
+  /** The level-1 title, set as the Library's `SectionHeading` page title. @default "Activity" */
   title?: string;
   /** Optional one-sentence line under the title; Activity passes none. */
   description?: string;
@@ -458,7 +463,7 @@ export interface ActivityHeaderProps {
   metrics?: ActivityMetric[];
 }
 export interface ActivityToolbarProps {
-  /** The page title the toolbar leads with once docked, as the Design library's does. @default "Activity" */
+  /** The page title the toolbar leads with once docked, as the Library's does. @default "Activity" */
   title?: string;
   segment: 'All' | 'Needs you' | 'With an agent';
   onSegment: (segment: string) => void;

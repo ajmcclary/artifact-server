@@ -26,18 +26,21 @@
 
 
   /* Component-specific — tightened for modern-compact density.
-     (Prior 2018 values kept in comments for the audit trail.) */
+     (Prior 2018 values kept in comments for the audit trail.)
+     Where one of these equals a --space-* step, the match is current, not a
+     coupling: each stays an independently tunable density control. */
   --space-card-padding: 0.875rem;        /* 14px — was 1rem/16px */
-  --space-input-padding-y: 0.375rem;     /* 6px */
+  --space-input-padding-y: 0.375rem;     /* 6px — equals the md button's padding-y today;
+                                            an independent density role, not an alias */
   --space-input-padding-x: 0.625rem;     /* 10px — was 0.75rem/12px */
-  --space-grid-gutter: 0.75rem;          /* 12px — was 1rem/16px */
-  --space-section-margin: 1rem;          /* 16px — was 1.5rem/24px */
+  --space-grid-gutter: 0.75rem;          /* 12px — was 1rem/16px; equals --space-3 today */
+  --space-section-margin: 1rem;          /* 16px — was 1.5rem/24px; equals --space-4 today */
   --space-page-gutter: 1.25rem;          /* 20px — screen padding, was 24px */
 
   /* Data-grid metrics — the signature surface's density levers */
   --grid-row-height: 40px;               /* was 48px */
   --grid-header-height: 36px;            /* was 40px */
-  --grid-cell-padding-x: 0.5rem;         /* 8px */
+  --grid-cell-padding-x: 0.5rem;         /* 8px — equals --space-2 today; the grid's own lever */
 
   /* Collapsed panel geometry: labels need 36px; icon navigation needs 52px. */
   --panel-rail-width: 36px;

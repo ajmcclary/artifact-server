@@ -29,9 +29,9 @@ const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 
 // The host supplies its React runtime and ArkCase exports; no duplicated primitives.
 export function createActivityUI(React, DS) {
-  const { CommentThread, StatusPill, Button, SegmentedControl, Input, SurfaceState, Avatar, SectionHeading,
-    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator, ToolbarSpacer } = DS;
-  const { PageToolbar, FilterMenu, FilterSummary } = createToolbarUI(React, DS);
+  const { CommentThread, StatusPill, Button, SegmentedControl, SurfaceState, Avatar, SectionHeading,
+    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator } = DS;
+  const { PageToolbar, FilterGroup, FilterMenu, FilterSummary, ToolbarSearch } = createToolbarUI(React, DS);
   const folder = (size = 14) => <i className="bi bi-folder2" aria-hidden="true" style={{ fontSize: size }} />;
 
   function Marker({ kind, icon, size = 32 }) {
@@ -228,7 +228,7 @@ export function createActivityUI(React, DS) {
     </div>;
   }
 
-  /* The page's heading, laid out like the Design library's: the level-1 title and its primary
+  /* The page's heading, laid out like the Library's: the level-1 title and its primary
      action, then metric tiles that double as filter shortcuts. The title carries no summary line. */
   function ActivityHeader({ title = 'Activity', description, action, metrics = [] }) {
     return <header style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '24px 0 12px' }}>
@@ -265,20 +265,20 @@ export function createActivityUI(React, DS) {
     const counted = typeof shown === 'number' && typeof total === 'number';
     const n = (v) => <span style={{ ...DATA, color: 'var(--text-data, #495057)' }}>{v}</span>;
     return <>
-      <PageToolbar title={title} label="Activity filters" gutter={20} phone={phone} onHeight={onHeight}>
+      <PageToolbar title={title} label="Activity filters" gutter={20} phone={phone} onHeight={onHeight}
+        end={<ToolbarSearch label="Search activity" placeholder="Search activity" value={query} onChange={(ev) => onQuery(ev.target.value)} />}>
         <SegmentedControl label="Show" mode="radio" value={segment} onChange={onSegment}
           options={SEGMENTS.map((id) => ({ id, label: id, count: id === 'All' ? undefined : counts[id] }))} />
         {!phone && <ToolbarSeparator style={{ margin: '0 4px', height: 24 }} />}
-        {onPeople && filter('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
-        {filter('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
-          projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,
-            meta: p.count, checked: selectedProjects.includes(p.id), keepOpen: true, onClick: () => onProjects(toggle(selectedProjects, p.id)) })), 240)}
-        {filter('types', 'bi-funnel', label('Types', types.length, 'All types'),
-          TYPE_FILTERS.map((f) => ({ type: 'checkbox', label: f.label, icon: TYPE_ICONS[f.id], meta: typeCounts ? typeCounts[f.id] : undefined, checked: types.includes(f.id), keepOpen: true,
-            onClick: () => onTypes(toggle(types, f.id)) })), 220)}
-        <ToolbarSpacer />
-        <Input icon="bi-search" size="sm" type="search" placeholder="Search activity" aria-label="Search activity"
-          value={query} onChange={(ev) => onQuery(ev.target.value)} style={{ flex: '1 1 140px', maxWidth: 260 }} />
+        <FilterGroup label="Filters">
+          {onPeople && filter('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
+          {filter('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
+            projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,
+              meta: p.count, checked: selectedProjects.includes(p.id), keepOpen: true, onClick: () => onProjects(toggle(selectedProjects, p.id)) })), 240)}
+          {filter('types', 'bi-funnel', label('Types', types.length, 'All types'),
+            TYPE_FILTERS.map((f) => ({ type: 'checkbox', label: f.label, icon: TYPE_ICONS[f.id], meta: typeCounts ? typeCounts[f.id] : undefined, checked: types.includes(f.id), keepOpen: true,
+              onClick: () => onTypes(toggle(types, f.id)) })), 220)}
+        </FilterGroup>
       </PageToolbar>
       {counted && <FilterSummary live filtered={filtered} status={<>Showing {n(shown)} of {n(total)} entries</>} restStatus={`Showing all ${total} entries`}
         chips={chips} onClear={onClearFilters} fallbackRef={peopleRef} />}

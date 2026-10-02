@@ -118,7 +118,7 @@ test.describe("Screen continuity", () => {
 
       await page.getByRole("button", {name: "Open menu"}).click();
       const drawer = page.getByRole("dialog", {name: "Review and projects"});
-      await drawer.getByRole("link", {name: "Design library"}).click();
+      await drawer.getByRole("link", {exact: true, name: "Library"}).click();
       await expect(page).toHaveURL(/\/review\/library$/u);
       await expect(drawer).toHaveCount(0);
       await page.getByRole("button", {name: "Open menu"}).click();
@@ -227,7 +227,7 @@ test.describe("Screen continuity", () => {
       await expect(page.getByText("Loading activity")).toHaveCount(0);
 
       // Leaving and returning shows the last feed at once while it re-reads underneath.
-      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {name: "Design library"}).click();
+      await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {exact: true, name: "Library"}).click();
       await page.getByRole("navigation", {name: "Review and projects"}).getByRole("link", {exact: true, name: "Activity"}).click();
       await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       await expect(row).toBeVisible();

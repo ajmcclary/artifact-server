@@ -1,4 +1,5 @@
 import React from 'react';
+import { TONES, toneTokens } from '../utilities/tones.jsx';
 
 const MAP = {
   active: 'success', closed: 'danger', archived: 'primary',
@@ -6,20 +7,11 @@ const MAP = {
   success: 'success', danger: 'danger', warning: 'warning',
   primary: 'primary', secondary: 'secondary', neutral: 'neutral',
 };
-/* Every tone is a --pill-*-bg / --pill-*-fg pair, so a pill can never drift from the
-   Alert, Toast, GroupBand or StateRow of the same tone. Text-on-tint ratios at 11px/600:
+/* Every tone is the registry's --pill-*-bg / --pill-*-fg pair (utilities/tones.jsx), so a pill
+   can never drift from the Alert, Toast, GroupBand or StateRow of the same tone. Critical is the
+   one solid fill in the system. Text-on-tint ratios at 11px/600:
    success 4.57 · warning 6.37 · danger 6.80 · primary 5.17 · secondary 7.39 · neutral 7.00 ·
    critical (white on the solid fill) 4.74 — all clear AA. */
-const TONES = {
-  success:  { bg: 'var(--pill-success-bg, #dcfce7)',   fg: 'var(--pill-success-fg, #15803d)' },
-  danger:   { bg: 'var(--pill-danger-bg, #fee2e2)',    fg: 'var(--pill-danger-fg, #991b1b)' },
-  warning:  { bg: 'var(--pill-warning-bg, #fef3c7)',   fg: 'var(--pill-warning-fg, #92400e)' },
-  primary:  { bg: 'var(--pill-primary-bg, #e0f2fe)',   fg: 'var(--pill-primary-fg, #0369a1)' },
-  secondary:{ bg: 'var(--pill-secondary-bg, #f3e8ff)', fg: 'var(--pill-secondary-fg, #6b21a8)' },
-  neutral:  { bg: 'var(--pill-neutral-bg, #e9ecef)',   fg: 'var(--pill-neutral-fg, #495057)' },
-  /* The one solid fill in the system — reserved for Critical. */
-  critical: { bg: 'var(--pill-critical-bg, #d83506)',  fg: 'var(--pill-critical-fg, #ffffff)' },
-};
 
 /* Size steps. `md` is the application pill and the default. `xs` is the worksheet-cell pill of
    the Excel specimens (their 9px, raised to the 10px copy floor); `slide` is the same pill at
@@ -39,8 +31,9 @@ const SIZES = {
  */
 export function StatusPill({ status, tone, label, icon, computed = false, size = 'md', style, ...rest }) {
   const z = SIZES[size] || SIZES.md;
-  const key = tone || MAP[String(status || '').toLowerCase()] || 'secondary';
-  const t = TONES[key] || TONES.secondary;
+  const key = tone || MAP[String(status || '').toLowerCase()];
+  /* Resolve the fallback here: the registry's own unknown-tone fallback is neutral, a pill's is secondary. */
+  const t = toneTokens(TONES.includes(key) ? key : 'secondary');
   const text = label != null ? label : capitalize(String(status || ''));
   return (
     <span
@@ -55,8 +48,8 @@ export function StatusPill({ status, tone, label, icon, computed = false, size =
         lineHeight: z.lineHeight,
         textTransform: 'uppercase',
         letterSpacing: z.letterSpacing,
-        backgroundColor: t.bg,
-        color: t.fg,
+        backgroundColor: t.pillBg,
+        color: t.pillFg,
         whiteSpace: 'nowrap',
         ...(computed ? { outline: '1px dashed currentColor', outlineOffset: -1 } : null),
         ...style,

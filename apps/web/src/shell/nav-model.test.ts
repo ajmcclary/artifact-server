@@ -50,11 +50,11 @@ const reviewInput: ShellNavInput = {
 };
 
 describe("shellNavItems in review mode", () => {
-  it("ACT-005: lists Activity, Projects and the design library, then project folders, New project and administrator Tools", () => {
+  it("ACT-005: lists Activity, Projects and the Library, then project folders, New project and administrator Tools", () => {
     expect(shellNavItems(reviewInput)).toEqual([
       {group: "Review", icon: "bi-inbox", id: "activity", label: "Activity", link: "/review"},
       {icon: "bi-briefcase", id: "projects", label: "Projects", link: "/review/projects"},
-      {icon: "bi-collection", id: "library", label: "Design library", link: "/review/library"},
+      {icon: "bi-collection", id: "library", label: "Library", link: "/review/library"},
       {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review?project=prj_b"},
       {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review?project=prj_default"},
       {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review?project=prj_old"},
@@ -65,7 +65,7 @@ describe("shellNavItems in review mode", () => {
 
   it("ACT-005: gives a non-administrator MCP & WebMCP in Tools instead of Administration", () => {
     const items = shellNavItems({...reviewInput, canCreateProjects: false, isAdministrator: false});
-    expect(items.map((item) => item.label)).toEqual(["Activity", "Projects", "Design library", "Beta", "Default", "Zeta", "MCP & WebMCP"]);
+    expect(items.map((item) => item.label)).toEqual(["Activity", "Projects", "Library", "Beta", "Default", "Zeta", "MCP & WebMCP"]);
     expect(items.at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
   });
 

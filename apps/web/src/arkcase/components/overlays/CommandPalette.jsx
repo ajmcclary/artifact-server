@@ -4,7 +4,7 @@ import { IconButton } from '../actions/IconButton.jsx';
 import { Button } from '../actions/Button.jsx';
 import { ShortcutKey } from '../data-display/ShortcutKey.jsx';
 import { Eyebrow } from '../data-display/Eyebrow.jsx';
-import { trapTab } from '../utilities/a11y-keys.jsx';
+import { useEscapeLayer, trapLayerTab } from './overlay-layer.jsx';
 
 /* The palette's scrim is the navy at 38% the Artifacts search drew — lighter than a
    Modal's 45% because the page behind stays the thing being searched. */
@@ -43,6 +43,9 @@ export function CommandPalette({
   const hasQuery = String(query || '').trim().length > 0;
   const [active, setActive] = React.useState(items.length ? 0 : -1);
   const [listFocus, setListFocus] = React.useState(false);
+  /* The shared layer stack owns Escape: only the topmost open layer closes, and the palette stays
+     a barrier (the press is consumed) even without an `onClose`. */
+  const handleEscape = useEscapeLayer(open, panelRef, onClose);
 
   /* A new result set starts at its first row. */
   const resultKey = items.map((r) => r && r.id).join('\u0001');
@@ -86,13 +89,8 @@ export function CommandPalette({
   };
 
   const onPanelKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (onClose) onClose();
-      return;
-    }
-    if (e.key === 'Tab') trapTab(e, panelRef.current);
+    if (e.key === 'Escape') { handleEscape(e); return; }
+    if (e.key === 'Tab') trapLayerTab(e, panelRef.current);
   };
 
   /* The field and the listbox share one key map; only the listbox also takes Home, End

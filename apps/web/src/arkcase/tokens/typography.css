@@ -99,11 +99,14 @@
      Status, priority, category and type chips are all that pill. No 12px pills,
      no 500 weight, no radius-4px chips. Colors: soft tint (--pill-*-bg/-fg);
      the solid fill (--pill-critical-*) is reserved for Critical. */
-  --font-size-pill: 0.6875rem;   /* 11px — alias of --font-size-label, pill role */
+  --font-size-pill: 0.6875rem;   /* 11px — same size as --font-size-label, pill role
+                                    (coupled in tokens.json via sameAs; kept literal) */
   --font-weight-pill: 600;
 
   /* ---- Icon sizes (2026 iconography pass) ----
-     Bootstrap Icons render on a 16px optical grid at ~1px stroke. Before this
+     Sized against the retired Bootstrap Icons font (16px optical grid, ~1px
+     stroke); the ArkCase Studio duotone masks in tokens/icons.css keep those
+     metrics behind the same `bi bi-*` classes. Before this
      pass, icon font-size was set inline per-usage (14/16/18/22/24 all appeared);
      the stray 18px had no home. These five steps cover control and content
      contexts; the two Portal hero steps are deliberate display exceptions. */

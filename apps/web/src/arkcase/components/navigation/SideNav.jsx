@@ -3,6 +3,7 @@ import { NavigationIcon } from './NavigationIcon.jsx';
 import { displayProfileContext } from '../shell/DisplayProfile.jsx';
 import { useResizeSeam } from '../panel/resize-seam.jsx';
 import { Tooltip } from '../feedback/Tooltip.jsx';
+import { matchesMedia, countText, leftToBrowser } from './nav-helpers.jsx';
 
 const RAIL_WIDTH = 'var(--navigator-rail-width, 52px)';
 const GROUP_LABEL = { fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, letterSpacing: 'var(--letter-spacing-wide, .025em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap' };
@@ -13,11 +14,6 @@ const COUNT_NEUTRAL = { ...COUNT, background: 'var(--pill-neutral-bg, #e9ecef)',
 const MINI_COUNT_NEUTRAL = { ...MINI_COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
 /* E5c — an informational count is the neutral pill; the default stays the danger pill. */
 const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_COUNT_NEUTRAL : COUNT_NEUTRAL) : (rail ? MINI_COUNT : COUNT));
-const matchesMedia = (q) => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false);
-const countText = (n) => (Number(n) > 99 ? '99+' : String(n));
-/* A modified or non-primary click on a link row — Cmd/Ctrl for a new tab, Shift for a new window,
-   Alt to download — belongs to the browser: it follows the href natively and selects nothing. */
-const leftToBrowser = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
 
 /**
  * ArkCase SideNav — the primary navigation in four modes. `drawer` is the

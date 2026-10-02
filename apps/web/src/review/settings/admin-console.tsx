@@ -25,7 +25,10 @@ export interface AdminConsoleProps {
 
 /**
  * The Admin Console pattern: an area menu, a breadcrumb heading, the area's
- * scrolling content, and an optional docked detail pane beside it.
+ * scrolling content, and an optional docked detail pane beside it. Unpinned, the
+ * menu is an icon rail whose footer pin is the only way back to it expanded. The
+ * pinned menu's header already names Administration, so the breadcrumb shows only
+ * while the menu is a rail or absent.
  */
 export function AdminConsole({administrator, area, children, inspector}: AdminConsoleProps) {
   const announce = useAnnounce();
@@ -62,7 +65,7 @@ export function AdminConsole({administrator, area, children, inspector}: AdminCo
       }))}
       maxWidth={340}
       minWidth={184}
-      mode={preference.pinned ? "expanded" : "peek"}
+      mode={preference.pinned ? "expanded" : "rail"}
       onAnnounce={announce}
       onPinChange={(next) => {
         preference.setPinned(next);
@@ -87,7 +90,9 @@ export function AdminConsole({administrator, area, children, inspector}: AdminCo
       <div style={columnStyle}>
         <div data-admin-head="" style={headStyle}>
           <SectionHeading
-            eyebrow={<Breadcrumb items={[{href: firstArea.href, label: rootLabel}, current.label]} />}
+            eyebrow={menu === null || !preference.pinned
+              ? <Breadcrumb items={[{href: firstArea.href, label: rootLabel}, current.label]} />
+              : undefined}
             level={1}
             size="md"
             stackBelow={560}

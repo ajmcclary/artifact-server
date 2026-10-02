@@ -157,7 +157,7 @@ export function groupGallery(items) {
   }).filter((group) => group.count > 0);
 }
 
-/* Design library. Items carry `createdAt`, the first version that listed the page, and
+/* Library. Items carry `createdAt`, the first version that listed the page, and
    `activityAt`, the later of the last version that changed its bytes and its newest comment
    (epoch ms the host derives from version and conversation records). Grouping by date reads
    the field the sort uses: creation when sorting by Date created, otherwise last activity. */
@@ -191,9 +191,10 @@ export function dateBucket(ms, now) {
   return { key: `month-${month.getFullYear()}-${month.getMonth() + 1}`, label: `${MONTHS[month.getMonth()]} ${month.getFullYear()}`, start: month.getTime() };
 }
 
-export function filterLibrary(items, query = '', types = []) {
+export function filterLibrary(items, query = '', types = [], projects = []) {
   const q = query.trim().toLocaleLowerCase();
   return items.filter((item) => (!types.length || types.includes(item.kind))
+    && (!projects.length || projects.includes(item.project))
     && `${item.title} ${item.description || ''} ${item.path} ${item.project || ''} ${item.gallery || ''} ${galleryKind(item.kind).label} ${galleryKind(item.kind).singular}`
       .toLocaleLowerCase().includes(q));
 }

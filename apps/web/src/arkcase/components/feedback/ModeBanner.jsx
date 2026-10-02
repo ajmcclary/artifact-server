@@ -78,7 +78,7 @@ function CardBanner({ icon, title, meta, action, controls, actions, role, style,
               color: 'var(--text-link-hover, #005a7d)',
             }}
           >
-            <i aria-hidden="true" className={`bi ${icon}`} style={{ fontSize: 'var(--icon-sm, 16px)' }} />
+            <i aria-hidden="true" className={`bi ${icon}`} style={{ fontSize: 'var(--icon-sm, 14px)' }} />
           </span>
         ) : null}
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -141,7 +141,7 @@ export function ModeBanner({ variant = 'floating', icon, title, children, meta, 
     </span>
   ) : null;
   const iconNode = icon ? (
-    <i aria-hidden="true" className={`bi ${icon}`} style={{ flex: 'none', fontSize: floating ? 13 : 'var(--icon-sm, 16px)' }} />
+    <i aria-hidden="true" className={`bi ${icon}`} style={{ flex: 'none', fontSize: floating ? 13 : 'var(--icon-sm, 14px)' }} />
   ) : null;
 
   if (floating) {
@@ -158,7 +158,7 @@ export function ModeBanner({ variant = 'floating', icon, title, children, meta, 
           transform: 'translateX(-50%)',
           display: 'flex',
           alignItems: 'center',
-          gap: 'var(--space-2, 10px)',
+          gap: 'var(--space-2, 8px)',
           maxWidth: 'calc(100% - 24px)',
           boxSizing: 'border-box',
           padding: '6px 8px 6px 12px',
@@ -189,7 +189,7 @@ export function ModeBanner({ variant = 'floating', icon, title, children, meta, 
         display: 'flex',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: 'var(--space-2, 10px)',
+        gap: 'var(--space-2, 8px)',
         padding: '8px 14px',
         background: 'var(--surface-header, #073652)',
         color: 'var(--text-on-navy, #ffffff)',

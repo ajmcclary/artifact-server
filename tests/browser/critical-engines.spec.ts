@@ -217,7 +217,7 @@ test.describe("critical engine review paths @critical", () => {
     }
   });
 
-  test("DSN-005 library: the design library opens an exact gallery page and returns through history @critical", async ({browser}) => {
+  test("DSN-005 library: the Library opens an exact gallery page and returns through history @critical", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     const directory = await mkdtemp(path.join(tmpdir(), "critical-design-library-"));
     try {
@@ -232,7 +232,7 @@ test.describe("critical engine review paths @critical", () => {
       }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
       await localLogin(fixture);
       await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
-      const card = fixture.page.getByRole("region", {name: "Design library", exact: true})
+      const card = fixture.page.getByRole("region", {name: "Library", exact: true})
         .locator(`a[href*="artifact=${published.artifact.id}"][href*="path=${encodeURIComponent("project/components/buttons.card.html")}"]`);
       await card.click();
       const exact = new URL(fixture.page.url());

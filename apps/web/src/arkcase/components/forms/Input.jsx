@@ -1,5 +1,6 @@
 import React from 'react';
 import { toneTokens, toneIcon } from '../utilities/tones.jsx';
+import { FIELD_PAD_X, FIELD_PAD_Y, FieldLabel, FieldMessage, fieldDescription, useFieldId } from './field-chrome.jsx';
 
 // Field status → semantic tone. `error` keeps the historical danger border and message ink.
 const STATUS_TONE = { error: 'danger', warning: 'warning', success: 'success', info: 'primary' };
@@ -66,12 +67,11 @@ export function Input({
   const [focus, setFocus] = React.useState(false);
   const [focusWithin, setFocusWithin] = React.useState(false);
   const [revealed, setRevealed] = React.useState(false);
-  const generatedId = React.useId();
-  const inputId = id || generatedId;
+  const inputId = useFieldId(id);
   // touch: a 44px control, 0 × 12px padding and a 15px value — the phone measure.
   const pads = touch
-    ? { sm: '0 12px', md: '0 12px', lg: '0 12px' }
-    : { sm: '0.25rem 0.5rem', md: '0.375rem 0.625rem', lg: '0.5rem 0.875rem' };
+    ? { sm: { y: '0', x: '12px' }, md: { y: '0', x: '12px' }, lg: { y: '0', x: '12px' } }
+    : { sm: { y: '0.25rem', x: '0.5rem' }, md: { y: FIELD_PAD_Y, x: FIELD_PAD_X }, lg: { y: '0.5rem', x: '0.875rem' } };
   const fonts = touch
     ? { sm: '0.9375rem', md: '0.9375rem', lg: '0.9375rem' }
     : { sm: '0.875rem', md: '1rem', lg: '1.25rem' };
@@ -86,9 +86,8 @@ export function Input({
   // The glyph shows for an explicit `status` unless `statusIcon={false}`; legacy `error`-only fields opt in with `statusIcon`.
   const showStatusIcon = !!fieldStatus && (statusIcon != null ? !!statusIcon : !!STATUS_TONE[status]);
   const borderCol = fieldStatus === 'error' ? 'var(--bs-danger, #d83506)' : tone ? tone.line : focus ? 'var(--bs-primary, #0079a8)' : 'var(--border-color-strong, #ced4da)';
-  const messageId = `${inputId}-${error ? 'error' : 'helper'}`;
-  const describedBy = [rest['aria-describedby'], (error || helper) ? messageId : null].filter(Boolean).join(' ') || undefined;
-  const radius = variant === 'pill' ? 'var(--radius-pill, 10px)' : 'var(--radius-md, 6px)';
+  const { messageId, describedBy } = fieldDescription(inputId, { helper, error, describedBy: rest['aria-describedby'] });
+  const radius = variant === 'pill' ? 'var(--radius-pill, 10px)' : 'var(--radius-md, 5px)';
   // navy: the app bar's search field — on-navy ink over a faint white fill, a light hairline that
   // turns solid on-navy while focused.
   const navy = variant === 'navy';
@@ -120,19 +119,14 @@ export function Input({
   };
   return (
     <div style={{ ...style }}>
-      {label && (
-        <label htmlFor={inputId} style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem', color: 'var(--text-body, #212529)' }}>
-          {label}
-          {required && <span aria-hidden="true" data-required-mark="" style={{ color: 'var(--text-overdue, #991b1b)' }}> *</span>}
-        </label>
-      )}
+      {label && <FieldLabel htmlFor={inputId} required={required}>{label}</FieldLabel>}
       {framed ? (
         <div
           onFocus={() => setFocusWithin(true)}
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 'var(--space-2, 0.5rem)',
-            paddingInlineStart: pads[size].split(' ')[1], paddingInlineEnd: 'var(--space-1, 0.25rem)',
+            paddingInlineStart: pads[size].x, paddingInlineEnd: 'var(--space-1, 0.25rem)',
             ...fieldSurface,
             ...touchHeight,
             border: `1px solid ${wrapperBorder}`,
@@ -162,10 +156,9 @@ export function Input({
             required={required || undefined}
             aria-required={required || undefined}
             aria-invalid={fieldStatus === 'error' ? true : undefined}
-            aria-describedby={describedBy}
             style={{
               flex: 1, minWidth: 0, width: '100%',
-              padding: `${pads[size].split(' ')[0]} 0`,
+              padding: `${pads[size].y} 0`,
               ...(touch ? { height: '100%' } : null),
               ...fieldSurface,
               ...monoStyle,
@@ -174,6 +167,7 @@ export function Input({
               outline: 'none',
             }}
             {...rest}
+            aria-describedby={describedBy}
           />
           {showStatusIcon && (
             <i className={`bi ${toneIcon(STATUS_TONE[fieldStatus])}`} aria-hidden="true" data-status={fieldStatus}
@@ -209,11 +203,10 @@ export function Input({
             required={required || undefined}
             aria-required={required || undefined}
             aria-invalid={fieldStatus === 'error' ? true : undefined}
-            aria-describedby={describedBy}
             style={{
               width: '100%',
-              padding: pads[size],
-              paddingInlineStart: icon ? '2rem' : pads[size].split(' ')[1],
+              padding: `${pads[size].y} ${pads[size].x}`,
+              paddingInlineStart: icon ? '2rem' : pads[size].x,
               fontSize: fonts[size],
               fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
               lineHeight: 1.5,
@@ -229,12 +222,16 @@ export function Input({
             }}
             data-ak-input={navy ? 'navy' : undefined}
             {...rest}
+            aria-describedby={describedBy}
           />
         </div>
       )}
-      {(helper || error) && (
-        <div id={messageId} role={error ? 'alert' : undefined} style={{ fontSize: '0.8125rem', marginTop: '0.25rem', color: fieldStatus === 'error' ? 'var(--text-overdue, #991b1b)' : fieldStatus === 'warning' ? tone.text : 'var(--text-secondary, #5a6268)' }}>{error || helper}</div>
-      )}
+      <FieldMessage
+        id={messageId}
+        helper={helper}
+        error={error}
+        color={fieldStatus === 'error' ? 'var(--text-overdue, #991b1b)' : fieldStatus === 'warning' ? tone.text : 'var(--text-secondary, #5a6268)'}
+      />
     </div>
   );
 }

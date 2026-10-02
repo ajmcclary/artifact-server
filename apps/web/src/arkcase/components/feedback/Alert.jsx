@@ -5,7 +5,7 @@ import { Button } from '../actions/Button.jsx';
    pill of the same tone now read the same dark, and the 2026 conformance pass retired
    the parallel ramp that grew here. */
 const TONES = {
-  primary:   { bg: 'rgba(0,121,168,0.10)',  border: 'var(--bs-primary, #0079a8)', fg: 'var(--pill-primary-fg, #0369a1)', icon: 'bi-info-circle-fill' },
+  primary:   { bg: 'var(--tint-primary-selected, rgba(0,121,168,0.10))',  border: 'var(--bs-primary, #0079a8)', fg: 'var(--pill-primary-fg, #0369a1)', icon: 'bi-info-circle-fill' },
   success:   { bg: 'rgba(0,181,50,0.10)',   border: 'var(--bs-success, #00b532)', fg: 'var(--pill-success-fg, #15803d)', icon: 'bi-check-circle-fill' },
   danger:    { bg: 'var(--tint-danger-selected, rgba(216,53,6,0.10))', border: 'var(--bs-danger, #d83506)', fg: 'var(--pill-danger-fg, #991b1b)', icon: 'bi-exclamation-octagon-fill' },
   warning:   { bg: 'rgba(255,154,21,0.12)', border: 'var(--bs-warning, #ff9a15)', fg: 'var(--pill-warning-fg, #92400e)', icon: 'bi-exclamation-triangle-fill' },

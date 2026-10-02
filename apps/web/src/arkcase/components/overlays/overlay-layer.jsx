@@ -1,4 +1,5 @@
 import React from 'react';
+import { trapTab } from '../utilities/a11y-keys.jsx';
 
 // One registry per document within each runtime. Callback changes
 // must not reorder open layers. DOM ancestry wins over effect registration order.
@@ -62,4 +63,16 @@ export function lockScroll(doc) {
   const state = registry(doc);
   if (!state.locks++) { state.overflow = doc.body.style.overflow; doc.body.style.overflow = 'hidden'; }
   return () => { if (!--state.locks) doc.body.style.overflow = state.overflow; };
+}
+
+// Tab containment for a modal layer whose root is its role="dialog" aria-modal element. It acts
+// only while focus sits in this layer and not inside a nested modal dialog, which keeps its own
+// Tab order; focus outside the layer (a portalled child, a sheet over it) is never pulled back.
+// Within those bounds it is trapTab: wrap at the ends of the enabled, visible, non-inert tabbables.
+export function trapLayerTab(event, root) {
+  if (!event || event.key !== 'Tab' || event.defaultPrevented || !root) return false;
+  const active = root.ownerDocument.activeElement;
+  if (!active || !root.contains(active)) return false;
+  if (active.closest('[role="dialog"][aria-modal="true"]') !== root) return false;
+  return trapTab(event, root);
 }
