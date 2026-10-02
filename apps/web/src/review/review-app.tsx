@@ -23,7 +23,7 @@ import {
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
-import {dismissInnermost, IconButton, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
+import {Button, dismissInnermost, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
@@ -56,7 +56,6 @@ import {LoadingGate, SignInGate, UnavailableGate} from "@/shell/gates";
 import {useReviewComments} from "./review-comments.tsx";
 import {
   parseReviewRoute,
-  projectsHref,
   readReviewLocation,
   REVIEW_LOCATION_EVENT,
   type ReviewLocation,
@@ -306,7 +305,6 @@ export function ReviewApp() {
       mainStyle={route.kind === "workspace" || route.kind === "library" || route.kind === "projects"
         ? {overflow: "hidden"}
         : {overflowY: "auto"}}
-      onCreateProject={createProject}
       onOpenPalette={openPalette}
       projects={projects}
       route={route}
@@ -1159,7 +1157,6 @@ function ProjectReview({
             refreshState={catalog.refreshState}
             selectedArtifactId={selectedArtifactId}
             selectedCommentCount={comments.loading ? null : comments.threads.length}
-            settingsHref={selectedProject === null ? null : projectsHref(selectedProject.id)}
             sheet={phone}
             sort={catalog.sort}
             tagFilters={catalog.tagFilters}
@@ -1271,13 +1268,9 @@ function ProjectReview({
           {focusMode ? null : (
             <InspectorPanel
               actions={inspectorTab === "versions" && details !== null ? (
-                <IconButton
-                  ariaLabel="Compare versions"
-                  icon="bi-file-diff"
-                  onClick={() => openComparison(null, "compare")}
-                  size="sm"
-                  title="Compare versions"
-                />
+                <Button icon="bi-layout-split" onClick={() => openComparison(null, "compare")} size="sm" variant="ghost">
+                  Compare
+                </Button>
               ) : null}
               active={inspectorTab}
               canPin={!phone && viewportWidth >= workspaceBudget.inspector}

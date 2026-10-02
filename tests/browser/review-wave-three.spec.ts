@@ -7,7 +7,14 @@ import {
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
-import {chooseVersionAction, openInspectorTab, previewFrame, selectThread, versionRow} from "./review-helpers.js";
+import {
+  chooseVersionAction,
+  openInspectorTab,
+  previewFrame,
+  selectThread,
+  versionRow,
+  versionsList,
+} from "./review-helpers.js";
 import {createReplyOverApi, createThreadOverApi} from "./comment-api.js";
 
 test.describe("Artifact Server Review wave three", () => {
@@ -215,6 +222,57 @@ test.describe("Artifact Server Review wave three", () => {
       await expect(preview.getByRole("heading", {name: "Selected preview remains"}))
         .toBeVisible();
       expect(result.body.artifact.id).not.toBe(selected.body.artifact.id);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("VER-001-B: the Versions panel ends with an older-versions row and opens Compare from its labelled button", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const first = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: "<!doctype html><html lang=\"en\"><h1>Version 1</h1></html>",
+        idempotencyKey: "review-older-versions-v1",
+        name: "Older versions fixture",
+      });
+      let latest = first.body.version.id;
+      for (let number = 2; number <= 7; number += 1) {
+        // eslint-disable-next-line no-await-in-loop -- each version names the one before it
+        const next = await publishVersion(fixture.server, fixture.installation, {
+          artifactId: first.body.artifact.id,
+          content: `<!doctype html><html lang="en"><h1>Version ${number}</h1></html>`,
+          expectedCurrentVersionId: latest,
+          idempotencyKey: `review-older-versions-v${number}`,
+        });
+        latest = next.body.version.id;
+      }
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(reviewUrl(fixture.server.baseUrl, first.body.artifact.id, latest));
+      await openInspectorTab(page, "Versions");
+      const versions = versionsList(page);
+      // Five version rows, then one more row of the same list naming what it reveals.
+      await expect(versions.locator("[data-link-row-control]")).toHaveCount(6);
+      const older = versions.getByRole("button", {name: "Show 2 older versions"});
+      await expect(older).toContainText("v1 – v2");
+      await expect(versions.getByRole("button", {name: /Older$/u})).toHaveCount(0);
+      await older.click();
+      await expect(versions.locator("[data-link-row-control]")).toHaveCount(7);
+      await expect(versions.getByRole("button", {name: /older versions?$/u})).toHaveCount(0);
+      await expect(versionRow(page, 1)).toBeVisible();
+
+      // A row's More menu compares with the current version under the split-view icon.
+      await versionRow(page, 2).getByRole("button", {name: "More actions for v2"}).click();
+      await expect(page.getByRole("menu", {name: "More actions for v2"}).getByRole("menuitem", {name: "Compare with v7"})
+        .locator(".bi-layout-split")).toBeAttached();
+      await page.keyboard.press("Escape");
+
+      const inspector = page.getByRole("complementary", {name: "Artifact inspector"});
+      await expect(inspector.getByRole("button", {name: "Compare versions"})).toHaveCount(0);
+      await inspector.getByRole("button", {exact: true, name: "Compare"}).click();
+      await expect(page.getByRole("region", {name: "Comparison and history"})).toBeVisible();
+      await expect(page.getByRole("tab", {name: "Compare"})).toHaveAttribute("aria-selected", "true");
     } finally {
       await stopBrowserFixture(fixture);
     }

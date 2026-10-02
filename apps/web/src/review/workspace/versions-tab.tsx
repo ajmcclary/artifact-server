@@ -19,8 +19,9 @@ export interface VersionsTabProps {
   readonly versions: readonly VersionListItem[];
 }
 
-/** Rows shown before Show Older; each press adds another page. */
-const versionPage = 20;
+/** Rows shown before the older-versions row; each press reveals up to `olderStep` more. */
+const versionPage = 5;
+const olderStep = 4;
 
 /**
  * The artifact's immutable history, newest first. Each row previews its version; Preview
@@ -63,19 +64,19 @@ export function VersionsTab({
               onClick: () => setPendingCurrent(entry.n),
             }]),
             ...(other === null || !idOf.has(other) ? [] : [{
-              icon: "bi-file-diff",
+              icon: "bi-layout-split",
               label: `Compare with v${other}`,
               onClick: () => compare(entry.n, other),
             }]),
             {icon: "bi-clock-history", label: "Action History", onClick: onOpenHistory},
           ];
         }}
-        olderLabel={`Show ${Math.min(versionPage, remaining)} Older`}
+        olderStep={Math.min(olderStep, remaining)}
         onPreview={(n) => {
           const id = idOf.get(n);
           if (id !== undefined) onSelect(id);
         }}
-        onShowOlder={() => setLimit((value) => value + versionPage)}
+        onShowOlder={() => setLimit((value) => value + olderStep)}
         phone={phone}
         remaining={remaining}
         shown={shown}

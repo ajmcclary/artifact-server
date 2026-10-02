@@ -11,7 +11,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {publishPath} from "../../src/client/file-publication-client.js";
 import {writeClaudeDesignFixture, writeDesignCardFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
-import {interactiveFrame, openInspectorTab, previewFrame, returnToGallery} from "./review-helpers.js";
+import {interactiveFrame, openInspectorTab, previewFrame, returnToGallery, searchPreviews} from "./review-helpers.js";
 
 for (const annotated of [false, true]) {
   test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search the gallery and open cards and templates in Review`, async ({browser}) => {
@@ -34,14 +34,18 @@ for (const annotated of [false, true]) {
     expect(published.version.entryPath).toBe("project/components/" + (annotated ? "buttons.card.html" : "card-button.html"));
     const title = annotated ? path.basename(directory) : "Example_System";
     const view = page.getByRole("region", {name: `${title} gallery`});
-    await expect(view.getByRole("heading", {name: title, level: 2})).toBeVisible();
+    // The review toolbar names the artifact, so the gallery shows no heading of its own.
+    const toolbar = view.getByRole("toolbar", {name: "Gallery view"});
+    await expect(toolbar).toBeVisible();
+    await expect(view.getByRole("heading", {name: title})).toHaveCount(0);
     const button = view.getByRole("link", {name: "Open Primary button · Component · Actions"});
     await expect(button).toContainText("640 × 110");
-    await view.getByRole("searchbox", {name: "Find a preview"}).fill("Screen");
+    await searchPreviews(page, toolbar, "Screen");
     await expect(button).toBeHidden();
-    await view.getByRole("searchbox", {name: "Find a preview"}).fill("absent");
+    await searchPreviews(page, toolbar, "absent");
     await expect(view.getByRole("link")).toHaveCount(0);
-    await view.getByRole("searchbox", {name: "Find a preview"}).fill("");
+    await expect(view.getByText("Nothing matches these filters")).toBeVisible();
+    await searchPreviews(page, toolbar, "");
     await page.screenshot({path: `test-results/browser/claude-design-${annotated ? "annotated" : "manifest"}-gallery.png`, fullPage: true});
 
     // A card opens as an exact page whose relative styles and scripts resolve from its original path.

@@ -14,7 +14,6 @@ import {
 import {
   inAppLinkTarget,
   navigateReview,
-  projectWorkspaceHref,
   type ReviewRoute,
 } from "@/review/review-routes";
 import {removeStored, writeStored} from "@/lib/safe-storage";
@@ -23,11 +22,8 @@ import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 import {AccountMenu} from "./account-menu.tsx";
 import {ReviewPaletteHost} from "./command-palette.tsx";
 import {ArtifactServerBrand} from "./brand.tsx";
-import {CreateProjectModal} from "./create-project-modal.tsx";
 import {
-  canManageProjects,
   isInstallationAdministrator,
-  NEW_PROJECT_NAV_ID,
   shellActiveLink,
   shellNavItems,
   type ShellNavInput,
@@ -45,11 +41,15 @@ interface ReviewShellProps {
   readonly aside?: ReactNode;
   readonly children: ReactNode;
   readonly mainStyle?: CSSProperties;
-  readonly onCreateProject: (name: string) => Promise<Project>;
   readonly onOpenPalette?: () => void;
   readonly projects: readonly Project[];
   readonly route: ReviewRoute;
   readonly session: Session;
+}
+
+/** Every navigation row is a real link; selecting one opens it in place. */
+function selectItem(item: NavItem): void {
+  if (item.link !== undefined) navigateReview(item.link);
 }
 
 /** Every signed-in screen's frame: navigation rail or drawer, main landmark, live regions. */
@@ -68,7 +68,6 @@ function ReviewShellFrame({
   aside,
   children,
   mainStyle,
-  onCreateProject,
   onOpenPalette,
   projects,
   route,
@@ -81,7 +80,6 @@ function ReviewShellFrame({
   const [navPinned, setNavPinned] = useState(() => reviewPanelStore.pinned(NAV_PANEL_ID, false));
   const [navWidth, setNavWidth] = useState<number | null>(() => reviewPanelStore.width(NAV_PANEL_ID) ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   // The Needs-you badge re-reads on focus and whenever the screen changes; a failed read hides it.
   const summary = useActivitySummary(noProjects);
   const reloadSummary = summary.reload;
@@ -99,7 +97,6 @@ function ReviewShellFrame({
       ? route.location.projectId
       : route.kind === "projects" ? route.projectId : null,
     activeSettings: route.kind === "settings" ? route.settings.kind : null,
-    canCreateProjects: canManageProjects(session.principal),
     isAdministrator: isInstallationAdministrator(session.principal),
     libraryActive: route.kind === "library",
     needsYou: summary.phase === "ready" && summary.summary !== null ? summary.summary.needsYou : null,
@@ -122,13 +119,6 @@ function ReviewShellFrame({
   useInAppLinks();
   useScreenChange(screenTitle, announce);
 
-  const selectItem = (item: NavItem): void => {
-    if (item.id === NEW_PROJECT_NAV_ID) {
-      setCreateOpen(true);
-      return;
-    }
-    if (item.link !== undefined) navigateReview(item.link);
-  };
   const changePin = (next: boolean): void => {
     setNavPinned(next);
     reviewPanelStore.setPinned(NAV_PANEL_ID, next);
@@ -230,15 +220,6 @@ function ReviewShellFrame({
         nav={nav}
       >
         {children}
-        <CreateProjectModal
-          onClose={() => setCreateOpen(false)}
-          onCreate={onCreateProject}
-          onCreated={(project) => {
-            setCreateOpen(false);
-            navigateReview(projectWorkspaceHref(project.id));
-          }}
-          open={createOpen}
-        />
       </AppShell>
       {phone ? null : drawer}
       <ReviewPaletteHost projects={projects} />

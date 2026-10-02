@@ -91,6 +91,7 @@ for (const {label, mode} of auditedModes) {
       await audit("account menu");
       await page.keyboard.press("Escape");
 
+      await page.goto(`${fixture.server.baseUrl}/review/projects`);
       await page.getByRole("button", {name: "New project"}).click();
       await expect(page.getByRole("dialog", {name: /project/iu})).toBeVisible();
       await audit("create project dialog");

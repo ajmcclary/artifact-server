@@ -1051,7 +1051,7 @@ requirements:
     owner: web-application
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
-      behavior: {id: DSN-004-B, description: "Browse grouped thumbnails and placeholders, search, filter by kind and switch to a compact list; open a tile by pointer and keyboard as an exact page and a related guide as plain text; annotate that document; return by the toolbar Gallery control and browser history with search, kind, layout, focus and scroll restored; fit phone widths; keep versions without an index on their entry page."}
+      behavior: {id: DSN-004-B, description: "Browse thumbnails and placeholders in the Library's design without a heading of its own, grouped by kind or section with dated tiles; search, filter by kind, clear filters and switch to a compact list whose rows link related guides; open a tile by pointer and keyboard as an exact page and a related guide as plain text; annotate that document; return by the page menu's Gallery row and browser history with search, kinds, grouping, layout, collapsed groups, focus and scroll restored; fit phone widths; keep versions without an index on their entry page."}
       failure: {id: DSN-004-F, description: "Fail closed on malformed, unsupported, duplicate or escaping indexes by showing the version's entry page (a legacy catalog or first preview) with a notice; reject related links in version 1 indexes; draw placeholders for missing or mistyped thumbnails and omit missing or duplicate related links; never load another version's assets."}
     deployments: *all
     status: behavior_verified

@@ -1,5 +1,5 @@
 {
-  "commit": "b200de6d7f77f58ad7b6920dc2ea702d1bdcc73a",
+  "commit": "35917a3715006863b370f6bd1ce37e2caa8fedac",
   "entriesSha256": "8dc72b1f20c46955097911f3d2c4dd5fdcad89f62b2bc1173dc9e4232e146c58",
   "files": {
     "README.md": {
@@ -831,7 +831,7 @@
       "source": "arkcase/project/components/utilities/tones.jsx"
     },
     "index.ts": {
-      "sha256": "4b48a647a35487e70f392f97c4df75fce1de6e5201b18576d841be117cc4df8c",
+      "sha256": "8569410aec7c6af79f8ab78cb3a7524c56d8cd3bb1b1dc9e8b4926c2868af678",
       "source": null
     },
     "review-ui/activity-model.js": {
@@ -843,11 +843,11 @@
       "source": "workspace/projects/arkcase-artifacts/activity-ui.jsx"
     },
     "review-ui/library-ui.jsx": {
-      "sha256": "b04e98d671dc1be4636bf9490ca33d1b950f14bc804ab5fd4c7209c4aa521f23",
+      "sha256": "ab9a07384e5cb4487615073a80f7d7b99996b3de4769c9eaa23552cb633d281b",
       "source": "workspace/projects/arkcase-artifacts/library-ui.jsx"
     },
     "review-ui/page-model.js": {
-      "sha256": "ce86b81e8872f2b5a6f14d055177dd42307376c8cedda9de9b450008953336ae",
+      "sha256": "ea42ad9e53c30addb6a23a5af0eb714b8544d71f7f4054844e8031d04d864e6c",
       "source": "workspace/projects/arkcase-artifacts/page-model.js"
     },
     "review-ui/placeholder-ui.jsx": {
@@ -855,11 +855,11 @@
       "source": "workspace/projects/arkcase-artifacts/placeholder-ui.jsx"
     },
     "review-ui/review-ui.d.ts": {
-      "sha256": "67c2c5ef2a67a29ad5b148ad3174879f4fce471fd332e5df18431ad31fe38503",
+      "sha256": "5e42aff07f0d3d1089ee7544c6fc7b1b199018da0d9ae42c6e5303dc347e2779",
       "source": "workspace/projects/arkcase-artifacts/review-ui.d.ts"
     },
     "review-ui/review-ui.jsx": {
-      "sha256": "9f2bb51c726745fbdda373004a6bdbff8204e6b1d382b3034e9f61f38f82b825",
+      "sha256": "fbd7ed433007e1395dd3aac401aca46872ccf1d00ab67de3b0eb0e434f10074b",
       "source": "workspace/projects/arkcase-artifacts/review-ui.jsx"
     },
     "review-ui/toolbar-ui.jsx": {
@@ -959,7 +959,7 @@
       "source": "arkcase/project/tokens/fonts/sourceserif4-OFL.txt"
     },
     "tokens/icons.css": {
-      "sha256": "d37a9d665652fdacbf83bf7bc9d9b62f399ace11cde54dc916e5e1dab6f53f18",
+      "sha256": "82f29298f82e5cc0254e91701da756bfd5d498c1a1001cfa155b127ce7c6e50f",
       "source": "arkcase/project/tokens/icons.css"
     },
     "tokens/spacing.css": {
@@ -1021,7 +1021,6 @@
       "bi-exclamation-triangle",
       "bi-exclamation-triangle-fill",
       "bi-eye",
-      "bi-file-diff",
       "bi-file-earmark",
       "bi-file-earmark-code",
       "bi-file-earmark-image",
@@ -1055,6 +1054,7 @@
       "bi-keyboard",
       "bi-layers",
       "bi-layers-half",
+      "bi-layout-split",
       "bi-link-45deg",
       "bi-list",
       "bi-list-ul",

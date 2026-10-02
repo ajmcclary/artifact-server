@@ -1,7 +1,9 @@
 import type {Project} from "@/api/client";
-import {SurfaceState} from "@/arkcase";
+import {Button, SurfaceState} from "@/arkcase";
 import {CopyableCode} from "@/ui/copyable-code";
-import {AdminStack} from "./admin-parts.tsx";
+
+import {projectsHref} from "../review-routes.ts";
+import {AdminActions, AdminStack} from "./admin-parts.tsx";
 
 export interface EmptyProjectStateProps {
   readonly project: Project;
@@ -44,11 +46,21 @@ export function EmptyProjectState({project}: EmptyProjectStateProps) {
   );
 }
 
-/** The workspace canvas shown in place of a preview when the selected project has no artifacts. */
+/**
+ * The workspace canvas shown in place of a preview when the selected project has no artifacts.
+ * Its starter actions include the project's settings, which otherwise open from Projects.
+ */
 export function EmptyProjectCanvas({project}: EmptyProjectStateProps) {
   return (
     <div style={{margin: "0 auto", maxWidth: 720, padding: "32px 18px", width: "100%"}}>
-      <EmptyProjectState project={project} />
+      <AdminStack>
+        <EmptyProjectState project={project} />
+        <AdminActions>
+          <Button href={projectsHref(project.id)} icon="bi-sliders" outline size="sm" variant="secondary">
+            Project settings
+          </Button>
+        </AdminActions>
+      </AdminStack>
     </div>
   );
 }

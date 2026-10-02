@@ -342,16 +342,29 @@ test.describe("Artifact Server frontend MVP", () => {
         .toHaveAttribute("href", "/review");
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
         .toHaveAttribute("aria-current", "page");
-      await reviewNavigation.getByRole("button", {exact: true, name: "New project"}).click();
+      // The menu offers no New project row; creating one starts from the Projects list.
+      await expect(reviewNavigation.getByRole("button", {exact: true, name: "New project"})).toHaveCount(0);
+      await reviewNavigation.getByRole("link", {exact: true, name: "Projects"}).click();
+      await fixture.page.getByRole("button", {exact: true, name: "New project"}).click();
       const projectDialog = fixture.page.getByRole("dialog", {name: "New project"});
       const projectNameInput = projectDialog.getByLabel("Project name");
       await expect(projectNameInput).toBeFocused();
       await projectNameInput.fill("Review project");
       await projectDialog.getByRole("button", {name: "Create project"}).click();
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=(?!prj_default)[^&]+/u);
       // A new project, like every project folder, opens that project's artifacts.
+      await reviewNavigation.getByRole("link", {exact: true, name: "Review project"}).click();
       await expect(fixture.page).toHaveURL(/\/review\?project=(?!prj_default)[^&]+/u);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Review project"}))
         .toHaveAttribute("aria-current", "page");
+      // An empty project's starter actions reach its settings, beside the project list.
+      const emptyProjectUrl = fixture.page.url();
+      await fixture.page.getByRole("link", {exact: true, name: "Project settings"}).click();
+      await expect(fixture.page).toHaveURL(/\/review\/projects\?project=(?!prj_default)[^&]+/u);
+      await expect(reviewNavigation.getByRole("link", {exact: true, name: "Projects"}))
+        .toHaveAttribute("aria-current", "page");
+      await fixture.page.goBack();
+      await expect(fixture.page).toHaveURL(emptyProjectUrl);
       await reviewNavigation.getByRole("link", {exact: true, name: "Default"}).click();
       await expect(fixture.page).toHaveURL(/\/review\?project=prj_default/u);
       await expect(reviewNavigation.getByRole("link", {exact: true, name: "Default"}))
@@ -427,8 +440,10 @@ test.describe("Artifact Server frontend MVP", () => {
       const canonicalReviewLocation = new URL(fixture.page.url());
       const canonicalReviewUrl = `${canonicalReviewLocation.pathname}${canonicalReviewLocation.search}`;
 
-      // Project settings live on the Projects screen; Back returns to the exact review.
-      await fixture.page.getByRole("link", {name: "Project settings"}).click();
+      // Project settings live on the Projects screen, which the main menu's Projects item
+      // opens on the project in view; Back returns to the exact review.
+      await expect(fixture.page.getByRole("link", {name: "Project settings"})).toHaveCount(0);
+      await reviewNavigation.getByRole("link", {exact: true, name: "Projects"}).click();
       await expect(fixture.page).toHaveURL(
         new RegExp(`/review/projects\\?project=${project.id}$`, "u"),
       );
@@ -1482,6 +1497,7 @@ test.describe("Artifact Server frontend MVP", () => {
     try {
       await localLogin(fixture);
       const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review/projects`);
       await page.getByRole("button", {name: "New project"}).click();
       const dialog = page.getByRole("dialog", {name: "New project"});
       await expect(dialog).toBeVisible();
@@ -1535,6 +1551,9 @@ test.describe("Artifact Server frontend MVP", () => {
         },
         {
           open: async (): Promise<void> => {
+            // Projects are created from the Projects screen's list.
+            await page.getByRole("navigation", {name: "Review and projects"})
+              .getByRole("link", {exact: true, name: "Projects"}).click();
             await page.getByRole("button", {name: "New project"}).click();
             await expect(page.getByRole("dialog", {name: "New project"})).toBeVisible();
           },

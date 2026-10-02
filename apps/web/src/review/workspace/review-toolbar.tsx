@@ -366,7 +366,7 @@ export function ReviewToolbar({
             align="end"
             items={[
               {heading: "This artifact"},
-              {icon: "bi-clock-history", label: "Comparison and history", onClick: onOpenComparison},
+              {icon: "bi-layout-split", label: "Comparison and history", onClick: onOpenComparison},
               {icon: "bi-layers", label: "Open Versions Panel", onClick: onOpenVersionsPanel},
               {
                 disabled: reloading || selectedVersion === null,

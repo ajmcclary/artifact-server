@@ -8,14 +8,10 @@ import {
   type SettingsRoute,
 } from "@/review/review-routes";
 
-/** The `id` of the link-less navigation row that opens the New project dialog. */
-export const NEW_PROJECT_NAV_ID = "new-project";
-
 /** Everything the navigation needs to know about the current screen and principal. */
 export interface ShellNavInput {
   readonly activeProjectId: string | null;
   readonly activeSettings: SettingsRoute["kind"] | null;
-  readonly canCreateProjects: boolean;
   readonly isAdministrator: boolean;
   /** The Library is open. */
   readonly libraryActive: boolean;
@@ -63,7 +59,7 @@ export function shellActiveLink(input: ShellNavInput): string {
   if (input.activityActive) return activityHref();
   if (input.libraryActive) return libraryHref();
   // The Projects screen marks the Projects row; a project's artifacts mark its folder.
-  if (input.projectsActive) return projectsHref(null);
+  if (input.projectsActive) return projectsHref(input.activeProjectId);
   return input.activeProjectId === null ? "" : projectWorkspaceHref(input.activeProjectId);
 }
 
@@ -81,8 +77,9 @@ function activityItem(needsYou: number | null): NavItem {
 function reviewItems(input: ShellNavInput): NavItem[] {
   const items: NavItem[] = [
     activityItem(input.needsYou),
-    {icon: "bi-briefcase", id: "projects", label: "Projects", link: projectsHref(null)},
     {icon: "bi-collection", id: "library", label: "Library", link: libraryHref()},
+    // Projects opens on the project in view, so its settings sit beside the list.
+    {icon: "bi-briefcase", id: "projects", label: "Projects", link: projectsHref(input.activeProjectId)},
   ];
   const firstProjectIndex = items.length;
   for (const project of orderedProjects(input.projects)) {
@@ -95,11 +92,6 @@ function reviewItems(input: ShellNavInput): NavItem[] {
     };
     if (items.length === firstProjectIndex) item.group = "Projects";
     items.push(item);
-  }
-  if (input.canCreateProjects) {
-    const create: NavItem = {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"};
-    if (items.length === firstProjectIndex) create.group = "Projects";
-    items.push(create);
   }
   // Non-administrators keep their only route to the MCP & WebMCP setup screen.
   items.push(input.isAdministrator

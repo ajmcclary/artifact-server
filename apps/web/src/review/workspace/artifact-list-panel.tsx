@@ -60,8 +60,6 @@ export interface ArtifactListPanelProps {
   readonly selectedArtifactId: string | null;
   /** The selected artifact's live thread count once its comments have loaded, else null. */
   readonly selectedCommentCount: number | null;
-  /** The selected project's settings page, or null when no project is selected. */
-  readonly settingsHref: string | null;
   /** Phone presentation: the catalog fills the viewport. */
   readonly sheet: boolean;
   readonly sort: CatalogSort;
@@ -176,7 +174,6 @@ export function ArtifactListPanel({
   refreshState,
   selectedArtifactId,
   selectedCommentCount,
-  settingsHref,
   sheet,
   sort,
   tagFilters,
@@ -233,9 +230,6 @@ export function ArtifactListPanel({
           variant="light"
         />
       ) : null}
-      {settingsHref === null ? null : (
-        <Button aria-label="Project settings" href={settingsHref} icon="bi-sliders" size="sm" title="Project settings" variant="light" />
-      )}
     </>
   );
 

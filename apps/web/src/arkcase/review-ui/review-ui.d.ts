@@ -188,9 +188,11 @@ export interface VersionListProps {
   onPreview: (n: number) => void;
   /** Items of a row's More menu, e.g. Make Current, Compare with v7, Action History. An empty list hides More. */
   menuItems: (version: VersionListEntry) => Array<{ label: string; icon?: string; disabled?: boolean; onClick: () => void }>;
-  /** Older versions not yet shown; above 0 the list ends with Show older. @default 0 */
+  /** Older versions not yet shown; above 0 the list ends with an older-versions row (a chevron, "Show N older versions" and the range it reveals). @default 0 */
   remaining?: number;
-  /** @default "Show {remaining} Older" */
+  /** How many versions the next press reveals; sets N and the range. @default remaining */
+  olderStep?: number;
+  /** Overrides the row's title. @default "Show {N} older versions" */
   olderLabel?: string;
   onShowOlder?: () => void;
   /** Keep the row actions visible instead of on hover or focus. @default false */
@@ -262,19 +264,46 @@ export interface GalleryItem {
   /** Related guides. Grid tiles show their count; list view links each beside the tile. */
   related?: GalleryLink[];
 }
+/**
+ * One artifact's gallery in the Library's design (`DesignLibrary` with `scope="artifact"`): the
+ * same toolbar, bands, tiles and list rows, over that version's preview index. Grouping offers
+ * Section in place of Project and there is no Projects menu. The review toolbar names the
+ * artifact, so no heading or description shows and the docked bar carries no title; `title`
+ * names the region ("{title} gallery") and group bands are level-2 headings.
+ * Each view choice is host-owned when its value is passed and kept internally otherwise
+ * (defaults: Artifact type, Name A–Z, grid).
+ */
 export interface DesignGalleryProps {
+  /** Names the gallery region; not shown. */
   title: string;
+  /** Not shown; kept for existing hosts. */
   description?: string;
-  /** Decorative project cover, hidden on phone widths. */
+  /** Not shown; kept for existing hosts. */
   coverUrl?: string | null;
-  items: GalleryItem[];
+  /** Preview-index items; `createdAt` / `activityAt` (epoch ms) add the date line, date grouping and date sorts. */
+  items: Array<GalleryItem & { createdAt?: number; activityAt?: number }>;
+  /** The clock date buckets read from. @default Date.now() */
+  now?: number;
   query: string;
   onQueryChange: (query: string) => void;
-  /** `'all'` or one GalleryKind; the host owns it so returning restores it. */
+  /** Kinds shown; empty shows every kind. */
+  types?: GalleryKind[];
+  onTypesChange?: (types: GalleryKind[]) => void;
+  /** Earlier single-kind filter: seeds `types` when they are not passed, and hears the single kind chosen (or `'all'`). */
   kind?: 'all' | GalleryKind;
-  onKindChange: (kind: 'all' | GalleryKind) => void;
+  onKindChange?: (kind: 'all' | GalleryKind) => void;
+  /** @default "type" */
+  groupBy?: Exclude<LibraryGrouping, 'project'>;
+  onGroupByChange?: (groupBy: Exclude<LibraryGrouping, 'project'>) => void;
+  /** @default "name" */
+  sortBy?: LibrarySort;
+  sortDir?: 'asc' | 'desc';
+  onSortChange?: (sortBy: LibrarySort, sortDir: 'asc' | 'desc') => void;
   view?: 'grid' | 'list';
   onViewChange: (view: 'grid' | 'list') => void;
+  /** Keys of collapsed groups (`date:…`, `section:…`, `kind:…`). */
+  collapsed?: string[];
+  onCollapsedChange?: (collapsed: string[]) => void;
   /** Open one original document (a tile or a related guide) by its identity as the host's exact selected page. */
   onOpen: (id: string) => void;
   /** Optional shareable URL per identity; plain clicks still call `onOpen`, modified clicks follow the link. */
@@ -285,7 +314,7 @@ export interface DesignGalleryProps {
   scrollTop?: number;
   onScroll?: (scrollTop: number) => void;
   onAnnounce?: (message: string) => void;
-  /** Host content above the controls, such as a compatibility notice. */
+  /** Host content under the heading, such as a compatibility notice. */
   notice?: React.ReactNode;
   phone?: boolean;
 }
@@ -303,6 +332,10 @@ export interface LibraryItem {
   thumbnailUrl?: string | null;
   /** Project name; grouping by project uses it, and tiles name it otherwise. */
   project: string;
+  /** Section heading from the preview index; artifact scope groups by it and tiles name it. */
+  section?: string;
+  /** Related guides: grid tiles show their count, list rows link each one beneath. */
+  related?: GalleryLink[];
   /** Gallery (preview index) title; tiles name it while grouped by project. */
   gallery: string;
   /** Epoch ms of the first version that listed the page. */
@@ -310,7 +343,8 @@ export interface LibraryItem {
   /** Epoch ms of the later of the last version that changed the page and its newest comment. */
   activityAt: number;
 }
-export type LibraryGrouping = 'date' | 'project' | 'type' | 'none';
+/** `section` is offered in artifact scope, in place of `project`. */
+export type LibraryGrouping = 'date' | 'project' | 'section' | 'type' | 'none';
 export type LibrarySort = 'name' | 'created' | 'activity';
 export interface DesignLibraryProps {
   /** @default "Library" */
@@ -355,6 +389,12 @@ export interface DesignLibraryProps {
   onScroll?: (scrollTop: number) => void;
   onAnnounce?: (message: string) => void;
   phone?: boolean;
+  /** `artifact` is one artifact's gallery: Section replaces Project in grouping and tile context, the toolbar is named "Gallery view", and no heading, description or docked title shows (the host toolbar names the artifact). @default "library" */
+  scope?: 'library' | 'artifact';
+  /** Level of the page heading; group bands sit one below (in artifact scope, which has no heading, the bands take this level). @default 1 */
+  headingLevel?: 1 | 2 | 3 | 4 | 5;
+  /** Decorative cover beside the heading, hidden on phone widths. */
+  coverUrl?: string | null;
 }
 export interface GalleryPlaceholderProps {
   kind: GalleryKind;
@@ -510,7 +550,7 @@ export function createReviewUI(react: typeof React, controls: Record<string, Rea
   MentionComposer: React.ComponentType<MentionComposerProps>;
   /** The design system's `MentionText`, re-exported for existing hosts. Requires `MentionText` in `controls`. */
   MentionText: React.ComponentType<MentionTextProps>;
-  /** Requires `SegmentedControl`, `Input`, `GroupBand` and `SurfaceState` in `controls`. */
+  /** The Library in artifact scope; requires the same `controls` as `DesignLibrary`. */
   DesignGallery: React.ComponentType<DesignGalleryProps>;
   /** Requires `Button`, `IconButton`, `Menu`, `Input`, `SegmentedControl`, `GroupBand`, `SurfaceState`, `SectionHeading`, `ScrollDock`, `Toolbar`, `ToolbarSeparator` and `ToolbarSpacer` in `controls`. */
   DesignLibrary: React.ComponentType<DesignLibraryProps>;

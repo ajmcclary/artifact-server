@@ -1,6 +1,6 @@
 # Next steps
 
-Updated October 1, 2026. This is the implementation backlog resulting from
+Updated October 2, 2026. This is the implementation backlog resulting from
 the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
@@ -1933,6 +1933,22 @@ gate.
   narrow desktop widths with the docked title showing, the bar can still wrap to
   two rows with search folded. Hiding the docked title when there is no room
   is a possible follow-up.
+- **Progress, October 2 (design port b200de6 → 35917a3):** an artifact's
+  gallery is now the Library in artifact scope: the shared toolbar (Group, Sort,
+  Types, search, Grid/List; no Projects menu or Refresh), pinned group bands as
+  level-2 headings, the Library's tiles and list rows, and no heading of its own.
+  It groups by Date, Section, Artifact type or None (default Artifact type, Name
+  A–Z), dates each page as of the version shown through the Library's own
+  history read (`pageDatesFor`), counts guides on grid tiles and links them
+  under list rows. The host keeps every view choice per exact version for the
+  page menu's Gallery row and browser Back. The main menu reads Activity,
+  Library, Projects; New project and the artifact list's Project settings
+  button are gone, so Projects opens on the project in view and an empty
+  project's canvas links its settings. The Versions panel shows five versions
+  and ends with a "Show N older versions" row revealing up to four at a time
+  with their range; its header has a labelled Compare button. Remaining: the
+  gallery's date read is not yet bounded by the artifact's comment count the way
+  the Library's is (it reads up to five comment pages per version viewed).
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

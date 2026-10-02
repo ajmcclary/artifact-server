@@ -1,4 +1,4 @@
-import { filterLibrary, groupLibrary, galleryKind, galleryKinds, libraryGroupings, librarySorts, defaultSortDir, libraryDateField } from './page-model.js';
+import { filterLibrary, groupLibrary, galleryKind, galleryKinds, groupingsFor, librarySorts, defaultSortDir, libraryDateField } from './page-model.js';
 import { usDateTime } from './activity-model.js';
 import { createThumbnailUI } from './placeholder-ui.jsx';
 import { createToolbarUI } from './toolbar-ui.jsx';
@@ -7,7 +7,11 @@ import { createToolbarUI } from './toolbar-ui.jsx';
    docks and leads with the title, and each group's band pins beneath it. The host owns every view choice (search,
    projects, types, grouping, sort, layout, collapsed groups, scroll and the returning tile) so a return
    from an opened page restores them. Tiles render no live preview: a captured thumbnail when
-   supplied, otherwise the kind's placeholder sketch. */
+   supplied, otherwise the kind's placeholder sketch.
+   `scope="artifact"` is one artifact's gallery in the same design: Section replaces Project
+   (grouping and the tile's context) and there is no Projects menu. The review toolbar above
+   already names the artifact, so the gallery shows no heading or description and its docked
+   bar no title; the group bands take `headingLevel` themselves. */
 export function createLibraryUI(React, DS) {
   const { IconButton, SegmentedControl, GroupBand, SurfaceState, SectionHeading } = DS;
   const { GalleryThumbnail, GalleryPlaceholder } = createThumbnailUI(React);
@@ -24,13 +28,31 @@ export function createLibraryUI(React, DS) {
     <span style={hidden}>{sortBy === 'name' ? (dir === 'asc' ? ' (A–Z)' : ' (Z–A)') : (dir === 'asc' ? ' (oldest)' : ' (newest)')}</span></>;
   const directions = (sortBy) => (sortBy === 'name' ? [['asc', 'A to Z'], ['desc', 'Z to A']] : [['desc', 'Newest first'], ['asc', 'Oldest first']]);
 
-  function LibraryTile({ item, href, onOpen, list, context, dateLabel, dateText, zebra, first, phone }) {
+  const guideCount = (item) => (item.related?.length ? `${item.related.length} ${item.related.length === 1 ? 'guide' : 'guides'}` : null);
+
+  /* A list row's guides link beside it, as their own exact pages; the row itself is one link,
+     so they sit under it rather than inside. */
+  function RelatedLinks({ item, hrefFor, onOpen, background }) {
+    return <nav aria-label={`Guides for ${item.title}`} style={{ ...secondary, display: 'flex', flexWrap: 'wrap', gap: '2px 10px',
+      padding: '0 14px 8px 126px', marginTop: -2, background }}>
+      {item.related.map((link) => {
+        const id = link.id ?? link.path;
+        const href = hrefFor?.(id);
+        const open = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(id); };
+        return href
+          ? <a key={id} href={href} onClick={open} style={{ color: 'var(--text-link, #0079A8)' }}>{link.title}</a>
+          : <button key={id} type="button" onClick={open} style={{ font: 'inherit', color: 'var(--text-link, #0079A8)', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>{link.title}</button>;
+      })}
+    </nav>;
+  }
+
+  function LibraryTile({ item, href, onOpen, list, context, origin, dateLabel, dateText, zebra, first, phone }) {
     const kind = galleryKind(item.kind);
     const [hover, setHover] = React.useState(false);
     const Element = href ? 'a' : 'button';
     const activate = (event) => { if (href && !plainClick(event)) return; event.preventDefault(); onOpen(libraryId(item)); };
     const common = { ...(href ? { href } : { type: 'button' }), onClick: activate, 'data-gallery-path': libraryId(item),
-      'aria-label': `Open ${item.title} · ${kind.singular} · ${item.project}`,
+      'aria-label': `Open ${item.title} · ${kind.singular}${origin ? ` · ${origin}` : ''}`,
       onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
     const reset = { font: 'inherit', color: 'inherit', textAlign: 'left', textDecoration: 'none', cursor: 'pointer', boxSizing: 'border-box', minWidth: 0 };
     const kindLine = <span><i className={`bi ${kind.icon}`} aria-hidden="true" style={{ marginRight: 6 }} />{kind.singular}</span>;
@@ -44,7 +66,7 @@ export function createLibraryUI(React, DS) {
         <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={strong}>{item.title}</span>
           {item.description && <span style={{ ...secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.description}</span>}
-          {phone && <span style={secondary}>{kind.singular} · {context}</span>}
+          {phone && <span style={secondary}>{[kind.singular, context].filter(Boolean).join(' · ')}</span>}
         </span>
         {column(150, { color: 'var(--text-secondary, #5A6268)' }, kindLine)}
         {column(96, data, `${item.viewport.width} × ${item.viewport.height}`)}
@@ -62,16 +84,22 @@ export function createLibraryUI(React, DS) {
         <span style={{ ...strong, fontSize: 'var(--font-size-sm, 14px)' }}>{item.title}</span>
         {item.description && <span style={{ ...secondary, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.description}</span>}
         <span style={{ ...secondary, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px' }}>
-          {kindLine}<span aria-hidden="true">·</span><span style={{ overflowWrap: 'anywhere' }}>{context}</span></span>
-        <span style={{ ...secondary, marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingTop: 8, borderTop: '1px solid var(--list-divider, #E9ECEF)' }}>
-          <span>{dateLabel}</span><span style={data}>{dateText}</span></span>
+          {kindLine}
+          {[context, guideCount(item)].filter(Boolean).map((text) => <React.Fragment key={text}>
+            <span aria-hidden="true">·</span><span style={{ overflowWrap: 'anywhere' }}>{text}</span></React.Fragment>)}</span>
+        {dateText && <span style={{ ...secondary, marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingTop: 8, borderTop: '1px solid var(--list-divider, #E9ECEF)' }}>
+          <span>{dateLabel}</span><span style={data}>{dateText}</span></span>}
       </span>
     </Element>;
   }
 
   function DesignLibrary({ title = 'Library', description, items, now, notice, query = '', onQueryChange, types = [], onTypesChange, projects = [], onProjectsChange,
     groupBy = 'date', onGroupByChange, sortBy = 'activity', sortDir, onSortChange, view = 'grid', onViewChange,
-    collapsed = [], onCollapsedChange, onRefresh, refreshedAt, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, phone = false }) {
+    collapsed = [], onCollapsedChange, onRefresh, refreshedAt, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, phone = false,
+    scope = 'library', headingLevel = 1, coverUrl }) {
+    const artifactScope = scope === 'artifact';
+    const groupings = groupingsFor(scope);
+    const BandHeading = `h${Math.min(artifactScope ? headingLevel : headingLevel + 1, 6)}`;
     const rootRef = React.useRef(null);
     const typesRef = React.useRef(null);
     const [menu, setMenu] = React.useState(null);
@@ -105,7 +133,7 @@ export function createLibraryUI(React, DS) {
     const menuButton = (id, icon, label) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)} icon={icon} label={label}
       menuLabel={{ group: 'Group by', sort: 'Sort by', projects: 'Projects', types: 'Artifact types' }[id]} minWidth={220} triggerRef={id === 'types' ? typesRef : undefined}
       items={{
-        group: [{ heading: 'Group by' }, ...libraryGroupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
+        group: [{ heading: 'Group by' }, ...groupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
           onClick: () => onGroupByChange(option.id) }))],
         sort: [{ heading: 'Sort by' }, ...librarySorts.map((option) => ({ type: 'radio', label: option.label, checked: sortBy === option.id,
           onClick: () => onSortChange(option.id, defaultSortDir(option.id)) })),
@@ -120,16 +148,22 @@ export function createLibraryUI(React, DS) {
       }[id]} />;
     const chips = projects.map((name) => ({ key: 'project:' + name, label: name, icon: 'bi-folder2', remove: () => setProjects(projects.filter((x) => x !== name)) }))
       .concat(types.map((id) => { const kind = galleryKind(id); return { key: 'type:' + id, label: kind.label, icon: kind.icon, remove: () => setTypes(types.filter((x) => x !== id)) }; }));
-    const groupName = libraryGroupings.find((option) => option.id === groupBy).label;
+    const groupName = (groupings.find((option) => option.id === groupBy) || groupings[0]).label;
 
-    return <section ref={rootRef} aria-label={title} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
+    return <section ref={rootRef} aria-label={artifactScope ? `${title} gallery` : title} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
       style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: `0 ${gutter}px 48px`,
         background: 'var(--surface-canvas, #F1F5F7)', color: 'var(--text-body, #212529)' }}>
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '24px 0 12px' }}>
-        <SectionHeading level={1} size="lg" title={title} subtitle={description} />
-        {notice}
-      </header>
-      <PageToolbar title={title} label="Library view" gutter={gutter} phone={phone} onHeight={setDockHeight}
+      {artifactScope
+        ? (notice ? <div style={{ padding: '12px 0 4px' }}>{notice}</div> : <div style={{ height: 8 }} />)
+        : <header style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '24px 0 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {coverUrl && !phone && <img src={coverUrl} alt="" style={{ flex: 'none', width: 120, aspectRatio: '16 / 10', objectFit: 'cover',
+              borderRadius: 'var(--radius-md, 6px)', border: '1px solid var(--border-color, #DEE2E6)' }} />}
+            <SectionHeading level={headingLevel} size="lg" title={title} subtitle={description} style={{ minWidth: 0, flex: 1 }} />
+          </div>
+          {notice}
+        </header>}
+      <PageToolbar title={artifactScope ? null : title} label={artifactScope ? 'Gallery view' : 'Library view'} gutter={gutter} phone={phone} onHeight={setDockHeight}
         end={<>
           <ToolbarSearch label="Search previews" placeholder="Search previews" value={query}
             onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types, projects); }} />
@@ -149,30 +183,34 @@ export function createLibraryUI(React, DS) {
         chips={chips} onClear={clear} fallbackRef={typesRef} />
       {!matches.length && <div style={{ marginTop: 24 }}>
         <SurfaceState phase="ready" count={0} noun="previews" emptyIcon="bi-collection" emptyTitle="Nothing matches these filters"
-          emptyBody="Clear the search, project and type filters to see every preview." actionLabel="Clear filters" actionIcon="bi-x" onAction={clear} />
+          emptyBody={artifactScope ? 'Clear the search and type filters to see every preview.' : 'Clear the search, project and type filters to see every preview.'} actionLabel="Clear filters" actionIcon="bi-x" onAction={clear} />
       </div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 4 }}>
         {groups.map((group, index) => {
           const open = !collapsed.includes(group.key);
           const id = `library-group-${index}`;
           const toggle = () => onCollapsedChange(open ? collapsed.concat(group.key) : collapsed.filter((key) => key !== group.key));
-          const context = (item) => (groupBy === 'project' ? item.gallery : item.project);
+          /* A tile names where it comes from, unless its band already does. */
+          const origin = (item) => (artifactScope ? item.section : item.project);
+          const context = (item) => (artifactScope ? (groupBy === 'section' ? null : item.section) : groupBy === 'project' ? item.gallery : item.project);
           const tile = (item, i) => <LibraryTile item={item} list={list} phone={phone} href={hrefFor?.(libraryId(item))} onOpen={onOpen}
-            context={context(item)} dateLabel={field === 'createdAt' ? 'Created' : 'Last activity'} dateText={usDateTime(item[field])}
+            context={context(item)} origin={origin(item)} dateLabel={field === 'createdAt' ? 'Created' : 'Last activity'} dateText={usDateTime(item[field])}
             zebra={i % 2 === 1} first={i === 0} />;
           return <section key={group.key} aria-label={group.label}>
             {/* The heading wraps the band's disclosure button; the wrapper pins, since a sticky
                 element only sticks within its parent. */}
-            {group.banded && <h2 style={{ position: 'sticky', top: dockHeight, zIndex: 3, margin: 0, padding: '10px 0',
+            {group.banded && <BandHeading style={{ position: 'sticky', top: dockHeight, zIndex: 3, margin: 0, padding: '10px 0',
               font: 'inherit', background: 'var(--surface-canvas, #F1F5F7)' }}>
               <GroupBand tone="neutral" label={group.label} count={group.items.length} note={group.note || undefined}
                 open={open} onToggle={toggle} controls={id} style={{ borderRadius: 'var(--radius-sm, 4px)' }} />
-            </h2>}
+            </BandHeading>}
             {open && <div id={id} style={{ paddingTop: group.banded ? 2 : 8 }}>
               {list
                 ? <ul style={{ listStyle: 'none', margin: 0, padding: 0, background: 'var(--surface-card, #fff)', border: '1px solid var(--border-color, #DEE2E6)',
                     borderRadius: 'var(--radius-md, 6px)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7,54,82,.1))', overflow: 'hidden' }}>
-                    {group.items.map((item, i) => <li key={libraryId(item)}>{tile(item, i)}</li>)}
+                    {group.items.map((item, i) => <li key={libraryId(item)}>{tile(item, i)}
+                      {item.related?.length > 0 && <RelatedLinks item={item} hrefFor={hrefFor} onOpen={onOpen}
+                        background={i % 2 === 1 ? 'var(--surface-secondary, #F8F9FA)' : 'var(--surface-card, #fff)'} />}</li>)}
                   </ul>
                 : <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 12,
                     gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 256px), 1fr))' }}>
@@ -185,5 +223,21 @@ export function createLibraryUI(React, DS) {
     </section>;
   }
 
-  return { DesignLibrary, GalleryPlaceholder };
+  /* One artifact's gallery: the Library in artifact scope over that version's preview index.
+     Hosts that own every view choice pass them as they do to the Library; any left out are
+     kept here. The earlier single `kind` / `onKindChange` pair still seeds and reports types. */
+  function DesignGallery({ kind, onKindChange, types, onTypesChange, groupBy, onGroupByChange, sortBy, sortDir, onSortChange,
+    collapsed, onCollapsedChange, query = '', ...rest }) {
+    const [local, setLocal] = React.useState(() => ({ types: kind && kind !== 'all' ? [kind] : [], groupBy: 'type', sortBy: 'name', sortDir: 'asc', collapsed: [] }));
+    const set = (patch) => setLocal((current) => ({ ...current, ...patch }));
+    return <DesignLibrary scope="artifact" headingLevel={2} {...rest} query={query}
+      types={types ?? local.types}
+      onTypesChange={(next) => { if (onTypesChange) onTypesChange(next); else set({ types: next }); onKindChange?.(next.length === 1 ? next[0] : 'all'); }}
+      groupBy={groupBy ?? local.groupBy} onGroupByChange={onGroupByChange ?? ((next) => set({ groupBy: next }))}
+      sortBy={sortBy ?? local.sortBy} sortDir={sortBy ? sortDir : local.sortDir}
+      onSortChange={onSortChange ?? ((nextSort, nextDir) => set({ sortBy: nextSort, sortDir: nextDir }))}
+      collapsed={collapsed ?? local.collapsed} onCollapsedChange={onCollapsedChange ?? ((next) => set({ collapsed: next }))} />;
+  }
+
+  return { DesignLibrary, DesignGallery, GalleryPlaceholder };
 }

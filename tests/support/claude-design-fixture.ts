@@ -54,6 +54,7 @@ export async function writePreviewSourceFixture(directory: string): Promise<stri
     writeFile(path.join(directory, "project/thumbnails/app.png"), fixtureThumbnailPng),
     writeFile(path.join(directory, "project/thumbnails/button.webp"), fixtureThumbnailWebp),
     writeFile(path.join(directory, "project/components/Button.README.md"), "# Button\n\nUse one primary button per view.\n"),
+    writeFile(path.join(directory, "project/components/Button.tokens.md"), "# Button tokens\n\nPrimary fill uses the brand green.\n"),
     writeFile(path.join(directory, "artifactserver.previews.json"), JSON.stringify(previewSourceFixture(), null, 2)),
   ]);
   return root;
@@ -70,7 +71,7 @@ export function previewSourceFixture() {
       {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: "project/thumbnails/app.png"},
       {kind: "prototype", section: "Portal", title: "Claimant Portal", path: "project/Portal.dc.html"},
       {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}},
-      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: "project/thumbnails/button.webp", related: [{title: "Button guide", path: "project/components/Button.README.md"}]},
+      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: "project/thumbnails/button.webp", related: [{title: "Button guide", path: "project/components/Button.README.md"}, {title: "Button tokens", path: "project/components/Button.tokens.md"}]},
     ],
   };
 }

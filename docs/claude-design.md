@@ -85,15 +85,19 @@ cover only when it is a supported image. Artifact Server never renders artifact
 code to make thumbnails: producers capture them (the ArkCase Design repository
 uses `npm run build:thumbnails`, with per-item render provenance).
 
-Review opens a version with an index on a native gallery: grouped thumbnail tiles, search, a kind filter and a compact list,
-where each item also links its related guides. Choosing a tile or guide opens
+Review opens a version with an index on a native gallery in the Library's design,
+scoped to that artifact at that version: the Library's toolbar (group by date,
+section, artifact type or none; sort; a Types filter; search; grid or list),
+collapsible group bands and its tiles, each dated as of the version shown. Grid
+tiles count an item's related guides and list rows link them. Choosing a tile or guide opens
 that file as the exact selected artifact, version and path, so browser history,
 Share, comments and Annotate mode refer to that document. Claude Design artboards
 open in the Interactive preview because their runtime loads React at run time;
 Annotate stays one click away. Text files, such as Markdown guides, render as
-plain text up to 1 MiB. While a gallery page is open, **Gallery** in the toolbar
-(or **Back to gallery** in full-screen controls) and browser Back restore the
-search, kind, layout, scroll position and the tile you left from. The index and
+plain text up to 1 MiB. While a gallery page is open, the page menu's **Gallery**
+row (or **Back to gallery** in full-screen controls) and browser Back restore the
+search, types, grouping, sort, layout, collapsed groups, scroll position and
+the tile you left from. The index and
 thumbnails load only through the exact version's authorized version-file and
 media routes and are treated as untrusted data; missing or unusable thumbnails
 and links degrade to placeholders or are omitted. An index Review cannot use falls

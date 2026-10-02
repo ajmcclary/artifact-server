@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 
-import {api, type CommentThread, type CommentThreadPage, type Manifest, type Version} from "@/api/client";
-import {createRequestLimiter, type RequestLimiter} from "@/lib/request-limiter";
+import {api, type Manifest, type Version} from "@/api/client";
+import {createRequestLimiter} from "@/lib/request-limiter";
 
 import {
   maximumPreviewIndexBytes,
@@ -10,31 +10,12 @@ import {
   previewIndexPath,
   type GalleryIndexItem,
 } from "../workspace/design-gallery.ts";
-import {
-  galleryDates,
-  historyWindow,
-  threadActivity,
-  type HistoryVersion,
-  type LibrarySource,
-  type PageDates,
-} from "./design-library.ts";
+import {galleryDates, type LibrarySource, type PageDates} from "./design-library.ts";
+import {pageDatesFor} from "./page-dates.ts";
 
 /** A bounded moving view: the first artifact pages across every project, read four at a time. */
 const maximumArtifactPages = 20;
 const concurrentReads = 4;
-/**
- * Dates read at most this many manifests per gallery: the first version and the
- * newest ones (see `historyWindow`). Longer histories attribute a page created or
- * changed inside the skipped gap to the first kept version after it.
- */
-const maximumHistoryVersions = 40;
-/** Comment pages read per gallery; threads past them do not count toward activity. */
-const maximumCommentPages = 5;
-const commentPageSize = 100;
-/** Threads whose replies are read exactly; the rest use their `updatedAt`, which every reply touches. */
-const maximumReplyReads = 40;
-const maximumCachedManifests = 4_000;
-const maximumCachedReplies = 4_000;
 
 /** One project the library reads. */
 export interface LibraryProject {
@@ -66,24 +47,7 @@ export type LibraryState =
 
 // Kept for the session so browser Back returns to the same moving view without refetching.
 const loadedLibraries = new Map<string, LoadedLibrary>();
-// Version manifests are immutable, so a version's page digests are read once per session.
-const manifestDigests = new Map<string, ReadonlyMap<string, string>>();
-// A thread's replies cannot change without moving its updatedAt, so that pair keys them.
-const replyTimes = new Map<string, readonly string[]>();
-
 const byName = (left: string, right: string) => left.localeCompare(right);
-
-function remember<V>(cache: Map<string, V>, key: string, value: V, capacity: number): V {
-  if (!cache.has(key) && cache.size >= capacity) {
-    const oldest = cache.keys().next();
-    if (oldest.done !== true) cache.delete(oldest.value);
-  }
-  cache.set(key, value);
-  return value;
-}
-
-const digestsOf = (manifest: Manifest): ReadonlyMap<string, string> =>
-  new Map(manifest.entries.map((entry) => [entry.path, entry.sha256]));
 
 interface ListedArtifact {
   readonly commentCount: number;
@@ -97,74 +61,6 @@ interface FoundGallery {
   readonly current: Version;
   readonly indexTitle: string;
   readonly items: readonly GalleryIndexItem[];
-}
-
-/** Every thread on this artifact, up to the comment page bound. */
-async function readThreads(limit: RequestLimiter, artifact: ListedArtifact, wanted: () => boolean): Promise<CommentThread[]> {
-  const threads: CommentThread[] = [];
-  let cursor: string | null = null;
-  for (let page = 0; page < maximumCommentPages; page += 1) {
-    const after: string | null = cursor;
-    // eslint-disable-next-line no-await-in-loop -- each page names the next cursor
-    const read: CommentThreadPage = await limit(() => api.comments(artifact.project.id, artifact.id, {
-      cursor: after, dispatched: "include", limit: commentPageSize, revision: null, since: null, state: null, versionId: null,
-    }));
-    threads.push(...read.items);
-    cursor = read.nextCursor;
-    if (cursor === null || !wanted()) break;
-  }
-  return threads;
-}
-
-/**
- * Dates for one gallery's pages from server records: each kept version's manifest and
- * every comment and reply on a page, both limited to versions up to the current one.
- */
-async function readDates(
-  limit: RequestLimiter,
-  gallery: FoundGallery,
-  currentManifest: Manifest,
-  wanted: () => boolean,
-): Promise<ReadonlyMap<string, PageDates> | null> {
-  const {artifact, current} = gallery;
-  const projectId = artifact.project.id;
-  remember(manifestDigests, `${artifact.id}\u001f${current.id}`, digestsOf(currentManifest), maximumCachedManifests);
-  const listed = await limit(() => api.versions(projectId, artifact.id));
-  if (!wanted()) return null;
-  const readable = listed.map(({version}) => version)
-    .filter((version) => version.number <= current.number)
-    .toSorted((left, right) => left.number - right.number);
-  const history = await Promise.all(historyWindow(readable, maximumHistoryVersions).map(async (version): Promise<HistoryVersion> => {
-    const key = `${artifact.id}\u001f${version.id}`;
-    const files = manifestDigests.get(key)
-      ?? remember(manifestDigests, key, digestsOf((await limit(() => api.version(projectId, artifact.id, version.id))).manifest), maximumCachedManifests);
-    return {at: Date.parse(version.createdAt), files, number: version.number};
-  }));
-  if (!wanted()) return null;
-  const paths = new Set(gallery.items.map((item) => item.path));
-  const versions = new Set(readable.map((version) => version.id));
-  const threads = artifact.commentCount === 0
-    ? []
-    : (await readThreads(limit, artifact, wanted))
-      .filter((thread) => thread.path !== null && paths.has(thread.path) && versions.has(thread.versionId));
-  if (!wanted()) return null;
-  const replied = threads.filter((thread) => thread.replyCount > 0)
-    .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .slice(0, maximumReplyReads);
-  const replies = new Map(await Promise.all(replied.map(async (thread) => {
-    const key = `${thread.id}\u001f${thread.updatedAt}`;
-    const times = replyTimes.get(key) ?? remember(replyTimes, key,
-      (await limit(() => api.comment(projectId, artifact.id, thread.id))).replies.map((reply) => reply.createdAt),
-      maximumCachedReplies);
-    return [thread.id, times] as const;
-  })));
-  if (!wanted()) return null;
-  return galleryDates(
-    history,
-    [...paths],
-    threads.map((thread) => threadActivity(thread, replies.get(thread.id) ?? null)),
-    Date.parse(current.createdAt),
-  );
 }
 
 /**
@@ -223,7 +119,14 @@ async function loadLibrary(projects: readonly LibraryProject[], wanted: () => bo
     const {gallery} = found;
     let dates: ReadonlyMap<string, PageDates> | null;
     try {
-      dates = await readDates(limit, gallery, found.manifest, wanted);
+      dates = await pageDatesFor(limit, {
+        artifactId: artifact.id,
+        commentCount: artifact.commentCount,
+        manifest: found.manifest,
+        paths: gallery.items.map((item) => item.path),
+        projectId,
+        version: gallery.current,
+      }, wanted);
     } catch {
       // The gallery stays readable; only its dates fall back to the current version.
       undated.push(artifact.name);

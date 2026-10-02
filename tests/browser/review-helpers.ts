@@ -272,3 +272,21 @@ export function toast(page: Page, text: string | RegExp): Locator {
 export async function waitForSettledPaint(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
 }
+
+/**
+ * Type into a page toolbar's "Search previews" field (the Library or an artifact's gallery).
+ * On a narrow row the search folds to an icon; the helper opens its popover and closes it
+ * again, so callers see the same filtered view either way.
+ */
+export async function searchPreviews(page: Page, toolbar: Locator, text: string): Promise<void> {
+  const field = toolbar.getByRole("searchbox", {name: "Search previews"});
+  if (await field.isVisible()) {
+    await field.fill(text);
+    return;
+  }
+  await toolbar.getByRole("button", {exact: true, name: "Search previews"}).click();
+  const popover = page.getByRole("dialog", {name: "Search previews"});
+  await popover.getByRole("searchbox", {name: "Search previews"}).fill(text);
+  await page.keyboard.press("Escape");
+  await expect(popover).toHaveCount(0);
+}

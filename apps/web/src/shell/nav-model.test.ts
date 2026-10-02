@@ -5,7 +5,6 @@ import {
   administrationHref,
   canManageProjects,
   isInstallationAdministrator,
-  NEW_PROJECT_NAV_ID,
   shellActiveLink,
   shellNavItems,
   type ShellNavInput,
@@ -36,7 +35,6 @@ function principal(overrides: Partial<Principal> = {}): Principal {
 const reviewInput: ShellNavInput = {
   activeProjectId: null,
   activeSettings: null,
-  canCreateProjects: true,
   isAdministrator: true,
   libraryActive: false,
   needsYou: null,
@@ -50,28 +48,27 @@ const reviewInput: ShellNavInput = {
 };
 
 describe("shellNavItems in review mode", () => {
-  it("ACT-005: lists Activity, Projects and the Library, then project folders, New project and administrator Tools", () => {
+  it("ACT-005: lists Activity, the Library and Projects, then project folders and administrator Tools", () => {
     expect(shellNavItems(reviewInput)).toEqual([
       {group: "Review", icon: "bi-inbox", id: "activity", label: "Activity", link: "/review"},
-      {icon: "bi-briefcase", id: "projects", label: "Projects", link: "/review/projects"},
       {icon: "bi-collection", id: "library", label: "Library", link: "/review/library"},
+      {icon: "bi-briefcase", id: "projects", label: "Projects", link: "/review/projects"},
       {group: "Projects", icon: "bi-folder2", id: "project:prj_b", label: "Beta", link: "/review?project=prj_b"},
       {icon: "bi-folder2", id: "project:prj_default", label: "Default", link: "/review?project=prj_default"},
       {icon: "bi-archive", id: "project:prj_old", label: "Zeta", link: "/review?project=prj_old"},
-      {icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
       {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: "/review/settings/members"},
     ]);
   });
 
   it("ACT-005: gives a non-administrator MCP & WebMCP in Tools instead of Administration", () => {
-    const items = shellNavItems({...reviewInput, canCreateProjects: false, isAdministrator: false});
-    expect(items.map((item) => item.label)).toEqual(["Activity", "Projects", "Library", "Beta", "Default", "Zeta", "MCP & WebMCP"]);
+    const items = shellNavItems({...reviewInput, isAdministrator: false});
+    expect(items.map((item) => item.label)).toEqual(["Activity", "Library", "Projects", "Beta", "Default", "Zeta", "MCP & WebMCP"]);
     expect(items.at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
   });
 
-  it("starts the Projects group with New project when there are no projects", () => {
+  it("offers no New project row: creating a project starts from the Projects screen", () => {
+    expect(shellNavItems(reviewInput).map((item) => item.label)).not.toContain("New project");
     expect(shellNavItems({...reviewInput, projects: []}).slice(3)).toEqual([
-      {group: "Projects", icon: "bi-plus-lg", id: NEW_PROJECT_NAV_ID, label: "New project"},
       {group: "Tools", icon: "bi-gear", id: "administration", label: "Administration", link: "/review/settings/members"},
     ]);
   });
@@ -82,8 +79,9 @@ describe("shellActiveLink", () => {
     expect(shellActiveLink({...reviewInput, activityActive: true})).toBe("/review");
     expect(shellActiveLink({...reviewInput, projectsActive: true})).toBe("/review/projects");
     // The Projects screen marks the Projects row, whichever project it has selected.
-    expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", projectsActive: true}))
-      .toBe("/review/projects");
+    const onProjects = {...reviewInput, activeProjectId: "prj_default", projectsActive: true};
+    expect(shellActiveLink(onProjects)).toBe("/review/projects?project=prj_default");
+    expect(shellNavItems(onProjects).find((item) => item.id === "projects")?.link).toBe(shellActiveLink(onProjects));
     expect(shellActiveLink({...reviewInput, libraryActive: true})).toBe("/review/library");
     expect(shellActiveLink({...reviewInput, activeProjectId: "prj_default", libraryActive: true})).toBe("/review/library");
     // A project folder opens that project's artifacts, and is current while they show.
@@ -91,6 +89,9 @@ describe("shellActiveLink", () => {
       .toBe("/review?project=prj_default");
     expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "library")?.link)
       .toBe("/review/library");
+    // Projects opens on the project in view, where its settings show beside the list.
+    expect(shellNavItems({...reviewInput, activeProjectId: "prj_default"}).find((item) => item.id === "projects")?.link)
+      .toBe("/review/projects?project=prj_default");
     expect(shellActiveLink(reviewInput)).toBe("");
   });
 });
@@ -124,7 +125,7 @@ describe("settings routes keep the review navigation", () => {
   });
 
   it("marks MCP & WebMCP current for a non-administrator on the MCP screen", () => {
-    const member = {...reviewInput, activeSettings: "mcp" as const, canCreateProjects: false, isAdministrator: false};
+    const member = {...reviewInput, activeSettings: "mcp" as const, isAdministrator: false};
     expect(shellNavItems(member).at(-1)).toEqual({group: "Tools", icon: "bi-plug", id: "mcp", label: "MCP & WebMCP", link: "/review/settings/mcp"});
     expect(shellActiveLink(member)).toBe("/review/settings/mcp");
   });

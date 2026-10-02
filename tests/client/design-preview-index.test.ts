@@ -110,7 +110,7 @@ test("DSN-003-B: a producer preview source publishes a versioned index, typed th
       {kind: "prototype", section: "Prototypes", title: "Examiner App", description: "Claim record with panels.", path: "project/App.dc.html", viewport: {width: 1440, height: 900}, thumbnail: {path: "project/thumbnails/app.png", mediaType: "image/png"}, related: []},
       {kind: "prototype", section: "Portal", title: "Claimant Portal", description: "", path: "project/Portal.dc.html", viewport: {width: 1280, height: 900}, thumbnail: null, related: []},
       {kind: "template", section: "Starter templates", title: "Screen", description: "A complete screen", path: "project/templates/Screen.dc.html", viewport: {width: 1100, height: 900}, thumbnail: null, related: []},
-      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: {path: "project/thumbnails/button.webp", mediaType: "image/webp"}, related: [{title: "Button guide", path: "project/components/Button.README.md"}]},
+      {kind: "component", section: "Actions", title: "Primary button", description: "An interactive component", path: "project/components/buttons.card.html", viewport: {width: 640, height: 110}, thumbnail: {path: "project/thumbnails/button.webp", mediaType: "image/webp"}, related: [{title: "Button guide", path: "project/components/Button.README.md"}, {title: "Button tokens", path: "project/components/Button.tokens.md"}]},
     ],
   });
 

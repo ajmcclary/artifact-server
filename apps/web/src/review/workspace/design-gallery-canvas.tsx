@@ -11,6 +11,7 @@ import {
   type GalleryViewState,
 } from "./design-gallery.ts";
 import type {GalleryCrumb} from "./review-toolbar.tsx";
+import {usePageDates} from "./use-page-dates.ts";
 import {usePreviewIndex} from "./use-preview-index.ts";
 
 /** What the canvas draws for a design version: the gallery, a return control or a notice. */
@@ -28,10 +29,11 @@ const loadingStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"}
 
 /**
  * Show a version's native gallery when Review opens a version with a preview index without
- * an explicit path. Opening a tile
- * is ordinary exact-page navigation (`onNavigate(path)`); returning navigates to the
- * entry (`onNavigate(null)`). Query, kind, layout, scroll and the returning tile are
- * kept per exact version, so browser Back and the page menu's Gallery row land where they left.
+ * an explicit path: the Library's design scoped to this artifact at this version. Opening a
+ * tile is ordinary exact-page navigation (`onNavigate(path)`); returning navigates to the
+ * entry (`onNavigate(null)`). Search, types, grouping, sort, layout, collapsed groups, scroll
+ * and the returning tile are kept per exact version, so browser Back and the page menu's
+ * Gallery row land where they left.
  */
 export function useDesignGalleryCanvas({
   announce,
@@ -55,11 +57,14 @@ export function useDesignGalleryCanvas({
   const index = usePreviewIndex(projectId, artifactId, version);
   const states = useRef(new Map<string, GalleryViewState>());
   const [, setRevision] = useState(0);
-  if (version === null || artifactId === null || index.status === "absent") return noGallery;
-  const versionId = version.version.id;
   // The gallery is the version's landing view. An explicit path, including the entry
   // page or a legacy catalog file, is an exact page like any other.
   const onEntry = selectedPath === null;
+  // Dates are read as of this version, only while its gallery shows.
+  const dates = usePageDates(projectId, artifactId, version,
+    onEntry && index.status === "ready" ? index.items.map((item) => item.path) : null);
+  if (version === null || artifactId === null || index.status === "absent") return noGallery;
+  const versionId = version.version.id;
   if (index.status === "loading") {
     return onEntry
       ? {
@@ -102,9 +107,9 @@ export function useDesignGalleryCanvas({
       title: index.title,
       content: (
         <DesignGallery
-          coverUrl={media(index.coverPath)}
-          description={index.description}
+          collapsed={[...state.collapsed]}
           focusPath={state.focusPath}
+          groupBy={state.groupBy}
           hrefFor={(path) => workspaceHref({
             artifactId,
             path,
@@ -114,6 +119,7 @@ export function useDesignGalleryCanvas({
             view: focusMode ? "focus" : null,
           })}
           items={index.items.map((item) => ({
+            ...dates?.get(item.path),
             description: item.description,
             kind: item.kind,
             path: item.path,
@@ -124,20 +130,26 @@ export function useDesignGalleryCanvas({
             viewport: item.viewport,
           }))}
           key={versionId}
-          kind={state.kind}
+          now={Date.now()}
           onAnnounce={announce}
-          onKindChange={(kind) => update({kind}, true)}
+          onCollapsedChange={(collapsed) => update({collapsed}, true)}
+          onGroupByChange={(groupBy) => update({groupBy}, true)}
           onOpen={(path) => {
             update({focusPath: path}, false);
             onNavigate(path);
           }}
           onQueryChange={(query) => update({query}, true)}
           onScroll={(scrollTop) => update({scrollTop}, false)}
+          onSortChange={(sortBy, sortDir) => update({sortBy, sortDir}, true)}
+          onTypesChange={(types) => update({types}, true)}
           onViewChange={(view) => update({view}, true)}
           phone={phone}
           query={state.query}
           scrollTop={state.scrollTop}
+          sortBy={state.sortBy}
+          sortDir={state.sortDir}
           title={index.title}
+          types={[...state.types]}
           view={state.view}
         />
       ),

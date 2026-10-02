@@ -160,11 +160,14 @@ export function groupGallery(items) {
 /* Library. Items carry `createdAt`, the first version that listed the page, and
    `activityAt`, the later of the last version that changed its bytes and its newest comment
    (epoch ms the host derives from version and conversation records). Grouping by date reads
-   the field the sort uses: creation when sorting by Date created, otherwise last activity. */
+   the field the sort uses: creation when sorting by Date created, otherwise last activity.
+   One artifact's gallery uses the same view with Section in place of Project. */
 export const libraryGroupings = [
-  { id: 'date', label: 'Date' }, { id: 'project', label: 'Project' },
+  { id: 'date', label: 'Date' }, { id: 'project', label: 'Project' }, { id: 'section', label: 'Section' },
   { id: 'type', label: 'Artifact type' }, { id: 'none', label: 'None' },
 ];
+export const groupingsFor = (scope = 'library') => libraryGroupings
+  .filter((option) => option.id !== (scope === 'artifact' ? 'project' : 'section'));
 export const librarySorts = [
   { id: 'name', label: 'Name' }, { id: 'created', label: 'Date created' }, { id: 'activity', label: 'Last activity' },
 ];
@@ -195,7 +198,7 @@ export function filterLibrary(items, query = '', types = [], projects = []) {
   const q = query.trim().toLocaleLowerCase();
   return items.filter((item) => (!types.length || types.includes(item.kind))
     && (!projects.length || projects.includes(item.project))
-    && `${item.title} ${item.description || ''} ${item.path} ${item.project || ''} ${item.gallery || ''} ${galleryKind(item.kind).label} ${galleryKind(item.kind).singular}`
+    && `${item.title} ${item.description || ''} ${item.path} ${item.project || ''} ${item.gallery || ''} ${item.section || ''} ${galleryKind(item.kind).label} ${galleryKind(item.kind).singular}`
       .toLocaleLowerCase().includes(q));
 }
 
@@ -222,6 +225,11 @@ export function groupLibrary(items, { groupBy = 'date', sortBy = 'activity', dir
       const galleries = new Set(inProject.map((item) => item.gallery)).size;
       return { key: `project:${project}`, label: project, note: `${galleries} ${galleries === 1 ? 'gallery' : 'galleries'}`, banded: true, items: inProject };
     });
+  }
+  if (groupBy === 'section') {
+    // Sections keep the publication's first-seen order; the sort applies within each.
+    return [...new Set(items.map((item) => item.section))].map((section) => ({ key: `section:${section}`, label: section, note: '', banded: true,
+      items: sorted.filter((item) => item.section === section) }));
   }
   if (groupBy === 'type') {
     return galleryKinds.map((kind) => ({ key: `kind:${kind.id}`, label: kind.label, note: '', banded: true,
