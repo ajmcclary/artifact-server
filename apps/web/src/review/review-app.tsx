@@ -23,7 +23,7 @@ import {
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
-import {dismissInnermost, IconButton, SurfaceState} from "@/arkcase";
+import {dismissInnermost, IconButton, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
@@ -445,6 +445,12 @@ function ProjectReview({
   const [focusControlsCollapsed, setFocusControlsCollapsed] = useState(false);
   const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(true);
   const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
+  // The artboard width lives in the toolbar's More menu; the presets offered are those the canvas has room for.
+  const canvasSlotRef = useRef<HTMLDivElement | null>(null);
+  const {width: canvasSlotWidth} = useElementSize(canvasSlotRef);
+  const artboardPresets = previewPresets(Math.max(0, canvasSlotWidth - 24));
+  const [artboardKey, setArtboardKey] = useState("Fit");
+  const artboardPreset = artboardPresets.find(({key}) => key === artboardKey) ?? artboardPresets[0];
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const commentsToggleRef = useRef<HTMLSpanElement | null>(null);
   const restoreControlsRef = useRef<HTMLSpanElement | null>(null);
@@ -964,14 +970,8 @@ function ProjectReview({
     }
     return saved;
   };
-  const previousArtifact = selectedIndex <= 0 ? null : (): void => {
-    const previous = catalogItems[selectedIndex - 1];
-    if (previous !== undefined) selectArtifact(previous.artifact.id, previous.artifact.currentVersionId);
-  };
-  const nextArtifact = selectedIndex < 0 || selectedIndex >= catalogItems.length - 1 ? null : (): void => {
-    const next = catalogItems[selectedIndex + 1];
-    if (next !== undefined) selectArtifact(next.artifact.id, next.artifact.currentVersionId);
-  };
+
+  const reloadComments = (): void => void (commentsInspectorRef.current?.reload() ?? comments.reload());
 
   const changeAccess = async (next: AccessSetting): Promise<void> => {
     if (details === null) return;
@@ -1171,6 +1171,11 @@ function ProjectReview({
         {focusMode ? null : (
           <ReviewToolbar
             annotate={annotateToggle}
+            artboard={{
+              onChange: setArtboardKey,
+              presets: artboardPresets,
+              value: artboardPreset?.key ?? "Fit",
+            }}
             artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
             canManage={canManageArtifacts}
             details={details}
@@ -1187,6 +1192,7 @@ function ProjectReview({
             onOpenLive={openLinkedArtifact}
             onOpenRawArtifact={() => void openRawArtifact()}
             onOpenVersionsPanel={() => openInspector("versions")}
+            onReload={reloadComments}
             onSelectPath={selectManifestPath}
             onSelectVersion={(versionId) => {
               setDetailError(null);
@@ -1196,6 +1202,7 @@ function ProjectReview({
             opening={opening}
             phone={phone}
             projectName={selectedProject?.name ?? "project"}
+            reloading={comments.loading}
             selectedPath={selectedPath}
             selectedVersion={selectedVersion}
             share={sharePopover("toolbar")}
@@ -1227,7 +1234,7 @@ function ProjectReview({
                 versions={versions}
               />
             )}
-            <div style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
+            <div ref={canvasSlotRef} style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
               <PreviewCanvas
                 accessSetting={details?.artifact.accessSetting ?? "account_required"}
                 annotateModeActive={htmlAnnotateModeActive}
@@ -1235,27 +1242,23 @@ function ProjectReview({
                 artifactId={selectedArtifactId}
                 artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
                 chrome={focusMode ? "focus" : "workspace"}
-                commentsLoading={comments.loading}
                 detailError={detailError}
                 awaitingCatalog={catalog.loading && catalog.items.length === 0}
                 detailLoading={detailLoading}
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
+                frameWidth={artboardPreset?.px ?? null}
                 gallery={galleryCanvas.gallery}
                 galleryNotice={galleryCanvas.galleryNotice}
                 hasDetails={details !== null}
                 isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
                 modeControlsTarget={previewModeTarget}
                 onAnnotateModeChange={setHtmlAnnotateModeActive}
-                onNextArtifact={nextArtifact}
                 onOpenRawArtifact={() => void openRawArtifact()}
-                onPreviousArtifact={previousArtifact}
-                onReload={() => void (commentsInspectorRef.current?.reload() ?? comments.reload())}
                 onSelectAnnotation={selectAnnotation}
                 onSubmitAnnotation={submitAnnotation}
                 onUnanchoredChange={comments.updateUnanchored}
                 onViewModeChange={setHtmlViewerMode}
                 opening={opening}
-                position={{index: selectedIndex, total: catalogItems.length}}
                 projectId={projectId}
                 readOnly={!canComment}
                 selectedPath={selectedPath}

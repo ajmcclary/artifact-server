@@ -7,6 +7,8 @@ import {
   ConfirmDialog,
   IconButton,
   Menu,
+  type MenuItem,
+  type PreviewPreset,
   StatusPill,
   Toolbar,
   ToolbarSeparator,
@@ -27,6 +29,13 @@ export interface AnnotateToggle {
   readonly onToggle: () => void;
 }
 
+/** The artboard widths that fit the canvas, picked from the More menu. */
+export interface ArtboardWidth {
+  readonly onChange: (key: string) => void;
+  readonly presets: readonly PreviewPreset[];
+  readonly value: string;
+}
+
 /** A version with a design gallery: the page menu pins a Gallery row that returns to it. */
 export interface GalleryCrumb {
   readonly count: number;
@@ -37,6 +46,7 @@ export interface GalleryCrumb {
 
 export interface ReviewToolbarProps {
   readonly annotate: AnnotateToggle;
+  readonly artboard: ArtboardWidth;
   readonly artifactName: string;
   readonly canManage: boolean;
   readonly details: ArtifactDetails | null;
@@ -54,11 +64,14 @@ export interface ReviewToolbarProps {
   readonly onOpenLive: () => Promise<void>;
   readonly onOpenRawArtifact: () => void;
   readonly onOpenVersionsPanel: () => void;
+  /** Refreshes threads, sends and presence for the shown version. */
+  readonly onReload: () => void;
   readonly onSelectPath: (path: string) => void;
   readonly onSelectVersion: (versionId: string) => void;
   readonly opening: boolean;
   readonly phone: boolean;
   readonly projectName: string;
+  readonly reloading: boolean;
   readonly selectedPath: string | null;
   readonly selectedVersion: ArtifactVersion | null;
   /** The Share control for this toolbar instance. */
@@ -95,6 +108,7 @@ const driftTags = {
  */
 export function ReviewToolbar({
   annotate,
+  artboard,
   artifactName,
   canManage,
   details,
@@ -111,11 +125,13 @@ export function ReviewToolbar({
   onOpenLive,
   onOpenRawArtifact,
   onOpenVersionsPanel,
+  onReload,
   onSelectPath,
   onSelectVersion,
   opening,
   phone,
   projectName,
+  reloading,
   selectedPath,
   selectedVersion,
   share,
@@ -143,6 +159,17 @@ export function ReviewToolbar({
   const pagePath = selectedVersion === null ? null : selectedPath ?? selectedVersion.manifest.entryPath;
   const pageName = galleryShown ? "Gallery" : pagePath?.split("/").pop() ?? "";
   const byNumber = new Map(versions.map(({version}) => [version.number, version.id]));
+  // A lone Fit has nothing to choose between, so the width group only appears with room for another.
+  const artboardItems: MenuItem[] = artboard.presets.length < 2 ? [] : [
+    {divider: true},
+    {heading: "Artboard width"},
+    ...artboard.presets.map((preset): MenuItem => ({
+      checked: preset.key === artboard.value,
+      label: preset.px === null ? "Fit the column" : `${preset.px} pixels wide`,
+      onClick: () => artboard.onChange(preset.key),
+      type: "radio",
+    })),
+  ];
 
   const driftActions = [
     ...(canManage && binding?.status === "modified" ? [{
@@ -341,6 +368,13 @@ export function ReviewToolbar({
               {heading: "This artifact"},
               {icon: "bi-clock-history", label: "Comparison and history", onClick: onOpenComparison},
               {icon: "bi-layers", label: "Open Versions Panel", onClick: onOpenVersionsPanel},
+              {
+                disabled: reloading || selectedVersion === null,
+                icon: "bi-arrow-clockwise",
+                label: reloading ? "Loading…" : "Reload",
+                onClick: onReload,
+              },
+              ...artboardItems,
             ]}
             label="More artifact actions"
             onClose={() => setMoreOpen(false)}

@@ -223,6 +223,24 @@ export async function expectGalleryReturn(page: Page, offered: boolean): Promise
   await expect(menu).toHaveCount(0);
 }
 
+/** Open the toolbar's More menu and return it. */
+export async function openMoreMenu(page: Page): Promise<Locator> {
+  const menu = page.getByRole("menu", {name: "More artifact actions"});
+  if (!(await menu.isVisible())) {
+    await page.getByRole("toolbar", {exact: true, name: "Artifact"})
+      .getByRole("button", {name: "More artifact actions"}).click();
+  }
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Refresh threads, sends and presence through the More menu's Reload. */
+export async function reloadReview(page: Page): Promise<void> {
+  const menu = await openMoreMenu(page);
+  await menu.getByRole("menuitem", {exact: true, name: "Reload"}).click();
+  await expect(menu).toHaveCount(0);
+}
+
 /** Open Comparison and history from the toolbar's More menu and choose one tab. */
 export async function openComparison(page: Page, tab: "Compare" | "Activity"): Promise<void> {
   const view = page.getByRole("region", {name: "Comparison and history"});

@@ -1,4 +1,4 @@
-import {expect, test} from "@playwright/test";
+import {expect, type Page, test} from "@playwright/test";
 
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
@@ -8,6 +8,14 @@ import {
 } from "./browser-fixture.js";
 import {openInspectorTab, reviewHref, selectThread, versionsList} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
+
+/** J and K step the catalog; drop focus from any composer first so the shortcut reaches the workspace. */
+const stepArtifact = async (page: Page, key: "j" | "k"): Promise<void> => {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.keyboard.press(key);
+};
 
 const pageHtml = (title: string): string =>
   `<!doctype html><html lang="en"><head><title>${title}</title></head>`
@@ -104,9 +112,9 @@ test.describe("comment draft durability", () => {
 
       // Artifact navigation and back (the newer "Other fixture" sorts first,
       // so the drafted artifact is the last catalog entry).
-      await page.getByRole("button", {name: "Previous artifact"}).click();
+      await stepArtifact(page, "k");
       await expect(page).not.toHaveURL(new RegExp(`artifact=${artifactId}`, "u"));
-      await page.getByRole("button", {name: "Next artifact"}).click();
+      await stepArtifact(page, "j");
       await expectBothDrafts();
 
       // A full reload restores both from the mirror, marker included.

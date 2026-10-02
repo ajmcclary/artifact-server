@@ -14,7 +14,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {inspectorTabButton, openInspectorTab, openReview, pageCrumb, previewFrame, versionCrumb} from "./review-helpers.js";
+import {inspectorTabButton, openInspectorTab, openMoreMenu, openReview, pageCrumb, previewFrame, versionCrumb} from "./review-helpers.js";
 
 function catalogPanel(page: Page) {
   return page.locator('[data-panel="artifact-catalog"]');
@@ -261,6 +261,7 @@ test.describe("Artifact review workspace layout", () => {
       await expect(toolbar.getByRole("button", {name: /^(Open|Close) inspector$/u})).toHaveCount(0);
       await toolbar.getByRole("button", {name: "More artifact actions"}).click();
       await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: "Comparison and history"})).toBeVisible();
+      await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {exact: true, name: "Reload"})).toBeEnabled();
       await expect(page.getByRole("menu", {name: "More artifact actions"}).getByRole("menuitem", {name: /Delete/u})).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu", {name: "More artifact actions"})).toHaveCount(0);
@@ -275,7 +276,7 @@ test.describe("Artifact review workspace layout", () => {
       await stopBrowserFixture(fixture);
     }
   });
-  test("CMT-015-B CMT-015-F: the canvas offers only the preview widths that fit its column", async ({browser}) => {
+  test("CMT-015-B CMT-015-F: the More menu offers only the artboard widths that fit the canvas", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const published = await publishNew(fixture.server, fixture.installation, {
@@ -290,24 +291,31 @@ test.describe("Artifact review workspace layout", () => {
         versionId: published.body.version.id,
       });
       const page = fixture.page;
-      const widths = page.getByRole("toolbar", {name: "Preview controls"})
-        .getByRole("group", {name: "Preview width"});
       const region = page.getByRole("region", {name: "Artifact preview"});
-      await expect(widths.getByRole("button", {name: "Fit the column"})).toHaveAttribute("aria-pressed", "true");
+      // The artboard widths live in the toolbar's More menu; the canvas has no footer.
+      await expect(page.getByRole("toolbar", {name: "Preview controls"})).toHaveCount(0);
+      let menu = await openMoreMenu(page);
+      const width = (name: string) => menu.getByRole("menuitemradio", {name});
+      await expect(width("Fit the column")).toHaveAttribute("aria-checked", "true");
       await expect(region).toHaveAttribute("data-preview-frame", "fit");
-      await expect(widths.getByRole("button", {name: "1440 pixels wide"})).toHaveCount(0);
+      await expect(width("1440 pixels wide")).toHaveCount(0);
 
-      await widths.getByRole("button", {name: "390 pixels wide"}).click();
+      await width("390 pixels wide").click();
+      await expect(menu).toHaveCount(0);
       await expect(region).toHaveAttribute("data-preview-frame", "390");
       await expect.poll(async () => Math.round((await region.boundingBox())?.width ?? 0)).toBe(390);
       await expect(previewFrame(page).getByRole("heading", {name: "Preset fixture content"})).toBeVisible();
+      menu = await openMoreMenu(page);
+      await expect(width("390 pixels wide")).toHaveAttribute("aria-checked", "true");
+      await page.keyboard.press("Escape");
 
       // A wide screen with both panes put away has room for the desktop preset.
       await page.setViewportSize({height: 1000, width: 1920});
       await inspectorTabButton(page, "Comments").click();
       await page.getByRole("complementary", {name: "Artifact catalog"})
         .getByRole("button", {name: "Unpin the artifact catalog"}).click();
-      await widths.getByRole("button", {name: "1440 pixels wide"}).click();
+      menu = await openMoreMenu(page);
+      await width("1440 pixels wide").click();
       await expect(region).toHaveAttribute("data-preview-frame", "1440");
     } finally {
       await stopBrowserFixture(fixture);

@@ -15,15 +15,10 @@ import {
   Alert,
   Button,
   FieldGrid,
-  IconButton,
   onThemeChange,
   PreviewFrame,
-  previewPresets,
   SegmentedControl,
   SurfaceState,
-  Toolbar,
-  ToolbarSpacer,
-  useElementSize,
 } from "@/arkcase";
 import {formatBytes} from "@/lib/presentation";
 import {
@@ -66,15 +61,16 @@ export interface PreviewCanvasProps {
   readonly annotations: readonly ReviewAnnotation[];
   readonly artifactId: string | null;
   readonly artifactName: string;
-  /** `focus` fills the full-screen layer: no width presets, no controls, no frame border. */
+  /** `focus` fills the full-screen layer: always fit, no frame border. */
   readonly chrome: "focus" | "workspace";
-  readonly commentsLoading: boolean;
   readonly detailError: Error | null;
   readonly detailLoading: boolean;
   /** No artifact is named yet and the catalog's first page is still being read. */
   readonly awaitingCatalog: boolean;
   /** Shown instead of "Select an artifact" when the project has nothing published yet. */
   readonly emptyProject: ReactNode;
+  /** The artboard width chosen in the toolbar, or null to fit the column. */
+  readonly frameWidth: number | null;
   /** A native design gallery that replaces the generated catalog entry, or null. */
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
   /** Explains why a version's gallery fell back to its original catalog. */
@@ -84,17 +80,12 @@ export interface PreviewCanvasProps {
   /** The Comments view owns the preview mode controls, outside the artifact canvas. */
   readonly modeControlsTarget: HTMLElement | null;
   readonly onAnnotateModeChange: (active: boolean) => void;
-  readonly onNextArtifact: (() => void) | null;
   readonly onOpenRawArtifact: () => void;
-  readonly onPreviousArtifact: (() => void) | null;
-  readonly onReload: () => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
   readonly onSubmitAnnotation: (body: string, anchor: ReviewAnchor | null, path: string) => Promise<boolean>;
   readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
   readonly onViewModeChange: (mode: HtmlViewerMode) => void;
   readonly opening: boolean;
-  /** The selected artifact's place in the loaded catalog (index -1 when absent). */
-  readonly position: {readonly index: number; readonly total: number};
   readonly projectId: string;
   readonly readOnly: boolean;
   readonly selectedPath: string | null;
@@ -117,10 +108,7 @@ const focusColumnStyle = {display: "flex", flex: "1 1 0", flexDirection: "column
 const frameStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
 const focusFrameStyle = {...frameStyle, border: 0, borderRadius: 0, boxShadow: "none"} satisfies CSSProperties;
 const frameBodyStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
-const controlsStyle = {flex: "none"} satisfies CSSProperties;
 const galleryStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
-const positionStyle = {color: "var(--text-data)", fontFamily: "var(--font-data)", fontSize: 12} satisfies CSSProperties;
-const metaStyle = {color: "var(--text-secondary)", fontSize: 12, whiteSpace: "nowrap"} satisfies CSSProperties;
 const htmlPreviewStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", minHeight: 0} satisfies CSSProperties;
 const modeBarStyle = {
   alignItems: "center",
@@ -177,27 +165,23 @@ export function PreviewCanvas({
   artifactId,
   artifactName,
   chrome,
-  commentsLoading,
   detailError,
   detailLoading,
   awaitingCatalog,
   emptyProject,
+  frameWidth,
   gallery,
   galleryNotice,
   hasDetails,
   isCurrentVersion,
   modeControlsTarget,
   onAnnotateModeChange,
-  onNextArtifact,
   onOpenRawArtifact,
-  onPreviousArtifact,
-  onReload,
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
   onViewModeChange,
   opening,
-  position,
   projectId,
   readOnly,
   selectedPath,
@@ -205,16 +189,10 @@ export function PreviewCanvas({
   threadFocusRevision,
   version,
 }: PreviewCanvasProps) {
-  const columnRef = useRef<HTMLDivElement | null>(null);
-  const {width: columnWidth} = useElementSize(columnRef);
-  const presets = previewPresets(Math.max(0, columnWidth - 24));
-  const [presetKey, setPresetKey] = useState("Fit");
-  const preset = presets.find((candidate) => candidate.key === presetKey) ?? presets[0];
   const focus = chrome === "focus";
   const path = version === null ? null : selectedPath ?? version.manifest.entryPath;
-  const entries = version?.manifest.entries.length ?? 0;
   return (
-    <div ref={columnRef} style={focus ? focusColumnStyle : columnStyle}>
+    <div style={focus ? focusColumnStyle : columnStyle}>
       {detailError === null || focus ? null : <Alert variant="danger">{detailError.message}</Alert>}
       {galleryNotice === null ? null : <Alert variant="warning">{galleryNotice}</Alert>}
       {/* No title bar in the workspace: the toolbar's breadcrumb already names the version and
@@ -224,7 +202,7 @@ export function PreviewCanvas({
         label="Artifact preview"
         style={focus ? focusFrameStyle : frameStyle}
         tabIndex={-1}
-        width={focus ? null : preset?.px ?? null}
+        width={focus ? null : frameWidth}
         {...(focus ? {
           meta: version === null ? null : `v${version.version.number}`,
           title: gallery?.title ?? path ?? artifactName,
@@ -303,58 +281,6 @@ export function PreviewCanvas({
           <div style={galleryStyle}>{gallery.content}</div>
         )}
       </PreviewFrame>
-      {focus ? null : (
-        <Toolbar gap={6} label="Preview controls" style={controlsStyle}>
-          <SegmentedControl
-            label="Preview width"
-            mode="toggle"
-            onChange={setPresetKey}
-            options={presets.map((candidate) => ({
-              ariaLabel: candidate.px === null ? "Fit the column" : `${candidate.px} pixels wide`,
-              id: candidate.key,
-              label: candidate.key,
-            }))}
-            size="sm"
-            value={preset?.key ?? "Fit"}
-            variant="pill"
-          />
-          <ToolbarSpacer />
-          <IconButton
-            ariaLabel="Previous artifact"
-            disabled={onPreviousArtifact === null}
-            icon="bi-chevron-left"
-            keyshortcuts="K ArrowUp"
-            onClick={() => onPreviousArtifact?.()}
-            size="sm"
-            title="Previous artifact (K or ↑)"
-          />
-          <span style={positionStyle}>{position.index < 0 ? 0 : position.index + 1} / {position.total}</span>
-          <IconButton
-            ariaLabel="Next artifact"
-            disabled={onNextArtifact === null}
-            icon="bi-chevron-right"
-            keyshortcuts="J ArrowDown"
-            onClick={() => onNextArtifact?.()}
-            size="sm"
-            title="Next artifact (J or ↓)"
-          />
-          <span style={metaStyle}>
-            {version === null
-              ? "No version selected"
-              : `${entries} file${entries === 1 ? "" : "s"} · ${version.version.routingMode.toUpperCase()}`}
-          </span>
-          <Button
-            disabled={commentsLoading || version === null}
-            icon="bi-arrow-clockwise"
-            onClick={onReload}
-            outline
-            size="sm"
-            variant="secondary"
-          >
-            {commentsLoading ? "Loading…" : "Reload"}
-          </Button>
-        </Toolbar>
-      )}
     </div>
   );
 }

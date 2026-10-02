@@ -177,9 +177,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByText(
         "Click any element in the HTML preview to place a comment.",
       )).toHaveCount(0);
-      await expect(fixture.page.getByRole("toolbar", {name: "Preview controls"}).getByRole("button", {
-        name: "Reload",
-      })).toBeVisible();
+      await expect(fixture.page.getByRole("toolbar", {name: "Preview controls"})).toHaveCount(0);
       await expect(fixture.page.getByRole("button", {
         name: /Review fixture.*2 versions.*1 comment/u,
       })).toBeVisible();
@@ -303,10 +301,9 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.keyboard.press("]");
       await expect(inspector).toBeVisible();
 
-      await expect(fixture.page.getByRole("button", {name: "Previous artifact"}))
-        .toHaveAttribute("aria-keyshortcuts", "K ArrowUp");
-      await expect(fixture.page.getByRole("button", {name: "Next artifact"}))
-        .toHaveAttribute("aria-keyshortcuts", "J ArrowDown");
+      // Artifact stepping is keyboard-only (J/K, listed in the shortcut map); no footer buttons take canvas height.
+      await expect(fixture.page.getByRole("button", {name: "Previous artifact"})).toHaveCount(0);
+      await expect(fixture.page.getByRole("button", {name: "Next artifact"})).toHaveCount(0);
 
       await fixture.page.reload();
       await expect(preview.locator("#review-target")).toBeVisible();

@@ -18,7 +18,7 @@ import {
   localLogin,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, toast} from "./review-helpers.js";
+import {openInspectorTab, openReview, reloadReview, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml =
@@ -226,7 +226,7 @@ test.describe("PRS-006 presence avatar", () => {
         path: "index.html",
         versionId: published.version.id,
       });
-      await page.getByRole("button", {name: "Reload"}).click();
+      await reloadReview(page);
       await expect(page.getByText("pres disconnected — pick another"))
         .toBeVisible();
 

@@ -21,7 +21,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, previewFrame, selectThread, toast} from "./review-helpers.js";
+import {openInspectorTab, openReview, previewFrame, reloadReview, selectThread, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -150,7 +150,7 @@ test.describe("Review send-all", () => {
       await Promise.all(claimed.threadIds.map((threadId) =>
         owner.setThreadState(published, threadId, "resolved")
       ));
-      await page.getByRole("button", {name: "Reload"}).click();
+      await reloadReview(page);
       await expect(page.getByText("Addressed", {exact: true})).toHaveCount(
         claimed.threadIds.length,
       );
@@ -226,7 +226,7 @@ test.describe("Review send-all", () => {
         path: "index.html",
         versionId: published.version.id,
       });
-      await page.getByRole("button", {name: "Reload"}).click();
+      await reloadReview(page);
       await expect(page.getByRole("button", {
         name: "Send all open (1) to mailbox",
       })).toBeVisible();
@@ -275,7 +275,7 @@ test.describe("Review send-all", () => {
         path: "index.html",
         versionId: published.version.id,
       });
-      await page.getByRole("button", {name: "Reload"}).click();
+      await reloadReview(page);
       await expect(page.getByRole("button", {
         name: "Send all open (1) to replacement",
       })).toBeEnabled();
