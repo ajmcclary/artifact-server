@@ -2,8 +2,11 @@ import {z} from "zod";
 
 import {mediaTypeEssence} from "./page-inventory.ts";
 
-/** The generated catalog entry and the index a design publication carries beside it. */
-export const designCatalogPath = "artifact-server-design.html";
+/**
+ * The catalog page that older CLIs generated as a design publication's entry. Current
+ * publications open on their first preview; the index alone makes them galleries.
+ */
+export const legacyDesignCatalogPath = "artifact-server-design.html";
 export const previewIndexPath = "artifact-server-previews/index.json";
 /** Generated indexes are small; anything larger is not one this Review reads. */
 export const maximumPreviewIndexBytes = 1024 * 1024;
@@ -86,14 +89,12 @@ interface ManifestEntry {
 }
 
 /**
- * The index entry Review may read, or null. A gallery replaces only the generated
- * catalog entry: root index.html and explicit entries keep their own first page.
+ * The index entry Review may read, or null. Only automatic design detection writes the
+ * reserved index, so root index.html and explicit entries keep their own first page.
  */
 export function previewIndexEntry(manifest: {
-  readonly entryPath: string;
   readonly entries: readonly ManifestEntry[];
 }): ManifestEntry | null {
-  if (manifest.entryPath !== designCatalogPath) return null;
   return manifest.entries.find((entry) => entry.path === previewIndexPath) ?? null;
 }
 

@@ -7,9 +7,9 @@ artifactserver publish /path/to/design-system --name "Design system"
 artifactserver publish /path/to/design-project --name "Design project"
 ```
 
-When there is no root `index.html` and no explicit `--entry`, Artifact Server recognizes `_ds_manifest.json` at the directory root or under `project/`. It creates `artifact-server-design.html`, a searchable catalog grouped by the manifest's card groups, with templates listed separately. Each preview runs from its original path at its declared viewport size; larger previews scroll within the stage. Only the selected preview loads. “Open full preview” opens that document in the current frame. The catalog's heading identifies the export as a Claude Design System.
+When there is no root `index.html` and no explicit `--entry`, Artifact Server recognizes `_ds_manifest.json` at the directory root or under `project/`. It publishes a [preview index](#preview-index-and-review-gallery) of the manifest's cards, grouped by their card groups, with templates listed separately, and opens the version on its first preview. Review shows that index as a native gallery. No catalog page is generated; every preview runs from its original path.
 
-For projects without a design-system manifest, `.dc.html` files become an artboard catalog identified as a Claude Design Project. A single published file continues to open directly. Publish its containing directory when it depends on sibling assets.
+For projects without a design-system manifest, `.dc.html` files become an artboard gallery. A single published file continues to open directly. Publish its containing directory when it depends on sibling assets.
 
 Portable design systems such as ArkCase can also publish without `_ds_manifest.json`.
 When no vendor manifest exists, the CLI discovers `*.card.html` previews throughout
@@ -19,7 +19,7 @@ the published directory and reads their leading `@dsCard` comments:
 <!-- @dsCard group="Components" viewport="1100x460" name="Data Grid" subtitle="Sort, select and filter" -->
 ```
 
-The generated Design System catalog uses the source folder name as its title and
+The generated gallery uses the source folder name as its title and
 preserves each card's name, group, subtitle, and viewport. Cards without an
 annotation use their filename, the Components group, and a 1100 × 700 viewport.
 Artboards in the same directory appear under Artboards: a `.dc.html` name alone
@@ -37,8 +37,8 @@ remains authoritative and bypasses automatic card discovery.
 
 ## Preview index and Review gallery
 
-Every generated catalog is published with `artifact-server-previews/index.json`,
-a versioned preview index (`"format": "artifact-server.preview-index"`; this CLI
+Every automatically detected design publication carries
+`artifact-server-previews/index.json`, a versioned preview index (`"format": "artifact-server.preview-index"`; this CLI
 writes `"version": 2`, and Review also reads version 1). Each item records its
 `kind` (`prototype`, `template`, `component`, `guideline`, `documentation` or
 `artboard`), `section`, `title`, `description`, exact published `path`, declared
@@ -46,7 +46,8 @@ writes `"version": 2`, and Review also reads version 1). Each item records its
 documents (`[{title, path}]`). The index also carries a title, description and
 optional `cover`. Derived indexes use the vendor manifest (cards are components,
 its templates are templates), card annotations (components) or bare artboards
-(artboards).
+(artboards). The version's entry is the index's first preview, so the plain
+version URL opens that page outside Review.
 
 A producer can declare its gallery precisely with `artifactserver.previews.json`
 at the publication root:
@@ -84,8 +85,7 @@ cover only when it is a supported image. Artifact Server never renders artifact
 code to make thumbnails: producers capture them (the ArkCase Design repository
 uses `npm run build:thumbnails`, with per-item render provenance).
 
-Review opens such a version on a native gallery instead of the catalog's nested
-preview stage: grouped thumbnail tiles, search, a kind filter and a compact list,
+Review opens a version with an index on a native gallery: grouped thumbnail tiles, search, a kind filter and a compact list,
 where each item also links its related guides. Choosing a tile or guide opens
 that file as the exact selected artifact, version and path, so browser history,
 Share, comments and Annotate mode refer to that document. Claude Design artboards
@@ -97,10 +97,15 @@ search, kind, layout, scroll position and the tile you left from. The index and
 thumbnails load only through the exact version's authorized version-file and
 media routes and are treated as untrusted data; missing or unusable thumbnails
 and links degrade to placeholders or are omitted. An index Review cannot use falls
-back to the original catalog with a notice. Versions published before indexes
-existed, and publications with explicit entries, keep their original first page.
-The generated catalog is still an ordinary file: open it with
-`path=artifact-server-design.html`.
+back to the version's entry page with a notice. Versions without an index,
+including root `index.html` and explicit-entry publications, keep their own first
+page.
+
+Earlier CLIs also generated an `artifact-server-design.html` catalog page and made
+it the entry. Those versions are immutable and keep it: Review still shows their
+gallery when they carry an index, falls back to that catalog otherwise, and the
+page opens with `path=artifact-server-design.html`. The name is no longer
+reserved, so a source file with that name publishes as an ordinary file.
 
 ## Design library
 
@@ -112,11 +117,11 @@ each artifact's current version when it loads, tiles open that exact version, an
 and omitted. Frozen, shareable collections that pin a complete version set
 remain future work (T24).
 
-A root `index.html` takes precedence. Use `--entry path/to/page.html` to open a particular card, artboard, existing catalog, or template instead. Explicit entries also bypass automatic detection.
+A root `index.html` takes precedence. Use `--entry path/to/page.html` to open a particular card, artboard, or template instead. Explicit entries also bypass automatic detection.
 
-The generated catalog is an additional file in the immutable publication. Original files retain their bytes and paths; source directories are never modified. Stable inputs produce the same catalog and retry identity. Manifests larger than 4 MiB, malformed metadata, missing or unsafe preview references, empty catalogs, and generated filename collisions fail before an upload is created. Existing path, symlink, publication-size, and file-count limits still apply.
+The preview index and any typed thumbnail copies are the only generated files in the immutable publication. Original files retain their bytes and paths; source directories are never modified. Stable inputs produce the same index and retry identity. Manifests larger than 4 MiB, malformed metadata, missing or unsafe preview references, empty galleries, and existing `artifact-server-previews/` paths fail before an upload is created. Existing path, symlink, publication-size, and file-count limits still apply.
 
-This supports exported browser previews and their supplied runtimes. It does not compile JSX, reconstruct missing export files, or implement Claude Design's editor. Fonts are served with their font media types. Dependencies on remote CDNs still require network access. An existing published version remains unchanged; publish a new version to add the catalog. Review annotations inside a catalog's nested frame are not a new annotation mode: select the original HTML file in Review to annotate that document directly.
+This supports exported browser previews and their supplied runtimes. It does not compile JSX, reconstruct missing export files, or implement Claude Design's editor. Fonts are served with their font media types. Dependencies on remote CDNs still require network access. An existing published version remains unchanged; publish a new version to change its gallery.
 
 The recognized layouts are observed export conventions, not a promised stable
 vendor export API. Keep representative exports as compatibility fixtures when
@@ -125,7 +130,7 @@ URLs, and the server does not silently vendor missing dependencies.
 
 Producer-side thumbnail capture lives in the publishing repository; frozen
 collections remain in [T19](../NEXT-STEPS.md) and T24. They must
-preserve entry precedence and source bytes; changes to generated catalog content
+preserve entry precedence and source bytes; changes to generated index content
 apply to new publications. A project overview that follows current versions is
 a moving view, not an immutable multi-artifact snapshot.
 

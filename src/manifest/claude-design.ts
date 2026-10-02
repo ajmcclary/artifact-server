@@ -2,10 +2,7 @@ import {Schema} from "effect";
 
 import {parseManifestPath} from "./create-manifest.js";
 import type {DesignCard} from "./design-card.js";
-import type {PreviewDraft, PreviewIndex, PreviewKind} from "./preview-index.js";
-
-/** The extra immutable entry page created for a recognized Claude export. */
-export const claudeDesignCatalogPath = "artifact-server-design.html";
+import type {PreviewDraft, PreviewKind} from "./preview-index.js";
 
 const cardSchema = Schema.Struct({
   path: Schema.String,
@@ -41,28 +38,13 @@ export function claudeDesignManifestPath(paths: readonly string[]): string | und
     .find((candidate) => paths.includes(candidate));
 }
 
-/** A generated catalog page and the gallery draft describing the same previews. */
-export interface DesignCatalog {
-  readonly catalog: string;
-  readonly draft: PreviewDraft;
-}
-
-/** Build a deterministic catalog using only paths present in the publication. */
-export function createClaudeDesignCatalog(
-  paths: readonly string[],
-  manifestPath?: string,
-  manifestText?: string,
-): string | undefined {
-  return claudeDesignPublication(paths, manifestPath, manifestText, "Artboards")?.catalog;
-}
-
-/** Catalog and gallery draft for a Claude Design System manifest or bare artboards. */
+/** Gallery draft for a Claude Design System manifest or bare artboards, using only published paths. */
 export function claudeDesignPublication(
   paths: readonly string[],
   manifestPath: string | undefined,
   manifestText: string | undefined,
   title: string,
-): DesignCatalog | undefined {
+): PreviewDraft | undefined {
   if (manifestPath !== undefined && manifestText !== undefined) {
     const manifest = Schema.decodeUnknownSync(designSystemSchema)(JSON.parse(manifestText));
     const prefix = manifestPath.slice(0, -"_ds_manifest.json".length);
@@ -84,21 +66,11 @@ export function claudeDesignPublication(
       width: 1280,
       height: 900,
     }));
-    const previews = [...cards, ...templates];
-    return {
-      catalog: renderCatalog("Claude Design System", manifest.namespace, previews),
-      draft: previewDraft("claude-design-manifest", manifest.namespace, previews),
-    };
+    return previewDraft("claude-design-manifest", manifest.namespace, [...cards, ...templates]);
   }
   const artboards = artboardPreviews(paths, "Artboards");
   if (artboards.length === 0) return undefined;
-  return {
-    catalog: renderCatalog("Claude Design Project", "Artboards", artboards.map((artboard) => ({
-      ...artboard,
-      description: artboard.path,
-    }))),
-    draft: previewDraft("artboards", title, artboards),
-  };
+  return previewDraft("artboards", title, artboards);
 }
 
 function previewPath(prefix: string, candidate: string, paths: readonly string[]): string {
@@ -111,17 +83,12 @@ function previewPath(prefix: string, candidate: string, paths: readonly string[]
   return result;
 }
 
-/** Catalog annotated cards alongside artboards without requiring a vendor manifest. */
-export function createDesignCardCatalog(paths: readonly string[], cards: readonly DesignCard[], title: string): string {
-  return designCardPublication(paths, cards, title).catalog;
-}
-
-/** Catalog and gallery draft for annotated cards; unclassified artboards stay artboards. */
+/** Gallery draft for annotated cards; unclassified artboards stay artboards. */
 export function designCardPublication(
   paths: readonly string[],
   cards: readonly DesignCard[],
   title: string,
-): DesignCatalog {
+): PreviewDraft {
   const previews = cards.map((card): DesignPreview => ({
     kind: "component",
     path: previewPath("", card.path, paths),
@@ -131,36 +98,7 @@ export function designCardPublication(
     ...viewport(card.viewport),
   }));
   // A .dc.html name does not establish whether a page is a reusable template.
-  const artboards = artboardPreviews(paths, "Artboards");
-  return {
-    catalog: renderCatalog("Design System", title, [...previews, ...artboards.map((artboard) => ({
-      ...artboard,
-      description: artboard.path,
-    }))]),
-    draft: previewDraft("design-cards", title, [...previews, ...artboards]),
-  };
-}
-
-const kindHeadings = {
-  artboard: "Artboards",
-  component: "Components",
-  documentation: "Documentation",
-  guideline: "Guidelines",
-  prototype: "Prototypes",
-  template: "Templates",
-} as const satisfies Record<PreviewKind, string>;
-
-/** Render the standalone catalog page from a producer's validated preview index. */
-export function createPreviewIndexCatalog(index: PreviewIndex): string {
-  return renderCatalog("Design Publication", index.title, index.items.map((item) => ({
-    kind: item.kind,
-    path: item.path,
-    name: item.title,
-    group: item.section === kindHeadings[item.kind] ? item.section : `${kindHeadings[item.kind]} · ${item.section}`,
-    description: item.description,
-    width: item.viewport.width,
-    height: item.viewport.height,
-  })));
+  return previewDraft("design-cards", title, [...previews, ...artboardPreviews(paths, "Artboards")]);
 }
 
 function artboardPreviews(paths: readonly string[], group: string): DesignPreview[] {
@@ -199,58 +137,4 @@ function viewport(value: string | undefined) {
     width: Math.min(4096, Math.max(1, Number(match?.[1] ?? 1100))),
     height: Math.min(4096, Math.max(1, Number(match?.[2] ?? 700))),
   };
-}
-
-function escapeHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
-
-function renderCatalog(kind: string, title: string, previews: readonly DesignPreview[]): string {
-  if (previews.length === 0) throw new Error("Claude Design export has no previews or templates.");
-  const groups = [...new Set(previews.map((preview) => preview.group))];
-  const navigation = groups.map((group) => `<section><h2>${escapeHtml(group)}</h2>${previews
-    .filter((preview) => preview.group === group)
-    .map((preview) => `<a href="./${escapeHtml(preview.path.split("/").map(encodeURIComponent).join("/"))}" target="design-preview" data-width="${preview.width}" data-height="${preview.height}" data-description="${escapeHtml(preview.description)}">${escapeHtml(preview.name)}</a>`)
-    .join("\n")}</section>`).join("\n");
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="artifact-server-preview" content="claude-design-catalog">
-<title>${escapeHtml(title)} · ${kind}</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#f5f5f4;color:#202322;font:14px/1.5 system-ui,sans-serif}
-header{padding:20px 28px;border-bottom:1px solid #d6dad7;background:white}header p{margin:0;color:#59635e}h1{font-size:24px;margin:4px 0;overflow-wrap:anywhere}
-main{display:grid;grid-template-columns:280px minmax(0,1fr)}nav{padding:20px;max-height:calc(100vh - 125px);overflow:auto;background:#fff;border-right:1px solid #d6dad7}
-label{display:block;font-weight:600}input{width:100%;padding:9px;border:1px solid #8b9690;border-radius:4px;margin:8px 0 16px;font:inherit}h2{font-size:12px;color:#59635e;margin:20px 0 6px}
-nav a{display:block;padding:8px;border-radius:4px;color:inherit;text-decoration:none;overflow-wrap:anywhere}nav a:hover,nav a[aria-current=true]{background:#e6eee9;color:#174e35}a:focus-visible,input:focus-visible{outline:2px solid #174e35;outline-offset:2px}
-article{min-width:0;padding:24px}article h2{font-size:20px;color:inherit;margin:0}#description{min-height:21px;color:#59635e}#open{color:#174e35}#stage{margin-top:20px;overflow:auto;border:1px solid #d6dad7;background:#e9eae8;padding:16px}iframe{display:block;border:0;background:white}small{color:#59635e}[hidden]{display:none!important}
-@media(max-width:700px){main{grid-template-columns:1fr}nav{max-height:280px;border-right:0;border-bottom:1px solid #d6dad7}article{padding:16px}}
-</style></head><body><header><p>${kind}</p><h1>${escapeHtml(title)}</h1><p>${previews.length} previews · original export files</p></header>
-<main><nav aria-label="Design previews"><label for="search">Find a preview</label><input id="search" type="search" placeholder="Name or group"><p id="empty" hidden>No matching previews.</p>${navigation}</nav>
-<article><h2 id="selected">Select a preview</h2><p id="description"></p><a id="open" target="_self">Open full preview</a> · <small id="size"></small><div id="stage"><iframe name="design-preview" title="Design preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe></div></article></main>
-<script>
-const links = Array.from(document.querySelectorAll('nav a'));
-const frame = document.querySelector('iframe');
-function select(link) {
-  for (const item of links) item.removeAttribute('aria-current');
-  link.setAttribute('aria-current', 'true');
-  document.getElementById('selected').textContent = link.textContent;
-  document.getElementById('description').textContent = link.dataset.description;
-  document.getElementById('open').href = link.href;
-  frame.title = link.textContent;
-  frame.width = link.dataset.width;
-  frame.height = link.dataset.height;
-  document.getElementById('size').textContent = frame.width + ' × ' + frame.height;
-}
-for (const link of links) link.addEventListener('click', () => select(link));
-document.getElementById('search').addEventListener('input', (event) => {
-  const query = event.target.value.toLocaleLowerCase();
-  for (const section of document.querySelectorAll('nav section')) {
-    for (const link of section.querySelectorAll('a')) link.hidden = !(link.textContent + ' ' + section.querySelector('h2').textContent).toLocaleLowerCase().includes(query);
-    section.hidden = Array.from(section.querySelectorAll('a')).every(link => link.hidden);
-  }
-  document.getElementById('empty').hidden = links.some(link => !link.hidden);
-});
-select(links[0]); frame.src = links[0].href;
-</script></body></html>\n`;
 }

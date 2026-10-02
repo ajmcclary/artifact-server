@@ -9,8 +9,6 @@ import {Effect, Redacted} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import {publishPath, type FilePublicationTarget} from "../../src/client/file-publication-client.js";
-import {createDesignCardCatalog} from "../../src/manifest/claude-design.js";
-import {parseDesignCard} from "../../src/manifest/design-card.js";
 import {writeDesignCardFixture, writePreviewSourceFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
 import {listThreadsOverApi} from "./comment-api.js";
@@ -33,13 +31,20 @@ function publish(fixture: BrowserFixture, inputPath: string, target: FilePublica
   ).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
 }
 
-/** A publication made before preview indexes existed: the catalog is its only entry. */
+/** The catalog page older CLIs generated as a design publication's entry. */
+const legacyCatalog = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="artifact-server-preview" content="claude-design-catalog"><title>Legacy system · Design System</title></head>
+<body><h1>Legacy system</h1><a href="./components/buttons.card.html">Primary button</a></body></html>\n`;
+
+/** A publication made by an older CLI: the catalog is its entry, with or without an index beside it. */
 async function writeLegacyCatalog(directory: string, index?: string): Promise<void> {
   await writeDesignCardFixture(directory);
-  const cards = [parseDesignCard("components/buttons.card.html", '<!-- @dsCard group="Actions" viewport="640x110" name="Primary button" -->')];
-  const paths = ["components/buttons.card.html", "templates/Screen.dc.html"];
-  await writeFile(path.join(directory, "artifact-server-design.html"), createDesignCardCatalog(paths, cards, "Legacy system"));
+  await writeFile(path.join(directory, "artifact-server-design.html"), legacyCatalog);
   if (index === undefined) return;
+  await writeIndex(directory, index);
+}
+
+async function writeIndex(directory: string, index: string): Promise<void> {
   await mkdir(path.join(directory, "artifact-server-previews"), {recursive: true});
   await writeFile(path.join(directory, "artifact-server-previews/index.json"), index);
 }
@@ -130,11 +135,8 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
       expect(threads.map((thread) => [thread.body, thread.path])).toEqual([["Tighten the claim header.", "project/App.dc.html"]]);
     }).toPass();
 
-    const catalogUrl = new URL(page.url());
-    catalogUrl.searchParams.set("path", "artifact-server-design.html");
-    await page.goto(catalogUrl.toString());
-    await expect(interactiveFrame(page).getByRole("heading", {name: "Claims Workspace"})).toBeVisible();
-    await expectGalleryReturn(page, true);
+    // The version's entry is its first preview, an ordinary exact page; no catalog page is published.
+    expect(published.version.entryPath).toBe("project/App.dc.html");
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});
@@ -175,7 +177,7 @@ test("DSN-004: the gallery fits phone widths without horizontal scrolling and re
   }
 });
 
-test("DSN-004: pre-index publications keep their catalog, later versions gain the gallery, and bad indexes fall back", async ({browser}) => {
+test("DSN-004: older catalog publications keep their catalog, later versions gain the gallery, and bad indexes fall back", async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   const directory = await mkdtemp(path.join(tmpdir(), "design-gallery-compat-"));
   try {
@@ -224,6 +226,15 @@ test("DSN-004: pre-index publications keep their catalog, later versions gain th
     };
     // One page visits each publication in turn.
     await hostile.reduce<Promise<void>>((previous, _entry, position) => previous.then(() => visit(position)), Promise.resolve());
+
+    // Without a legacy catalog, an unusable index falls back to the version's own entry page.
+    const currentPath = path.join(directory, "current-hostile");
+    await writeDesignCardFixture(currentPath);
+    await writeIndex(currentPath, "{not json");
+    const unreadable = await publish(fixture, currentPath, privateArtifact, "templates/Screen.dc.html");
+    await page.goto(unreadable.links.review.toString());
+    await expect(page.getByText(/not valid JSON\. Showing the first page\./u)).toBeVisible();
+    await expect(interactiveFrame(page).getByRole("heading", {name: "Template screen"})).toBeVisible();
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});

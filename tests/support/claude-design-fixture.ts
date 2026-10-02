@@ -21,7 +21,7 @@ export async function writeClaudeDesignFixture(directory: string, nested = false
   return root;
 }
 
-/** Portable card exports carry their catalog metadata in a leading HTML comment. */
+/** Portable card exports carry their gallery metadata in a leading HTML comment. */
 export async function writeDesignCardFixture(directory: string, nested = false): Promise<string> {
   const root = await writeClaudeDesignFixture(directory, nested);
   await rm(path.join(root, "_ds_manifest.json"));

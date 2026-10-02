@@ -23,7 +23,7 @@ interface Loaded {
 /**
  * Read the exact version's preview index through the authorized version-file route.
  * Versions without one — including every publication made before indexes existed —
- * report `absent` and keep their original catalog entry.
+ * report `absent` and keep their own entry page.
  */
 export function usePreviewIndex(
   projectId: string,

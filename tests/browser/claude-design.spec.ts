@@ -11,10 +11,10 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {publishPath} from "../../src/client/file-publication-client.js";
 import {writeClaudeDesignFixture, writeDesignCardFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
-import {interactiveFrame} from "./review-helpers.js";
+import {interactiveFrame, openInspectorTab, previewFrame, returnToGallery} from "./review-helpers.js";
 
 for (const annotated of [false, true]) {
-  test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search and switch templates in Review`, async ({browser}) => {
+  test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search the gallery and open cards and templates in Review`, async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
   const directory = await mkdtemp(path.join(tmpdir(), "claude-design-browser-"));
   try {
@@ -28,30 +28,35 @@ for (const annotated of [false, true]) {
       target: {kind: "new_artifact", accessSetting: "account_required", tags: []},
     }).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
     await localLogin(fixture);
-    // The pathless Review URL lands on the native gallery; the generated catalog stays
-    // an exact file of the version and opens by its path.
-    const catalogUrl = new URL(published.links.review);
-    catalogUrl.searchParams.set("path", "artifact-server-design.html");
-    await fixture.page.goto(catalogUrl.toString());
-    const catalog = interactiveFrame(fixture.page);
-    await expect(catalog.getByRole("heading", {name: annotated ? path.basename(directory) : "Example_System"})).toBeVisible();
-    const card = catalog.frameLocator('iframe[name="design-preview"]');
-    await expect(card.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
+    // The pathless Review URL lands on the native gallery; no generated catalog page exists.
+    const page = fixture.page;
+    await page.goto(published.links.review.toString());
+    expect(published.version.entryPath).toBe("project/components/" + (annotated ? "buttons.card.html" : "card-button.html"));
+    const title = annotated ? path.basename(directory) : "Example_System";
+    const view = page.getByRole("region", {name: `${title} gallery`});
+    await expect(view.getByRole("heading", {name: title, level: 2})).toBeVisible();
+    const button = view.getByRole("link", {name: "Open Primary button · Component · Actions"});
+    await expect(button).toContainText("640 × 110");
+    await view.getByRole("searchbox", {name: "Find a preview"}).fill("Screen");
+    await expect(button).toBeHidden();
+    await view.getByRole("searchbox", {name: "Find a preview"}).fill("absent");
+    await expect(view.getByRole("link")).toHaveCount(0);
+    await view.getByRole("searchbox", {name: "Find a preview"}).fill("");
+    await page.screenshot({path: `test-results/browser/claude-design-${annotated ? "annotated" : "manifest"}-gallery.png`, fullPage: true});
+
+    // A card opens as an exact page whose relative styles and scripts resolve from its original path.
+    await button.click();
+    await expect(previewFrame(page).getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
+    await page.getByRole("button", {name: "Exit full screen"}).click();
+    await openInspectorTab(page, "Comments");
+    await page.getByRole("group", {name: "HTML preview mode"}).getByRole("button", {name: "Interactive preview"}).click();
+    const card = interactiveFrame(page);
     await card.getByRole("button", {name: "Try button"}).click();
     await expect(card.locator("output")).toHaveText("Clicked");
-    await expect(catalog.locator('iframe[name="design-preview"]')).toHaveAttribute("width", "640");
-    await expect(catalog.locator('iframe[name="design-preview"]')).toHaveAttribute("height", "110");
-    await catalog.getByRole("searchbox", {name: "Find a preview"}).fill("Screen");
-    await expect(catalog.getByRole("link", {name: "Primary button", exact: true})).toBeHidden();
-    await catalog.getByRole("link", {name: "Screen", exact: true}).click();
-    await expect(card.getByRole("heading", {name: "Template screen"})).toBeVisible();
-    await expect(catalog.getByRole("link", {name: "Open full preview"})).toHaveAttribute("href", /project\/templates\/Screen.dc.html$/u);
-    await catalog.getByRole("searchbox").fill("absent");
-    await expect(catalog.getByText("No matching previews.")).toBeVisible();
-    await catalog.getByRole("searchbox").fill("");
-    await fixture.page.screenshot({path: `test-results/browser/claude-design-${annotated ? "annotated" : "manifest"}-catalog.png`, fullPage: true});
-    await catalog.getByRole("link", {name: "Open full preview"}).click();
-    await expect(catalog.getByRole("heading", {name: "Template screen"})).toBeVisible();
+    await returnToGallery(page);
+    await view.getByRole("link", {name: annotated ? "Open Screen · Artboard · Artboards" : "Open Screen · Template · Templates"}).click();
+    await expect(page).toHaveURL(/path=project%2Ftemplates%2FScreen\.dc\.html/u);
+    await expect(interactiveFrame(page).getByRole("heading", {name: "Template screen"})).toBeVisible();
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {recursive: true, force: true});

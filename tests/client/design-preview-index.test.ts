@@ -95,7 +95,8 @@ test("DSN-003-B: a producer preview source publishes a versioned index, typed th
   const replay = await prepare(inputPath);
   expect(replay.operationDigest).toBe(first.operationDigest);
   expect(await readdir(inputPath, {recursive: true})).toEqual(before);
-  expect(first.publication.entryPath).toBe("artifact-server-design.html");
+  expect(first.publication.entryPath).toBe("project/App.dc.html");
+  expect(first.publication.files.some((file) => file.path === "artifact-server-design.html")).toBe(false);
   const coverCopy = first.publication.files.find((file) => file.path.startsWith("artifact-server-previews/thumbnails/"));
   expect(coverCopy?.path).toMatch(/^artifact-server-previews\/thumbnails\/[a-f0-9]{64}\.jpg$/u);
   expect(indexOf(first)).toEqual({
@@ -126,10 +127,8 @@ test("DSN-003-B: a producer preview source publishes a versioned index, typed th
   expect(Buffer.from(await original.arrayBuffer())).toEqual(fixtureCoverJpeg);
   const thumbnail = await fetchLoopbackContent(new URL("project/thumbnails/app.png", result.links.version));
   expect(Buffer.from(await thumbnail.arrayBuffer())).toEqual(fixtureThumbnailPng);
-  const catalog = await (await fetchLoopbackContent(result.links.version)).text();
-  expect(catalog).toContain("<h2>Prototypes</h2>");
-  expect(catalog).toContain("<h2>Templates · Starter templates</h2>");
-  expect(catalog).toContain('data-width="1440" data-height="900"');
+  const entry = await (await fetchLoopbackContent(result.links.version)).text();
+  expect(entry).toContain("<h1>Examiner app</h1>");
 });
 
 test("DSN-003: derived indexes keep declared kinds and never infer templates from .dc.html names", async () => {
@@ -158,7 +157,7 @@ test("DSN-003: derived indexes keep declared kinds and never infer templates fro
   ]);
 });
 
-test("DSN-003: root index.html and explicit entries still bypass catalogs; producer sources outrank detection", async () => {
+test("DSN-003: root index.html and explicit entries still bypass galleries; producer sources outrank detection", async () => {
   const inputPath = path.join(directory, "precedence");
   await writePreviewSourceFixture(inputPath);
   await writeFile(path.join(inputPath, "project/_ds_manifest.json"), JSON.stringify({namespace: "Vendor", cards: [{path: "components/buttons.card.html", name: "Vendor card"}]}));

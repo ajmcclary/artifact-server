@@ -7,6 +7,7 @@ import {DesignGallery} from "@/ui/review-ui";
 import {workspaceHref} from "../review-routes.ts";
 import {
   initialGalleryViewState,
+  legacyDesignCatalogPath,
   type GalleryViewState,
 } from "./design-gallery.ts";
 import type {GalleryCrumb} from "./review-toolbar.tsx";
@@ -26,7 +27,7 @@ const noGallery: DesignGalleryCanvas = {gallery: null, galleryCrumb: null, galle
 const loadingStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"};
 
 /**
- * Show a version's native gallery when Review opens its generated catalog entry without
+ * Show a version's native gallery when Review opens a version with a preview index without
  * an explicit path. Opening a tile
  * is ordinary exact-page navigation (`onNavigate(path)`); returning navigates to the
  * entry (`onNavigate(null)`). Query, kind, layout, scroll and the returning tile are
@@ -56,8 +57,8 @@ export function useDesignGalleryCanvas({
   const [, setRevision] = useState(0);
   if (version === null || artifactId === null || index.status === "absent") return noGallery;
   const versionId = version.version.id;
-  // The gallery is the version's landing view. An explicit path, including the generated
-  // catalog file itself, is an exact page like any other.
+  // The gallery is the version's landing view. An explicit path, including the entry
+  // page or a legacy catalog file, is an exact page like any other.
   const onEntry = selectedPath === null;
   if (index.status === "loading") {
     return onEntry
@@ -81,7 +82,8 @@ export function useDesignGalleryCanvas({
       : noGallery;
   }
   if (index.status === "invalid") {
-    return onEntry ? {...noGallery, galleryNotice: `${index.reason} Showing the original catalog.`} : noGallery;
+    const fallback = version.manifest.entryPath === legacyDesignCatalogPath ? "the original catalog" : "the first page";
+    return onEntry ? {...noGallery, galleryNotice: `${index.reason} Showing ${fallback}.`} : noGallery;
   }
   const state = states.current.get(versionId) ?? initialGalleryViewState;
   const update = (patch: Partial<GalleryViewState>, render: boolean): void => {

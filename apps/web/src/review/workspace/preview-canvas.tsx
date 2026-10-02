@@ -71,9 +71,9 @@ export interface PreviewCanvasProps {
   readonly emptyProject: ReactNode;
   /** The artboard width chosen in the toolbar, or null to fit the column. */
   readonly frameWidth: number | null;
-  /** A native design gallery that replaces the generated catalog entry, or null. */
+  /** A native design gallery that replaces the version's entry page, or null. */
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
-  /** Explains why a version's gallery fell back to its original catalog. */
+  /** Explains why a version's gallery fell back to its entry page. */
   readonly galleryNotice: string | null;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;

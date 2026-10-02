@@ -247,13 +247,13 @@ test("remembered destinations: separates servers and projects, refuses unauthori
   } finally { await fixture.stop(); await otherServer.stop(); }
 }, 45_000);
 
-test("remembered catalog: automatic generated entry stays automatic on later publishes", async () => {
+test("remembered gallery: automatic design entry stays automatic on later publishes", async () => {
   const fixture = await publicationCliFixture();
   try {
     await rm(path.join(fixture.source, "index.html"));
     await writeFile(path.join(fixture.source, "board.dc.html"), "<!doctype html><title>Board</title>");
     const first = receipt(await fixture.publish());
-    expect(first.version.entryPath).toBe("artifact-server-design.html");
+    expect(first.version.entryPath).toBe("board.dc.html");
     const same = await fixture.publish();
     expect(receipt(same).version.id).toBe(first.version.id);
     expect(unchanged(same)).toBe(true);

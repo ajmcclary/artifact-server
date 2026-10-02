@@ -32,12 +32,9 @@ import {
 } from "../core/publishing-limits.js";
 
 import {
-  claudeDesignCatalogPath,
   claudeDesignManifestPath,
   claudeDesignPublication,
-  createPreviewIndexCatalog,
   designCardPublication,
-  type DesignCatalog,
 } from "../manifest/claude-design.js";
 import {parseDesignCard, type DesignCard} from "../manifest/design-card.js";
 import {
@@ -52,7 +49,6 @@ import {
   sniffPreviewImage,
   type PreviewDraft,
   type PreviewImage,
-  type PreviewIndex,
 } from "../manifest/preview-index.js";
 
 const maximumFileCount = 10_000;
@@ -610,19 +606,16 @@ async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Pr
   const paths = files.map((file) => file.path);
   if (paths.includes(defaultDirectoryEntryPath)) return defaultDirectoryEntryPath;
   try {
-    const design = await prepareDesignCatalog(files, paths, path.basename(inputPath));
+    const design = await prepareDesignGallery(files, paths, path.basename(inputPath));
     if (design === undefined) return defaultDirectoryEntryPath;
-    if (paths.some((candidate) => candidate.toLowerCase() === claudeDesignCatalogPath)) {
-      throw new Error("The generated design catalog path already exists; choose --entry explicitly.");
-    }
     if (paths.some(isReservedPreviewPath)) {
       throw new Error("The generated preview asset directory already exists; choose --entry explicitly.");
     }
-    if (files.length + 1 + design.generated.length > maximumFileCount) {
-      throw new Error("The Claude Design catalog would exceed the publication file limit.");
+    if (files.length + design.generated.length > maximumFileCount) {
+      throw new Error("The design preview index would exceed the publication file limit.");
     }
-    files.push(generatedFile(claudeDesignCatalogPath, design.catalog, "text/html; charset=utf-8"), ...design.generated);
-    return claudeDesignCatalogPath;
+    files.push(...design.generated);
+    return design.entryPath;
   } catch (cause) {
     throw inputFailure(inputPath, "invalid_entry", cause instanceof Error
       ? `Cannot prepare design export: ${cause.message}`
@@ -630,8 +623,9 @@ async function inferDirectoryEntry(files: PreparedFile[], inputPath: string): Pr
   }
 }
 
-interface PreparedDesignCatalog {
-  readonly catalog: string;
+interface PreparedDesignGallery {
+  /** The first preview, which opens when the version is viewed outside Review's gallery. */
+  readonly entryPath: string;
   /** The preview index and typed thumbnail copies, in deterministic order. */
   readonly generated: readonly GeneratedPreparedFile[];
 }
@@ -640,15 +634,15 @@ interface PreparedDesignCatalog {
  * A producer preview source outranks automatic detection; otherwise the existing
  * vendor-manifest, card and artboard precedence applies unchanged.
  */
-async function prepareDesignCatalog(
+async function prepareDesignGallery(
   files: readonly PreparedFile[],
   paths: readonly string[],
   title: string,
-): Promise<PreparedDesignCatalog | undefined> {
+): Promise<PreparedDesignGallery | undefined> {
   const source = files.find((file) => file.path === previewSourcePath);
   if (source?.kind === "disk") {
     const draft = parsePreviewSource(await readDesignMetadata(source), paths);
-    return indexedCatalog(files, draft, createPreviewIndexCatalog, true);
+    return indexedGallery(files, draft, true);
   }
   const manifestPath = claudeDesignManifestPath(paths);
   const manifest = files.find((file) => file.path === manifestPath);
@@ -656,13 +650,12 @@ async function prepareDesignCatalog(
     ? await readDesignMetadata(manifest)
     : undefined;
   const cards = manifestPath === undefined ? await readDesignCards(files) : [];
-  const design: DesignCatalog | undefined = cards.length > 0
+  const design: PreviewDraft | undefined = cards.length > 0
     ? designCardPublication(paths, cards, title)
     : claudeDesignPublication(paths, manifestPath, manifestText, title);
   if (design === undefined) return undefined;
   const cover = conventionalCover(files);
-  const draft = cover === undefined ? design.draft : {...design.draft, cover};
-  return indexedCatalog(files, draft, () => design.catalog, false);
+  return indexedGallery(files, cover === undefined ? design : {...design, cover}, false);
 }
 
 /** Claude exports place an optional project cover at `.thumbnail`; it is used only when valid. */
@@ -672,12 +665,11 @@ function conventionalCover(files: readonly PreparedFile[]): string | undefined {
     && file.size <= maximumThumbnailBytes)?.path;
 }
 
-async function indexedCatalog(
+async function indexedGallery(
   files: readonly PreparedFile[],
   draft: PreviewDraft,
-  renderCatalog: (index: PreviewIndex) => string,
   declared: boolean,
-): Promise<PreparedDesignCatalog> {
+): Promise<PreparedDesignGallery> {
   const references = [...new Set([draft.cover, ...draft.items.map((item) => item.thumbnail)]
     .filter((reference): reference is string => reference !== undefined))];
   const lookups = await Promise.all(references.map(async (reference) => {
@@ -698,8 +690,10 @@ async function indexedCatalog(
   });
   const copies = new Map<string, GeneratedPreparedFile>();
   for (const {copy} of images.values()) if (copy !== undefined) copies.set(copy.path, copy);
+  const [first] = index.items;
+  if (first === undefined) throw new Error("A preview index must contain at least one preview.");
   return {
-    catalog: renderCatalog(index),
+    entryPath: first.path,
     generated: [
       generatedFile(previewIndexPath, serializePreviewIndex(index), "application/json; charset=utf-8"),
       ...[...copies.values()].toSorted((left, right) => left.path < right.path ? -1 : Number(left.path > right.path)),

@@ -1,14 +1,14 @@
 import {describe, expect, it} from "vitest";
 
 import {
-  designCatalogPath,
+  legacyDesignCatalogPath,
   parsePreviewIndex,
   previewIndexEntry,
   previewIndexPath,
 } from "./design-gallery.ts";
 
 const entries = [
-  {mediaType: "text/html; charset=utf-8", path: designCatalogPath, size: 10},
+  {mediaType: "text/html; charset=utf-8", path: legacyDesignCatalogPath, size: 10},
   {mediaType: "application/json; charset=utf-8", path: previewIndexPath, size: 10},
   {mediaType: "text/html; charset=utf-8", path: "project/App.dc.html", size: 10},
   {mediaType: "text/html; charset=utf-8", path: "templates/Doc.dc.html", size: 10},
@@ -54,10 +54,10 @@ const index = (overrides: IndexOverrides = {}) => JSON.stringify({
 });
 
 describe("design gallery preview index", () => {
-  it("reads only a generated catalog entry's index, preserving explicit and root entries", () => {
-    expect(previewIndexEntry({entryPath: designCatalogPath, entries})?.path).toBe(previewIndexPath);
-    expect(previewIndexEntry({entryPath: "project/App.dc.html", entries})).toBeNull();
-    expect(previewIndexEntry({entryPath: designCatalogPath, entries: entries.filter((entry) => entry.path !== previewIndexPath)})).toBeNull();
+  it("reads the index of current and legacy-catalog design versions; versions without one keep their entry", () => {
+    expect(previewIndexEntry({entries})?.path).toBe(previewIndexPath);
+    expect(previewIndexEntry({entries: entries.filter((entry) => entry.path !== legacyDesignCatalogPath)})?.path).toBe(previewIndexPath);
+    expect(previewIndexEntry({entries: entries.filter((entry) => entry.path !== previewIndexPath)})).toBeNull();
   });
 
   it("keeps declared kinds and resolves thumbnails to exact-version image entries", () => {

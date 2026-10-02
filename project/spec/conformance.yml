@@ -980,12 +980,12 @@ requirements:
 
   - id: DSN-001
     kind: behavior
-    behavior: Directory publication recognizes Claude Design System and Project exports and adds a deterministic preview catalog when no existing or explicit entry takes precedence, preserving original bytes and paths through staged publication.
+    behavior: Directory publication recognizes Claude Design System and Project exports and adds a deterministic preview index, opening on its first preview, when no existing or explicit entry takes precedence, preserving original bytes and paths through staged publication.
     owner: cli
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
       behavior: {id: DSN-001-B, description: "Publish flat and nested systems and projects, replay identical inputs, preserve source bytes, browse grouped previews and templates with working relative assets, and honor existing and explicit entries."}
-      failure: {id: DSN-001-F, description: "Reject malformed, oversized, escaping, missing, non-HTML, empty, symlinked, and colliding inputs before upload; escape catalog metadata without executing it."}
+      failure: {id: DSN-001-F, description: "Reject malformed, oversized, escaping, missing, non-HTML, empty, symlinked, and colliding inputs before upload; carry hostile metadata as inert index data."}
     deployments: *all
     status: behavior_verified
     proof_gap: Local staged publication, hostile-input, and interactive browser checks pass. Equivalent evidence for team deployments remains unrecorded.
@@ -1028,7 +1028,7 @@ requirements:
 
   - id: DSN-003
     kind: behavior
-    behavior: A generated design catalog is published with a versioned preview index of each preview's kind, section, title, description, exact path, declared viewport, optional thumbnail and related documents, derived from a producer preview source (versions 1 and 2) or existing design metadata, with typed copies of supplied images and without modifying source files.
+    behavior: An automatically detected design publication carries a versioned preview index of each preview's kind, section, title, description, exact path, declared viewport, optional thumbnail and related documents, derived from a producer preview source (versions 1 and 2) or existing design metadata, with typed copies of supplied images and without modifying source files.
     owner: cli
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
@@ -1047,12 +1047,12 @@ requirements:
 
   - id: DSN-004
     kind: behavior
-    behavior: Review shows a version's valid preview index as a native gallery and opens each preview or related guide as the exact selected artifact, version and path, preserving history, sharing, annotation ownership and gallery return state, while versions without an index keep their original catalog.
+    behavior: Review shows a version's valid preview index as a native gallery and opens each preview or related guide as the exact selected artifact, version and path, preserving history, sharing, annotation ownership and gallery return state, while versions without an index keep their own entry page.
     owner: web-application
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
-      behavior: {id: DSN-004-B, description: "Browse grouped thumbnails and placeholders, search, filter by kind and switch to a compact list; open a tile by pointer and keyboard as an exact page and a related guide as plain text; annotate that document; return by the toolbar Gallery control and browser history with search, kind, layout, focus and scroll restored; fit phone widths; keep pre-index versions on their catalog."}
-      failure: {id: DSN-004-F, description: "Fail closed on malformed, unsupported, duplicate or escaping indexes by showing the original catalog with a notice; reject related links in version 1 indexes; draw placeholders for missing or mistyped thumbnails and omit missing or duplicate related links; never load another version's assets."}
+      behavior: {id: DSN-004-B, description: "Browse grouped thumbnails and placeholders, search, filter by kind and switch to a compact list; open a tile by pointer and keyboard as an exact page and a related guide as plain text; annotate that document; return by the toolbar Gallery control and browser history with search, kind, layout, focus and scroll restored; fit phone widths; keep versions without an index on their entry page."}
+      failure: {id: DSN-004-F, description: "Fail closed on malformed, unsupported, duplicate or escaping indexes by showing the version's entry page (a legacy catalog or first preview) with a notice; reject related links in version 1 indexes; draw placeholders for missing or mistyped thumbnails and omit missing or duplicate related links; never load another version's assets."}
     deployments: *all
     status: behavior_verified
     proof_gap: Local Chromium journeys and the Chromium, Firefox and WebKit critical gallery path pass. Equivalent evidence for team deployments remains unrecorded.
