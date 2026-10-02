@@ -70,6 +70,19 @@ test.describe("Activity", () => {
       await conversation.getByRole("button", {name: "Show 3 earlier replies"}).click();
       await expect(conversation.getByText("Reply number 1.")).toBeVisible();
 
+      // The toolbar sits on the canvas; docked at the scroller's top it leads with the title alone.
+      const toolbar = page.getByRole("toolbar", {name: "Activity filters"});
+      await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
+      await page.locator("main").evaluate((main) => main.scrollTo({top: main.scrollHeight}));
+      await expect(toolbar.locator("[data-toolbar-title]")).toHaveText("Activity");
+      await expect(toolbar).not.toContainText(/\d+ entries/u);
+      // The day panel's cap pins directly beneath the docked bar.
+      const toolbarBottom = await toolbar.evaluate((node) => node.getBoundingClientRect().bottom);
+      await expect.poll(async () => Math.abs(await page.locator("[data-day-cap]").first()
+        .evaluate((node) => node.getBoundingClientRect().top) - (toolbarBottom + 1))).toBeLessThanOrEqual(1);
+      await page.locator("main").evaluate((main) => main.scrollTo({top: 0}));
+      await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
+
       await conversation.getByRole("button", {name: "Reply"}).first().click();
       await page.getByRole("textbox", {name: "Reply on Activity conversation fixture"}).fill("Inline from Activity.");
       await page.getByRole("button", {exact: true, name: "Reply"}).last().click();
@@ -82,7 +95,10 @@ test.describe("Activity", () => {
       await expect(page).toHaveURL(/q=headline/u);
       await page.goBack();
       await expect(page).toHaveURL(/\/review\?segment=needs_you$/u);
-      await page.getByRole("radio", {name: /^All/u}).click();
+      // Clear filters is a link in the summary row; it returns focus to the first filter menu.
+      await page.locator("[data-active-filters='on']").getByRole("button", {name: "Clear filters"}).click();
+      await expect(page).toHaveURL(/\/review$/u);
+      await expect(page.getByRole("button", {name: "Everyone"})).toBeFocused();
 
       await conversation.getByRole("button", {name: /^Resolve comment by/u}).first().click();
       // The resolution joins the conversation's card rather than adding a second one.
@@ -252,6 +268,11 @@ test.describe("Activity people", () => {
       await expect(page.getByText(/published v1 of Activity people fixture/u)).toBeVisible();
       await expect(page.getByLabel("Conversations on Activity people fixture")).toHaveCount(0);
       await expect(page.getByRole("status").filter({hasText: /^Showing \d+ of \d+ entries$/u})).toBeVisible();
+      // The summary row under the toolbar carries the count, a chip per filter and Clear filters.
+      const summary = page.locator("[data-active-filters='on']");
+      await expect(summary.getByRole("button", {name: "Remove Local filter"})).toBeVisible();
+      await expect(summary.getByRole("button", {name: "Clear filters"})).toBeVisible();
+      await expect(page.getByRole("toolbar", {name: "Activity filters"}).getByRole("button", {name: "Clear filters"})).toHaveCount(0);
 
       await page.getByRole("button", {name: "Remove Local filter"}).click();
       await expect(page).toHaveURL(/\/review$/u);

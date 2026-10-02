@@ -1,3 +1,4 @@
+import { createToolbarUI } from './toolbar-ui.jsx';
 import { groupByDay, groupByArtifact, usTime, timeRange, bylineTime, listPreview, sentenceOf, versionChange, TYPE_FILTERS, SEGMENTS } from './activity-model.js';
 
 /* Markers are 32px discs tinted by type. A glyph with an ink of its own is tonal on its tint;
@@ -22,16 +23,15 @@ const TEXT = {
   code: { ...DATA, fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-data, #495057)', background: 'var(--surface-secondary, #f8f9fa)',
     border: '1px solid var(--border-color, #dee2e6)', borderRadius: 4, padding: '0 6px' },
 };
-const HIDDEN = { position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
 const THREAD_TYPES = ['comment', 'resolution'];
 
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 
 // The host supplies its React runtime and ArkCase exports; no duplicated primitives.
 export function createActivityUI(React, DS) {
-  const { CommentThread, StatusPill, Button, SegmentedControl, Input, Menu, SurfaceState, Avatar,
-    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore } = DS;
-  const hidden = DS.visuallyHiddenStyle || HIDDEN;
+  const { CommentThread, StatusPill, Button, SegmentedControl, Input, SurfaceState, Avatar, SectionHeading,
+    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator, ToolbarSpacer } = DS;
+  const { PageToolbar, FilterMenu, FilterSummary } = createToolbarUI(React, DS);
   const folder = (size = 14) => <i className="bi bi-folder2" aria-hidden="true" style={{ fontSize: size }} />;
 
   function Marker({ kind, icon, size = 32 }) {
@@ -76,7 +76,7 @@ export function createActivityUI(React, DS) {
       if (cap && Math.abs(cap.offsetHeight - capHeight) > 0.5) setCapHeight(cap.offsetHeight);
     });
     if (!events.length) {
-      return <div style={{ background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS }}>
+      return <div style={{ marginTop: 12, background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS }}>
         <SurfaceState phase="ready" count={0} noun="entries" emptyIcon="bi-inbox"
           emptyTitle={filtered ? 'Nothing matches these filters' : 'No activity yet'}
           emptyBody={filtered ? 'Remove a filter or clear them all to see every entry.' : 'Published versions and conversations appear here.'}
@@ -214,7 +214,7 @@ export function createActivityUI(React, DS) {
 
     /* Each day is one panel. Nothing here clips (no overflow), so the cap and the conversation
        heads stay sticky against the page's scroller. */
-    return <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 20 }} data-activity-feed={label}>
+    return <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 12 }} data-activity-feed={label}>
       {groupByDay(entries, now).map((g) => <section key={g.key} aria-label={[g.weekday, g.date].filter(Boolean).join(' ')} data-day={g.key}
         style={{ background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS, boxShadow: 'var(--shadow-card, 0 1px 2px rgba(0,0,0,0.06))' }}>
         <div data-day-cap="" style={{ position: 'sticky', top: stickyTop, zIndex: 3, display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 20px',
@@ -228,50 +228,24 @@ export function createActivityUI(React, DS) {
     </div>;
   }
 
-  /* The page's heading: the level-1 title and its primary action, then metric tiles that double
-     as filter shortcuts. The title carries no summary line. */
-  function ActivityHeader({ title = 'Activity', action, metrics = [] }) {
-    return <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <h1 style={{ flex: '1 1 auto', minWidth: 0, margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", serif)', fontSize: 'var(--font-size-3xl, 2rem)',
-          fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.01em', color: 'var(--text-strong, #111827)' }}>{title}</h1>
-        {action}
-      </div>
+  /* The page's heading, laid out like the Design library's: the level-1 title and its primary
+     action, then metric tiles that double as filter shortcuts. The title carries no summary line. */
+  function ActivityHeader({ title = 'Activity', description, action, metrics = [] }) {
+    return <header style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '24px 0 12px' }}>
+      <SectionHeading level={1} size="lg" title={title} subtitle={description}>{action}</SectionHeading>
       {metrics.length > 0 && <AutoGrid min={180}>
         {metrics.map((m) => <MetricCard key={m.id} label={m.label} value={String(m.value)} size="sm" variant="surface"
           onClick={m.onClick} pressed={m.onClick ? !!m.pressed : undefined} />)}
       </AutoGrid>}
-    </div>;
+    </header>;
   }
 
-  function ActivityToolbar({ segment, onSegment, counts = {}, people = [], selectedPeople = [], onPeople, projects, selectedProjects, onProjects,
-    types, onTypes, typeCounts, query, onQuery, onHeight, shown, total, onClearFilters }) {
+  /* The shared page toolbar: docked, it leads with the title and reports its height so the
+     day caps and conversation heads pin beneath it. */
+  function ActivityToolbar({ title = 'Activity', segment, onSegment, counts = {}, people = [], selectedPeople = [], onPeople, projects, selectedProjects, onProjects,
+    types, onTypes, typeCounts, query, onQuery, onHeight, shown, total, onClearFilters, phone = false }) {
     const [menu, setMenu] = React.useState(null);
-    const rowRef = React.useRef(null);
     const peopleRef = React.useRef(null);
-    const chipsRef = React.useRef(null);
-    const pendingFocus = React.useRef(null);
-    /* Reports the docked row's height so the day caps and conversation heads pin beneath it. */
-    React.useLayoutEffect(() => {
-      const el = rowRef.current;
-      if (!el || !onHeight) return undefined;
-      const report = () => onHeight(Math.round(el.getBoundingClientRect().height) + 20);
-      report();
-      if (typeof ResizeObserver === 'undefined') return undefined;
-      const ro = new ResizeObserver(report);
-      ro.observe(el);
-      return () => ro.disconnect();
-    }, [onHeight]);
-    /* A removed chip takes its focus with it: hand focus to the chip now in its place, else to
-       Clear filters, else back to the People button. */
-    React.useLayoutEffect(() => {
-      const want = pendingFocus.current;
-      if (want == null) return;
-      pendingFocus.current = null;
-      const chips = chipsRef.current ? [...chipsRef.current.querySelectorAll('[data-filter-chip], [data-clear-filters]')] : [];
-      const target = typeof want === 'number' && chips.length ? chips[Math.min(want, chips.length - 1)] : peopleRef.current && peopleRef.current.querySelector('button');
-      if (target) target.focus();
-    });
     const toggle = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : list.concat(id));
     const label = (word, n, all) => (n ? `${word} · ${n}` : all);
     const filtered = segment !== 'All' || selectedPeople.length > 0 || selectedProjects.length > 0 || types.length > 0 || !!String(query || '').trim();
@@ -283,48 +257,31 @@ export function createActivityUI(React, DS) {
       return { type: 'checkbox', label: p.name, description: p.self ? 'You' : p.agent ? 'Agent' : undefined, checked: selectedPeople.includes(p.id), keepOpen: true,
         leading: avatar(p), meta: p.count, onClick: () => onPeople(toggle(selectedPeople, p.id)) };
     }
-    /* Each filter menu is as wide as its longest row, so names stay on one line: never narrower
-       than `minWidth`, never wider than 400px or the viewport less its gutters. */
-    const trigger = (id, icon, text, items, minWidth, ref) => <span ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
-      <Button variant="secondary" outline size="sm" icon={icon} iconRight="bi-chevron-down" expanded={menu === id} hasPopup="menu"
-        onClick={() => setMenu(menu === id ? null : id)}>{text}</Button>
-      <Menu open={menu === id} onClose={() => setMenu(null)} label={id[0].toUpperCase() + id.slice(1)} align="start" density="comfortable" items={items}
-        width="max-content" style={{ minWidth, maxWidth: 'min(400px, calc(100vw - 32px))' }} />
-    </span>;
+    const filter = (id, icon, text, items, minWidth, ref) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)}
+      icon={icon} label={text} menuLabel={id[0].toUpperCase() + id.slice(1)} density="comfortable" items={items} minWidth={minWidth} triggerRef={ref} />;
     const chips = selectedPeople.map((id) => { const p = people.find((x) => x.id === id); return { key: 'person:' + id, label: p ? p.name : id, icon: p && p.agent ? 'bi-cpu' : 'bi-person', remove: () => onPeople(selectedPeople.filter((x) => x !== id)) }; })
       .concat(selectedProjects.map((id) => { const p = projects.find((x) => x.id === id); return { key: 'project:' + id, label: p ? p.name : id, icon: 'bi-folder2', remove: () => onProjects(selectedProjects.filter((x) => x !== id)) }; }))
       .concat(types.map((id) => { const f = TYPE_FILTERS.find((x) => x.id === id); return { key: 'type:' + id, label: f ? f.label : id, icon: TYPE_ICONS[id], remove: () => onTypes(types.filter((x) => x !== id)) }; }));
     const counted = typeof shown === 'number' && typeof total === 'number';
     const n = (v) => <span style={{ ...DATA, color: 'var(--text-data, #495057)' }}>{v}</span>;
     return <>
-      <ScrollDock surface="var(--surface-canvas, #f1f5f7)" bleed={20} zIndex={4} style={{ paddingTop: 10, paddingBottom: 10 }}>
-        <div ref={rowRef} role="toolbar" aria-label="Activity filters" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 14px',
-          background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS, boxShadow: 'var(--shadow-card, 0 1px 2px rgba(0,0,0,0.06))' }}>
-          <SegmentedControl label="Show" mode="radio" value={segment} onChange={onSegment}
-            options={SEGMENTS.map((id) => ({ id, label: id, count: id === 'All' ? undefined : counts[id] }))} />
-          <span aria-hidden="true" style={{ width: 1, height: 24, background: 'var(--border-color-strong, #ced4da)' }} />
-          {onPeople && trigger('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
-          {trigger('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
-            projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,
-              meta: p.count, checked: selectedProjects.includes(p.id), keepOpen: true, onClick: () => onProjects(toggle(selectedProjects, p.id)) })), 240)}
-          {trigger('types', 'bi-funnel', label('Types', types.length, 'All types'),
-            TYPE_FILTERS.map((f) => ({ type: 'checkbox', label: f.label, icon: TYPE_ICONS[f.id], meta: typeCounts ? typeCounts[f.id] : undefined, checked: types.includes(f.id), keepOpen: true,
-              onClick: () => onTypes(toggle(types, f.id)) })), 220)}
-          <Input icon="bi-search" size="sm" type="search" placeholder="Search activity" aria-label="Search activity"
-            value={query} onChange={(ev) => onQuery(ev.target.value)} style={{ flex: '1 1 180px', maxWidth: 260, marginLeft: 'auto' }} />
-        </div>
-      </ScrollDock>
-      {/* The count is a live region that stays mounted, so every filter change is spoken; the row
-          around it shows only while the feed is narrowed. */}
-      {counted && <div ref={chipsRef} data-active-filters={filtered ? 'on' : 'off'} style={filtered
-        ? { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '2px 0 12px' } : { margin: '0 0 8px' }}>
-        <span role="status" aria-live="polite" style={filtered ? { fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-secondary, #5a6268)' } : hidden}>
-          {filtered ? <>Showing {n(shown)} of {n(total)} entries</> : `Showing all ${total} entries`}
-        </span>
-        {filtered && chips.map((c, i) => <Button key={c.key} data-filter-chip="" variant="secondary" outline size="xs" icon={c.icon} iconRight="bi-x-lg" aria-label={`Remove ${c.label} filter`}
-          onClick={() => { pendingFocus.current = i; c.remove(); }}>{c.label}</Button>)}
-        {filtered && onClearFilters && <Button data-clear-filters="" variant="link" size="xs" onClick={() => { pendingFocus.current = 'trigger'; onClearFilters(); }}>Clear filters</Button>}
-      </div>}
+      <PageToolbar title={title} label="Activity filters" gutter={20} phone={phone} onHeight={onHeight}>
+        <SegmentedControl label="Show" mode="radio" value={segment} onChange={onSegment}
+          options={SEGMENTS.map((id) => ({ id, label: id, count: id === 'All' ? undefined : counts[id] }))} />
+        {!phone && <ToolbarSeparator style={{ margin: '0 4px', height: 24 }} />}
+        {onPeople && filter('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
+        {filter('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
+          projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,
+            meta: p.count, checked: selectedProjects.includes(p.id), keepOpen: true, onClick: () => onProjects(toggle(selectedProjects, p.id)) })), 240)}
+        {filter('types', 'bi-funnel', label('Types', types.length, 'All types'),
+          TYPE_FILTERS.map((f) => ({ type: 'checkbox', label: f.label, icon: TYPE_ICONS[f.id], meta: typeCounts ? typeCounts[f.id] : undefined, checked: types.includes(f.id), keepOpen: true,
+            onClick: () => onTypes(toggle(types, f.id)) })), 220)}
+        <ToolbarSpacer />
+        <Input icon="bi-search" size="sm" type="search" placeholder="Search activity" aria-label="Search activity"
+          value={query} onChange={(ev) => onQuery(ev.target.value)} style={{ flex: '1 1 140px', maxWidth: 260 }} />
+      </PageToolbar>
+      {counted && <FilterSummary live filtered={filtered} status={<>Showing {n(shown)} of {n(total)} entries</>} restStatus={`Showing all ${total} entries`}
+        chips={chips} onClear={onClearFilters} fallbackRef={peopleRef} />}
     </>;
   }
 

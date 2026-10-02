@@ -1909,6 +1909,17 @@ gate.
   where the design shows the publisher, because the versions API names
   publishers only by principal id; mentions in the docked comment composer
   are deferred until the server notifies mentioned people.
+- **Progress, October 2 (design port 175aef3 → 08c3899):** Activity and the
+  Design library share the vendored page toolbar: flat on the canvas in a 56px
+  row, docking with a hairline and leading with the page title alone (none on
+  phones), ghost filter menus, and a "Showing N of M" summary row with removable
+  chips and a Clear filters link. Activity takes the library's level-1 heading,
+  and the rail brand emblem now matches the expanded lock-up, so the navy header
+  is 56px in both modes. Remaining: with the navigation pinned open at 1024px,
+  both toolbars wrap to two rows (about 82px; they hold one row with the rail);
+  the library's Clear filters returns focus to Types, not the first menu, as the
+  design source does; and at 375px the Activity conversation card's Open button
+  overflows the card's right edge, which predates this port.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

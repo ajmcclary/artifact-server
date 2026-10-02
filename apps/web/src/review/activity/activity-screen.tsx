@@ -3,6 +3,8 @@ import {useEffect, useState, type CSSProperties} from "react";
 import type {Project, Session} from "@/api/client";
 import {Button, Popover} from "@/arkcase";
 import {activityHref, navigateReview, type ActivityFilters} from "@/review/review-routes";
+import {useViewportWidth} from "@/review/workspace/use-viewport-size";
+import {isPhoneWidth} from "@/review/workspace/workspace-layout";
 import {ActivityHeader, ActivityToolbar} from "@/ui/review-ui";
 import {CopyableCode} from "@/ui/copyable-code";
 
@@ -11,7 +13,7 @@ import {useActivityFacets} from "./use-activity-facets";
 import {useActivityFeed} from "./use-activity-feed";
 import {useActivitySummary} from "./use-activity-summary";
 
-const screenStyle = {margin: "0 auto", maxWidth: 1180, padding: "20px 20px 48px", width: "100%"} satisfies CSSProperties;
+const screenStyle = {margin: "0 auto", maxWidth: 1180, padding: "0 20px 48px", width: "100%"} satisfies CSSProperties;
 const segmentIds = {"All": "all", "Needs you": "needs_you", "With an agent": "with_agent"} as const;
 const segmentLabels = {all: "All", needs_you: "Needs you", with_agent: "With an agent"} as const;
 type ToolbarType = "comments" | "versions" | "agents" | "access";
@@ -31,6 +33,7 @@ export function ActivityScreen({filters, projects, session}: {
   readonly filters: ActivityFilters; readonly projects: readonly Project[]; readonly session: Session;
 }) {
   const feed = useActivityFeed(filters);
+  const phone = isPhoneWidth(useViewportWidth());
   const {phase: summaryPhase, reload: reloadSummary, summary} = useActivitySummary([]);
   const {facets, reload: reloadFacets} = useActivityFacets(filters);
   const [query, setQuery] = useState(filters.q);
@@ -83,6 +86,7 @@ export function ActivityScreen({filters, projects, session}: {
         onSegment={(label) => change({segment: segmentOf(label)})}
         onTypes={(ids) => change({types: toolbarTypesOf(ids)})}
         people={people}
+        phone={phone}
         projects={projects.map((project) => ({archived: project.archivedAt !== null, id: project.id, name: project.name}))}
         query={query}
         segment={segmentLabels[filters.segment]}

@@ -110,15 +110,29 @@ test("DSN-005-B: the design library gathers every current gallery across all pro
     await expect(toolbar.getByRole("button", {name: "Sort: Name (Z–A)"})).toBeVisible();
     await expect(tiles.first()).toHaveAttribute("aria-label", /^Open Screen · Template/u);
 
-    // Types filter by kind with counts, and Clear filters appears only while filtering.
+    // Types filter by kind with counts. While filtering, a row under the toolbar counts the
+    // matches, offers a removable chip per type and Clear filters, which hands focus back to Types.
     await toolbar.getByRole("button", {name: "All types"}).click();
     await page.getByRole("menuitemcheckbox", {name: "Components"}).click();
     await page.keyboard.press("Escape");
     await expect(toolbar.getByRole("button", {name: "Types · 1"})).toBeVisible();
     await expect(tiles).toHaveCount(3);
-    await toolbar.getByRole("button", {name: "Clear filters"}).click();
-    await expect(tiles).toHaveCount(12);
+    const summary = library.locator("[data-active-filters='on']");
+    await expect(summary).toContainText("Showing 3 of 12 previews");
+    await expect(summary.getByRole("button", {name: "Remove Components filter"})).toBeVisible();
     await expect(toolbar.getByRole("button", {name: "Clear filters"})).toHaveCount(0);
+    await summary.getByRole("button", {name: "Clear filters"}).click();
+    await expect(tiles).toHaveCount(12);
+    await expect(library.locator("[data-active-filters]")).toHaveCount(0);
+    await expect(toolbar.getByRole("button", {name: "All types"})).toBeFocused();
+
+    // Docked at the scroller's top, the toolbar leads with the page title and no preview count.
+    await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
+    await library.evaluate((section) => section.scrollTo({top: 400}));
+    await expect(toolbar.locator("[data-toolbar-title]")).toHaveText("Design library");
+    await expect(toolbar).not.toContainText(/\d+ previews?/u);
+    await library.evaluate((section) => section.scrollTo({top: 0}));
+    await expect(toolbar.locator("[data-toolbar-title]")).toHaveCount(0);
 
     // Group by project, collapse one project's band, switch to list and search.
     await toolbar.getByRole("button", {name: "Group: Date"}).click();

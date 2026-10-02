@@ -31,6 +31,9 @@ import {
   StatusPill,
   SurfaceState,
   Timeline,
+  Toolbar,
+  ToolbarSeparator,
+  ToolbarSpacer,
   TreeView,
   visuallyHiddenStyle,
 } from "@/arkcase";
@@ -71,6 +74,9 @@ const controls = {
   StatusPill,
   SurfaceState,
   Timeline,
+  Toolbar,
+  ToolbarSeparator,
+  ToolbarSpacer,
   TreeView,
 };
 // The review modules also read `visuallyHiddenStyle`, a style object rather than a

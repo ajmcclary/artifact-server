@@ -1,15 +1,17 @@
 import { filterLibrary, groupLibrary, galleryKind, galleryKinds, libraryGroupings, librarySorts, defaultSortDir, libraryDateField } from './page-model.js';
 import { usDateTime } from './activity-model.js';
 import { createThumbnailUI } from './placeholder-ui.jsx';
+import { createToolbarUI } from './toolbar-ui.jsx';
 
-/* The design library, laid out like Activity: the heading scrolls away, the toolbar docks and
-   condenses, and each group's band pins beneath it. The host owns every view choice (search,
+/* The design library, laid out like Activity: the heading scrolls away, the shared page toolbar
+   docks and leads with the title, and each group's band pins beneath it. The host owns every view choice (search,
    types, grouping, sort, layout, collapsed groups, scroll and the returning tile) so a return
    from an opened page restores them. Tiles render no live preview: a captured thumbnail when
    supplied, otherwise the kind's placeholder sketch. */
 export function createLibraryUI(React, DS) {
-  const { Button, IconButton, Menu, Input, SegmentedControl, GroupBand, SurfaceState, SectionHeading, ScrollDock } = DS;
+  const { IconButton, Input, SegmentedControl, GroupBand, SurfaceState, SectionHeading, ToolbarSpacer } = DS;
   const { GalleryThumbnail, GalleryPlaceholder } = createThumbnailUI(React);
+  const { PageToolbar, FilterMenu, FilterSummary } = createToolbarUI(React, DS);
   const secondary = { fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5A6268)' };
   const data = { fontFamily: 'var(--font-data, "Source Code Pro", monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-data, #495057)' };
   const strong = { fontWeight: 600, color: 'var(--text-strong, #111827)', overflowWrap: 'anywhere' };
@@ -68,9 +70,9 @@ export function createLibraryUI(React, DS) {
     groupBy = 'date', onGroupByChange, sortBy = 'activity', sortDir, onSortChange, view = 'grid', onViewChange,
     collapsed = [], onCollapsedChange, onRefresh, refreshedAt, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, phone = false }) {
     const rootRef = React.useRef(null);
-    const rowRef = React.useRef(null);
+    const typesRef = React.useRef(null);
     const [menu, setMenu] = React.useState(null);
-    const [dockHeight, setDockHeight] = React.useState(52);
+    const [dockHeight, setDockHeight] = React.useState(57);
     const dir = sortDir || defaultSortDir(sortBy);
     const matches = filterLibrary(items, query, types);
     const groups = groupLibrary(matches, { groupBy, sortBy, dir, now: now ?? Date.now() });
@@ -86,41 +88,26 @@ export function createLibraryUI(React, DS) {
         .find((tile) => tile.getAttribute('data-gallery-path') === focusPath)?.focus({ preventScroll: scrollTop > 0 });
       // Restore once per mount; later prop changes come from this library's own scrolling.
     }, []);
-    /* The bands pin directly under the docked toolbar, whatever height it wraps to. */
-    React.useLayoutEffect(() => {
-      const row = rowRef.current;
-      if (!row) return undefined;
-      const report = () => setDockHeight(Math.round(row.getBoundingClientRect().height) + 1);
-      report();
-      if (typeof ResizeObserver === 'undefined') return undefined;
-      const observer = new ResizeObserver(report);
-      observer.observe(row);
-      return () => observer.disconnect();
-    }, []);
     const announce = (nextQuery, nextTypes) => onAnnounce?.(`${filterLibrary(items, nextQuery, nextTypes).length} matching previews.`);
     const setTypes = (next) => { onTypesChange(next); announce(query, next); };
     const clear = () => { onQueryChange(''); onTypesChange([]); announce('', []); };
     const counts = {};
     items.forEach((item) => { counts[item.kind] = (counts[item.kind] || 0) + 1; });
-    const toggleMenu = (id) => () => setMenu(menu === id ? null : id);
-    const menuButton = (id, icon, label) => <span style={{ position: 'relative', display: 'inline-flex' }}>
-      <Button variant="secondary" outline size="sm" icon={icon} iconRight="bi-chevron-down" expanded={menu === id} hasPopup="menu"
-        onClick={toggleMenu(id)}>{label}</Button>
-      <Menu open={menu === id} onClose={() => setMenu(null)} align="start" label={{ group: 'Group by', sort: 'Sort by', types: 'Artifact types' }[id]}
-        items={{
-          group: [{ heading: 'Group by' }, ...libraryGroupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
-            onClick: () => onGroupByChange(option.id) }))],
-          sort: [{ heading: 'Sort by' }, ...librarySorts.map((option) => ({ type: 'radio', label: option.label, checked: sortBy === option.id,
-            onClick: () => onSortChange(option.id, defaultSortDir(option.id)) })),
-          { divider: true }, { heading: 'Order' },
-          ...directions(sortBy).map(([id, label]) => ({ type: 'radio', label, checked: dir === id, onClick: () => onSortChange(sortBy, id) }))],
-          types: galleryKinds.filter((kind) => counts[kind.id]).map((kind) => ({ type: 'checkbox', label: kind.label, icon: kind.icon,
-            meta: counts[kind.id], checked: types.includes(kind.id), keepOpen: true,
-            onClick: () => setTypes(types.includes(kind.id) ? types.filter((id) => id !== kind.id) : types.concat(kind.id)) })),
-        }[id]} />
-    </span>;
+    const menuButton = (id, icon, label) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)} icon={icon} label={label}
+      menuLabel={{ group: 'Group by', sort: 'Sort by', types: 'Artifact types' }[id]} minWidth={220} triggerRef={id === 'types' ? typesRef : undefined}
+      items={{
+        group: [{ heading: 'Group by' }, ...libraryGroupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
+          onClick: () => onGroupByChange(option.id) }))],
+        sort: [{ heading: 'Sort by' }, ...librarySorts.map((option) => ({ type: 'radio', label: option.label, checked: sortBy === option.id,
+          onClick: () => onSortChange(option.id, defaultSortDir(option.id)) })),
+        { divider: true }, { heading: 'Order' },
+        ...directions(sortBy).map(([id, label]) => ({ type: 'radio', label, checked: dir === id, onClick: () => onSortChange(sortBy, id) }))],
+        types: galleryKinds.filter((kind) => counts[kind.id]).map((kind) => ({ type: 'checkbox', label: kind.label, icon: kind.icon,
+          meta: counts[kind.id], checked: types.includes(kind.id), keepOpen: true,
+          onClick: () => setTypes(types.includes(kind.id) ? types.filter((id) => id !== kind.id) : types.concat(kind.id)) })),
+      }[id]} />;
+    const chips = types.map((id) => { const kind = galleryKind(id); return { key: 'type:' + id, label: kind.label, icon: kind.icon, remove: () => setTypes(types.filter((x) => x !== id)) }; });
     const groupName = libraryGroupings.find((option) => option.id === groupBy).label;
-    const count = filtered ? `${matches.length} of ${items.length}` : `${items.length} ${items.length === 1 ? 'preview' : 'previews'}`;
 
     return <section ref={rootRef} aria-label={title} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
       style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: `0 ${gutter}px 48px`,
@@ -129,28 +116,21 @@ export function createLibraryUI(React, DS) {
         <SectionHeading level={1} size="lg" title={title} subtitle={description} />
         {notice}
       </header>
-      <ScrollDock surface="var(--surface-canvas, #F1F5F7)" bleed={gutter} zIndex={4}
-        style={{ borderBottom: '1px solid transparent' }} dockedStyle={{ borderBottom: '1px solid var(--border-color, #DEE2E6)' }}>
-        {({ docked }) => <div ref={rowRef} role="toolbar" aria-label="Library view"
-          style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, minHeight: 52, padding: phone ? '8px 0' : 0, boxSizing: 'border-box' }}>
-          {docked && <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, paddingRight: 10, marginRight: 2, borderRight: '1px solid var(--border-color, #DEE2E6)' }}>
-            <span style={{ fontFamily: 'var(--font-heading, "Source Serif 4", serif)', fontWeight: 600, fontSize: 'var(--font-size-md, 16px)', color: 'var(--text-strong, #111827)' }}>{title}</span>
-            <span style={{ ...data, fontSize: 'var(--font-size-xs, 12px)' }}>{count}</span>
-          </div>}
-          {menuButton('group', 'bi-layers', `Group: ${groupName}`)}
-          {menuButton('sort', 'bi-sort-alpha-down', `Sort: ${sortLabel(sortBy, dir)}`)}
-          {menuButton('types', 'bi-funnel', types.length ? `Types · ${types.length}` : 'All types')}
-          {filtered && <Button variant="link" size="xs" icon="bi-x" onClick={clear}>Clear filters</Button>}
-          <div style={{ flexGrow: 1 }} />
-          <Input icon="bi-search" size="sm" type="search" placeholder="Search previews" aria-label="Search previews" value={query}
-            onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types); }}
-            style={{ width: phone ? '100%' : 260, maxWidth: '100%' }} />
-          <SegmentedControl variant="pill" size="sm" mode="radio" label="Layout" value={view} onChange={onViewChange}
-            options={[{ id: 'grid', icon: 'bi-grid-3x3-gap', ariaLabel: 'Grid', title: 'Grid' }, { id: 'list', icon: 'bi-list-ul', ariaLabel: 'List', title: 'List' }]} />
-          {onRefresh && <IconButton icon="bi-arrow-clockwise" size="sm" ariaLabel="Refresh"
-            title={refreshedAt ? `Refresh · read ${refreshedAt}` : 'Refresh'} onClick={onRefresh} />}
-        </div>}
-      </ScrollDock>
+      <PageToolbar title={title} label="Library view" gutter={gutter} phone={phone} onHeight={setDockHeight}>
+        {menuButton('group', 'bi-layers', `Group: ${groupName}`)}
+        {menuButton('sort', 'bi-sort-alpha-down', `Sort: ${sortLabel(sortBy, dir)}`)}
+        {menuButton('types', 'bi-funnel', types.length ? `Types · ${types.length}` : 'All types')}
+        <ToolbarSpacer />
+        <Input icon="bi-search" size="sm" type="search" placeholder="Search previews" aria-label="Search previews" value={query}
+          onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types); }}
+          style={phone ? { width: '100%' } : { flex: '1 1 140px', maxWidth: 260 }} />
+        <SegmentedControl variant="pill" size="sm" mode="radio" label="Layout" value={view} onChange={onViewChange}
+          options={[{ id: 'grid', icon: 'bi-grid-3x3-gap', ariaLabel: 'Grid', title: 'Grid' }, { id: 'list', icon: 'bi-list-ul', ariaLabel: 'List', title: 'List' }]} />
+        {onRefresh && <IconButton icon="bi-arrow-clockwise" size="sm" ariaLabel="Refresh"
+          title={refreshedAt ? `Refresh · read ${refreshedAt}` : 'Refresh'} onClick={onRefresh} />}
+      </PageToolbar>
+      <FilterSummary filtered={filtered} status={<>Showing <span style={data}>{matches.length}</span> of <span style={data}>{items.length}</span> previews</>}
+        chips={chips} onClear={clear} fallbackRef={typesRef} />
       {!matches.length && <div style={{ marginTop: 24 }}>
         <SurfaceState phase="ready" count={0} noun="previews" emptyIcon="bi-collection" emptyTitle="Nothing matches these filters"
           emptyBody="Clear the search and type filters to see every preview." actionLabel="Clear filters" actionIcon="bi-x" onAction={clear} />

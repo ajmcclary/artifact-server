@@ -449,13 +449,17 @@ export interface ActivityMetric {
   pressed?: boolean;
 }
 export interface ActivityHeaderProps {
-  /** @default "Activity" */
+  /** The level-1 title, set as the Design library's `SectionHeading` page title. @default "Activity" */
   title?: string;
+  /** Optional one-sentence line under the title; Activity passes none. */
+  description?: string;
   /** The page's primary action, at the heading's end. */
   action?: React.ReactNode;
   metrics?: ActivityMetric[];
 }
 export interface ActivityToolbarProps {
+  /** The page title the toolbar leads with once docked, as the Design library's does. @default "Activity" */
+  title?: string;
   segment: 'All' | 'Needs you' | 'With an agent';
   onSegment: (segment: string) => void;
   counts?: Record<string, number>;
@@ -472,9 +476,11 @@ export interface ActivityToolbarProps {
   typeCounts?: Partial<Record<'comments' | 'versions' | 'agents' | 'access', number>>;
   query: string;
   onQuery: (text: string) => void;
-  /** Reports the docked row's height (including its padding) whenever it changes. */
+  /** Reports the docked bar's height (its hairline included) whenever it changes. */
   onHeight?: (height: number) => void;
-  /** Entries after filtering and in all. Given both, the toolbar keeps a live "Showing N of M entries" region and, while filtered, a row of removable filter chips. */
+  /** Phone layout: no docked title and no separator after the segments, so the wrapped bar stays short. @default false */
+  phone?: boolean;
+  /** Entries after filtering and in all. Given both, the toolbar keeps a live "Showing N of M entries" region and, while filtered, a row of removable filter chips and Clear filters. */
   shown?: number;
   total?: number;
   /** Clears every filter, people included. */
@@ -501,14 +507,14 @@ export function createReviewUI(react: typeof React, controls: Record<string, Rea
   MentionText: React.ComponentType<MentionTextProps>;
   /** Requires `SegmentedControl`, `Input`, `GroupBand` and `SurfaceState` in `controls`. */
   DesignGallery: React.ComponentType<DesignGalleryProps>;
-  /** Requires `Button`, `IconButton`, `Menu`, `Input`, `SegmentedControl`, `GroupBand`, `SurfaceState`, `SectionHeading` and `ScrollDock` in `controls`. */
+  /** Requires `Button`, `IconButton`, `Menu`, `Input`, `SegmentedControl`, `GroupBand`, `SurfaceState`, `SectionHeading`, `ScrollDock`, `Toolbar`, `ToolbarSeparator` and `ToolbarSpacer` in `controls`. */
   DesignLibrary: React.ComponentType<DesignLibraryProps>;
   /** A full-bleed sketch of one kind; fills its positioned container. */
   GalleryPlaceholder: React.ComponentType<GalleryPlaceholderProps>;
-  /** Requires `AutoGrid` and `MetricCard` in `controls`. */
+  /** Requires `SectionHeading`, `AutoGrid` and `MetricCard` in `controls`. */
   ActivityHeader: React.ComponentType<ActivityHeaderProps>;
   /** Requires `CommentThread`, `StatusPill`, `Button`, `SurfaceState`, `ScrollDock`, `AnnotationPin` and `LoadMore` in `controls`. */
   ActivityFeed: React.ComponentType<ActivityFeedProps>;
-  /** Requires `SegmentedControl`, `Button`, `Menu`, `Input`, `Avatar` and `ScrollDock` in `controls`. */
+  /** Requires `SegmentedControl`, `Button`, `Menu`, `Input`, `Avatar`, `ScrollDock`, `Toolbar`, `ToolbarSeparator` and `ToolbarSpacer` in `controls`. */
   ActivityToolbar: React.ComponentType<ActivityToolbarProps>;
 };

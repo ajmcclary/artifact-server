@@ -1,5 +1,5 @@
 {
-  "commit": "175aef38e2f884c24007dc8fba4f1b3a62a27b51",
+  "commit": "08c3899facf2261ec008e442254cedf1ef7a377d",
   "entriesSha256": "8dc72b1f20c46955097911f3d2c4dd5fdcad89f62b2bc1173dc9e4232e146c58",
   "files": {
     "README.md": {
@@ -823,7 +823,7 @@
       "source": "arkcase/project/components/utilities/tones.jsx"
     },
     "index.ts": {
-      "sha256": "a9df8d90fdb244ca1423f20509a26e5565cd68592dd3724454a00d70687ba675",
+      "sha256": "bf7ede27556767294f54735fb3e731be3a7db05ba794528dcc0b4e28ba422624",
       "source": null
     },
     "review-ui/activity-model.js": {
@@ -831,11 +831,11 @@
       "source": "workspace/projects/arkcase-artifacts/activity-model.js"
     },
     "review-ui/activity-ui.jsx": {
-      "sha256": "5e036460e880c79009430296994a021a2806f8e4b14d80c24202ee6c9eee1e43",
+      "sha256": "b5f77c7209c15cb50597a6a133181d995694208d9c54ed88e6e262fbb284d52e",
       "source": "workspace/projects/arkcase-artifacts/activity-ui.jsx"
     },
     "review-ui/library-ui.jsx": {
-      "sha256": "8b54e84a284c538002f2a531de2e0b35f8bc37f68cd79a9cc4f4d2ac0497de93",
+      "sha256": "920de1ecd5c591993c6d7f105844eb68a00f8f5f8340195cab47ce012c716d5b",
       "source": "workspace/projects/arkcase-artifacts/library-ui.jsx"
     },
     "review-ui/page-model.js": {
@@ -847,12 +847,16 @@
       "source": "workspace/projects/arkcase-artifacts/placeholder-ui.jsx"
     },
     "review-ui/review-ui.d.ts": {
-      "sha256": "a80d52f96c849e72718a5b6ab80486793a33509c80de45318db3fc3a8233f729",
+      "sha256": "eeb172e698257e26df1bd2ac7e6254a5cc4bc67f9f264078bfef62fe30d1b623",
       "source": "workspace/projects/arkcase-artifacts/review-ui.d.ts"
     },
     "review-ui/review-ui.jsx": {
       "sha256": "9f2bb51c726745fbdda373004a6bdbff8204e6b1d382b3034e9f61f38f82b825",
       "source": "workspace/projects/arkcase-artifacts/review-ui.jsx"
+    },
+    "review-ui/toolbar-ui.jsx": {
+      "sha256": "fc1164df00d28d0bcc749e81737bd535ed0802b21140e9a9d4a6aec1ccd64f87",
+      "source": "workspace/projects/arkcase-artifacts/toolbar-ui.jsx"
     },
     "tokens/base.css": {
       "sha256": "1913aa94db1c00c594b08eb339c45b13f15650bc52ae51dccc2a8f2ff1b48ee6",
