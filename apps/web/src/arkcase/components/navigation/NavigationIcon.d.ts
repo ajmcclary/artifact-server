@@ -1,8 +1,10 @@
 import React from 'react';
 export interface NavigationIconProps {
-  /** Studio compatibility class. Uses the navigation rendition when available. @default "bi-circle" */
+  /** Compatibility class from icon-map.json. @default "bi-circle" */
   icon?: string;
-  /** Optional style overrides. Leave color unset for the Portal-matched Studio duotone. */
+  /** The route is current: draws the filled (Bold) pair. @default false */
+  active?: boolean;
+  /** Optional style overrides. Colour follows the parent's text colour. */
   style?: React.CSSProperties;
 }
 /** Shared 20px glyph for labelled, rail and mobile route controls. Not a button. */

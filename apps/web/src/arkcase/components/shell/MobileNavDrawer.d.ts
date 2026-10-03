@@ -53,6 +53,6 @@ export interface MobileNavDrawerProps {
  * The phone shell's primary navigation: a modal drawer that slides in from the
  * start edge over a navy backdrop, traps Tab, closes on Escape, locks the
  * body's scroll and returns focus on close. Every item is a 44px target with a
- * 20px navigation-optimized Studio icon independent of its label's font size.
+ * 20px navigation icon independent of its label's font size; the current item draws Bold.
  */
 export function MobileNavDrawer(props: MobileNavDrawerProps): React.JSX.Element | null;

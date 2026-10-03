@@ -10,7 +10,7 @@ export interface AlertAction {
   variant?: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'light' | 'dark' | 'link' | 'ghost' | 'navy';
   /** Outline treatment. Defaults to true only for a `neutral` alert's default secondary button. */
   outline?: boolean;
-  /** Leading `bi-*` studio icon class. */
+  /** Leading `bi-*` icon class. */
   icon?: string;
   /** Native `disabled`. */
   disabled?: boolean;
@@ -25,7 +25,7 @@ export interface AlertProps {
   title?: React.ReactNode;
   /** Content rendered inside the Alert. */
   children?: React.ReactNode;
-  /** Override the default status icon (`bi-*` studio icon class). */
+  /** Override the default status icon (`bi-*` icon class). */
   icon?: string;
   /** Dismiss handler — shows a close button when provided. */
   onClose?: () => void;

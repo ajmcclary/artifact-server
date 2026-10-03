@@ -28,7 +28,7 @@ export interface MetricCardProps {
   dataFont?: boolean;
   /** Tinted tile with accent rule, or the plain card surface with hairline border and shadow. @default "tinted" */
   variant?: 'tinted' | 'surface';
-  /** Leading `bi-*` studio icon class shown before the label, e.g. "bi-images". */
+  /** Leading `bi-*` icon class shown before the label, e.g. "bi-images". */
   icon?: string;
   /** StatusPill shown at the end of the label row. */
   status?: { tone: NonNullable<StatusPillProps['tone']>; label: string };

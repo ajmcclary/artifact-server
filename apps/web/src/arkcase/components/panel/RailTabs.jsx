@@ -54,14 +54,15 @@ function RailTab({ item, pressed, divider, labels, placement, onSelect, reduce }
           flex: '1 1 auto', width: '100%', minHeight: 0, overflow: 'hidden',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
           padding: '10px 0', border: 0, borderRadius: 0, font: 'inherit', cursor: 'pointer',
-          background: lit ? 'var(--tint-primary-hover, rgba(0,121,168,.05))' : 'transparent',
+          background: pressed ? 'var(--tint-primary-selected, rgba(0,121,168,.10))' : hover ? 'var(--tint-primary-hover, rgba(0,121,168,.05))' : 'transparent',
+          boxShadow: pressed ? `inset ${placement === 'left' ? 3 : -3}px 0 var(--bs-primary, #0079a8)` : undefined,
           color: lit ? 'var(--text-link-on-tint, #00688f)' : 'var(--text-secondary, #5a6268)',
           /* The shared :focus-visible outline, drawn inside so the strip's edges never clip it. */
           outlineOffset: -3,
           transition: reduce ? 'none' : 'background-color .15s ease, color .15s ease',
         }}
       >
-        {item.icon && <i aria-hidden="true" className={'bi ' + item.icon} style={{ flex: 'none', fontSize: 'var(--icon-sm, 14px)' }} />}
+        {item.icon && <i aria-hidden="true" className={'bi ' + item.icon} style={{ flex: 'none', width: 'var(--icon-lg, 20px)', height: 'var(--icon-lg, 20px)', fontSize: 'var(--icon-lg, 20px)', lineHeight: 1 }} />}
         {hasCount && (
           <span aria-hidden="true" style={{
             flex: 'none', padding: '0 5px', borderRadius: 'var(--radius-pill, 10px)',

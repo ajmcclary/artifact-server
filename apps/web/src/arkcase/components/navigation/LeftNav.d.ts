@@ -9,6 +9,8 @@ export interface LeftNavProps {
    * `peek` a rail whose expanded list opens over the content. @default "expanded"
    */
   mode?: LeftNavMode;
+  /** Navy application chrome or the default light section navigation. @default "default" */
+  tone?: 'default' | 'navy';
   /** The column's accessible name, handed to the `SideNav` landmark. @default "Navigation" */
   title?: string;
   /** Replaces the `SideNav` title row; pass `false` to omit the visible row while retaining `title` as the landmark name. */

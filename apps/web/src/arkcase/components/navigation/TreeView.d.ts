@@ -8,7 +8,7 @@ export interface TreeBadge {
   value?: React.ReactNode;
   /** Pill colour pair. @default "primary" */
   tone?: TreeBadgeTone;
-  /** Optional `bi-*` studio icon before the value. */
+  /** Optional `bi-*` icon before the value. */
   icon?: string;
   /** Spoken meaning (e.g. "3 open findings"); read instead of the bare value and shown as its tooltip. */
   label?: string;
@@ -19,7 +19,7 @@ export type TreeMarkerTone = 'neutral' | 'info' | 'warning' | 'danger' | 'primar
 
 /** A small status glyph after a row's label, e.g. `{ icon: 'bi-lock', label: 'Required' }`. */
 export interface TreeMarker {
-  /** `bi-*` studio icon drawn at 11px. */
+  /** `bi-*` icon drawn at 11px. */
   icon: string;
   /** Meaning of the glyph; shown as its tooltip and spoken in the row's description. */
   label: string;
@@ -32,7 +32,7 @@ export interface TreeNode {
   id: string;
   /** Row text; also the typeahead and `query` target. */
   label: string;
-  /** Optional `bi-*` studio icon shown after the chevron. */
+  /** Optional `bi-*` icon shown after the chevron. */
   icon?: string;
   /** Icon colour for an unselected row (makes the icon tonal); selected rows use the row ink. */
   iconColor?: string;

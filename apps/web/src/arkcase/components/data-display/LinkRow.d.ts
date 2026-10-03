@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface LinkRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title' | 'style' | 'onSelect'> {
-  /** `bi-*` studio icon class before the title. */
+  /** `bi-*` icon class before the title. */
   icon?: string;
   /** Glyph ink: `link` for a starter or destination, `muted` (`text-secondary`) for a history row. @default "link" */
   iconTone?: 'link' | 'muted';

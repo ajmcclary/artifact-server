@@ -1,4 +1,5 @@
 import React from 'react';
+import { navyNavigationStyle } from './nav-tone.js';
 import { NavigationIcon } from './NavigationIcon.jsx';
 import { displayProfileContext } from '../shell/DisplayProfile.jsx';
 import { useResizeSeam } from '../panel/resize-seam.jsx';
@@ -6,9 +7,9 @@ import { Tooltip } from '../feedback/Tooltip.jsx';
 import { matchesMedia, countText, leftToBrowser } from './nav-helpers.jsx';
 
 const RAIL_WIDTH = 'var(--navigator-rail-width, 52px)';
-const GROUP_LABEL = { fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, letterSpacing: 'var(--letter-spacing-wide, .025em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap' };
+const GROUP_LABEL = { fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, letterSpacing: 'var(--letter-spacing-wide, .025em)', textTransform: 'uppercase', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', whiteSpace: 'nowrap' };
 const COUNT = { marginLeft: 'auto', flex: 'none', minWidth: 20, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: 1.45, borderRadius: 'var(--radius-pill, 10px)', padding: '1px 6px' };
-const MINI_COUNT = { position: 'absolute', top: 2, right: 2, minWidth: 16, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 10, fontWeight: 700, lineHeight: 1.6, borderRadius: 8, padding: '0 3px', boxShadow: '0 0 0 2px var(--surface-body, #fff)' };
+const MINI_COUNT = { position: 'absolute', top: 2, right: 2, minWidth: 16, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 10, fontWeight: 700, lineHeight: 1.6, borderRadius: 8, padding: '0 3px', boxShadow: '0 0 0 2px var(--ac-nav-surface, var(--surface-body, #fff))' };
 
 const COUNT_NEUTRAL = { ...COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
 const MINI_COUNT_NEUTRAL = { ...MINI_COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
@@ -41,7 +42,7 @@ const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_
  */
 export function SideNav({
   items = [], activeLink, isOpen = true, onClose, onSelect, title = 'Navigation', inline = false, style,
-  mode: modeProp, pinned = false, onPinChange, footerMeta, header, footer, footerRail, width, onAnnounce,
+  mode: modeProp, tone = 'default', pinned = false, onPinChange, footerMeta, header, footer, footerRail, width, onAnnounce,
   pinName = 'the menu', pinLabelVisible = true, currentLabel,
   resizable = false, onWidthChange, minWidth = 180, maxWidth = 420,
   ...rest
@@ -172,7 +173,7 @@ export function SideNav({
     if (!item.group || (prev && prev.group === item.group)) return null;
     if (rail) {
       if (i === 0) return null;
-      return <div aria-hidden="true" style={{ flex: 'none', position: 'relative', height: 13 }}><span style={{ position: 'absolute', left: 11, right: 11, top: 6, borderTop: '1px solid var(--border-color-strong, #ced4da)' }} /></div>;
+      return <div aria-hidden="true" style={{ flex: 'none', position: 'relative', height: 13 }}><span style={{ position: 'absolute', left: 11, right: 11, top: 6, borderTop: '1px solid var(--ac-nav-divider, var(--border-color-strong, #ced4da))' }} /></div>;
     }
     return <div style={{ flex: 'none', height: 30, display: 'flex', alignItems: 'flex-end', padding: '0 14px 4px', overflow: 'hidden' }}><span style={GROUP_LABEL}>{item.group}</span></div>;
   };
@@ -195,21 +196,22 @@ export function SideNav({
           ...asButton,
           display: 'flex', alignItems: 'center', height: 29, padding: '0 12px 0 calc(1rem + var(--icon-lg, 20px) + 0.75rem)', fontSize: 13,
           borderLeft: '3px solid transparent',
-          color: active ? 'var(--text-link-on-tint, #00688f)' : 'var(--text-secondary, #5a6268)',
+          color: active ? 'var(--ac-nav-text, var(--text-link-on-tint, #00688f))' : 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))',
           fontWeight: active ? 600 : 400,
-          backgroundColor: active ? 'rgba(0,121,168,0.06)' : isHover ? 'rgba(0,121,168,0.05)' : 'transparent',
-          textDecoration: 'none',
+          backgroundColor: active ? 'var(--ac-nav-selected, var(--tint-primary-selected, rgba(0,121,168,.10)))' : isHover ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
+          textDecoration: 'none', outlineOffset: -3,
+          boxShadow: active ? 'inset 3px 0 var(--ac-nav-marker, var(--bs-primary, #0079a8))' : undefined,
           transition: 'color .15s ease, background-color .15s ease',
         }
       : {
           ...asButton,
           display: 'flex', alignItems: 'center', gap: '0.75rem',
           padding: '0.5rem 1rem',
-          color: active || isHover ? 'var(--text-link-on-tint, #00688f)' : 'var(--text-body, #212529)',
+          color: active || isHover ? 'var(--ac-nav-text, var(--text-link-on-tint, #00688f))' : 'var(--ac-nav-text, var(--text-body, #212529))',
           textDecoration: 'none',
-          borderLeft: `3px solid ${active ? 'var(--bs-primary, #0079a8)' : 'transparent'}`,
-          backgroundColor: active ? 'rgba(0,121,168,0.1)' : isHover ? 'rgba(0,121,168,0.05)' : 'transparent',
-          fontWeight: active ? 500 : 400,
+          borderLeft: `3px solid ${active ? 'var(--ac-nav-marker, var(--bs-primary, #0079a8))' : 'transparent'}`,
+          backgroundColor: active ? 'var(--ac-nav-selected, var(--tint-primary-selected, rgba(0,121,168,.10)))' : isHover ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
+          fontWeight: active ? 600 : 400,
           fontSize: '0.9375rem',
           transition: 'color .15s ease, background-color .15s ease, border-color .15s ease',
         };
@@ -220,13 +222,13 @@ export function SideNav({
         onClick: onItemClick(item),
         onMouseEnter: () => setHover(i),
         onMouseLeave: () => setHover(null),
-        style,
+        style: { ...style, outlineOffset: -3 },
       },
       child ? item.label : [
-        item.icon ? <NavigationIcon key="icon" icon={item.icon} /> : null,
+        item.icon ? <NavigationIcon key="icon" icon={item.icon} active={active} /> : null,
         item.label,
         item.count != null ? <span key="count" style={countStyle(item, false)}>{countText(item.count)}</span> : null,
-        item.locked ? <i key="lock" aria-hidden="true" className="bi bi-lock" title="Restricted for your role" style={{ marginLeft: item.count != null ? 8 : 'auto', flexShrink: 0, fontSize: 'var(--icon-xs, 12px)', color: 'var(--text-secondary, #5a6268)' }} /> : null,
+        item.locked ? <i key="lock" aria-hidden="true" className="bi bi-lock" title="Restricted for your role" style={{ marginLeft: item.count != null ? 8 : 'auto', flexShrink: 0, fontSize: 'var(--icon-xs, 12px)', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))' }} /> : null,
       ],
     );
   };
@@ -251,13 +253,14 @@ export function SideNav({
           position: 'relative', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: 44, height: 44, margin: '2px auto',
           borderRadius: 'var(--radius-md, 5px)',
-          color: active || isHover ? 'var(--text-link-on-tint, #00688f)' : 'var(--text-body, #212529)',
-          backgroundColor: active ? 'var(--tint-primary-selected, rgba(0,121,168,0.10))' : isHover ? 'var(--tint-primary-hover, rgba(0,121,168,0.05))' : 'transparent',
-          textDecoration: 'none',
+          color: active || isHover ? 'var(--ac-nav-text, var(--text-link-on-tint, #00688f))' : 'var(--ac-nav-text, var(--text-body, #212529))',
+          backgroundColor: active ? 'var(--ac-nav-selected, var(--tint-primary-selected, rgba(0,121,168,.10)))' : isHover ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
+          textDecoration: 'none', outlineOffset: -3,
+          boxShadow: active ? 'inset 3px 0 var(--ac-nav-marker, var(--bs-primary, #0079a8))' : undefined,
           transition: 'color .15s ease, background-color .15s ease',
         },
       },
-      <NavigationIcon key="icon" icon={item.icon || 'bi-circle'} />,
+      <NavigationIcon key="icon" icon={item.icon || 'bi-circle'} active={active} />,
       item.count != null ? <span key="count" style={countStyle(item, true)}>{countText(item.count)}</span> : null,
     );
     return (
@@ -289,40 +292,40 @@ export function SideNav({
     const showLabel = pinLabelVisible && !rail && w >= 150;
     const toggle = () => { const next = !pinned; onPinChange(next); onAnnounce && onAnnounce(next ? Who + ' pinned.' : Who + ' unpinned.'); };
     return (
-      <div style={{ flex: 'none', height: 32, borderTop: '1px solid var(--border-color-strong, #ced4da)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: rail ? 0 : '0 10px 0 4px', overflow: 'hidden' }}>
+      <div style={{ flex: 'none', height: 32, borderTop: '1px solid var(--ac-nav-divider, var(--border-color-strong, #ced4da))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: rail ? 0 : '0 10px 0 4px', overflow: 'hidden' }}>
         <button
           type="button"
           onClick={toggle}
           aria-pressed={!!pinned}
           aria-label={pinLabel}
           title={pinLabel}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', gap: 6, height: 24, width: rail ? 44 : undefined, margin: rail ? '0 auto' : 0, padding: rail ? 0 : '0 6px 0 8px', borderRadius: 'var(--radius-md, 5px)', border: 'none', background: 'transparent', font: 'inherit', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, .025em)', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--text-link-hover, #005a7d)', flex: 'none' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', gap: 6, height: 24, width: rail ? 44 : undefined, margin: rail ? '0 auto' : 0, padding: rail ? 0 : '0 6px 0 8px', borderRadius: 'var(--radius-md, 5px)', border: 'none', background: 'transparent', font: 'inherit', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 400, letterSpacing: 'normal', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', flex: 'none' }}
         >
           <i aria-hidden="true" className={`bi ${pinned ? 'bi-pin-angle-fill' : 'bi-pin-angle'}`} style={{ fontSize: 'var(--icon-sm, 14px)' }} />
           {showLabel && <span>{pinLabel}</span>}
         </button>
-        {!rail && footerMeta != null && <span style={{ minWidth: 0, fontSize: 'var(--font-size-label, 11px)', color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{footerMeta}</span>}
+        {!rail && footerMeta != null && <span style={{ minWidth: 0, fontSize: 'var(--font-size-label, 11px)', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{footerMeta}</span>}
       </div>
     );
   };
 
   const titleRow = header != null ? header : (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color, #dee2e6)' }}>
-      <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 500 }}>{title}</h2>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', borderBottom: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))' }}>
+      <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 500, color: 'var(--ac-nav-text, var(--text-body, #212529))' }}>{title}</h2>
       {onClose && (
-        <button onClick={onClose} aria-label="Close navigation" style={{ background: 'transparent', border: 'none', fontSize: '1.25rem', lineHeight: 1, color: 'var(--text-body, #212529)', cursor: 'pointer', padding: '0.25rem', borderRadius: '0.25rem' }}>
+        <button onClick={onClose} aria-label="Close navigation" style={{ background: 'transparent', border: 'none', fontSize: '1.25rem', lineHeight: 1, color: 'var(--ac-nav-text, var(--text-body, #212529))', cursor: 'pointer', padding: '0.25rem', borderRadius: '0.25rem' }}>
           <i className="bi bi-x-lg" />
         </button>
       )}
     </div>
   );
-  const footerRow = footer != null && <div style={{ flex: 'none', borderTop: '1px solid var(--border-color, #dee2e6)', padding: '8px 12px' }}>{footer}</div>;
+  const footerRow = footer != null && <div style={{ flex: 'none', borderTop: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))', padding: '8px 12px' }}>{footer}</div>;
 
   /* The peek's own toggle: the rail's head opens it, the overlay's head — the same 44px row in
      the same place — closes it, so the press that opened it can be undone where it was made. */
   const whoNav = String(pinName).replace(/^the\s+/i, '');
   const peekHead = (open) => (
-    <div style={{ flex: 'none', height: 44, display: 'flex', alignItems: 'center', justifyContent: open ? 'flex-start' : 'center', padding: open ? '0 4px' : 0, borderBottom: '1px solid var(--border-color, #dee2e6)' }}>
+    <div style={{ flex: 'none', height: 44, display: 'flex', alignItems: 'center', justifyContent: open ? 'flex-start' : 'center', padding: open ? '0 4px' : 0, borderBottom: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))' }}>
       <button
         ref={open ? undefined : peekToggleRef}
         type="button"
@@ -331,7 +334,7 @@ export function SideNav({
         aria-label={(open ? 'Collapse ' : 'Expand ') + whoNav}
         title={(open ? 'Collapse ' : 'Expand ') + whoNav}
         onClick={() => { if (open) retractPeek(); else setPeek(true); }}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 36, padding: 0, border: 0, borderRadius: 'var(--radius-md, 5px)', background: 'transparent', font: 'inherit', cursor: 'pointer', color: 'var(--text-secondary, #5a6268)' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 36, padding: 0, border: 0, borderRadius: 'var(--radius-md, 5px)', background: 'transparent', font: 'inherit', cursor: 'pointer', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))' }}
       >
         <i aria-hidden="true" className={'bi ' + (open ? 'bi-arrow-bar-left' : 'bi-arrow-bar-right')} style={{ fontSize: 'var(--icon-sm, 14px)' }} />
       </button>
@@ -347,17 +350,19 @@ export function SideNav({
         onKeyDown={isPeek ? undefined : onKeyDown}
         style={{
           flex: 'none', width: RAIL_WIDTH, height: '100%',
-          backgroundColor: 'var(--surface-body, #fff)',
+          backgroundColor: 'var(--ac-nav-surface, var(--surface-body, #fff))',
+          color: 'var(--ac-nav-text, var(--text-body, #212529))',
           display: 'flex', flexDirection: 'column',
-          borderRight: '1px solid var(--border-color, #dee2e6)',
+          borderRight: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
           overflow: 'hidden',
+          ...(tone === 'navy' ? navyNavigationStyle : null),
           ...style,
         }}
         {...rest}
       >
         {isPeek && peekHead(false)}
         {list(true)}
-        {footerRail != null && <div style={{ flex: 'none', borderTop: '1px solid var(--border-color, #dee2e6)', padding: '8px 0', display: 'flex', justifyContent: 'center' }}>{footerRail}</div>}
+        {footerRail != null && <div style={{ flex: 'none', borderTop: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))', padding: '8px 0', display: 'flex', justifyContent: 'center' }}>{footerRail}</div>}
         {pinRow(true)}
       </nav>
     );
@@ -376,11 +381,13 @@ export function SideNav({
             data-ac-peek-overlay="true"
             style={{
               position: 'absolute', top: 0, left: 0, bottom: 0, width: panelW, zIndex: 40,
-              backgroundColor: 'var(--surface-body, #fff)',
-              borderRight: '1px solid var(--border-color, #dee2e6)',
+              backgroundColor: 'var(--ac-nav-surface, var(--surface-body, #fff))',
+          color: 'var(--ac-nav-text, var(--text-body, #212529))',
+              borderRight: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
               boxShadow: 'var(--shadow-nav, 0 0 24px rgba(0,0,0,0.12))',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               animation: reduceMotion ? 'none' : undefined,
+              ...(tone === 'navy' ? navyNavigationStyle : null),
             }}
           >
             {peekHead(true)}
@@ -409,12 +416,14 @@ export function SideNav({
            beside it was wide: the width is the host's decision, not the leftover. */
         flex: 'none', position: 'relative',
         width: panelW,
-        backgroundColor: 'var(--surface-body, #fff)',
+        backgroundColor: 'var(--ac-nav-surface, var(--surface-body, #fff))',
+          color: 'var(--ac-nav-text, var(--text-body, #212529))',
         display: 'flex', flexDirection: 'column',
         height: '100%',
         boxShadow: isDrawer ? 'var(--shadow-nav, 0 0 15px rgba(0,0,0,0.2))' : 'none',
-        borderRight: isDrawer ? 'none' : '1px solid var(--border-color, #dee2e6)',
+        borderRight: isDrawer ? 'none' : '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
         transition: reduceMotion || dragging ? 'none' : 'width .2s ease',
+        ...(tone === 'navy' ? navyNavigationStyle : null),
         ...style,
       }}
       {...rest}

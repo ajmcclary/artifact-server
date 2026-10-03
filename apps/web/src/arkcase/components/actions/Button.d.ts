@@ -16,11 +16,11 @@ export interface ButtonProps {
   /** Visual size of the Button; `xs` is a fixed 24px dense-toolbar row with a 13px label. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
   /**
-   * `bi-*` studio icon class for a leading icon, e.g. "bi-plus-lg". Renders tonal (follows the
-   * label color) on every variant except solid `light`, which keeps the Studio duotone colours.
+   * `bi-*` icon class for a leading icon, e.g. "bi-plus-lg". Paints in the label colour;
+   * `pressed` swaps it to its filled (Bold) pair.
    */
   icon?: string;
-  /** `bi-*` studio icon class for a trailing icon; toned like `icon`. */
+  /** `bi-*` icon class for a trailing icon; toned like `icon`. */
   iconRight?: string;
   /** Disables interaction with the Button. */
   disabled?: boolean;

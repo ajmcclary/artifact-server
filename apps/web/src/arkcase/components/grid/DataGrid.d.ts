@@ -70,7 +70,7 @@ export interface GridColumn<T = any> {
 export interface DataGridRowAction {
   /** Visible verb. */
   label?: React.ReactNode;
-  /** `bi-*` studio icon class. */
+  /** `bi-*` icon class. */
   icon?: string;
   /** Runs the verb; the menu closes afterwards. */
   onClick?: () => void;

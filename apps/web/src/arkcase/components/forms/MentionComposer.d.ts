@@ -5,12 +5,12 @@ export interface MentionComposerPerson {
   name: string;
   /** A second fact in the list, e.g. "Administrator" or "Agent". */
   detail?: string;
-  /** `bi-*` studio icon class for an avatar without a face, e.g. an agent's. */
+  /** `bi-*` icon class for an avatar without a face, e.g. an agent's. */
   icon?: string;
 }
 
 export interface MentionComposerContext {
-  /** `bi-*` studio icon class leading the line, e.g. "bi-reply". */
+  /** `bi-*` icon class leading the line, e.g. "bi-reply". */
   icon?: string;
   /** What is being written: "Replying to Dana Okonkwo · #1". Truncates to one line. */
   text: React.ReactNode;

@@ -15,7 +15,7 @@ export interface DiscardDialogProps {
   onClose: () => void;
   /** Runs after the dismiss — the host's close continuation. */
   onDiscard: () => void;
-  /** `bi-*` studio icon class for the navy title tile. @default 'bi-exclamation-triangle' */
+  /** `bi-*` icon class for the navy title tile. @default 'bi-exclamation-triangle' */
   icon?: string;
   /** The backdrop's z-index; the frame sits one above. @default 1050 */
   zIndex?: number;

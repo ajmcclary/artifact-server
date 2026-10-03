@@ -1,4 +1,5 @@
 import React from 'react';
+import { navyNavigationStyle } from './nav-tone.js';
 import { SideNav } from './SideNav.jsx';
 
 /**
@@ -17,6 +18,7 @@ import { SideNav } from './SideNav.jsx';
  */
 export function LeftNav({
   mode = 'expanded',
+  tone = 'default',
   title = 'Navigation',
   header,
   brand,
@@ -51,6 +53,7 @@ export function LeftNav({
   const body = navigation != null ? navigation : (
     <SideNav
       mode={mode}
+      tone={tone}
       title={title}
       header={header}
       items={items || []}
@@ -76,11 +79,14 @@ export function LeftNav({
   return (
     <div
       data-ac-left-nav={mode}
+      data-navigation-tone={tone}
       style={{
         flex: 'none', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
-        backgroundColor: 'var(--surface-card, #fff)',
-        borderRight: '1px solid var(--border-color, #dee2e6)',
+        backgroundColor: 'var(--ac-nav-surface, var(--surface-card, #fff))',
+        color: 'var(--ac-nav-text, var(--text-body, #212529))',
+        borderRight: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
         overflow: 'hidden',
+        ...(tone === 'navy' ? navyNavigationStyle : null),
         ...style,
       }}
       {...rest}
@@ -98,7 +104,7 @@ export function LeftNav({
       {searchNode != null && (
         <div style={{
           flex: 'none', padding: railLike ? '8px 0' : '8px 12px',
-          borderBottom: '1px solid var(--border-color, #dee2e6)',
+          borderBottom: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
           display: 'flex', justifyContent: railLike ? 'center' : 'stretch',
         }}>
           {searchNode}

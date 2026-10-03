@@ -23,6 +23,8 @@ export interface RailHeaderScope {
 }
 
 export interface RailHeaderProps {
+  /** Wrap the list title instead of truncating it; actions stay beside it. @default false */
+  titleWrap?: boolean;
   /** The list's name, rendered as a heading in the display face (20px). Not rewritten by filtering. */
   title?: React.ReactNode;
   /** Heading level of the title. @default 2 */

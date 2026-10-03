@@ -16,7 +16,7 @@ export interface ToastRegionItem {
   actionLabel?: string;
   /** Called when the follow-up verb is activated. */
   onAction?: () => void;
-  /** Overrides the tone's status glyph (`bi-*` studio icon class). */
+  /** Overrides the tone's status glyph (`bi-*` icon class). */
   icon?: string;
   /** True while the toast plays its exit motion; the host drops it from `toasts` afterwards. The region stops speaking a leaving toast. */
   leaving?: boolean;

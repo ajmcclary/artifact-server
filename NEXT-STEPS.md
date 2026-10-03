@@ -1949,6 +1949,17 @@ gate.
   with their range; its header has a labelled Compare button. Remaining: the
   gallery's date read is not yet bounded by the artifact's comment count the way
   the Library's is (it reads up to five comment pages per version viewed).
+- **Progress, October 2 (design port 35917a3 → 5d4b2c3):** the vendored icon
+  sheet now comes from the six-style icon library's icon map instead of Icon
+  Studio's duotone inputs. Icons paint monochrome in the text colour, and a
+  selected control's icon (`aria-current`, `aria-selected`, `aria-pressed`, or
+  `data-icon-state="active"`) swaps to its filled (Bold) pair; the retired
+  `data-icon-tone` and `--icon-primary`/`--icon-secondary` hooks no longer have
+  any effect. The application menu adopts the LeftNav's `tone="navy"` recipe
+  with a navy rail search button, while section navigation (the admin console)
+  stays light. RailTabs draw 20px icons with an inset pressed marker, and
+  RailHeader gains `titleWrap`; the application's rail titles are fixed
+  ("Artifacts", "Projects"), so it does not opt in.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

@@ -13,7 +13,7 @@ export interface ChoiceGroupOption {
   detail?: React.ReactNode;
   /** Shown but not selectable, and skipped by the arrow keys. */
   disabled?: boolean;
-  /** Leading `bi-*` studio glyph in the Studio duotone: 20px above the title on a card (a role picker), 14px before it in a row. */
+  /** Leading `bi-*` icon glyph in the text colour: 20px above the title on a card (a role picker), 14px before it in a row. */
   icon?: string;
   /** Small decorative sketch of the choice, e.g. a wireframe of how a control looks. On a card it is drawn full width above the glyph and title, 6px over them, in place of `icon`; in a row it sits before the title, in place of `icon`. Wrapped `aria-hidden` — the title must still name the choice — and dimmed with a disabled option. */
   preview?: React.ReactNode;

@@ -3,7 +3,7 @@ import React from 'react';
 export interface TabItem {
   id: string;
   label: string;
-  /** Optional `bi-*` studio icon class. */
+  /** Optional `bi-*` icon class. */
   icon?: string;
   /** Optional count badge. On `variant="stacked"` iconed tabs a count of 0 (or below) draws nothing. */
   count?: number;

@@ -1,9 +1,9 @@
 import React from 'react';
 
 export interface CopyButtonProps {
-  /** `bi-*` studio icon class for the resting state. @default "bi-clipboard" */
+  /** `bi-*` icon class for the resting state. @default "bi-clipboard" */
   icon?: string;
-  /** `bi-*` studio icon class for the copied state. @default "bi-check2" */
+  /** `bi-*` icon class for the copied state. @default "bi-check2" */
   copiedIcon?: string;
   /** @default "sm" */
   /** Visual size of the CopyButton. */

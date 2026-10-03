@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface StatusMarkProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'style' | 'children'> {
-  /** `bi-*` studio icon class, e.g. "bi-shield-check". Rendered tonal in the tone's pill foreground. */
+  /** `bi-*` icon class, e.g. "bi-shield-check". Rendered tonal in the tone's pill foreground. */
   icon: string;
   /** Pill tone pair: `pill-<tone>-bg` ground with `pill-<tone>-fg` glyph. @default 'primary' */
   tone?: 'success' | 'primary' | 'warning' | 'danger' | 'neutral';

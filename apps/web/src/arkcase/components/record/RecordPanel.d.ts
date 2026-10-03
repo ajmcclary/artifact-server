@@ -34,7 +34,7 @@ export interface RecordPanelProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   padded?: boolean | number | string;
   /** Requested width of the RecordPanel. */
   width?: number | string;
-  /** `bi-*` studio glyph drawn before the cap label, e.g. `bi-file-earmark-text`. Decorative. */
+  /** `bi-*` icon glyph drawn before the cap label, e.g. `bi-file-earmark-text`. Decorative. */
   icon?: string;
   /** Visual weight: `primary` leads the page (navy-subtle cap, strong hairlines, card lift); `reference` sits flat with no shadow. @default "default" */
   emphasis?: 'default' | 'primary' | 'reference';

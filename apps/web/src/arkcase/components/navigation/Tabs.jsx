@@ -194,7 +194,7 @@ export function Tabs({ tabs = [], active, onChange, variant = 'underline', orien
           : undefined;
         if (inCorner && countShown) name = `${label}, ${t.countLabel || t.count}`;
         if (lockName) name = `${name || label}${lockName}`;
-        const iconNode = t.icon && <i className={`bi ${t.icon}`} aria-hidden="true" style={stacked ? { fontSize: 'var(--icon-lg, 20px)', lineHeight: 1 } : iconOnly || navy ? { fontSize: 'var(--icon-md, 16px)' } : undefined} />;
+        const iconNode = t.icon && <i className={`bi ${t.icon}`} aria-hidden="true" data-icon-state={on ? 'active' : undefined} style={stacked ? { fontSize: 'var(--icon-lg, 20px)', lineHeight: 1 } : iconOnly || navy ? { fontSize: 'var(--icon-md, 16px)' } : undefined} />;
         const lockInline = t.locked && !inCorner && !iconOnly
           ? <i className="bi bi-lock" aria-hidden="true" data-tab-lock="" title={t.lockLabel || 'Restricted'} style={{ fontSize: 'var(--icon-xs, 12px)' }} />
           : null;

@@ -15,7 +15,7 @@ export interface ToastProps {
   onAction?: () => void;
   /** Called when the Toast requests dismissal; shows the dismiss control when provided. */
   onClose?: () => void;
-  /** Overrides the tone's default status glyph (`bi-*` studio icon class). */
+  /** Overrides the tone's default status glyph (`bi-*` icon class). */
   icon?: string;
   /**
    * Live-region politeness. Omitted, `danger` and `warning` announce assertively

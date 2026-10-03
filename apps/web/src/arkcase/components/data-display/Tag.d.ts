@@ -26,7 +26,7 @@ export interface TagProps extends Omit<React.HTMLAttributes<HTMLElement>, 'style
   pressed?: boolean;
   /** Natively disables a toggle chip (dimmed, not focusable). @default false */
   disabled?: boolean;
-  /** Leading `bi-*` studio icon class, e.g. "bi-funnel". */
+  /** Leading `bi-*` icon class, e.g. "bi-funnel". */
   icon?: string;
   /** Trailing `bi-*` glyph at 12px and 60% opacity after the label and count, hinting what a press does, e.g. "bi-pencil" on a filter chip that opens its editor or "bi-chevron-down" on one that opens a menu. */
   iconRight?: string;

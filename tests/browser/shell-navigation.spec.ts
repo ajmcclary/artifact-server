@@ -97,6 +97,21 @@ test.describe("Shell navigation", () => {
       await nav.getByRole("link", {exact: true, name: "Library"}).click();
       await expect(page).toHaveURL(/\/review\/library$/u);
       await expectSameDocument(page);
+      // The application menu wears the navy tone, and the current item's icon shows its filled pair.
+      const leftNav = page.locator("[data-ac-left-nav]");
+      await expect(leftNav).toHaveAttribute("data-navigation-tone", "navy");
+      expect(await leftNav.evaluate((node) => {
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--surface-navy-strong)";
+        document.body.append(probe);
+        const navy = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return getComputedStyle(node).backgroundColor === navy;
+      })).toBe(true);
+      await expect(nav.getByRole("link", {exact: true, name: "Library"}).locator("i.bi"))
+        .toHaveAttribute("data-icon-state", "active");
+      await expect(nav.getByRole("link", {exact: true, name: "Activity"}).locator("i.bi"))
+        .not.toHaveAttribute("data-icon-state", "active");
 
       // A modified click still opens the screen in a new tab and leaves this one in place.
       const libraryUrl = page.url();

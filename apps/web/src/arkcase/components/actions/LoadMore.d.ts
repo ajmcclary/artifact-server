@@ -13,7 +13,7 @@ export interface LoadMoreProps extends React.HTMLAttributes<HTMLDivElement> {
   onLoadMore?: () => void;
   /** The step's label, e.g. "Show 4 Older". @default "Load {n} more" with `step`, else "Load more" */
   label?: string;
-  /** `bi-*` studio icon class leading the label. @default "bi-chevron-down" */
+  /** `bi-*` icon class leading the label. @default "bi-chevron-down" */
   icon?: string;
   /** Show the "{shown} of {total} {noun}" count line. @default true when `noun` and `total` are given */
   count?: boolean;

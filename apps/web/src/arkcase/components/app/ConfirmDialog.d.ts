@@ -9,13 +9,13 @@ export interface ConfirmDialogProps {
   message?: React.ReactNode;
   /** The confirm verb, last in the footer band. @default 'Confirm' */
   confirmLabel?: string;
-  /** `bi-*` studio icon class leading the confirm verb. */
+  /** `bi-*` icon class leading the confirm verb. */
   confirmIcon?: string;
   /** The stay button. @default 'Cancel' */
   cancelLabel?: string;
   /** `danger` for a destructive change; `primary` for a weighty one that loses nothing. @default 'danger' */
   tone?: 'danger' | 'primary';
-  /** `bi-*` studio icon class for the navy title tile. */
+  /** `bi-*` icon class for the navy title tile. */
   icon?: string;
   /** Dismisses the dialog — Cancel, the close button and Escape. */
   onClose: () => void;

@@ -18,7 +18,7 @@ export interface PanelProps {
   railLabel?: string;
   /** The pin's object without its article — "claim information" reads "Pin claim information". @default "the " + name */
   pinName?: string;
-  /** `bi-*` studio icon class for the rail — "bi-folder2". */
+  /** `bi-*` icon class for the rail — "bi-folder2". */
   icon?: string;
   /** Count badge on the rail. */
   count?: React.ReactNode;

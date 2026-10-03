@@ -15,7 +15,7 @@ export interface InputProps {
   /** @default "md" */
   /** Visual size of the Input. */
   size?: 'sm' | 'md' | 'lg';
-  /** Leading `bi-*` studio icon class, e.g. "bi-search". */
+  /** Leading `bi-*` icon class, e.g. "bi-search". */
   icon?: string;
   /** Helper text below the field. */
   helper?: string;

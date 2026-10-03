@@ -163,7 +163,7 @@ export function MobileNavDrawer({
                   }}
                 >
                   <span style={{ width: 30, height: 'calc(var(--icon-lg, 20px) * 1.5)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <NavigationIcon icon={m.icon || 'bi-circle'} />
+                    <NavigationIcon icon={m.icon || 'bi-circle'} active={active} />
                   </span>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
                   {m.count != null && <span style={{ marginLeft: 'auto', flex: 'none', minWidth: 20, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: 1.45, borderRadius: 'var(--radius-pill, 10px)', padding: '1px 6px' }}>{countText(m.count)}</span>}

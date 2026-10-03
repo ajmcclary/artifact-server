@@ -131,7 +131,7 @@ function ReviewShellFrame({
         keyshortcuts="Meta+K Control+K /"
         onClick={onOpenPalette}
         size="sm"
-        variant="ghost"
+        variant="navy"
       />
     </Tooltip>
   ));
@@ -177,6 +177,7 @@ function ReviewShellFrame({
       resizable={expanded}
       style={{width: expanded ? expandedWidth : "var(--navigator-rail-width, 52px)"}}
       title={navTitle}
+      tone="navy"
       width={expandedWidth}
     />
     </div>

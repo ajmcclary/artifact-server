@@ -23,7 +23,7 @@ export interface AccountButtonProps extends Omit<React.ButtonHTMLAttributes<HTML
   hasPopup?: 'menu' | 'dialog' | 'listbox' | 'true' | null;
   /** Accessible name override. @default "Account menu: {name}, {role}" */
   label?: string;
-  /** Style overrides for the button. */
+  /** Style overrides for the button. Navigation placement inherits LeftNav/SideNav scoped foreground and hover colors. */
   style?: React.CSSProperties;
 }
 

@@ -2,8 +2,8 @@ import React from 'react';
 
 export interface IconButtonProps {
   /**
-   * `bi-*` studio icon class, e.g. "bi-list", "bi-x-lg", "bi-three-dots-vertical". `ghost` and
-   * `light` show the Studio duotone; `primary` and `danger` render it tonal in the control's ink.
+   * `bi-*` icon class, e.g. "bi-list", "bi-x-lg", "bi-three-dots-vertical". The glyph paints in
+   * the control's ink; `pressed` swaps it to its filled (Bold) pair.
    */
   icon: string;
   /** @default "ghost" */

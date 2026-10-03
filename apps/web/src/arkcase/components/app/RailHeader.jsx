@@ -20,7 +20,7 @@ const ELLIPSIS = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'elli
  * own toolbar): no pill, no scope menu, no warning; the working row stays only for select-all.
  */
 export function RailHeader({
-  title, headingLevel = 2, actions,
+  title, titleWrap = false, headingLevel = 2, actions,
   onAdd, addLabel = 'Add', addDisabled = false,
   selectAll, onSelectAll, selectAllLabel = 'Select All',
   query, onQuery, queryPlaceholder = 'Search', queryLabel, queryKeyShortcuts, inputRef, onQueryKeyDown,
@@ -86,7 +86,7 @@ export function RailHeader({
           title={typeof title === 'string' ? title : undefined}
           style={{
             flex: '1 1 auto', minWidth: 0, margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", Georgia, serif)',
-            fontSize: 'var(--h4-font-size, 1.25rem)', fontWeight: 600, lineHeight: 1.25, color: 'var(--text-body, #212529)', ...ELLIPSIS,
+            fontSize: 'var(--h4-font-size, 1.25rem)', fontWeight: 600, lineHeight: 1.25, color: 'var(--text-body, #212529)', ...ELLIPSIS, ...(titleWrap ? { whiteSpace: 'normal', overflowWrap: 'anywhere' } : null),
           }}
         >{title}</Heading>
         {(actions || onAdd) && (

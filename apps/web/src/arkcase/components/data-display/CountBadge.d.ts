@@ -9,7 +9,7 @@ export interface CountBadgeProps extends Omit<React.HTMLAttributes<HTMLSpanEleme
   label?: string;
   /** Data face for the digits; false uses Public Sans. @default true */
   mono?: boolean;
-  /** `bi-*` studio icon class drawn in a 20px round mark instead of a count — an item with no number among numbered ones (a whole-page comment beside pins). Give it a `label`, which names it as an image. */
+  /** `bi-*` icon class drawn in a 20px round mark instead of a count — an item with no number among numbered ones (a whole-page comment beside pins). Give it a `label`, which names it as an image. */
   icon?: string;
   /** Style overrides for the CountBadge root. */
   style?: React.CSSProperties;

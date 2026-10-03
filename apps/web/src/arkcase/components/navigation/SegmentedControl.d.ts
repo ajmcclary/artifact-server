@@ -3,7 +3,7 @@ import React from 'react';
 export interface SegmentedOption {
   id: string;
   label?: React.ReactNode;
-  /** Optional `bi-*` studio icon class shown before the label (or alone, with `ariaLabel`). */
+  /** Optional `bi-*` icon class shown before the label (or alone, with `ariaLabel`). */
   icon?: string;
   /** A small drawn picture in the icon's place — e.g. the Dashboard column picker's bar drawings — as a node or a function of the segment's selected state. Wrapped in an aria-hidden span; draw it in `currentColor` so it follows the segment's ink. */
   glyph?: React.ReactNode | ((selected: boolean) => React.ReactNode);

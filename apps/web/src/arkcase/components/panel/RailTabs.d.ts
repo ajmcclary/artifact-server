@@ -3,7 +3,7 @@ import React from 'react';
 export interface RailTabItem {
   /** The view's key — what `active` holds and `onSelect` receives. */
   id: string;
-  /** `bi-*` studio icon class — "bi-chat-square-text". */
+  /** `bi-*` icon class — "bi-chat-square-text". Rendered at the shared 20px navigation size. */
   icon: string;
   /** The view's name, set vertically under the icon — "Comments". */
   label: string;

@@ -4,7 +4,7 @@ import React from 'react';
 export interface ModalPrimaryAction {
   /** Button text, e.g. "Create project". */
   label: string;
-  /** Leading `bi-*` studio icon class, e.g. "bi-folder-plus". */
+  /** Leading `bi-*` icon class, e.g. "bi-folder-plus". */
   icon?: string;
   /** Called when the primary button is activated. */
   onClick: () => void;
@@ -22,7 +22,7 @@ export interface ModalProps {
   title?: React.ReactNode;
   /** One line of context under the title. */
   subtitle?: React.ReactNode;
-  /** `bi-*` studio icon class for the navy title tile. */
+  /** `bi-*` icon class for the navy title tile. */
   icon?: string;
   /** sm 480 · md 620 · lg 820 · full — inset 28px top and bottom (or `inset` on every edge) · viewport — the whole viewport at inset 0, with no radius, border or shadow. @default "md" */
   size?: 'sm' | 'md' | 'lg' | 'full' | 'viewport';

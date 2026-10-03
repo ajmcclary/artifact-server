@@ -10,7 +10,7 @@ export interface NavItem {
   depth?: 0 | 1;
   /** `neutral` draws an informational count in the neutral pill; the default is the danger pill. */
   countTone?: 'danger' | 'neutral';
-  /** Optional `bi-*` Studio icon. Navigation renditions use 20px in labelled rows and rails, independently of text size. */
+  /** Optional `bi-*` icon. Navigation renditions use 20px in labelled rows and rails, independently of text size. */
   icon?: string;
   /** Stable key; defaults to the index. */
   id?: string;
@@ -54,6 +54,8 @@ export interface SideNavProps {
    * destination on any pointer. @default "drawer", or "expanded" when `inline`
    */
   mode?: SideNavMode;
+  /** Navy application chrome or the default light section navigation. @default "default" */
+  tone?: 'default' | 'navy';
   /** Pin state of the Panel Pin Model footer. @default false */
   pinned?: boolean;
   /** Draws the 32px pin footer and receives the next pin state. Without it no footer is drawn. */

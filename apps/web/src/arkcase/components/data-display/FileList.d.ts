@@ -6,7 +6,7 @@ export interface FileListItem {
   name: string;
   /** Human-readable size, e.g. "4.2 KB"; appended as `name · size`. */
   size?: string | number;
-  /** `bi-*` studio icon class overriding the extension-derived icon. */
+  /** `bi-*` icon class overriding the extension-derived icon. */
   icon?: string;
   /** Short trailing role, e.g. "entry" or "asset", in 11px `text-secondary`. */
   role?: string;

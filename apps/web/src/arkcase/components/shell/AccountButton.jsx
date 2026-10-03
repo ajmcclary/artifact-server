@@ -74,8 +74,8 @@ export function AccountButton({
       onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex', alignItems: 'center', border: 0, cursor: 'pointer', font: 'inherit',
-        background: hover || expanded ? 'var(--tint-primary-hover, rgba(0,121,168,.05))' : 'transparent',
-        color: 'var(--text-body, #212529)',
+        background: hover || expanded ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
+        color: 'var(--ac-nav-text, var(--text-body, #212529))',
         transition: 'background-color .15s ease',
         ...(rail
           ? { justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', padding: 0 }
@@ -91,12 +91,12 @@ export function AccountButton({
         <span style={{ flex: '1 1 auto', minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
           {role != null && role !== '' && (
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{role}</span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{role}</span>
           )}
         </span>
       )}
       {!rail && (
-        <i aria-hidden="true" className="bi bi-three-dots-vertical" style={{ flex: 'none', fontSize: 13, color: 'var(--text-secondary, #5a6268)' }} />
+        <i aria-hidden="true" className="bi bi-three-dots-vertical" style={{ flex: 'none', fontSize: 13, color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))' }} />
       )}
     </button>
   );

@@ -9,7 +9,7 @@ export interface SearchableListItem {
   description?: React.ReactNode;
   /** The group the row is listed under; rows keep the order given within it. */
   group?: string;
-  /** `bi-*` studio icon class leading the row, in the muted tone. */
+  /** `bi-*` icon class leading the row, in the muted tone. */
   icon?: string;
   /** Trailing marks before the check, e.g. a "Current" StatusPill. */
   meta?: React.ReactNode;

@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface AuthLayoutPoint {
-  /** `bi-*` studio icon class drawn 16px, tonal on navy. */
+  /** `bi-*` icon class drawn 16px, tonal on navy. */
   icon?: string;
   /** The point's sentence, 14px secondary-on-navy. */
   text: React.ReactNode;

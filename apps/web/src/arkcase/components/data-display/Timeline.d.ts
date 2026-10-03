@@ -6,7 +6,7 @@ export interface TimelineItem {
   /** Marker drawn on the connector: a small dot, a numbered ring or an icon ring.
    *  @default 'dot' */
   marker?: 'dot' | 'number' | 'icon';
-  /** ArkCase Studio icon class for `marker="icon"`, e.g. "bi-check-lg". */
+  /** `bi-*` icon class for `marker="icon"`, e.g. "bi-check-lg". */
   icon?: string;
   /** Ring content for `marker="number"`; the 1-based position is used when absent. */
   number?: React.ReactNode;

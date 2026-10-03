@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface MenuItem {
   label?: React.ReactNode;
-  /** `bi-*` studio icon class. */
+  /** `bi-*` icon class. */
   icon?: string;
   onClick?: () => void;
   /** Destructive verb — renders in danger red. */

@@ -5,7 +5,7 @@ export interface MentionPerson {
   name: string;
   /** A second fact shown in the composer's list, e.g. a role or "Agent". */
   detail?: string;
-  /** `bi-*` studio icon class for an avatar without a face, e.g. an agent's. */
+  /** `bi-*` icon class for an avatar without a face, e.g. an agent's. */
   icon?: string;
 }
 

@@ -13,7 +13,7 @@ export interface FieldGridField {
   tone?: string;
   /** Text for a value nothing recorded, drawn in italic sans (`DataRef variant="absent"`) in place of the em dash — "not recorded". */
   absent?: string;
-  /** `bi-*` studio glyph drawn before the label in the label's ink, e.g. "bi-person". Decorative. */
+  /** `bi-*` icon glyph drawn before the label in the label's ink, e.g. "bi-person". Decorative. */
   icon?: string;
   /** A secondary line under the value, 12px sans — "Registry now: 412 Main St", "Recorded 08/12/2026", a field error. */
   note?: React.ReactNode;
