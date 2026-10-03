@@ -59,6 +59,10 @@
   --surface-header: #073652; /* The 60px app bar and the `PartBand`: deep navy-teal with `text-on-navy`. As ink (serif headings, tile numbers) use `text-navy`: the same value in default and high-contrast, but dark keeps this #073652 ground while the ink lightens to #9ad7f0. */
   --surface-navy-strong: #0d4a6b; /* One step up from the app bar: sidebar and app-bar hover surfaces, with `text-on-navy`. */
   --surface-navy-subtle: #eaf1f6; /* Pale navy wash: selected rows, active nav, callouts. Text on it: `text-body`, `text-secondary` (5.44:1), links `text-link-on-tint`. */
+  --surface-navy-hover: #205877; /* Hover fill on `surface-navy-strong` and `surface-header`: navy menu rows and navy IconButtons. `text-on-navy` on it 7.7:1; `text-on-navy-secondary` 4.9:1. */
+  --surface-navy-selected: #346783; /* Selected or pressed fill on navy chrome: the current menu row, a pressed navy IconButton. `text-on-navy` on it 6.2:1; selected rows keep their text in `text-on-navy`, never the secondary ink (4.1:1). */
+  --surface-document-stage: #495057; /* Canvas behind document pages in a viewer; chrome text on it is `text-on-navy` (8.2:1). */
+  --surface-document-stage-strong: #343a40; /* Pager strip and review footer bar around a document viewer, with `text-on-navy`. */
   /* ---- Text ramp & related ---- */
   --text-navy: #073652; /* The brand navy AS INK: Source Serif headings, feature values and tile numbers on `surface-body` and `surface-canvas` (12.4:1). Same value as `surface-header` in default and high-contrast only (dark: #9ad7f0 ink vs the #073652 header), and a different role: that one is the app bar's ground, this one is text. */
   --text-strong: #111827; /* Headings, dense table headers and emphasis on `surface-body` and `surface-secondary` (16.9:1). */
@@ -127,6 +131,8 @@
   --bs-dark-hover: #2f3745; /* One step down from `bs-dark`: hover and active state of dark solid fills (white text clears AA). */
   --bs-light-hover: #cdd5d9; /* One step down from `bs-light`: hover and active state of light solid fills. Dark `text-body` on it. */
   --brand-ark: #2F3164; /* The "Ark" half of the full-colour ArkCase wordmark (`BrandLock tone="color"`). A logo fill, not a text colour; the dark step keeps the wordmark legible on dark cards. */
+  --nav-search-bg: #ffffff; /* Ground of the field-styled search trigger in the navy menu; label in `text-secondary`. */
+  --scrim: rgba(7, 54, 82, 0.45); /* Backdrop behind a modal, sheet or phone drawer. */
 }
 
 [data-theme="dark"] {
@@ -162,6 +168,12 @@
   --text-on-navy: #ffffff;
   --text-on-navy-secondary: rgba(255, 255, 255, 0.72);
   --border-on-navy: rgba(255, 255, 255, 0.18);
+  --surface-navy-hover: #205877;
+  --surface-navy-selected: #346783;
+  --nav-search-bg: #15232f;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --surface-document-stage: #495057;
+  --surface-document-stage-strong: #343a40;
   --tint-primary-hover: rgba(95, 189, 232, 0.08);
   --tint-primary-selected: rgba(95, 189, 232, 0.16);
   --tint-danger-hover: rgba(216, 53, 6, 0.08);
@@ -248,6 +260,12 @@
   --text-on-navy: #ffffff;
   --text-on-navy-secondary: rgba(255, 255, 255, 0.88);
   --border-on-navy: rgba(255, 255, 255, 0.45);
+  --surface-navy-hover: #1a4159;
+  --surface-navy-selected: #2e5167;
+  --nav-search-bg: #ffffff;
+  --scrim: rgba(4, 31, 48, 0.60);
+  --surface-document-stage: #343a40;
+  --surface-document-stage-strong: #212529;
   --tint-primary-hover: rgba(0, 90, 125, 0.10);
   --tint-primary-selected: rgba(0, 90, 125, 0.18);
   --tint-danger-hover: rgba(166, 39, 0, 0.10);

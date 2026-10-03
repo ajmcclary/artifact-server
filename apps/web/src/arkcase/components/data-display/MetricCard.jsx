@@ -38,15 +38,21 @@ const DELTA_TONES = {
   warning: 'var(--text-due-soon, #92400e)', neutral: 'var(--text-secondary, #5a6268)',
 };
 const DATA_FONT = "var(--font-data, 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace)";
+/* A value made of digits and figure punctuation: counts, amounts, percentages, durations. */
+const isNumericValue = (v) => v != null && /^[-+\d.,%:\s]+$/.test(String(v));
 
 export function MetricCard({
   label, value, subtext, trend = 'none', trendColor = 'secondary',
-  color = 'info', borderStart = true, dataFont = false,
+  color = 'info', borderStart = true, dataFont: dataFontProp,
   variant = 'tinted', icon, status, unit, delta, deltaTone = 'neutral', onClick, pressed,
   size = 'md', labelVariant = 'default',
   onMouseEnter, onMouseLeave, style, ...rest
 }) {
   const sm = size === 'sm';
+  /* `quiet` is the unboxed summary figure: no ground, rule or shadow; the caption wraps; the data
+     face follows the value unless the host says otherwise. */
+  const quiet = variant === 'quiet';
+  const dataFont = dataFontProp != null ? !!dataFontProp : quiet && isNumericValue(value);
   const eyebrow = labelVariant === 'eyebrow';
   const [hover, setHover] = React.useState(false);
   const accent = PALETTE[color] || PALETTE.info;
@@ -66,7 +72,9 @@ export function MetricCard({
   const highlighted = interactive && (selected || hover);
   const shadows = [surface ? (hover ? shadowMd : shadowSm) : (interactive && hover ? shadowMd : null), selected ? `inset 0 0 0 1px ${primaryEdge}` : null].filter(Boolean);
   let base;
-  if (surface) {
+  if (quiet) {
+    base = { backgroundColor: 'transparent', border: 0, borderRadius: 0, boxShadow: 'none', padding: '4px 0', height: 'auto' };
+  } else if (surface) {
     base = {
       backgroundColor: 'var(--surface-card, #fff)',
       borderRadius: 'var(--radius-lg, 0.5rem)',
@@ -85,7 +93,7 @@ export function MetricCard({
       borderLeft: borderStart ? `4px solid ${accent}` : `1px solid ${edge}`,
     };
   }
-  if (shadows.length) base.boxShadow = shadows.join(', ');
+  if (!quiet && shadows.length) base.boxShadow = shadows.join(', ');
   const buttonReset = interactive
     ? { display: 'block', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', cursor: 'pointer', transition: 'border-color .15s ease, box-shadow .15s ease' }
     : null;
@@ -94,7 +102,7 @@ export function MetricCard({
   const captionType = eyebrow
     ? { fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, 0.025em)', textTransform: 'uppercase', color: EYEBROW_INK[color] || EYEBROW_INK.secondary }
     : { fontSize: sm ? 'var(--font-size-dense, 13px)' : '0.875rem', color: 'var(--text-secondary, #5a6268)' };
-  const oneLine = sm ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : null;
+  const oneLine = sm && !quiet ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : quiet ? { whiteSpace: 'normal', overflowWrap: 'anywhere' } : null;
   const captionGap = sm || eyebrow ? '0.25rem' : '0.375rem';
   const content = (
     <>
@@ -135,6 +143,7 @@ export function MetricCard({
         aria-pressed={typeof pressed === 'boolean' ? pressed : undefined}
         onMouseEnter={(event) => { setHover(true); onMouseEnter && onMouseEnter(event); }}
         onMouseLeave={(event) => { setHover(false); onMouseLeave && onMouseLeave(event); }}
+        data-metric-quiet={quiet ? '' : undefined}
         style={{ ...base, ...buttonReset, ...style }}
         {...rest}
       >
@@ -143,7 +152,7 @@ export function MetricCard({
     );
   }
   return (
-    <div style={{ ...base, ...style }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} {...rest}>
+    <div data-metric-quiet={quiet ? '' : undefined} style={{ ...base, ...style }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} {...rest}>
       {content}
     </div>
   );

@@ -25,7 +25,7 @@ export function Switch({
   const twoSided = has(offLabel) || has(onLabel);
   const onLabelId = sid + '-on';
 
-  const offTrack = navy ? 'var(--surface-navy-strong, #052a40)' : 'var(--bs-gray-400, #ced4da)';
+  const offTrack = navy ? 'var(--surface-navy-strong, #0d4a6b)' : 'var(--bs-gray-400, #ced4da)';
   const offBorder = navy ? 'var(--text-on-navy-secondary, rgba(255,255,255,0.72))' : 'var(--bs-gray-400, #ced4da)';
   const ring = navy
     ? '0 0 0 0.2rem var(--text-on-navy-secondary, rgba(255,255,255,0.72))'

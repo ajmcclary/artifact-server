@@ -9,7 +9,7 @@ export interface RailTabItem {
   label: string;
   /** Count pill under the icon — unresolved comments, files. Omit for none. */
   count?: React.ReactNode;
-  /** `primary` for a count that asks for action, `neutral` for an inventory. @default "primary" */
+  /** `primary` for a count that asks for action, `neutral` for an inventory. @default "neutral" */
   countTone?: 'primary' | 'neutral';
   /** Accessible name when the default `label — count` does not read well — "Comments, 3 unresolved". */
   ariaLabel?: string;

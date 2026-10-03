@@ -7,7 +7,7 @@ const ITEM_SELECTOR = '[role="menuitem"],[role="menuitemcheckbox"],[role="menuit
 
 const MENU_ANCHOR_MARGIN = 12;
 /* The phone sheet's scrim: the Modal's navy at 45%. */
-const MENU_SHEET_SCRIM = 'rgba(7,54,82,.45)';
+const MENU_SHEET_SCRIM = 'var(--scrim, rgba(7, 54, 82, 0.45))';
 const MENU_ANCHOR_GAP = 8;
 
 /* Fixed coordinates for a menu hung off `anchor`, clamped 12px inside the viewport.

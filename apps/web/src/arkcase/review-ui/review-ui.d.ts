@@ -395,6 +395,10 @@ export interface DesignLibraryProps {
   headingLevel?: 1 | 2 | 3 | 4 | 5;
   /** Decorative cover beside the heading, hidden on phone widths. */
   coverUrl?: string | null;
+  /** The window scrolls the page (a phone's document scroll) instead of the library's own pane: `scrollTop` restores and `onScroll` reports the window's offset. @default false */
+  documentScroll?: boolean;
+  /** Height of fixed chrome over a document-scrolled page (the phone's app bar), in px; the toolbar and group bands dock beneath it. @default 0 */
+  dockTop?: number;
 }
 export interface GalleryPlaceholderProps {
   kind: GalleryKind;
@@ -501,6 +505,8 @@ export interface ActivityHeaderProps {
   /** The page's primary action, at the heading's end. */
   action?: React.ReactNode;
   metrics?: ActivityMetric[];
+  /** Phone layout: the metric tiles form a compact two-by-two grid. @default false */
+  compact?: boolean;
 }
 export interface ActivityToolbarProps {
   /** The page title the toolbar leads with once docked, as the Library's does. @default "Activity" */
@@ -523,8 +529,10 @@ export interface ActivityToolbarProps {
   onQuery: (text: string) => void;
   /** Reports the docked bar's height (its hairline included) whenever it changes. */
   onHeight?: (height: number) => void;
-  /** Phone layout: no docked title and no separator after the segments, so the wrapped bar stays short. @default false */
+  /** Phone layout: no docked title and no separator after the segments, so the wrapped bar stays short; the filter menus form one sideways-scrolling row and open as bottom sheets. @default false */
   phone?: boolean;
+  /** Height of fixed chrome over a document-scrolled page (the phone's app bar), in px; the toolbar docks beneath it. @default 0 */
+  top?: number;
   /** Entries after filtering and in all. Given both, the toolbar keeps a live "Showing N of M entries" region and, while filtered, a row of removable filter chips and Clear filters. */
   shown?: number;
   total?: number;

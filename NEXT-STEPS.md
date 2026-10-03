@@ -1960,6 +1960,23 @@ gate.
   stays light. RailTabs draw 20px icons with an inset pressed marker, and
   RailHeader gains `titleWrap`; the application's rail titles are fixed
   ("Artifacts", "Projects"), so it does not opt in.
+- **Progress, October 3 (design port 5d4b2c3 → 726f41d, phone navigation):**
+  below 768px the drawer launcher and the room kept for it are gone. A
+  `MobileTabBar` (Activity with the Needs-you count, Library, Projects, More),
+  a `MobileMoreSheet` (projects, Tools → Administration, and an account row
+  with appearance, density, the source and sign-out) and a navy `MobileAppBar`
+  replace them, and Activity, Library, Projects, project settings and
+  Administration scroll the document. A review keeps its preview in a frame
+  between the bars; its app bar leads with "‹ <the screen it came from>", or
+  the project (opening the artifact list) when it was opened directly. History
+  entries carry `{idx, scrollY, from}` (`review/review-history.ts`), so ‹ Back
+  and the browser's Back both return to that entry at the offset it was left,
+  even after page changes inside the review. The Projects tab is a list page
+  whose rows push one project's settings. The sync also brought the chrome
+  roll-up commits between the two pins (panel props, quiet MetricCard,
+  `fileTypeIcon`, neutral rail counts). Remaining: a physical iPhone Safari
+  run, and the vendored Activity card's Open control still crowds the
+  thumbnail metadata at 390px.
 
 ### T20 Improve infrastructure previews and secret-safe evidence
 

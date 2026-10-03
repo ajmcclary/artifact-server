@@ -77,6 +77,7 @@ function PinButton({ pressed, label, disabled, onClick, cue, reduce, buttonRef, 
       ref={buttonRef}
       type="button"
       data-panel-pin=""
+      data-ac-pin=""
       onClick={onClick}
       disabled={disabled}
       aria-pressed={pressed}
@@ -107,7 +108,7 @@ export function Panel({
   pinned, defaultPinned = true, onPinChange, canPin: canPinProp, pinnable = true,
   side = 'start', width, onWidthChange, resizable = false, minWidth = 200, maxWidth,
   unpinned = 'rail', floatOffset = 0, sheet = false, stacked = false, stackEdge, stackLabel,
-  peek = true, peeking: peekingProp, onPeekChange, cueExternalPin = false, onSheetClose, sheetCloseLabel = 'Back', header: headerProp, selection: selectionProp, footerMeta: footerMetaProp, onAnnounce, style, bodyStyle, children: childrenProp, ...rest
+  peek = true, peeking: peekingProp, onPeekChange, cueExternalPin = false, onSheetClose, sheetCloseLabel = 'Back', bodyLayout = 'block', header: headerProp, selection: selectionProp, footerMeta: footerMetaProp, onAnnounce, style, bodyStyle, children: childrenProp, ...rest
 }) {
   /* A portable page fills the node props through slotted children; an explicit prop wins. A
      function child is the peek API form and carries no slots. */
@@ -337,7 +338,7 @@ export function Panel({
       {sheetBack}
       {header}
       {selection}
-      <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', ...bodyStyle }}>{body}</div>
+      <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', ...(bodyLayout === 'column' ? { display: 'flex', flexDirection: 'column', overflow: 'hidden' } : null), ...bodyStyle }}>{body}</div>
       {footer}
     </React.Fragment>
   );

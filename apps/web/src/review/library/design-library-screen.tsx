@@ -13,6 +13,9 @@ import {libraryItems, parseLibraryItemId, type LibrarySource} from "./design-lib
 import {useDesignLibrary} from "./use-design-library.ts";
 
 const screenStyle = {display: "flex", flexDirection: "column", height: "100%", minHeight: 0} satisfies CSSProperties;
+/** A phone's page scrolls the document, under the fixed app bar. */
+const phoneScreenStyle = {display: "flex", flexDirection: "column"} satisfies CSSProperties;
+const phoneAppBarHeight = 52;
 const stateStyle = {margin: "auto", maxWidth: 560, padding: 24, width: "100%"} satisfies CSSProperties;
 
 /** Every choice the library's toolbar makes, plus where the reader was. */
@@ -131,10 +134,12 @@ export function DesignLibraryScreen({projects}: {readonly projects: readonly Pro
     ) : null,
   ].filter((notice) => notice !== null);
   return (
-    <div style={screenStyle}>
+    <div style={phone ? phoneScreenStyle : screenStyle}>
       <DesignLibrary
         collapsed={[...view.collapsed]}
         description="Every design gallery across all projects, following each artifact’s current version."
+        dockTop={phone ? phoneAppBarHeight : 0}
+        documentScroll={phone}
         focusPath={view.focusPath}
         groupBy={view.groupBy}
         hrefFor={(id) => exactHref(id) ?? libraryHref()}

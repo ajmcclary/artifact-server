@@ -32,13 +32,13 @@ export function createActivityUI(React, DS) {
   const { CommentThread, StatusPill, Button, SegmentedControl, SurfaceState, Avatar, SectionHeading,
     MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator } = DS;
   const { PageToolbar, FilterGroup, FilterMenu, FilterSummary, ToolbarSearch } = createToolbarUI(React, DS);
-  const folder = (size = 14) => <i className="bi bi-folder2" aria-hidden="true" style={{ fontSize: size }} />;
+  const folder = (size = 'var(--icon-sm, 0.875rem)') => <i className="bi bi-folder2" aria-hidden="true" style={{ fontSize: size }} />;
 
   function Marker({ kind, icon, size = 32 }) {
     const m = MARKERS[kind] || MARKERS.admin;
     return <span data-activity-marker={kind} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', display: 'inline-flex', alignItems: 'center',
-      justifyContent: 'center', background: m.bg, fontSize: size > 28 ? 16 : 14 }}>
-      <i className={'bi ' + (icon || m.icon)} data-icon-tone={m.fg ? 'current' : undefined} style={m.fg ? { color: m.fg } : undefined} />
+      justifyContent: 'center', background: m.bg, fontSize: size > 28 ? 'var(--icon-md, 1rem)' : 'var(--icon-sm, 0.875rem)' }}>
+      <i className={'bi ' + (icon || m.icon)} style={m.fg ? { color: m.fg } : undefined} />
     </span>;
   }
 
@@ -97,7 +97,7 @@ export function createActivityUI(React, DS) {
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           {e.projects.map((p) => <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 500,
             color: 'var(--text-emphasis, #374151)', background: 'var(--surface-secondary, #f8f9fa)', border: STRONG_RULE, borderRadius: 4 }}>
-            {folder(12)}{p.name}<span style={{ ...DATA, fontWeight: 400, color: 'var(--text-data, #495057)' }}>{p.count}</span>
+            {folder('var(--icon-xs, 0.75rem)')}{p.name}<span style={{ ...DATA, fontWeight: 400, color: 'var(--text-data, #495057)' }}>{p.count}</span>
           </span>)}
         </div>
         {open
@@ -107,7 +107,7 @@ export function createActivityUI(React, DS) {
                 <span style={{ minWidth: 0 }}><Button variant="link" flush onClick={() => onOpen(item)}
                   style={{ display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 'var(--font-size-sm, 14px)', fontWeight: 600, textAlign: 'left' }}>{item.artifactName}</Button></span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-emphasis, #374151)', whiteSpace: 'nowrap' }}>
-                  {folder(13)}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.projectName}</span></span>
+                  {folder()}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.projectName}</span></span>
                 <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {item.type === 'version' ? versionChange(item) : `${item.from} → ${item.to}`}</span>
                 <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5a6268)', textAlign: 'right', whiteSpace: 'nowrap' }}>{usTime(item.at)}</span>
@@ -216,7 +216,7 @@ export function createActivityUI(React, DS) {
        heads stay sticky against the page's scroller. */
     return <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 12 }} data-activity-feed={label}>
       {groupByDay(entries, now).map((g) => <section key={g.key} aria-label={[g.weekday, g.date].filter(Boolean).join(' ')} data-day={g.key}
-        style={{ background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS, boxShadow: 'var(--shadow-card, 0 1px 2px rgba(0,0,0,0.06))' }}>
+        style={{ background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS, boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7, 54, 82, 0.10))' }}>
         <div data-day-cap="" style={{ position: 'sticky', top: stickyTop, zIndex: 3, display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 20px',
           borderRadius: `${RADIUS} ${RADIUS} 0 0`, background: 'var(--surface-secondary, #f8f9fa)', borderBottom: STRONG_RULE }}>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", serif)', fontSize: 18, fontWeight: 600, lineHeight: 1.2, color: 'var(--text-strong, #111827)' }}>{g.weekday}</h2>
@@ -229,21 +229,23 @@ export function createActivityUI(React, DS) {
   }
 
   /* The page's heading, laid out like the Library's: the level-1 title and its primary
-     action, then metric tiles that double as filter shortcuts. The title carries no summary line. */
-  function ActivityHeader({ title = 'Activity', description, action, metrics = [] }) {
-    return <header style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '24px 0 12px' }}>
+     action, then metric tiles that double as filter shortcuts. The title carries no summary line.
+     `compact` (a phone) sets the tiles as a two-by-two grid instead of one tall column. */
+  function ActivityHeader({ title = 'Activity', description, action, metrics = [], compact = false }) {
+    const tiles = metrics.map((m) => <MetricCard key={m.id} label={m.label} value={String(m.value)} size="sm" variant="surface"
+      onClick={m.onClick} pressed={m.onClick ? !!m.pressed : undefined} style={compact ? { minWidth: 0 } : undefined} />);
+    return <header style={{ display: 'flex', flexDirection: 'column', gap: compact ? 12 : 16, padding: compact ? '20px 0 8px' : '24px 0 12px' }}>
       <SectionHeading level={1} size="lg" title={title} subtitle={description}>{action}</SectionHeading>
-      {metrics.length > 0 && <AutoGrid min={180}>
-        {metrics.map((m) => <MetricCard key={m.id} label={m.label} value={String(m.value)} size="sm" variant="surface"
-          onClick={m.onClick} pressed={m.onClick ? !!m.pressed : undefined} />)}
-      </AutoGrid>}
+      {metrics.length > 0 && (compact
+        ? <div data-activity-metrics="compact" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>{tiles}</div>
+        : <AutoGrid min={180}>{tiles}</AutoGrid>)}
     </header>;
   }
 
   /* The shared page toolbar: docked, it leads with the title and reports its height so the
      day caps and conversation heads pin beneath it. */
   function ActivityToolbar({ title = 'Activity', segment, onSegment, counts = {}, people = [], selectedPeople = [], onPeople, projects, selectedProjects, onProjects,
-    types, onTypes, typeCounts, query, onQuery, onHeight, shown, total, onClearFilters, phone = false }) {
+    types, onTypes, typeCounts, query, onQuery, onHeight, shown, total, onClearFilters, phone = false, top = 0 }) {
     const [menu, setMenu] = React.useState(null);
     const peopleRef = React.useRef(null);
     const toggle = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : list.concat(id));
@@ -258,19 +260,20 @@ export function createActivityUI(React, DS) {
         leading: avatar(p), meta: p.count, onClick: () => onPeople(toggle(selectedPeople, p.id)) };
     }
     const filter = (id, icon, text, items, minWidth, ref) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)}
-      icon={icon} label={text} menuLabel={id[0].toUpperCase() + id.slice(1)} density="comfortable" items={items} minWidth={minWidth} triggerRef={ref} />;
+      icon={icon} label={text} menuLabel={id[0].toUpperCase() + id.slice(1)} density="comfortable" items={items} minWidth={minWidth} triggerRef={ref}
+      presentation={phone ? 'sheet' : 'popover'} />;
     const chips = selectedPeople.map((id) => { const p = people.find((x) => x.id === id); return { key: 'person:' + id, label: p ? p.name : id, icon: p && p.agent ? 'bi-cpu' : 'bi-person', remove: () => onPeople(selectedPeople.filter((x) => x !== id)) }; })
       .concat(selectedProjects.map((id) => { const p = projects.find((x) => x.id === id); return { key: 'project:' + id, label: p ? p.name : id, icon: 'bi-folder2', remove: () => onProjects(selectedProjects.filter((x) => x !== id)) }; }))
       .concat(types.map((id) => { const f = TYPE_FILTERS.find((x) => x.id === id); return { key: 'type:' + id, label: f ? f.label : id, icon: TYPE_ICONS[id], remove: () => onTypes(types.filter((x) => x !== id)) }; }));
     const counted = typeof shown === 'number' && typeof total === 'number';
     const n = (v) => <span style={{ ...DATA, color: 'var(--text-data, #495057)' }}>{v}</span>;
     return <>
-      <PageToolbar title={title} label="Activity filters" gutter={20} phone={phone} onHeight={onHeight}
+      <PageToolbar title={title} label="Activity filters" gutter={phone ? 16 : 20} phone={phone} top={top} onHeight={onHeight}
         end={<ToolbarSearch label="Search activity" placeholder="Search activity" value={query} onChange={(ev) => onQuery(ev.target.value)} />}>
         <SegmentedControl label="Show" mode="radio" value={segment} onChange={onSegment}
           options={SEGMENTS.map((id) => ({ id, label: id, count: id === 'All' ? undefined : counts[id] }))} />
         {!phone && <ToolbarSeparator style={{ margin: '0 4px', height: 24 }} />}
-        <FilterGroup label="Filters">
+        <FilterGroup label="Filters" phone={phone}>
           {onPeople && filter('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
           {filter('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
             projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,

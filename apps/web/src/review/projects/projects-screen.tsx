@@ -1,7 +1,7 @@
 import {useEffect, useState, type CSSProperties} from "react";
 
 import type {Project, Session} from "@/api/client";
-import {Button, PageScaffold, SurfaceState} from "@/arkcase";
+import {PageScaffold, SurfaceState} from "@/arkcase";
 import {CreateProjectModal} from "@/shell/create-project-modal";
 import {useAnnounce} from "@/ui/announcer";
 
@@ -11,6 +11,7 @@ import {settingsAccess} from "../settings/settings-view.ts";
 import {usePanelPreference} from "../workspace/panel-preferences.ts";
 import {useViewportWidth} from "../workspace/use-viewport-size.ts";
 import {isPhoneWidth, workspaceBudget} from "../workspace/workspace-layout.ts";
+import {PhoneProjectList} from "./phone-project-list.tsx";
 import {ProjectListPanel} from "./project-list-panel.tsx";
 import {initialProjectId, projectListPanelId, projectRows} from "./projects-model.ts";
 import {useProjectSummaries} from "./use-project-summaries.ts";
@@ -23,14 +24,17 @@ export interface ProjectsScreenProps {
   readonly session: Session;
 }
 
-/** Projects: the project list docked beside the selected project's details. */
+/**
+ * Projects: the project list docked beside the selected project's details. A
+ * phone splits them into two levels: the list as a page, and one project's
+ * details pushed over it.
+ */
 export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, projects, session}: ProjectsScreenProps) {
   const announce = useAnnounce();
   const viewportWidth = useViewportWidth();
   const phone = isPhoneWidth(viewportWidth);
   const preference = usePanelPreference(projectListPanelId);
   const [peeking, setPeeking] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(phone && projectId === null);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const summaries = useProjectSummaries(projects.map((project) => project.id).join(","));
@@ -43,23 +47,38 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
   const access = settingsAccess(session.principal);
 
   useEffect(() => {
-    if (projectId === null && selectedId !== null) {
+    // A phone's bare Projects is the list itself; wider screens open on a project.
+    if (!phone && projectId === null && selectedId !== null) {
       writeReviewHistory(projectsHref(selectedId), "replace");
     }
-  }, [projectId, selectedId]);
+  }, [phone, projectId, selectedId]);
 
   const select = (id: string): void => {
-    setSheetOpen(false);
-    navigateReview(projectsHref(id), {replace: true});
+    // Beside the list a choice replaces the detail; on a phone it is a level ‹ Back returns from.
+    navigateReview(projectsHref(id), {replace: !phone});
     const name = projects.find((project) => project.id === id)?.name;
     if (name !== undefined) announce(`${name} opened.`);
   };
+  const createModal = (
+    <CreateProjectModal
+      onClose={() => setCreateOpen(false)}
+      onCreate={onCreateProject}
+      onCreated={(project) => {
+        setCreateOpen(false);
+        navigateReview(projectsHref(project.id));
+      }}
+      open={createOpen}
+    />
+  );
 
-  const listButton = phone ? (
-    <Button icon="bi-briefcase" onClick={() => setSheetOpen(true)} outline size="sm" variant="secondary">
-      Projects
-    </Button>
-  ) : null;
+  if (phone && projectId === null) {
+    return (
+      <>
+        <PhoneProjectList onAdd={() => setCreateOpen(true)} onSelect={select} rows={projectRows(projects, summaries.items, "")} />
+        {createModal}
+      </>
+    );
+  }
 
   const detail = selectedId === null ? (
     <PageScaffold head="scroll" maxWidth="none" title="Projects">
@@ -78,7 +97,7 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
       />
     </PageScaffold>
   ) : filteredOut ? (
-    <PageScaffold actions={listButton} head="scroll" maxWidth="none" title="Projects">
+    <PageScaffold head="scroll" maxWidth="none" title="Projects">
       <SurfaceState
         count={0}
         emptyBody="The selected project is hidden by the search. Choose a project from the list or clear the search."
@@ -95,7 +114,6 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
       artifactCount={selectedRow?.artifactCount ?? null}
       canManage={access.canManageProjects}
       gitHistory={session.capabilities.gitHistory}
-      headActions={listButton}
       // One project's dialogs, estimate and pages never carry over to another.
       key={selectedId}
       onProjectsChanged={async () => {
@@ -111,7 +129,7 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
 
   return (
     <div style={screenStyle}>
-      {phone && !sheetOpen ? null : (
+      {phone ? null : (
         <aside aria-label="Project list" style={listLandmarkStyle}>
           <ProjectListPanel
             canPin={viewportWidth >= workspaceBudget.catalogAlone}
@@ -124,29 +142,21 @@ export function ProjectsScreen({onCreateProject, onProjectsChanged, projectId, p
             }}
             onQueryChange={setQuery}
             onSelect={select}
-            onSheetClose={() => setSheetOpen(false)}
+            onSheetClose={() => undefined}
             onWidthChange={preference.setWidth}
             peeking={peeking}
             pinned={preference.pinned}
             query={query}
             rows={rows}
             selectedId={selectedId}
-            sheet={phone}
+            sheet={false}
             total={projects.length}
             width={preference.width}
           />
         </aside>
       )}
       <div aria-label="Project details" role="region" style={detailStyle}>{detail}</div>
-      <CreateProjectModal
-        onClose={() => setCreateOpen(false)}
-        onCreate={onCreateProject}
-        onCreated={(project) => {
-          setCreateOpen(false);
-          navigateReview(projectsHref(project.id));
-        }}
-        open={createOpen}
-      />
+      {createModal}
     </div>
   );
 }

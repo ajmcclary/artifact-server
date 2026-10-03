@@ -8,7 +8,7 @@ export interface NavItem {
   current?: boolean;
   /** 1 renders a child row of the item before it, absent from the rail. */
   depth?: 0 | 1;
-  /** `neutral` draws an informational count in the neutral pill; the default is the danger pill. */
+  /** Count chip tone: neutral information, or `danger` for a count that needs action now (overdue, failing, urgent). SideNav and MobileNavDrawer honor it. @default "neutral" */
   countTone?: 'danger' | 'neutral';
   /** Optional `bi-*` icon. Navigation renditions use 20px in labelled rows and rails, independently of text size. */
   icon?: string;
@@ -56,6 +56,10 @@ export interface SideNavProps {
   mode?: SideNavMode;
   /** Navy application chrome or the default light section navigation. @default "default" */
   tone?: 'default' | 'navy';
+  /** `secondary` paints `surface-secondary` for a light section rail beside a record. Ignored with `tone="navy"`. @default "default" */
+  surface?: 'default' | 'secondary';
+  /** A view list inside a Panel: expanded, no title row, full width, no edge rule. @default false */
+  embedded?: boolean;
   /** Pin state of the Panel Pin Model footer. @default false */
   pinned?: boolean;
   /** Draws the 32px pin footer and receives the next pin state. Without it no footer is drawn. */

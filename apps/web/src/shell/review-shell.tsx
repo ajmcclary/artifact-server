@@ -16,12 +16,14 @@ import {
   navigateReview,
   type ReviewRoute,
 } from "@/review/review-routes";
+import {restoreWindowScroll, takePendingScroll} from "@/review/review-history";
 import {removeStored, writeStored} from "@/lib/safe-storage";
 import {useAnnounce, useAnnouncements} from "@/ui/announcer";
 
 import {AccountMenu} from "./account-menu.tsx";
 import {ReviewPaletteHost} from "./command-palette.tsx";
 import {ArtifactServerBrand} from "./brand.tsx";
+import {usePhoneChrome} from "./phone-chrome.tsx";
 import {
   isInstallationAdministrator,
   shellActiveLink,
@@ -33,9 +35,6 @@ import {useActivitySummary} from "@/review/activity/use-activity-summary";
 import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, navigationWidth, reviewPanelStore} from "./shell-layout.ts";
 import {NAV_BOOT_WIDTH_KEY} from "./shell-layout-keys.ts";
 import {ShellLayoutProvider, ShellNavigationProvider, useShellLayoutState} from "./shell-layout-context.tsx";
-
-/** Room kept clear on phones for the drawer's fixed 40 px launcher. */
-const phoneLauncherClearance = 56;
 
 interface ReviewShellProps {
   readonly aside?: ReactNode;
@@ -52,10 +51,15 @@ function selectItem(item: NavItem): void {
   if (item.link !== undefined) navigateReview(item.link);
 }
 
-/** Every signed-in screen's frame: navigation rail or drawer, main landmark, live regions. */
 /** Every project: the badge counts across the installation. */
 const noProjects: readonly string[] = [];
 
+/**
+ * Every signed-in screen's frame: the navigation rail (or, on a tablet, its
+ * drawer), the main landmark and the live regions. A phone has no rail and no
+ * drawer: a bottom tab bar, a More sheet and a navy app bar, over a page the
+ * document scrolls.
+ */
 export function ReviewShell(props: ReviewShellProps) {
   return (
     <ShellLayoutProvider>
@@ -117,7 +121,20 @@ function ReviewShellFrame({
   }, [expandedWidth, navPinned]);
   const screenTitle = routeTitle(route, projects);
   useInAppLinks();
-  useScreenChange(screenTitle, announce);
+  useScreenChange(screenTitle, announce, route);
+  const phoneChrome = usePhoneChrome({
+    activeLink,
+    isAdministrator: navInput.isAdministrator,
+    navItems: items,
+    needsYou: navInput.needsYou,
+    onAnnounce: announce,
+    onOpenPalette,
+    projects,
+    route,
+    session,
+  });
+  // Focus is a full-screen layer of its own; it hides the bars and gives their room to the preview.
+  const phoneBars = phone && !focus;
 
   const changePin = (next: boolean): void => {
     setNavPinned(next);
@@ -182,22 +199,21 @@ function ReviewShellFrame({
     />
     </div>
   );
-  const drawer = focus ? null : (
+  // A tablet's catalog can still open the whole navigation as a drawer; a phone has the tab bar instead.
+  const drawer = focus || phone ? null : (
     <MobileNavDrawer
       activeLink={activeLink}
       brand={<ArtifactServerBrand showProduct={false} />}
       footer={<AccountMenu rail={false} session={session} />}
       items={items}
       label={navTitle}
-      launcher={phone ? {label: "Open menu"} : false}
+      launcher={false}
       onAnnounce={announce}
       onClose={() => setDrawerOpen(false)}
       onOpen={() => setDrawerOpen(true)}
       onSelect={selectItem}
       open={drawerOpen}
-      returnFocusSelector={phone
-        ? "[data-ac-mnav-launcher]"
-        : '[aria-label="Open navigation menu"], [aria-label="Show the artifact catalog"]'}
+      returnFocusSelector={'[aria-label="Open navigation menu"], [aria-label="Show the artifact catalog"]'}
       title="Review"
     />
   );
@@ -207,22 +223,22 @@ function ReviewShellFrame({
       <AppShell
         alert={announcements.assertive}
         announce={announcements.polite}
+        appBar={phoneBars ? phoneChrome.appBar : undefined}
         aside={aside}
         chrome="left"
         drawer={drawer}
         ladder={REVIEW_DISPLAY_LADDER}
-        mainStyle={{
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-          paddingTop: phone && !focus ? phoneLauncherClearance : 0,
-          ...mainStyle,
-        }}
+        // On a phone the document scrolls: main is neither a scroller nor a fixed height.
+        mainStyle={phoneBars
+          ? {display: "flex", flexDirection: "column"}
+          : {display: "flex", flexDirection: "column", minHeight: 0, ...mainStyle}}
         nav={nav}
+        status={phoneBars ? phoneChrome.moreSheet : undefined}
+        tabBar={phoneBars ? phoneChrome.tabBar : undefined}
       >
         {children}
       </AppShell>
-      {phone ? null : drawer}
+      {drawer}
       <ReviewPaletteHost projects={projects} />
     </ShellNavigationProvider>
   );
@@ -252,9 +268,11 @@ function useInAppLinks(): void {
  * Name the document for history and tabs. After a navigation (a link, the
  * palette, or back and forward) lands on another screen, start that screen at
  * its top and announce it; a URL the current screen rewrites for itself, such
- * as the workspace naming its first artifact, is not a new screen.
+ * as the workspace naming its first artifact, is not a new screen. The
+ * browser's Back and Forward (and ‹ Back, which takes the same path) return a
+ * document-scrolled page to the offset it was left at.
  */
-function useScreenChange(title: string, announce: (message: string) => void): void {
+function useScreenChange(title: string, announce: (message: string) => void, route: ReviewRoute): void {
   const navigated = useRef(false);
   const previousTitle = useRef(title);
   useEffect(() => {
@@ -264,6 +282,11 @@ function useScreenChange(title: string, announce: (message: string) => void): vo
     window.addEventListener("popstate", noteNavigation);
     return () => window.removeEventListener("popstate", noteNavigation);
   }, []);
+  useEffect(() => {
+    const y = takePendingScroll();
+    // It runs out on its own, and the next push or restore stops it; a screen's own URL rewrite must not.
+    if (y !== null) restoreWindowScroll(y);
+  }, [route]);
   useEffect(() => {
     document.title = `${title} · Artifact Server`;
     if (navigated.current && previousTitle.current !== title) {

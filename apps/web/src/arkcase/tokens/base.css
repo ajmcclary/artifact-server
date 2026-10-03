@@ -118,3 +118,9 @@ small { font-size: 0.875em; }
     scroll-behavior: auto !important;
   }
 }
+
+/* A phone panel is a stage, not a docked pane: no pin controls in the mobile display profile.
+   Panel and SideNav mark their pin toggles with data-ac-pin. */
+[data-ac-profile="mobile"] [data-ac-pin] {
+  display: none !important;
+}

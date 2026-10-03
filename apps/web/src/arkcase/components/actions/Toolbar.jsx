@@ -26,7 +26,13 @@ const toolbarContext = () => _toolbarContext || (_toolbarContext = React.createC
 
 const ITEMS = 'button:not([tabindex="-1"]), input:not([type="hidden"]):not([tabindex="-1"]), select:not([tabindex="-1"]), textarea:not([tabindex="-1"]), a[href]:not([tabindex="-1"]), [role="button"]:not(button):not([tabindex="-1"])';
 
-export function Toolbar({ label, orientation = 'horizontal', variant = 'light', gap = 4, wrap = false, children, style, onKeyDown, ...rest }) {
+/* Pane chrome: a toolbar ruled under a pane header, or docked at a pane's foot. */
+const PLACEMENTS = {
+  'pane-top': { flex: 'none', padding: '10px 16px', background: 'var(--surface-card, #ffffff)', borderBottom: '1px solid var(--border-color, #dee2e6)' },
+  'pane-footer': { flex: 'none', minHeight: 56, padding: '8px 20px', background: 'var(--surface-card, #ffffff)', borderTop: '1px solid var(--border-color, #dee2e6)', boxShadow: 'var(--shadow-up, 0 -6px 16px rgba(0, 0, 0, 0.14))' },
+};
+
+export function Toolbar({ label, orientation = 'horizontal', variant = 'light', placement = 'inline', gap = 4, wrap = false, children, style, onKeyDown, ...rest }) {
   const Ctx = toolbarContext();
   const vertical = orientation === 'vertical';
   const navy = variant === 'navy';
@@ -58,6 +64,7 @@ export function Toolbar({ label, orientation = 'horizontal', variant = 'light', 
             background: 'var(--surface-header, #073652)',
             color: 'var(--text-on-navy, #ffffff)',
           } : null),
+          ...(PLACEMENTS[placement] || null),
           ...style,
         }}
         {...rest}

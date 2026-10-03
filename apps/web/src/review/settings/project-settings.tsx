@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from "react";
+import {useEffect, useState} from "react";
 
 import {
   api,
@@ -43,8 +43,6 @@ export interface ProjectSettingsProps {
   readonly artifactCount: number | null;
   readonly canManage: boolean;
   readonly gitHistory: DeploymentCapabilities["gitHistory"];
-  /** Extra head actions, such as the phone "Projects" button. */
-  readonly headActions?: ReactNode;
   /** The signed-in principal, for inline Reply drafts in the Activity section. */
   readonly principalId: string;
   readonly onProjectsChanged: () => Promise<readonly Project[]>;
@@ -121,7 +119,6 @@ export function ProjectSettings({
   artifactCount,
   canManage,
   gitHistory,
-  headActions,
   principalId,
   onProjectsChanged,
   projectId,
@@ -240,21 +237,16 @@ export function ProjectSettings({
   const archived = project.archivedAt !== null;
   return (
     <PageScaffold
-      actions={(
-        <>
-          {headActions}
-          {artifactCount === 0 ? null : (
-            <Button
-              href={`/review?project=${encodeURIComponent(project.id)}`}
-              icon="bi-box-arrow-up-right"
-              outline
-              size="sm"
-              variant="secondary"
-            >
-              Open latest artifact
-            </Button>
-          )}
-        </>
+      actions={artifactCount === 0 ? null : (
+        <Button
+          href={`/review?project=${encodeURIComponent(project.id)}`}
+          icon="bi-box-arrow-up-right"
+          outline
+          size="sm"
+          variant="secondary"
+        >
+          Open latest artifact
+        </Button>
       )}
       head="scroll"
       maxWidth="none"

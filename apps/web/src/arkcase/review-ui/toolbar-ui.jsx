@@ -15,9 +15,12 @@ export function createToolbarUI(React, DS) {
   const SearchFit = React.createContext({ compact: false, phone: false });
 
   /* `onHeight` reports the docked bar's height, hairline included, so the bands and caps
-     below can pin directly beneath it whatever height the row wraps to. */
-  function PageToolbar({ title, label, gutter = 20, phone = false, onHeight, end, children }) {
-    return <ScrollDock surface="var(--surface-canvas, #f1f5f7)" bleed={gutter} zIndex={4}
+     below can pin directly beneath it whatever height the row wraps to. `top` docks it below
+     fixed chrome over a document-scrolled page (the phone's app bar). A sticky dock is a stacking
+     context, so on a phone it sits just above the fixed bars (1020) and below sheets and dialogs
+     (1040+): its filter menus open as bottom sheets, which must clear the tab bar. */
+  function PageToolbar({ title, label, gutter = 20, phone = false, top = 0, onHeight, end, children }) {
+    return <ScrollDock surface="var(--surface-canvas, #f1f5f7)" bleed={gutter} zIndex={phone ? 1030 : 4} top={top}
       style={{ borderBottom: '1px solid transparent' }} dockedStyle={{ borderBottom: LINE }}>
       {({ docked }) => <ToolbarRow title={docked && !phone ? title : null} label={label} phone={phone} onHeight={onHeight} end={end}>{children}</ToolbarRow>}
     </ScrollDock>;
@@ -94,19 +97,27 @@ export function createToolbarUI(React, DS) {
   }
 
   /* Adjacent filter menus with no gap between them: the ghost triggers' own padding spaces
-     them. The group keeps its width and wraps inside itself only when wider than the row. */
-  function FilterGroup({ label, children }) {
-    return <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0, maxWidth: '100%' }}>{children}</div>;
+     them. The group keeps its width and wraps inside itself only when wider than the row; on a
+     phone it is one row that scrolls sideways instead (its menus open as sheets, so nothing is
+     clipped by the scrolling row). */
+  function FilterGroup({ label, phone = false, children }) {
+    return <div role="group" aria-label={label} data-filter-group={phone ? 'scroll' : 'wrap'}
+      style={phone
+        ? { display: 'flex', flexWrap: 'nowrap', alignItems: 'center', flex: '1 1 100%', minWidth: 0, maxWidth: '100%', overflowX: 'auto',
+          overscrollBehaviorX: 'contain', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', padding: '2px 0' }
+        : { display: 'flex', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0, maxWidth: '100%' }}>{children}</div>;
   }
 
   /* A ghost trigger with a chevron that opens a menu of choices. The menu is as wide as its
-     longest row, never narrower than `minWidth` nor wider than 400px or the viewport. */
-  function FilterMenu({ open, onOpenChange, icon, label, menuLabel, items, minWidth, width = 'max-content', density, triggerRef }) {
-    return <span ref={triggerRef} style={{ position: 'relative', display: 'inline-flex' }}>
+     longest row, never narrower than `minWidth` nor wider than 400px or the viewport. On a
+     phone (`presentation="sheet"`) it is the Menu's bottom sheet. */
+  function FilterMenu({ open, onOpenChange, icon, label, menuLabel, items, minWidth, width = 'max-content', density, triggerRef, presentation = 'popover' }) {
+    const sheet = presentation === 'sheet';
+    return <span ref={triggerRef} style={{ position: 'relative', display: 'inline-flex', flex: 'none' }}>
       <Button variant="ghost" size="sm" icon={icon} iconRight="bi-chevron-down" expanded={open} hasPopup="menu"
-        onClick={() => onOpenChange(!open)}>{label}</Button>
-      <Menu open={open} onClose={() => onOpenChange(false)} label={menuLabel} align="start" density={density} items={items}
-        width={width} style={{ minWidth, maxWidth: 'min(400px, calc(100vw - 32px))' }} />
+        onClick={() => onOpenChange(!open)} style={sheet ? { whiteSpace: 'nowrap' } : undefined}>{label}</Button>
+      <Menu open={open} onClose={() => onOpenChange(false)} label={menuLabel} align="start" density={sheet ? 'comfortable' : density} items={items}
+        presentation={presentation} width={sheet ? undefined : width} style={sheet ? undefined : { minWidth, maxWidth: 'min(400px, calc(100vw - 32px))' }} />
     </span>;
   }
 

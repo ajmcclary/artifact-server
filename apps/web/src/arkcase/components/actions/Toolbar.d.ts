@@ -7,6 +7,8 @@ export interface ToolbarProps {
   orientation?: 'horizontal' | 'vertical';
   /** `light` sits on the host surface; `navy` is the app-chrome bar (`surface-header` fill, `text-on-navy` ink, tonal icons). @default "light" */
   variant?: 'light' | 'navy';
+  /** `pane-top` rules a toolbar under a pane header; `pane-footer` docks it at the pane's foot with the upward shadow. @default "inline" */
+  placement?: 'inline' | 'pane-top' | 'pane-footer';
   /** Space between controls, in pixels or any CSS length. @default 4 */
   gap?: number | string;
   /** Lets the controls wrap onto further rows when the toolbar is too narrow, instead of overflowing; row gap equals `gap`. @default false */

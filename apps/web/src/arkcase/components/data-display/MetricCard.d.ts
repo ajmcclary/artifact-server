@@ -3,7 +3,7 @@ import type { StatusPillProps } from './StatusPill';
 
 export interface MetricCardProps {
   /** Caption above the value, e.g. "Claims Received". */
-  label: string;
+  label: React.ReactNode;
   /** Large primary figure, e.g. "248" or "94.8%". */
   value: string;
   /** Trend / context line below the value. */
@@ -23,11 +23,12 @@ export interface MetricCardProps {
    * data font at every size so stacked metrics align and a total lines up with
    * the mono column it sums. Leave off for word values ("Medical Only").
    * Never switch the value to the serif display face — its figures are
-   * proportional. @default false
+   * proportional. In `quiet` it defaults to on for numeric values and off for words.
+   * @default false
    */
   dataFont?: boolean;
-  /** Tinted tile with accent rule, or the plain card surface with hairline border and shadow. @default "tinted" */
-  variant?: 'tinted' | 'surface';
+  /** Tinted tile with accent rule, the plain card surface with hairline border and shadow, or `quiet`: an unboxed figure for a summary strip (no ground, rule or shadow; the label wraps; `color` has no effect, because a summary is not an exception). @default "tinted" */
+  variant?: 'tinted' | 'surface' | 'quiet';
   /** Leading `bi-*` icon class shown before the label, e.g. "bi-images". */
   icon?: string;
   /** StatusPill shown at the end of the label row. */

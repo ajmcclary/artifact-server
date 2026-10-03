@@ -1,13 +1,21 @@
 import React from 'react';
-import { DisplayProfile, displayProfileContext, defaultLadder } from './DisplayProfile.jsx';
+import { useDisplayProfile, displayProfileContext, defaultLadder } from './DisplayProfile.jsx';
 
 const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' };
 
 /* The frame reads the profile the root provides, so the mobile decisions — no rail,
    a drawer instead — are made once, here, and not by every slot. */
-function ShellFrame({ chrome, bar, strip, nav, drawer, aside, status, announce, alert, mainId, skipLabel, mainStyle, drawerLeft, children }) {
+/* A fixed phone bar spans the window; in a framed column it is pulled in to the column's edges. */
+function inColumn(el, offset) {
+  if (offset == null || !React.isValidElement(el)) return el;
+  return React.cloneElement(el, { style: { left: offset, right: offset, ...(el.props && el.props.style) } });
+}
+
+function ShellFrame({ chrome, bar, strip, nav, drawer, appBar, tabBar, aside, status, announce, alert, mainId, skipLabel, mainStyle, drawerLeft, children }) {
   const dp = React.useContext(displayProfileContext());
   const mobile = !!dp && dp.profile === 'mobile';
+  /* Phone chrome: the document scrolls, the app bar and tab bar are fixed, and main pads past them. */
+  const phone = mobile && (appBar != null || tabBar != null);
   const reduceMotion = !!dp && dp.reduceMotion;
   const topChrome = chrome === 'top';
   const [skipFocused, setSkipFocused] = React.useState(false);
@@ -33,16 +41,30 @@ function ShellFrame({ chrome, bar, strip, nav, drawer, aside, status, announce, 
       </a>
       <div aria-live="polite" style={VISUALLY_HIDDEN}>{announce}</div>
       <div role="alert" aria-live="assertive" style={VISUALLY_HIDDEN}>{alert}</div>
-      {topChrome && bar}
-      {topChrome && strip}
+      {topChrome && !phone && bar}
+      {topChrome && !phone && strip}
+      {phone && inColumn(appBar, drawerLeft)}
       <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
         {!mobile && nav}
-        <main ref={mainRef} id={mainId} role="main" tabIndex={-1} style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, overflow: 'auto', outline: 'none', ...mainStyle }}>
+        <main
+          ref={mainRef}
+          id={mainId}
+          role="main"
+          tabIndex={-1}
+          style={phone ? {
+            flex: '1 1 auto', minWidth: 0, outline: 'none', overflow: 'visible',
+            paddingTop: appBar != null ? 'calc(var(--mobile-app-bar-height, 52px) + env(safe-area-inset-top, 0px))' : undefined,
+            paddingBottom: tabBar != null ? 'calc(var(--mobile-tab-bar-height, 56px) + env(safe-area-inset-bottom, 0px))' : undefined,
+            scrollPaddingTop: 'calc(var(--mobile-app-bar-height, 52px) + 46px)',
+            ...mainStyle,
+          } : { flex: '1 1 auto', minWidth: 0, minHeight: 0, overflow: 'auto', outline: 'none', ...mainStyle }}
+        >
           {children}
         </main>
         {aside}
       </div>
       {status}
+      {phone && inColumn(tabBar, drawerLeft)}
       {mobile && (drawerLeft != null && React.isValidElement(drawer)
         ? React.cloneElement(drawer, { style: { left: drawerLeft, ...(drawer.props && drawer.props.style) } })
         : drawer)}
@@ -82,9 +104,15 @@ function useAppShellFrame(frame, force, ladder) {
  * `frame` (opt-in) draws a forced profile narrower than the window as a centred
  * column at the ladder width, with `shadow-lg` and hairline sides, and slides the
  * phone drawer into that column.
+ *
+ * Phone chrome: on `mobile`, an `appBar` (a `MobileAppBar`) or `tabBar` (a
+ * `MobileTabBar`) switches the frame to document scroll. The root grows with its
+ * content, `main` stops scrolling and pads past the fixed bars, and the desktop
+ * `bar` and `strip` stand down. Without either prop the phone keeps the previous
+ * frame, so existing hosts are unchanged.
  */
 export function AppShell({
-  chrome = 'left', force = null, ladder, bar, strip, nav, drawer, aside, status, announce, alert,
+  chrome = 'left', force = null, ladder, bar, strip, nav, drawer, appBar, tabBar, aside, status, announce, alert,
   mainId = 'ak-main', skipLabel = 'Skip to main content', mainStyle, frame = false, style, children, ...rest
 }) {
   const framed = useAppShellFrame(frame, force, ladder);
@@ -93,17 +121,26 @@ export function AppShell({
     boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18))',
     borderLeft: '1px solid var(--border-color, #dee2e6)', borderRight: '1px solid var(--border-color, #dee2e6)',
   } : null;
+  const profile = useDisplayProfile({ force, ladder: ladder || defaultLadder });
+  const phone = profile.profile === 'mobile' && (appBar != null || tabBar != null);
+  /* The phone frame grows with its content so the document — not a pane — scrolls. */
+  const sizing = phone
+    ? { minHeight: '100dvh', overflow: 'visible' }
+    : { height: '100dvh', overflow: 'hidden' };
+  const Provider = displayProfileContext().Provider;
   return (
-    <DisplayProfile
-      force={force}
-      ladder={ladder}
+    <div
+      data-ac-profile={profile.profile}
       data-ak-shell-frame={framed ? '' : undefined}
-      style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh', maxWidth: '100vw', overflow: 'hidden', background: 'var(--surface-canvas, #f1f5f7)', ...frameStyle, ...style }}
+      data-ak-phone-chrome={phone ? '' : undefined}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', maxWidth: '100vw', background: 'var(--surface-canvas, #f1f5f7)', ...sizing, ...frameStyle, ...style }}
       {...rest}
     >
-      <ShellFrame chrome={chrome} bar={bar} strip={strip} nav={nav} drawer={drawer} aside={aside} status={status} announce={announce} alert={alert} mainId={mainId} skipLabel={skipLabel} mainStyle={mainStyle} drawerLeft={framed ? framed.offset : null}>
+      <Provider value={profile}>
+      <ShellFrame chrome={chrome} bar={bar} strip={strip} nav={nav} drawer={drawer} appBar={appBar} tabBar={tabBar} aside={aside} status={status} announce={announce} alert={alert} mainId={mainId} skipLabel={skipLabel} mainStyle={mainStyle} drawerLeft={framed ? framed.offset : null}>
         {children}
       </ShellFrame>
-    </DisplayProfile>
+      </Provider>
+    </div>
   );
 }

@@ -33,7 +33,7 @@ export function IconButton({
   const d = dims[size] || dims.md;
 
   const variants = {
-    navy:    { bg: 'transparent', fg: 'var(--text-on-navy, #ffffff)', hoverBg: 'var(--surface-navy-strong, #052a40)', activeBg: 'var(--surface-navy-strong, #052a40)', hoverFg: 'var(--text-on-navy, #ffffff)' },
+    navy:    { bg: 'transparent', fg: 'var(--text-on-navy, #ffffff)', hoverBg: 'var(--surface-navy-hover, #205877)', activeBg: 'var(--surface-navy-selected, #346783)', hoverFg: 'var(--text-on-navy, #ffffff)' },
     dark:    { bg: 'transparent', fg: 'var(--text-on-navy, #ffffff)', hoverBg: 'var(--bs-gray-700, #495057)', activeBg: 'var(--bs-gray-700, #495057)', hoverFg: 'var(--text-on-navy, #ffffff)' },
     ghost:   { bg: 'transparent', fg: 'var(--text-emphasis, #374151)', hoverBg: 'var(--tint-primary-hover, rgba(0,121,168,0.05))', activeBg: 'var(--tint-primary-selected, rgba(0,121,168,0.10))', hoverFg: 'var(--bs-primary, #0079a8)' },
     primary: { bg: 'var(--bs-primary, #0079a8)', fg: 'var(--text-on-primary, #ffffff)', hoverBg: 'var(--bs-primary-hover, #00668f)', activeBg: 'var(--bs-primary-hover, #00668f)', hoverFg: 'var(--bs-white, #ffffff)', inset: true },
@@ -45,7 +45,7 @@ export function IconButton({
   // variant's selected fill; ghost also steps its ink to the on-tint link tone.
   const selectedFills = {
     ghost: { bg: 'var(--tint-primary-selected, rgba(0,121,168,0.10))', fg: 'var(--text-link-on-tint, #00688f)' },
-    navy: { bg: 'var(--surface-navy-strong, #052a40)', fg: v.fg },
+    navy: { bg: 'var(--surface-navy-selected, #346783)', fg: v.fg },
     dark: { bg: 'var(--bs-gray-700, #495057)', fg: v.fg },
     light: { bg: 'var(--border-color-strong, #ced4da)', fg: 'var(--text-body, #212529)' },
   };

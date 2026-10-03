@@ -15,6 +15,8 @@ export interface StatusPillProps {
   size?: 'xs' | 'md' | 'slide';
   /** Tooltip — the icon/label's fuller meaning (e.g. "Computed"). */
   title?: string;
+  /** Let a long label wrap and align to the start of its column instead of overflowing a narrow card. @default false */
+  wrap?: boolean;
   /** Style overrides for the StatusPill root. */
   style?: React.CSSProperties;
 }

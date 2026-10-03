@@ -29,7 +29,7 @@ const SIZES = {
  * soft tint (pale background + saturated text). Solid fill is reserved for
  * Critical (`tone="critical"`). No radius-4px chips, no 500-weight variants.
  */
-export function StatusPill({ status, tone, label, icon, computed = false, size = 'md', style, ...rest }) {
+export function StatusPill({ status, tone, label, icon, computed = false, size = 'md', wrap = false, style, ...rest }) {
   const z = SIZES[size] || SIZES.md;
   const key = tone || MAP[String(status || '').toLowerCase()];
   /* Resolve the fallback here: the registry's own unknown-tone fallback is neutral, a pill's is secondary. */
@@ -50,7 +50,8 @@ export function StatusPill({ status, tone, label, icon, computed = false, size =
         letterSpacing: z.letterSpacing,
         backgroundColor: t.pillBg,
         color: t.pillFg,
-        whiteSpace: 'nowrap',
+        whiteSpace: wrap ? 'normal' : 'nowrap',
+        ...(wrap ? { alignSelf: 'flex-start', overflowWrap: 'anywhere' } : null),
         ...(computed ? { outline: '1px dashed currentColor', outlineOffset: -1 } : null),
         ...style,
       }}

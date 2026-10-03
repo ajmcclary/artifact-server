@@ -87,10 +87,8 @@ export function createReviewUI(React, DS) {
      chevron column so icons line up at each level, and sizes (or a folder's file count) sit
      in a fixed right-aligned column. The folders holding `selected` open themselves, so a
      page chosen elsewhere never hides its row. */
-  const FILE_ICONS = { html: 'bi-filetype-html', htm: 'bi-filetype-html', css: 'bi-filetype-css', json: 'bi-filetype-json',
-    svg: 'bi-filetype-svg', png: 'bi-file-earmark-image', jpg: 'bi-file-earmark-image', jpeg: 'bi-file-earmark-image',
-    gif: 'bi-file-earmark-image', webp: 'bi-file-earmark-image', md: 'bi-file-earmark-text', txt: 'bi-file-earmark-text' };
-  const fileIcon = (name) => FILE_ICONS[String(name).split('.').pop().toLowerCase()] || 'bi-file-earmark';
+  /* The design system's one extension-to-glyph map (FileList's). */
+  const fileIcon = (name) => DS.fileTypeIcon(name);
   const folderIds = (path) => String(path || '').split('/').slice(0, -1).map((_, i, all) => 'dir:' + all.slice(0, i + 1).join('/') + '/');
   function fileTree(files, open) {
     const root = [];

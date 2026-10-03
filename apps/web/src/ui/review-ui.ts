@@ -11,6 +11,7 @@ import {
   Disclosure,
   Eyebrow,
   FileList,
+  fileTypeIcon,
   GroupBand,
   IconButton,
   Input,
@@ -80,9 +81,10 @@ const controls = {
   TreeView,
 };
 // The review modules also read `visuallyHiddenStyle`, a style object rather than a
-// component, to hide the breadcrumb's h1 while the docked list names the artifact. The
-// declared controls map holds components only, so it joins the same object here.
-Object.assign(controls, {visuallyHiddenStyle});
+// component, to hide the breadcrumb's h1 while the docked list names the artifact, and
+// `fileTypeIcon`, FileList's extension-to-glyph map, for the page tree. The declared
+// controls map holds components only, so they join the same object here.
+Object.assign(controls, {fileTypeIcon, visuallyHiddenStyle});
 const reviewUi = createReviewUI(React, controls);
 
 export const {

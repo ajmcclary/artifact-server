@@ -22,6 +22,13 @@ export interface AppShellProps {
   nav?: React.ReactNode;
   /** The phone navigation — a `MobileNavDrawer`. Rendered only on `mobile`. */
   drawer?: React.ReactNode;
+  /**
+   * The phone's top bar — a `MobileAppBar`. Rendered only on `mobile`; with it (or `tabBar`) the
+   * frame switches to document scroll and `main` pads past the fixed bars.
+   */
+  appBar?: React.ReactNode;
+  /** The phone's bottom navigation — a `MobileTabBar`. Rendered only on `mobile`; see `appBar`. */
+  tabBar?: React.ReactNode;
   /** The end-side panel — a `Panel` or `SlideOver`. */
   aside?: React.ReactNode;
   /** A status row under the content. */
@@ -56,7 +63,8 @@ export interface AppShellProps {
  * `data-ac-profile`, one of two chrome arrangements, the nav + main + aside
  * row, the status row, the drawer on mobile, and the two live regions every
  * announcing control hands its text to. Left navigation is the default;
- * `chrome="top"` restores the traditional bar and optional module strip.
+ * `chrome="top"` restores the traditional bar and optional module strip. On a
+ * phone, `appBar` and `tabBar` replace the drawer launcher with document scroll.
  *
  * @startingPoint section="Shell" subtitle="App frame: bar, strip, nav, main, aside, status" viewport="1280x720"
  */

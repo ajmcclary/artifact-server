@@ -45,4 +45,6 @@
   /* Collapsed panel geometry: labels need 36px; icon navigation needs 52px. */
   --panel-rail-width: 36px;
   --navigator-rail-width: 52px;
+  --mobile-app-bar-height: 52px;   /* phone MobileAppBar, before the top safe-area inset */
+  --mobile-tab-bar-height: 56px;   /* phone MobileTabBar, before the bottom safe-area inset */
 }

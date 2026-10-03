@@ -93,6 +93,8 @@ export interface PanelProps {
   style?: React.CSSProperties;
   /** Style overrides for the scrollable body. */
   bodyStyle?: React.CSSProperties;
+  /** `column` lays the body out as a non-scrolling flex column, for a header + list + footer stack. @default "block" */
+  bodyLayout?: 'block' | 'column';
   /** The body, or a render function that receives the peek API. */
   children?: React.ReactNode | ((api: PanelPeekApi) => React.ReactNode);
 }

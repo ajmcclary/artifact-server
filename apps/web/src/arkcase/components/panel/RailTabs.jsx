@@ -35,7 +35,7 @@ function RailTab({ item, pressed, divider, labels, placement, onSelect, reduce }
   const hasCount = item.count != null && item.count !== '';
   const name = item.ariaLabel != null ? item.ariaLabel : item.label + (hasCount ? ' — ' + item.count : '');
   const lit = pressed || hover;
-  const pill = PILL[item.countTone] || PILL.primary;
+  const pill = PILL[item.countTone] || PILL.neutral;
   return (
     <Tooltip
       label={name}

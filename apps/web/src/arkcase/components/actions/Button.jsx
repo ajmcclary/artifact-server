@@ -182,19 +182,19 @@ export function Button({
     else if (isLink) { color = 'var(--text-link-hover, #005a7d)'; underline = flat; }
     else if (isGhost && dangerText) { bg = 'var(--tint-danger-hover, rgba(216,53,6,0.05))'; }
     else if (isGhost) { bg = 'var(--tint-primary-hover, rgba(0,121,168,0.05))'; color = 'var(--text-link-hover, #005a7d)'; }
-    else if (isNavyOutline) { bg = 'var(--surface-navy-strong, #052a40)'; bc = 'var(--text-on-navy, #ffffff)'; }
-    else if (isNavy) { bg = 'var(--surface-navy-strong, #052a40)'; }
+    else if (isNavyOutline) { bg = 'var(--surface-navy-hover, #205877)'; bc = 'var(--text-on-navy, #ffffff)'; }
+    else if (isNavy) { bg = 'var(--surface-navy-hover, #205877)'; }
     else if (outline) { bg = base; color = onColor; }
     else { bg = hoverPalette[variant] || base; bc = hoverPalette[variant] || base; }
   }
   // Selected (pressed/expanded) and the ghost/navy press take the variant's selected
-  // fill: the 10% primary tint, the strong navy step, a solid variant's hover fill,
+  // fill: the 10% primary tint, the selected navy step, a solid variant's hover fill,
   // or an outline's filled hover state.
   if (selected || (active && isFlat && !disabled && !loading)) {
     if (dangerText) { bg = 'var(--tint-danger-selected, rgba(216,53,6,0.10))'; color = 'var(--text-overdue, #991b1b)'; }
-    else if (isNavyOutline) { bg = 'var(--surface-navy-strong, #052a40)'; color = 'var(--text-on-navy, #ffffff)'; }
+    else if (isNavyOutline) { bg = 'var(--surface-navy-selected, #346783)'; color = 'var(--text-on-navy, #ffffff)'; }
     else if (isLink || isGhost) { bg = 'var(--tint-primary-selected, rgba(0,121,168,0.10))'; color = 'var(--text-link-on-tint, #00688f)'; }
-    else if (isNavy) { bg = 'var(--surface-navy-strong, #052a40)'; color = 'var(--text-on-navy, #ffffff)'; }
+    else if (isNavy) { bg = 'var(--surface-navy-selected, #346783)'; color = 'var(--text-on-navy, #ffffff)'; }
     else if (outline) { bg = base; color = onColor; bc = base; }
     // Solid light steps to the tertiary surface with the strong hairline: --bs-light-hover
     // is not re-themed for dark, so it would drop the dark theme's light label to 1.2:1.

@@ -64,12 +64,16 @@ export interface RailHeaderProps {
   onQueryKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** Population selector inside the search pill. Escape closes only its menu and restores focus to the scope trigger. */
   scope?: RailHeaderScope;
+  /** Funnel toggle for the `filters` drawer, drawn after `actions`; the host owns `pressed` and flips `filtersOpen` in `onToggle`. `count` badges the number of applied filters. */
+  filter?: { pressed: boolean; onToggle: (e: React.MouseEvent) => void; count?: number; label?: string };
   /** Filter controls shown under the search while `filtersOpen` is true. */
   filters?: React.ReactNode;
   /** Whether the filter slot is open; the host toggles it from its filter action. */
   filtersOpen?: boolean;
   /** One-line summary of applied filters, shown while the filter slot is closed. */
   summary?: React.ReactNode;
+  /** Page markup for portable pages: a child with `slot="filters"` fills the filter drawer when `filters` is not given. */
+  children?: React.ReactNode;
   /** Style overrides for the RailHeader root. */
   style?: React.CSSProperties;
 }

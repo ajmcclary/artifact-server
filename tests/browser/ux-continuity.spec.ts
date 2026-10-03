@@ -103,7 +103,7 @@ test.describe("Screen continuity", () => {
     }
   });
 
-  test("NAV-001-B: on a phone the menu drawer changes screens in place and the startup frame has no navigation column", async ({browser}) => {
+  test("NAV-001-B: on a phone the tab bar changes screens in place and the startup frame has no navigation column", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const page = fixture.page;
@@ -116,13 +116,10 @@ test.describe("Screen continuity", () => {
       });
       const probe = () => page.evaluate(() => document.documentElement.dataset["navigationProbe"] ?? null);
 
-      await page.getByRole("button", {name: "Open menu"}).click();
-      const drawer = page.getByRole("dialog", {name: "Review and projects"});
-      await drawer.getByRole("link", {exact: true, name: "Library"}).click();
+      const tabs = page.getByRole("navigation", {name: "Primary"});
+      await tabs.getByRole("link", {exact: true, name: "Library"}).click();
       await expect(page).toHaveURL(/\/review\/library$/u);
-      await expect(drawer).toHaveCount(0);
-      await page.getByRole("button", {name: "Open menu"}).click();
-      await drawer.getByRole("link", {exact: true, name: "Activity"}).click();
+      await tabs.getByRole("link", {name: /^Activity/u}).click();
       await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       expect(await probe()).toBe("same-document");
 

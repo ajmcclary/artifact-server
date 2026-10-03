@@ -58,10 +58,12 @@ import {
   parseReviewRoute,
   readReviewLocation,
   REVIEW_LOCATION_EVENT,
+  REVIEW_OPEN_CATALOG_EVENT,
   type ReviewLocation,
   workspaceHref,
   writeReviewHistory,
 } from "./review-routes.ts";
+import {replaceHistoryEntry} from "./review-history.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
 import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
 import {ProjectsScreen} from "./projects/projects-screen.tsx";
@@ -76,6 +78,12 @@ const workspaceStyle = {
   height: "100%",
   minHeight: 0,
   minWidth: 0,
+} satisfies CSSProperties;
+/* A phone's review keeps its preview in a frame between the app bar and the tab bar; every other
+   screen scrolls the document. */
+const phoneWorkspaceStyle = {
+  ...workspaceStyle,
+  height: "calc(100dvh - var(--mobile-app-bar-height, 52px) - var(--mobile-tab-bar-height, 56px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
 } satisfies CSSProperties;
 const focusLayerStyle = {
   background: "var(--surface-canvas)",
@@ -212,7 +220,7 @@ export function ReviewApp() {
     [locationHref],
   );
   useLayoutEffect(() => {
-    if (replaceWith !== null) window.history.replaceState(null, "", replaceWith);
+    if (replaceWith !== null) replaceHistoryEntry(replaceWith);
   }, [replaceWith]);
 
   /**
@@ -795,7 +803,23 @@ function ProjectReview({
     setFocusControlsCollapsed(false);
     setFocusMode(false);
   }, [projectId, selectedArtifactId, selectedPath, selectedVersionId]);
-  const {setChromeHidden, setNavExpandable} = useShellLayout();
+  const {setChromeHidden, setNavExpandable, setScreenTitle} = useShellLayout();
+  useEffect(() => {
+    // A phone's ‹ Back with no screen behind it leads to the project's artifacts.
+    if (!phone) return undefined;
+    const openCatalog = (): void => setCatalogSheetOpen(true);
+    window.addEventListener(REVIEW_OPEN_CATALOG_EVENT, openCatalog);
+    return () => window.removeEventListener(REVIEW_OPEN_CATALOG_EVENT, openCatalog);
+  }, [phone]);
+  const shownVersion = selectedVersion?.version ?? null;
+  const titleName = details?.artifact.name ?? null;
+  const titleSubtitle = shownVersion === null ? null
+    : `v${shownVersion.number}${shownVersion.id === details?.artifact.currentVersionId ? "" : " · preview"}`;
+  useEffect(() => {
+    // The phone's app bar names the artifact and the version in view.
+    setScreenTitle(titleName === null ? null : {subtitle: titleSubtitle, title: titleName});
+  }, [setScreenTitle, titleName, titleSubtitle]);
+  useEffect(() => () => setScreenTitle(null), [setScreenTitle]);
   useEffect(() => {
     setNavExpandable(docking.navExpandable && !focusMode);
     // Other screens have no catalog or inspector competing for the width.
@@ -1118,7 +1142,7 @@ function ProjectReview({
   );
 
   return (
-    <div ref={workspaceRef} style={focusMode ? focusLayerStyle : workspaceStyle}>
+    <div ref={workspaceRef} style={focusMode ? focusLayerStyle : phone ? phoneWorkspaceStyle : workspaceStyle}>
       {focusMode || (phone && !catalogSheetOpen) ? null : (
         <aside aria-label="Artifact catalog" style={catalogLandmarkStyle}>
           <ArtifactListPanel

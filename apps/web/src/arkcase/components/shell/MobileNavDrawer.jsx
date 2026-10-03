@@ -99,7 +99,7 @@ export function MobileNavDrawer({
 
   return (
     <React.Fragment>
-      <div onClick={close} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1030, background: 'rgba(7,54,82,.45)', opacity: entered ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity .3s ease' }} />
+      <div onClick={close} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1030, background: 'var(--scrim, rgba(7, 54, 82, 0.45))', opacity: entered ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity .3s ease' }} />
       <div
         ref={navRef}
         data-ac-mnav="true"
@@ -166,7 +166,7 @@ export function MobileNavDrawer({
                     <NavigationIcon icon={m.icon || 'bi-circle'} active={active} />
                   </span>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
-                  {m.count != null && <span style={{ marginLeft: 'auto', flex: 'none', minWidth: 20, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: 1.45, borderRadius: 'var(--radius-pill, 10px)', padding: '1px 6px' }}>{countText(m.count)}</span>}
+                  {m.count != null && <span style={{ marginLeft: 'auto', flex: 'none', minWidth: 20, textAlign: 'center', background: m.countTone === 'danger' ? 'var(--bs-danger, #d83506)' : 'var(--pill-neutral-bg, #e9ecef)', color: m.countTone === 'danger' ? 'var(--text-on-primary, #ffffff)' : 'var(--pill-neutral-fg, #495057)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: 1.45, borderRadius: 'var(--radius-pill, 10px)', padding: '1px 6px' }}>{countText(m.count)}</span>}
                   {m.locked && <i aria-hidden="true" className="bi bi-lock" title="Restricted for your role" style={{ marginLeft: m.count != null ? 8 : 'auto', flexShrink: 0, fontSize: 'var(--icon-xs, 12px)', color: 'var(--text-secondary, #5a6268)' }} />}
                 </a>
               </React.Fragment>

@@ -3,7 +3,7 @@ import { Button } from '../actions/Button.jsx';
 import { useEscapeLayer, lockScroll, trapLayerTab } from './overlay-layer.jsx';
 
 const SIZES = { sm: 480, md: 620, lg: 820 };
-const BACKDROP = { navy: 'rgba(7,54,82,.45)', tint: 'rgba(7,54,82,.18)', none: 'transparent' };
+const BACKDROP = { navy: 'var(--scrim, rgba(7, 54, 82, 0.45))', tint: 'rgba(7,54,82,.18)', none: 'transparent' };
 const MODAL_SKIP_INERT = { SCRIPT: 1, STYLE: 1, LINK: 1, TEMPLATE: 1, NOSCRIPT: 1 };
 
 /* react-dom never enters the bundle: portable pages load it as a UMD global. */

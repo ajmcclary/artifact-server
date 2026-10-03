@@ -13,6 +13,7 @@ import {
   Toolbar,
   ToolbarSeparator,
   ToolbarSpacer,
+  visuallyHiddenStyle,
 } from "@/arkcase";
 import {sourceDriftDescription} from "@/lib/presentation";
 import {ArtifactBreadcrumb, PageMenu, VersionMenu} from "@/ui/review-ui";
@@ -93,6 +94,7 @@ const phoneToolbarStyle = {...toolbarStyle, padding: "7px 8px"} satisfies CSSPro
 const inlineStyle = {display: "inline-flex", flex: "none"} satisfies CSSProperties;
 const anchorStyle = {display: "inline-flex", flex: "none", position: "relative"} satisfies CSSProperties;
 const separatorStyle = {height: 20, margin: "0 2px"} satisfies CSSProperties;
+const pickersStyle = {alignItems: "center", display: "flex", flex: "0 1 auto", gap: 2, minWidth: 0} satisfies CSSProperties;
 
 const driftTags = {
   "in-sync": "In sync",
@@ -263,8 +265,10 @@ export function ReviewToolbar({
 
   return (
     <>
-      <Toolbar gap={6} label="Artifact" style={phone ? phoneToolbarStyle : toolbarStyle} wrap={phone}>
-        {showName && !phone ? null : (
+      <Toolbar gap={phone ? 2 : 6} label="Artifact" style={phone ? phoneToolbarStyle : toolbarStyle} wrap={phone}>
+        {/* A phone's app bar carries ‹ Back and the artifact's name, so its toolbar keeps only
+            the version and page pickers (each a sheet): no arrow and no breadcrumb trail. */}
+        {showName || phone ? null : (
           <IconButton
             ariaLabel={`Back to ${projectName}`}
             icon="bi-arrow-left"
@@ -273,12 +277,22 @@ export function ReviewToolbar({
             title={`Back to ${projectName}`}
           />
         )}
-        <ArtifactBreadcrumb
-          crumbs={[versionMenu, pageMenu]}
-          name={artifactName}
-          nameMaxWidth={phone ? 140 : 260}
-          showName={showName}
-        />
+        {phone ? (
+          <>
+            <h1 style={visuallyHiddenStyle}>{artifactName}</h1>
+            <div aria-label="Version and page" role="group" style={pickersStyle}>
+              {versionMenu}
+              {pageMenu}
+            </div>
+          </>
+        ) : (
+          <ArtifactBreadcrumb
+            crumbs={[versionMenu, pageMenu]}
+            name={artifactName}
+            nameMaxWidth={260}
+            showName={showName}
+          />
+        )}
         {drifted && binding !== null && shown !== null ? (
           <span style={inlineStyle}>
             <StatusPill
@@ -347,7 +361,8 @@ export function ReviewToolbar({
             title="Open comments"
           />
         ) : null}
-        <ToolbarSeparator style={separatorStyle} />
+        {/* A phone keeps every action on one row. */}
+        {phone ? null : <ToolbarSeparator style={separatorStyle} />}
         <span style={anchorStyle}>
           <IconButton
             ariaLabel="More artifact actions"

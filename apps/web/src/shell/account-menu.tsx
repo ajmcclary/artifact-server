@@ -1,11 +1,14 @@
-import {useState} from "react";
+import {type CSSProperties, useState} from "react";
 
 import {api, ApiError, type Principal, type Session} from "@/api/client";
 import {
   AccountButton,
+  Button,
   IdentityBlock,
   Menu,
   type MenuItem,
+  SegmentedControl,
+  Select,
   type ThemeMode,
 } from "@/arkcase";
 import {navigateReview, activityHref} from "@/review/review-routes";
@@ -55,7 +58,7 @@ export function AccountMenu({rail, session}: AccountMenuProps) {
   const toasts = useToasts();
   const principal = session.principal;
   const name = accountName(principal);
-  const role = principal.membershipRole === "administrator" ? "Administrator" : "Member";
+  const role = accountRole(principal);
 
   const close = (): void => {
     setOpen(false);
@@ -88,9 +91,7 @@ export function AccountMenu({rail, session}: AccountMenuProps) {
       external: true,
       icon: "bi-github",
       label: "Source on GitHub",
-      onClick: () => {
-        window.open(SOURCE_REPOSITORY_HREF, "_blank", "noopener,noreferrer");
-      },
+      onClick: openSource,
     },
     {divider: true},
     {icon: "bi-box-arrow-right", label: "Sign out", onClick: () => signOut(toasts)},
@@ -124,6 +125,69 @@ export function AccountMenu({rail, session}: AccountMenuProps) {
       ) : null}
     </>
   );
+}
+
+/**
+ * The account row heading a phone's More sheet: who is signed in, then what
+ * the account menu offers — appearance, density, the source and sign-out.
+ * Administration is a tile of its own in the sheet.
+ */
+export function PhoneAccountRow({session}: {readonly session: Session}) {
+  const appearance = useThemeMode();
+  const density = useDensity();
+  const setDensity = useSetDensity();
+  const toasts = useToasts();
+  const principal = session.principal;
+  const densityLabel = densityOptions.find((option) => option.density === density)?.label ?? "Comfortable";
+  return (
+    <div data-phone-account="" style={phoneAccountStyle}>
+      <IdentityBlock avatar={{size: 40}} detail={accountRole(principal)} name={accountName(principal)} />
+      <div style={phoneSettingsStyle}>
+        <Select
+          label="Appearance"
+          onChange={(event) => {
+            const chosen = appearanceOptions.find((option) => option.mode === event.currentTarget.value);
+            if (chosen !== undefined) appearance.setMode(chosen.mode);
+          }}
+          options={appearanceOptions.map((option) => ({label: option.label, value: option.mode}))}
+          size="sm"
+          value={appearance.mode}
+        />
+        <div style={phoneDensityStyle}>
+          <span aria-hidden="true" style={phoneLabelStyle}>Density</span>
+          <SegmentedControl
+            block
+            label="Density"
+            mode="radio"
+            onChange={(label) => {
+              const chosen = densityOptions.find((option) => option.label === label);
+              if (chosen !== undefined) setDensity(chosen.density);
+            }}
+            options={densityOptions.map((option) => option.label)}
+            value={densityLabel}
+          />
+        </div>
+      </div>
+      <div style={phoneActionsStyle}>
+        <Button icon="bi-github" onClick={openSource} outline size="sm" touch variant="secondary">Source on GitHub</Button>
+        <Button icon="bi-box-arrow-right" onClick={() => signOut(toasts)} outline size="sm" touch variant="secondary">Sign out</Button>
+      </div>
+    </div>
+  );
+}
+
+const phoneAccountStyle: CSSProperties = {display: "flex", flexDirection: "column", gap: 12, padding: "4px 0 8px"};
+const phoneSettingsStyle: CSSProperties = {display: "grid", gap: 10, gridTemplateColumns: "minmax(0, 1fr)"};
+const phoneDensityStyle: CSSProperties = {display: "flex", flexDirection: "column", gap: 4};
+const phoneLabelStyle: CSSProperties = {color: "var(--text-emphasis, #374151)", fontSize: "var(--font-size-sm, 14px)", fontWeight: 600};
+const phoneActionsStyle: CSSProperties = {display: "flex", flexWrap: "wrap", gap: 8};
+
+function openSource(): void {
+  window.open(SOURCE_REPOSITORY_HREF, "_blank", "noopener,noreferrer");
+}
+
+function accountRole(principal: Principal): string {
+  return principal.membershipRole === "administrator" ? "Administrator" : "Member";
 }
 
 function accountName(principal: Principal): string {

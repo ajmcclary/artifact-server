@@ -2,6 +2,7 @@ import React from 'react';
 import { Input } from '../forms/Input.jsx';
 import { IconButton } from '../actions/IconButton.jsx';
 import { Menu } from '../overlays/Menu.jsx';
+import { splitSlots } from '../utilities/slots.jsx';
 
 const ELLIPSIS = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 
@@ -24,8 +25,10 @@ export function RailHeader({
   onAdd, addLabel = 'Add', addDisabled = false,
   selectAll, onSelectAll, selectAllLabel = 'Select All',
   query, onQuery, queryPlaceholder = 'Search', queryLabel, queryKeyShortcuts, inputRef, onQueryKeyDown,
-  scope, filters, filtersOpen = false, summary, search = true, style, ...rest
+  scope, filter, filters: filtersProp, filtersOpen = false, summary, search = true, children, style, ...rest
 }) {
+  /* A portable page authors the drawer as page markup: a child with slot="filters" fills it. */
+  const filters = filtersProp != null ? filtersProp : children != null ? splitSlots(children).filters : undefined;
   const [scopeOpen, setScopeOpen] = React.useState(false);
   const scopeButton = React.useRef(null);
   const showSearch = search !== false;
@@ -89,9 +92,13 @@ export function RailHeader({
             fontSize: 'var(--h4-font-size, 1.25rem)', fontWeight: 600, lineHeight: 1.25, color: 'var(--text-body, #212529)', ...ELLIPSIS, ...(titleWrap ? { whiteSpace: 'normal', overflowWrap: 'anywhere' } : null),
           }}
         >{title}</Heading>
-        {(actions || onAdd) && (
+        {(filter || actions || onAdd) && (
           <span style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
             {actions}
+            {filter && (
+              <IconButton icon={filter.pressed ? 'bi-funnel-fill' : 'bi-funnel'} variant="light" size="sm"
+                pressed={!!filter.pressed} count={filter.count || undefined} ariaLabel={filter.label || 'Filters'} onClick={filter.onToggle} />
+            )}
             {onAdd && (
               <IconButton icon="bi-plus-lg" variant="primary" shape="circle" size="sm" ariaLabel={addLabel} disabled={addDisabled} onClick={onAdd} />
             )}
@@ -149,7 +156,7 @@ export function RailHeader({
       </div>
       )}
       {filtersOpen && filters != null && (
-        <div role="group" aria-label="Filters" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px 12px' }}>{filters}</div>
+        <div role="group" aria-label="Filters" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '6px 14px 12px' }}>{filters}</div>
       )}
       {!filtersOpen && summary != null && summary !== '' && (
         <div style={{ padding: '5px 14px', borderTop: '1px solid var(--border-color, #dee2e6)', fontSize: 'var(--font-size-label, 11px)', color: 'var(--text-secondary, #5a6268)', ...ELLIPSIS }}>{summary}</div>

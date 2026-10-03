@@ -27,3 +27,6 @@ export interface FileListProps extends Omit<React.HTMLAttributes<HTMLUListElemen
 
 /** List of file rows: type icon, name and size in the data face, optional role. */
 export function FileList(props: FileListProps): React.JSX.Element;
+
+/** The `bi-*` class for a file name's extension (case-insensitive); `bi-file-earmark` when the type is unknown. */
+export function fileTypeIcon(name: string): string;

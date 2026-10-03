@@ -11,7 +11,7 @@ const TYPE_ICONS = {
 };
 
 /** The `bi-*` class for a file name's extension; `bi-file-earmark` when unknown. */
-function fileIconFor(name) {
+export function fileTypeIcon(name) {
   const m = /\.([a-z0-9]+)$/i.exec(String(name || ''));
   return (m && TYPE_ICONS[m[1].toLowerCase()]) || 'bi-file-earmark';
 }
@@ -19,7 +19,7 @@ function fileIconFor(name) {
 function RowContent({ file }) {
   return (
     <>
-      <i aria-hidden="true" className={`bi ${file.icon || fileIconFor(file.name)}`} style={{ flex: 'none', fontSize: 'var(--icon-xs, 14px)' }} />
+      <i aria-hidden="true" className={`bi ${file.icon || fileTypeIcon(file.name)}`} style={{ flex: 'none', fontSize: 'var(--icon-xs, 14px)' }} />
       <span
         style={{
           flex: '1 1 auto',

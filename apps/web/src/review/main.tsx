@@ -11,6 +11,7 @@ import {DensityProvider} from "@/ui/density";
 import {ToastProvider} from "@/ui/toasts";
 
 import {ReviewApp} from "./review-app.tsx";
+import {startReviewHistory} from "./review-history.ts";
 import "@/arkcase/tokens/fonts.css";
 import "@/arkcase/tokens/icons.css";
 import "@/arkcase/tokens/colors.css";
@@ -26,6 +27,8 @@ installArkcaseRuntime();
 // Lives for the whole session, above every route: the leave prompt and the
 // logout purge must not depend on which screen is mounted.
 installDraftGuard();
+// Numbers history entries before any screen listens to Back and Forward.
+startReviewHistory();
 
 const rootElement = document.querySelector("#review-root");
 

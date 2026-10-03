@@ -10,6 +10,7 @@
   --radius-sm: 0.25rem;     /* 4px — small chips, inputs sm */
   --radius-md: 0.3125rem;   /* 5px — default: buttons, inputs, cards (was 6px) */
   --radius-lg: 0.5rem;      /* 8px — modals, large cards */
+  --radius-sheet: 12px;     /* phone BottomSheet top corners */
   --radius-pill: 10px;      /* status badges / pills (was 12px) */
   --radius-circle: 50%;     /* avatars, icon buttons */
 

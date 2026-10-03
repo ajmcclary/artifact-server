@@ -90,7 +90,8 @@ export function AdminConsole({administrator, area, children, inspector}: AdminCo
       <div style={columnStyle}>
         <div data-admin-head="" style={headStyle}>
           <SectionHeading
-            eyebrow={menu === null || !preference.pinned
+            // A phone's app bar names Administration; it carries no breadcrumb.
+            eyebrow={!phone && (menu === null || !preference.pinned)
               ? <Breadcrumb items={[{href: firstArea.href, label: rootLabel}, current.label]} />
               : undefined}
             level={1}
@@ -113,7 +114,8 @@ export function AdminConsole({administrator, area, children, inspector}: AdminCo
           ) : null}
         </div>
         <div style={rowStyle}>
-          <div aria-label={current.label} data-admin-content="" role="region" style={scrollStyle} tabIndex={-1}>
+          {/* A phone's page scrolls the document, so the content is not a scroller of its own. */}
+          <div aria-label={current.label} data-admin-content="" role="region" style={phone ? phoneContentStyle : scrollStyle} tabIndex={-1}>
             <div style={contentStyle}>{children}</div>
           </div>
           {inspector}
@@ -142,6 +144,7 @@ const scrollStyle: CSSProperties = {
   minWidth: 0,
   overflow: "auto",
 };
+const phoneContentStyle: CSSProperties = {background: "var(--surface-canvas, #F1F5F7)", flex: "1 1 auto", minWidth: 0};
 const contentStyle: CSSProperties = {display: "flex", flexDirection: "column", gap: 16, maxWidth: 1360, padding: "16px 20px 28px"};
 const menuHeaderStyle: CSSProperties = {
   background: "var(--surface-secondary, #F8F9FA)",

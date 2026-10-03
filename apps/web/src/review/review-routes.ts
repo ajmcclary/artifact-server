@@ -1,5 +1,7 @@
 import type {ActivitySegment, ActivityType} from "@/api/client";
 
+import {historyIndex, historyOrigin, type HistoryOrigin, pushHistoryEntry, replaceHistoryEntry} from "./review-history.ts";
+
 /** One canonical settings destination inside the Artifact Server application. */
 export type SettingsRoute =
   | {readonly kind: "projects"}
@@ -32,6 +34,9 @@ export type ReviewRoute =
 
 /** Window event fired after the application rewrites the review URL without a document load. */
 export const REVIEW_LOCATION_EVENT = "artifact-review-location-changed";
+
+/** Window event a phone's app bar fires to open the review's artifact list sheet. */
+export const REVIEW_OPEN_CATALOG_EVENT = "artifact-review-open-catalog";
 
 /** Return whether the current document path belongs to the settings mode. */
 export function isSettingsPath(pathname: string): boolean {
@@ -195,14 +200,39 @@ export function projectWorkspaceHref(projectId: string): string {
   });
 }
 
-/** Rewrite the review URL in place and tell the shell the location changed. */
+/**
+ * Rewrite the review URL and tell the shell the location changed. A pushed
+ * step inside one screen (a review's page) keeps the entry that screen was
+ * opened from, so ‹ Back still returns straight to it.
+ */
 export function writeReviewHistory(href: string, entry: "push" | "replace"): void {
   if (entry === "push") {
-    window.history.pushState(null, "", href);
+    pushHistoryEntry(href, historyOrigin());
   } else {
-    window.history.replaceState(null, "", href);
+    replaceHistoryEntry(href);
   }
   window.dispatchEvent(new Event(REVIEW_LOCATION_EVENT));
+}
+
+/**
+ * A screen one level below a root on a phone — a review, or one project's
+ * settings — which leads with ‹ Back to the screen it was opened from.
+ */
+export function isPushedScreen(route: ReviewRoute): boolean {
+  return route.kind === "workspace" || (route.kind === "projects" && route.projectId !== null);
+}
+
+/**
+ * Where a pushed screen opened at `href` returns to: the current entry, or,
+ * when the current entry is already that kind of screen (another page, artifact
+ * or project of it), the entry the current one came from.
+ */
+export function originFor(href: string): HistoryOrigin | null {
+  const target = parseReviewRoute(new URL(href, window.location.origin));
+  if (!isPushedScreen(target)) return null;
+  const here = parseReviewRoute(new URL(window.location.href));
+  if (isPushedScreen(here) && here.kind === target.kind) return historyOrigin();
+  return {href: `${window.location.pathname}${window.location.search}`, idx: historyIndex()};
 }
 
 function parsePathSegment(segment: string | undefined): string | null {
@@ -227,11 +257,15 @@ export function navigateReview(
 ): void {
   const current = `${window.location.pathname}${window.location.search}`;
   if (options.replace === true || href === current) {
-    window.history.replaceState(null, "", href);
+    replaceHistoryEntry(href);
   } else {
-    window.history.pushState(null, "", href);
+    const target = parseReviewRoute(new URL(href, window.location.origin));
+    const here = parseReviewRoute(new URL(window.location.href));
+    pushHistoryEntry(href, originFor(href));
+    // A new screen starts at its top; a filter or search on the same screen keeps the reader's place.
+    if (window.scrollY > 0 && (target.kind !== here.kind || isPushedScreen(target))) window.scrollTo(0, 0);
   }
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  window.dispatchEvent(new PopStateEvent("popstate", {state: window.history.state}));
 }
 
 /** Whether one same-origin pathname is a screen of this application rather than a document or API URL. */

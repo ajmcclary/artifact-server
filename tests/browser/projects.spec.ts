@@ -118,14 +118,14 @@ test.describe("Projects screen", () => {
       await page.goto(`${fixture.server.baseUrl}/projects`);
       await expect(page).toHaveURL(/\/review\/projects\?project=prj_default$/u);
 
-      // On a phone the list is a sheet opened from the page head.
+      // On a phone the list is a page of its own and a project's details sit one level down.
       await page.setViewportSize({height: 800, width: 390});
       await expect(page.getByRole("complementary", {name: "Project list"})).toHaveCount(0);
-      await page.getByRole("button", {exact: true, name: "Projects"}).click();
-      await page.getByRole("complementary", {name: "Project list"})
-        .getByRole("button", {name: /Projects alpha/u}).click();
-      await expect(page.getByRole("complementary", {name: "Project list"})).toHaveCount(0);
+      await page.getByRole("navigation", {name: "Primary"}).getByRole("link", {exact: true, name: "Projects"}).click();
+      await expect(page).toHaveURL(/\/review\/projects$/u);
+      await page.getByRole("list", {name: "Projects"}).getByRole("button", {name: /Projects alpha/u}).click();
       await expect(page.getByRole("heading", {name: "Projects alpha"})).toBeVisible();
+      await expect(page.locator("[data-ak-app-bar]").getByRole("button", {name: "Back to Projects"})).toBeVisible();
       await expect.poll(() => page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     } finally {

@@ -465,7 +465,7 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
-  test("CMT-015-F: on a phone the navigation rail becomes the menu drawer and returns focus to its launcher", async ({browser}) => {
+  test("CMT-015-F: on a phone the navigation rail becomes a tab bar whose More sheet returns focus to its tab", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       await localLogin(fixture);
@@ -473,16 +473,19 @@ test.describe("Artifact Server frontend MVP", () => {
       // Load as a phone does: the inspector starts closed below the docking floor.
       await fixture.page.reload();
       await expect(fixture.page.locator("[data-ac-left-nav]")).toHaveCount(0);
-      const launcher = fixture.page.getByRole("button", {name: "Open menu"});
-      await launcher.click();
-      const drawer = fixture.page.getByRole("dialog", {name: "Review and projects"});
-      await expect(drawer.getByRole("link", {name: "Artifact Server"}))
-        .toHaveAttribute("href", "/review");
-      await expect(drawer.getByRole("link", {exact: true, name: "Default"}))
+      await expect(fixture.page.getByRole("button", {name: "Open menu"})).toHaveCount(0);
+      const more = fixture.page.getByRole("navigation", {name: "Primary"}).getByRole("button", {exact: true, name: "More"});
+      await more.click();
+      const sheet = fixture.page.getByRole("dialog", {name: "More"});
+      await expect(sheet.getByRole("link", {exact: true, name: "Default"}))
         .toHaveAttribute("aria-current", "page");
       await fixture.page.keyboard.press("Escape");
-      await expect(drawer).toHaveCount(0);
-      await expect(launcher).toBeFocused();
+      await expect(sheet).toHaveCount(0);
+      await expect(more).toBeFocused();
+      // A tab's root carries the lock-up home to Activity.
+      await fixture.page.getByRole("navigation", {name: "Primary"}).getByRole("link", {name: /^Activity/u}).click();
+      await expect(fixture.page.locator("[data-ak-app-bar]").getByRole("link", {name: "Artifact Server home"}))
+        .toHaveAttribute("href", "/review");
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -535,7 +538,7 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
-  test("CMT-015-F: a long project name stays inside the phone menu without widening the page", async ({browser}) => {
+  test("CMT-015-F: a long project name stays inside the phone's More sheet without widening the page", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const longName = "Quarterly review of the northern regional claims intake backlog and duplicate submission reconciliation";
@@ -544,8 +547,8 @@ test.describe("Artifact Server frontend MVP", () => {
       await fixture.page.setViewportSize({height: 844, width: 390});
       // Load as a phone does: the inspector starts closed below the docking floor.
       await fixture.page.reload();
-      await fixture.page.getByRole("button", {name: "Open menu"}).click();
-      const row = fixture.page.getByRole("link", {name: longName});
+      await fixture.page.getByRole("navigation", {name: "Primary"}).getByRole("button", {exact: true, name: "More"}).click();
+      const row = fixture.page.getByRole("dialog", {name: "More"}).getByRole("link", {name: longName});
       await expect(row).toBeVisible();
       expect(await fixture.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
         .toBe(true);

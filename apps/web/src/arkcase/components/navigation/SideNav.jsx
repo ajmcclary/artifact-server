@@ -13,8 +13,8 @@ const MINI_COUNT = { position: 'absolute', top: 2, right: 2, minWidth: 16, textA
 
 const COUNT_NEUTRAL = { ...COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
 const MINI_COUNT_NEUTRAL = { ...MINI_COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
-/* E5c — an informational count is the neutral pill; the default stays the danger pill. */
-const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_COUNT_NEUTRAL : COUNT_NEUTRAL) : (rail ? MINI_COUNT : COUNT));
+/* E5c — counts are informational (neutral) unless an item says `countTone: 'danger'`: red is for "act now". */
+const countStyle = (item, rail) => (item.countTone === 'danger' ? (rail ? MINI_COUNT : COUNT) : (rail ? MINI_COUNT_NEUTRAL : COUNT_NEUTRAL));
 
 /**
  * ArkCase SideNav — the primary navigation in four modes. `drawer` is the
@@ -34,7 +34,7 @@ const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_
  * `onWidthChange` so the host stores it beside its other panel widths.
  *
  * An item with no `link` is a button, current by `item.current`; `depth: 1` is a child row of the
- * item before it, absent from the rail; `countTone: 'neutral'` is an informational count; and
+ * item before it, absent from the rail; a count is neutral, and `countTone: 'danger'` marks one that needs action now; and
  * `pinName` and `pinLabelVisible` name the pin and choose the glyph-only footer, which is how a
  * record's section rail draws it. `currentLabel` ("Current") suffixes the active rail item's
  * tooltip, "Review queue · Current", so the rail says which icon is the page. Arrow keys move focus between the items of the list that has
@@ -42,11 +42,19 @@ const countStyle = (item, rail) => (item.countTone === 'neutral' ? (rail ? MINI_
  */
 export function SideNav({
   items = [], activeLink, isOpen = true, onClose, onSelect, title = 'Navigation', inline = false, style,
-  mode: modeProp, tone = 'default', pinned = false, onPinChange, footerMeta, header, footer, footerRail, width, onAnnounce,
+  mode: modeProp, tone = 'default', surface = 'default', embedded = false, pinned = false, onPinChange, footerMeta, header, footer, footerRail, width, onAnnounce,
   pinName = 'the menu', pinLabelVisible = true, currentLabel,
   resizable = false, onWidthChange, minWidth = 180, maxWidth = 420,
   ...rest
 }) {
+  /* An embedded view list (inside a Panel): expanded, no title row, full width, no edge rule. */
+  if (embedded) {
+    if (modeProp == null) modeProp = 'expanded';
+    if (header === undefined) header = false;
+    if (width == null) width = '100%';
+  }
+  /* The light section rail paints surface-secondary through the column's own surface property. */
+  const surfaceVars = surface === 'secondary' && tone !== 'navy' ? { '--ac-nav-surface': 'var(--surface-secondary, #f8f9fa)' } : null;
   const extended = modeProp != null;
   const mode = modeProp || (inline ? 'expanded' : 'drawer');
   const isDrawer = mode === 'drawer';
@@ -222,7 +230,7 @@ export function SideNav({
         onClick: onItemClick(item),
         onMouseEnter: () => setHover(i),
         onMouseLeave: () => setHover(null),
-        style: { ...style, outlineOffset: -3 },
+        style: { ...style, outlineOffset: -3, pointerEvents: 'auto' },
       },
       child ? item.label : [
         item.icon ? <NavigationIcon key="icon" icon={item.icon} active={active} /> : null,
@@ -255,7 +263,7 @@ export function SideNav({
           borderRadius: 'var(--radius-md, 5px)',
           color: active || isHover ? 'var(--ac-nav-text, var(--text-link-on-tint, #00688f))' : 'var(--ac-nav-text, var(--text-body, #212529))',
           backgroundColor: active ? 'var(--ac-nav-selected, var(--tint-primary-selected, rgba(0,121,168,.10)))' : isHover ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
-          textDecoration: 'none', outlineOffset: -3,
+          textDecoration: 'none', outlineOffset: -3, pointerEvents: 'auto',
           boxShadow: active ? 'inset 3px 0 var(--ac-nav-marker, var(--bs-primary, #0079a8))' : undefined,
           transition: 'color .15s ease, background-color .15s ease',
         },
@@ -297,9 +305,10 @@ export function SideNav({
           type="button"
           onClick={toggle}
           aria-pressed={!!pinned}
+          data-ac-pin=""
           aria-label={pinLabel}
           title={pinLabel}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', gap: 6, height: 24, width: rail ? 44 : undefined, margin: rail ? '0 auto' : 0, padding: rail ? 0 : '0 6px 0 8px', borderRadius: 'var(--radius-md, 5px)', border: 'none', background: 'transparent', font: 'inherit', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 400, letterSpacing: 'normal', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', flex: 'none' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: rail ? 'center' : 'flex-start', gap: 6, height: 24, width: rail ? 44 : undefined, margin: rail ? '0 auto' : 0, padding: rail ? 0 : '0 6px 0 8px', borderRadius: 'var(--radius-md, 5px)', border: 'none', background: 'transparent', font: 'inherit', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 400, letterSpacing: 'normal', cursor: 'pointer', whiteSpace: 'nowrap', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', flex: 'none', pointerEvents: 'auto' }}
         >
           <i aria-hidden="true" className={`bi ${pinned ? 'bi-pin-angle-fill' : 'bi-pin-angle'}`} style={{ fontSize: 'var(--icon-sm, 14px)' }} />
           {showLabel && <span>{pinLabel}</span>}
@@ -334,7 +343,7 @@ export function SideNav({
         aria-label={(open ? 'Collapse ' : 'Expand ') + whoNav}
         title={(open ? 'Collapse ' : 'Expand ') + whoNav}
         onClick={() => { if (open) retractPeek(); else setPeek(true); }}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 36, padding: 0, border: 0, borderRadius: 'var(--radius-md, 5px)', background: 'transparent', font: 'inherit', cursor: 'pointer', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 36, padding: 0, border: 0, borderRadius: 'var(--radius-md, 5px)', background: 'transparent', font: 'inherit', cursor: 'pointer', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', pointerEvents: 'auto' }}
       >
         <i aria-hidden="true" className={'bi ' + (open ? 'bi-arrow-bar-left' : 'bi-arrow-bar-right')} style={{ fontSize: 'var(--icon-sm, 14px)' }} />
       </button>
@@ -355,7 +364,7 @@ export function SideNav({
           display: 'flex', flexDirection: 'column',
           borderRight: '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
           overflow: 'hidden',
-          ...(tone === 'navy' ? navyNavigationStyle : null),
+          ...surfaceVars, ...(tone === 'navy' ? navyNavigationStyle : null),
           ...style,
         }}
         {...rest}
@@ -387,7 +396,7 @@ export function SideNav({
               boxShadow: 'var(--shadow-nav, 0 0 24px rgba(0,0,0,0.12))',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               animation: reduceMotion ? 'none' : undefined,
-              ...(tone === 'navy' ? navyNavigationStyle : null),
+              ...surfaceVars, ...(tone === 'navy' ? navyNavigationStyle : null),
             }}
           >
             {peekHead(true)}
@@ -423,7 +432,8 @@ export function SideNav({
         boxShadow: isDrawer ? 'var(--shadow-nav, 0 0 15px rgba(0,0,0,0.2))' : 'none',
         borderRight: isDrawer ? 'none' : '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
         transition: reduceMotion || dragging ? 'none' : 'width .2s ease',
-        ...(tone === 'navy' ? navyNavigationStyle : null),
+        ...surfaceVars, ...(tone === 'navy' ? navyNavigationStyle : null),
+        ...(embedded ? { border: 0, borderRight: 0, flex: 'none' } : null),
         ...style,
       }}
       {...rest}

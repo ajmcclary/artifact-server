@@ -75,8 +75,8 @@ export function createLibraryUI(React, DS) {
       </Element>;
     }
     return <Element {...common} style={{ ...reset, display: 'flex', flexDirection: 'column', width: '100%', height: '100%', padding: 0, overflow: 'hidden',
-      background: 'var(--surface-card, #fff)', borderRadius: 'var(--radius-md, 6px)',
-      border: `1px solid ${hover ? 'var(--border-color-strong, #ADB5BD)' : 'var(--border-color, #DEE2E6)'}`,
+      background: 'var(--surface-card, #fff)', borderRadius: 'var(--radius-md, 5px)',
+      border: `1px solid ${hover ? 'var(--border-color-strong, #ced4da)' : 'var(--border-color, #DEE2E6)'}`,
       boxShadow: hover ? 'var(--shadow-sm, 0 1px 2px rgba(0,0,0,.08))' : 'none' }}>
       <span style={{ position: 'relative', display: 'block', aspectRatio: '16 / 10', overflow: 'hidden', borderBottom: '1px solid var(--border-color, #DEE2E6)',
         background: 'var(--surface-tertiary, #E9ECEF)' }}><GalleryThumbnail item={item} /></span>
@@ -96,7 +96,7 @@ export function createLibraryUI(React, DS) {
   function DesignLibrary({ title = 'Library', description, items, now, notice, query = '', onQueryChange, types = [], onTypesChange, projects = [], onProjectsChange,
     groupBy = 'date', onGroupByChange, sortBy = 'activity', sortDir, onSortChange, view = 'grid', onViewChange,
     collapsed = [], onCollapsedChange, onRefresh, refreshedAt, onOpen, hrefFor, focusPath, scrollTop = 0, onScroll, onAnnounce, phone = false,
-    scope = 'library', headingLevel = 1, coverUrl }) {
+    scope = 'library', headingLevel = 1, coverUrl, documentScroll = false, dockTop = 0 }) {
     const artifactScope = scope === 'artifact';
     const groupings = groupingsFor(scope);
     const BandHeading = `h${Math.min(artifactScope ? headingLevel : headingLevel + 1, 6)}`;
@@ -111,14 +111,24 @@ export function createLibraryUI(React, DS) {
     const filtered = types.length > 0 || projects.length > 0 || query.trim().length > 0;
     const list = view === 'list';
     const gutter = phone ? 16 : 20;
+    const scrollReport = React.useRef(onScroll);
+    scrollReport.current = onScroll;
     React.useLayoutEffect(() => {
       const root = rootRef.current;
       if (!root) return;
-      root.scrollTop = scrollTop;
+      if (documentScroll) window.scrollTo(0, scrollTop); else root.scrollTop = scrollTop;
       if (focusPath) Array.from(root.querySelectorAll('[data-gallery-path]'))
         .find((tile) => tile.getAttribute('data-gallery-path') === focusPath)?.focus({ preventScroll: scrollTop > 0 });
       // Restore once per mount; later prop changes come from this library's own scrolling.
     }, []);
+    /* On a document-scrolled page (a phone) the window is the scroller. A layout effect, so the
+       listener is gone before the next screen's shorter page clamps the window's offset. */
+    React.useLayoutEffect(() => {
+      if (!documentScroll) return undefined;
+      const report = () => scrollReport.current?.(window.scrollY || 0);
+      window.addEventListener('scroll', report, { passive: true });
+      return () => window.removeEventListener('scroll', report);
+    }, [documentScroll]);
     const announce = (nextQuery, nextTypes, nextProjects) => onAnnounce?.(`${filterLibrary(items, nextQuery, nextTypes, nextProjects).length} matching previews.`);
     const setTypes = (next) => { onTypesChange(next); announce(query, next, projects); };
     const setProjects = (next) => { onProjectsChange?.(next); announce(query, types, next); };
@@ -132,6 +142,7 @@ export function createLibraryUI(React, DS) {
     const projectNames = Object.keys(projectCounts).sort((a, b) => a.localeCompare(b));
     const menuButton = (id, icon, label) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)} icon={icon} label={label}
       menuLabel={{ group: 'Group by', sort: 'Sort by', projects: 'Projects', types: 'Artifact types' }[id]} minWidth={220} triggerRef={id === 'types' ? typesRef : undefined}
+      presentation={phone ? 'sheet' : 'popover'}
       items={{
         group: [{ heading: 'Group by' }, ...groupings.map((option) => ({ type: 'radio', label: option.label, checked: groupBy === option.id,
           onClick: () => onGroupByChange(option.id) }))],
@@ -150,20 +161,21 @@ export function createLibraryUI(React, DS) {
       .concat(types.map((id) => { const kind = galleryKind(id); return { key: 'type:' + id, label: kind.label, icon: kind.icon, remove: () => setTypes(types.filter((x) => x !== id)) }; }));
     const groupName = (groupings.find((option) => option.id === groupBy) || groupings[0]).label;
 
-    return <section ref={rootRef} aria-label={artifactScope ? `${title} gallery` : title} onScroll={(event) => onScroll?.(event.currentTarget.scrollTop)}
-      style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: `0 ${gutter}px 48px`,
+    return <section ref={rootRef} aria-label={artifactScope ? `${title} gallery` : title}
+      onScroll={documentScroll ? undefined : (event) => onScroll?.(event.currentTarget.scrollTop)}
+      style={{ ...(documentScroll ? null : { height: '100%', overflowY: 'auto' }), boxSizing: 'border-box', padding: `0 ${gutter}px 48px`,
         background: 'var(--surface-canvas, #F1F5F7)', color: 'var(--text-body, #212529)' }}>
       {artifactScope
         ? (notice ? <div style={{ padding: '12px 0 4px' }}>{notice}</div> : <div style={{ height: 8 }} />)
         : <header style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '24px 0 12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {coverUrl && !phone && <img src={coverUrl} alt="" style={{ flex: 'none', width: 120, aspectRatio: '16 / 10', objectFit: 'cover',
-              borderRadius: 'var(--radius-md, 6px)', border: '1px solid var(--border-color, #DEE2E6)' }} />}
+              borderRadius: 'var(--radius-md, 5px)', border: '1px solid var(--border-color, #DEE2E6)' }} />}
             <SectionHeading level={headingLevel} size="lg" title={title} subtitle={description} style={{ minWidth: 0, flex: 1 }} />
           </div>
           {notice}
         </header>}
-      <PageToolbar title={artifactScope ? null : title} label={artifactScope ? 'Gallery view' : 'Library view'} gutter={gutter} phone={phone} onHeight={setDockHeight}
+      <PageToolbar title={artifactScope ? null : title} label={artifactScope ? 'Gallery view' : 'Library view'} gutter={gutter} phone={phone} top={dockTop} onHeight={setDockHeight}
         end={<>
           <ToolbarSearch label="Search previews" placeholder="Search previews" value={query}
             onChange={(event) => { onQueryChange(event.target.value); announce(event.target.value, types, projects); }} />
@@ -172,7 +184,7 @@ export function createLibraryUI(React, DS) {
           {onRefresh && <IconButton icon="bi-arrow-clockwise" size="sm" ariaLabel="Refresh"
             title={refreshedAt ? `Refresh · read ${refreshedAt}` : 'Refresh'} onClick={onRefresh} />}
         </>}>
-        <FilterGroup label="View and filters">
+        <FilterGroup label="View and filters" phone={phone}>
           {menuButton('group', 'bi-layers', `Group: ${groupName}`)}
           {menuButton('sort', 'bi-sort-alpha-down', <>Sort: {sortLabel(sortBy, dir)}</>)}
           {onProjectsChange && menuButton('projects', 'bi-folder2', projects.length ? `Projects · ${projects.length}` : 'All projects')}
@@ -199,7 +211,7 @@ export function createLibraryUI(React, DS) {
           return <section key={group.key} aria-label={group.label}>
             {/* The heading wraps the band's disclosure button; the wrapper pins, since a sticky
                 element only sticks within its parent. */}
-            {group.banded && <BandHeading style={{ position: 'sticky', top: dockHeight, zIndex: 3, margin: 0, padding: '10px 0',
+            {group.banded && <BandHeading style={{ position: 'sticky', top: dockTop + dockHeight, zIndex: 3, margin: 0, padding: '10px 0',
               font: 'inherit', background: 'var(--surface-canvas, #F1F5F7)' }}>
               <GroupBand tone="neutral" label={group.label} count={group.items.length} note={group.note || undefined}
                 open={open} onToggle={toggle} controls={id} style={{ borderRadius: 'var(--radius-sm, 4px)' }} />
@@ -207,7 +219,7 @@ export function createLibraryUI(React, DS) {
             {open && <div id={id} style={{ paddingTop: group.banded ? 2 : 8 }}>
               {list
                 ? <ul style={{ listStyle: 'none', margin: 0, padding: 0, background: 'var(--surface-card, #fff)', border: '1px solid var(--border-color, #DEE2E6)',
-                    borderRadius: 'var(--radius-md, 6px)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7,54,82,.1))', overflow: 'hidden' }}>
+                    borderRadius: 'var(--radius-md, 5px)', boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7,54,82,.1))', overflow: 'hidden' }}>
                     {group.items.map((item, i) => <li key={libraryId(item)}>{tile(item, i)}
                       {item.related?.length > 0 && <RelatedLinks item={item} hrefFor={hrefFor} onOpen={onOpen}
                         background={i % 2 === 1 ? 'var(--surface-secondary, #F8F9FA)' : 'var(--surface-card, #fff)'} />}</li>)}

@@ -14,6 +14,9 @@ import {useActivityFeed} from "./use-activity-feed";
 import {useActivitySummary} from "./use-activity-summary";
 
 const screenStyle = {margin: "0 auto", maxWidth: 1180, padding: "0 20px 48px", width: "100%"} satisfies CSSProperties;
+const phoneScreenStyle = {...screenStyle, padding: "0 16px 32px"} satisfies CSSProperties;
+/** A phone's fixed app bar; the docked toolbar and the day caps pin beneath it. */
+const phoneAppBarHeight = 52;
 const segmentIds = {"All": "all", "Needs you": "needs_you", "With an agent": "with_agent"} as const;
 const segmentLabels = {all: "All", needs_you: "Needs you", with_agent: "With an agent"} as const;
 type ToolbarType = "comments" | "versions" | "agents" | "access";
@@ -79,7 +82,7 @@ export function ActivityScreen({filters, projects, session}: {
   const counted = facets === null ? {} : {shown: facets.matching, total: facets.total};
 
   return (
-    <section aria-label="Activity" style={screenStyle}>
+    <section aria-label="Activity" style={phone ? phoneScreenStyle : screenStyle}>
       <ActivityHeader
         action={(
           <Popover label="Publish artifact" onOpenChange={setPublishOpen} open={publishOpen} placement="bottom-end"
@@ -93,6 +96,7 @@ export function ActivityScreen({filters, projects, session}: {
           {id: "open", label: "Open conversations", value: count(summary?.openConversations)},
           {id: "review", label: "Artifacts in review", value: count(summary?.artifactsInReview)},
         ]}
+        compact={phone}
         title="Activity"
       />
       <ActivityToolbar
@@ -112,6 +116,7 @@ export function ActivityScreen({filters, projects, session}: {
         segment={segmentLabels[filters.segment]}
         selectedPeople={[...filters.people]}
         selectedProjects={[...filters.projects]}
+        top={phone ? phoneAppBarHeight : 0}
         types={toolbarTypesOf(filters.types)}
       />
       <ActivityFeedBody
@@ -120,7 +125,7 @@ export function ActivityScreen({filters, projects, session}: {
         onChanged={() => { reloadSummary(); reloadFacets(); }}
         onRetry={() => { feed.reload(); reloadSummary(); reloadFacets(); }}
         principalId={session.principal.id}
-        stickyTop={dock}
+        stickyTop={dock + (phone ? phoneAppBarHeight : 0)}
       />
     </section>
   );
