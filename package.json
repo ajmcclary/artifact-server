@@ -54,6 +54,7 @@
     "lint": "oxlint --type-aware --type-check --deny-warnings --ignore-pattern 'apps/site/**' --ignore-pattern 'apps/web/src/arkcase/**' --ignore-pattern 'deploy/cloudflare/**' .",
     "perf:baseline": "node --expose-gc --import tsx project/performance/run-local-baseline.ts",
     "perf:capacity": "pnpm build && node --import tsx project/performance/run-server-capacity-baseline.ts",
+    "perf:delivery": "node --import tsx project/performance/run-delivery-baseline.ts",
     "perf:external-storage-baseline": "bash scripts/run-external-storage-performance-baseline.sh",
     "perf:batch-staging-comparison": "node --import tsx project/performance/run-batch-staging-comparison.ts",
     "perf:git-history-backlog": "node --import tsx project/performance/run-git-history-backlog.ts",
