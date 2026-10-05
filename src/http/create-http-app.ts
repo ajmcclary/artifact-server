@@ -181,6 +181,7 @@ import {
   type ContentVariantMapping,
   isVariantEligible,
 } from "../core/content-variants.js";
+import {LibraryCatalogService} from "../application/library-catalog.js";
 
 const maximumJsonRequestBytes = 1_500_000;
 const accessSettingSchema = z.enum([
@@ -1461,6 +1462,15 @@ export function createHttpApp(
       })),
       total: facets.total,
     });
+  });
+
+  app.get("/api/v1/library", async (context) => {
+    const library = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      LibraryCatalogService.use((catalog) => catalog.read(context.get("principal"))),
+    );
+    return context.json(library);
   });
 
   app.get("/api/v1/activity/summary", async (context) => {

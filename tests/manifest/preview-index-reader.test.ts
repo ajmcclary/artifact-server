@@ -1,6 +1,6 @@
 import {describe, expect, test} from "vitest";
 
-import {parsePreviewIndex} from "../../apps/web/src/review/workspace/design-gallery.ts";
+import {parsePreviewIndex} from "../../apps/web/src/review/workspace/preview-index.ts";
 import type {ManifestEntry} from "../../src/core/model.js";
 import {readPreviewIndex} from "../../src/manifest/preview-index-reader.js";
 

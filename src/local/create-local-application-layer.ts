@@ -155,6 +155,8 @@ import type {
   GitHistoryMirrorStore,
   GitHistoryProvider,
 } from "../git-history/git-history-mirror.js";
+import {LibraryCatalogService} from "../application/library-catalog.js";
+import type {LibraryDatesStore} from "../core/library.js";
 
 /** Concrete Node adapters reused by the Effect application layer. */
 export interface ApplicationAdapters {
@@ -194,6 +196,7 @@ export interface ApplicationAdapters {
     ProjectRepository &
     ProjectGitHistoryStore &
     GitHistoryMirrorStore &
+    LibraryDatesStore &
     PublicLinkInventoryStore &
     StagedUploadRepository;
   readonly staging: StagingStore;
@@ -239,6 +242,7 @@ export function createApplicationLayer(
   | GitHistoryAccessService
   | InstallationAccessService
   | InteractiveLoginService
+  | LibraryCatalogService
   | PrincipalActivityService
   | LinkedArtifactService
   | PublishArtifactService
@@ -1340,8 +1344,37 @@ export function createApplicationLayer(
   const comparisonLayer = CompareArtifactService.layer(
     comparisonDependencies,
   ).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)));
+  const libraryLayer = LibraryCatalogService.layer({
+    clock,
+    findVersionRecord: (projectId, artifactId, versionId) =>
+      Effect.tryPromise({
+        try: () => adapters.repository.findVersionRecord(projectId, artifactId, versionId),
+        catch: (cause) => repositoryFailure("findVersionRecord", cause),
+      }),
+    listArtifacts: (command) =>
+      Effect.tryPromise({
+        try: () => adapters.repository.listArtifacts(command),
+        catch: (cause) => repositoryFailure("listArtifacts", cause),
+      }),
+    listProjects: () =>
+      Effect.tryPromise({
+        try: () => adapters.repository.listProjects(),
+        catch: (cause) => repositoryFailure("listProjects", cause),
+      }),
+    pageDates: (requests) =>
+      Effect.tryPromise({
+        try: () => adapters.repository.libraryPageDates(requests),
+        catch: (cause) => repositoryFailure("libraryPageDates", cause),
+      }),
+    readBlobText: (entry) =>
+      Effect.tryPromise({
+        try: async () => new TextDecoder().decode(await readBlobBytes(adapters.blobs, entry)),
+        catch: (cause) => new BlobStorageFailure({cause, operation: "open"}),
+      }),
+  }).pipe(Layer.provideMerge(authorizationLayer));
   return Layer.mergeAll(
     activityLayer,
+    libraryLayer,
     authenticationLayer,
     commentLayer,
     dispatchLayer,
