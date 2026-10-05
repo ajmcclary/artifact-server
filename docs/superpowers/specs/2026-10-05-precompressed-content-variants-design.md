@@ -31,7 +31,7 @@ Make large prototypes such as ExtractionKit open faster on the hosted deployment
 
 ### `ContentVariantIndex` port
 
-A narrow port in `src/core/ports.ts`:
+A narrow port in `src/core/content-variants.ts`, beside the variant types, eligibility, and encoder constants it needs:
 
 ```ts
 interface ContentVariantKey {
@@ -58,7 +58,7 @@ Implementations:
 - Postgres (external-storage runtime): the same table in migration 20.
 - D1 and the Workers runtime do not compose it.
 
-Table `content_variants`: `source_sha256`, `coding`, `encoder_id`, `variant_sha256`, `variant_size`, `created_at`, with primary key (`source_sha256`, `coding`, `encoder_id`). Rows are not project-scoped: a variant is a pure function of bytes already content-addressed in the blob store, and serving it still requires the caller to be authorized for the source entry.
+Table `content_variants`: `installation_id`, `source_sha256`, `coding`, `encoder_id`, `variant_sha256`, `variant_size`, `created_at`, with primary key (`installation_id`, `source_sha256`, `coding`, `encoder_id`). Rows are installation-scoped, as every product table is (AUTH-017), so one installation cannot observe another's variants in a shared Postgres database. They are not project-scoped: a variant is a pure function of bytes already content-addressed in the installation's blob store, and serving it still requires the caller to be authorized for the source entry.
 
 ### Encoder identity
 
@@ -81,7 +81,7 @@ An application service that turns a source digest into a stored variant.
 
 ### Triggers
 
-1. **After publish:** the publication service notifies an optional observer port after every successful commit that creates a version, outside the commit transaction. Moving the current pointer to an existing version creates nothing and queues nothing; that version's entries were queued when it was published. The observer queues every eligible entry of the new version. Publishing never waits for builds.
+1. **After publish:** the publication service notifies an optional observer port after every successful commit that creates a version, outside the commit transaction. Moving the current pointer to an existing version creates nothing and queues nothing; that version's entries were queued when it was published. Local linked-file captures create versions through a separate service and rely on the read-miss trigger. The observer queues every eligible entry of the new version. Publishing never waits for builds.
 2. **On read miss:** `serveStoredVersionContent` queues the entry it served as identity.
 3. **Backfill:** `artifact-server maintenance build-content-variants --once [--limit N]` walks every project's current versions, builds eligible entries synchronously in the foreground, and prints a JSON report with `built`, `skipped` (already mapped), `not_beneficial`, `too_large`, and `failed` counts. It exits with code 2 when any build failed. It follows the existing `maintenance cleanup-staging` command and runs for both compact and external-storage configurations.
 
