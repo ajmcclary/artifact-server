@@ -3,6 +3,8 @@ import type {BlobStore} from "../core/ports.js";
 /** Observation seam for content-delivery tests; never parsed from the environment. */
 export interface BlobReadObserver {
   readonly bytesRead: (byteLength: number) => void;
+  /** Called once when an opened blob stream finishes or is cancelled. */
+  readonly streamClosed: () => void;
 }
 
 /** Pull-through counting keeps the source's backpressure: nothing is read ahead of demand. */
@@ -12,10 +14,14 @@ function countedStream(
 ): ReadableStream<Uint8Array> {
   const reader = body.getReader();
   return new ReadableStream<Uint8Array>({
-    cancel: (reason) => reader.cancel(reason),
+    cancel: async (reason) => {
+      observer.streamClosed();
+      await reader.cancel(reason);
+    },
     pull: async (controller) => {
       const next = await reader.read();
       if (next.done) {
+        observer.streamClosed();
         controller.close();
         return;
       }

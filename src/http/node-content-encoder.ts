@@ -32,7 +32,13 @@ function webCompression(compressor: Transform): TransformStream<Uint8Array, Uint
     }),
     start: (controller) => {
       compressor.on("data", (chunk: Buffer) => {
-        controller.enqueue(chunk);
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          // zlib can finish a chunk after the response was cancelled; that
+          // output has nowhere to go, so stop the compressor instead.
+          compressor.destroy();
+        }
       });
       compressor.once("error", (error) => {
         controller.error(error);
