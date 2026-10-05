@@ -3,10 +3,12 @@ import {brotliCompress, constants, gzip} from "node:zlib";
 
 import {
   appendAcceptEncodingVary,
-  isCompressibleMediaType,
-  minimumCompressedBodyBytes,
   negotiateContentCoding,
 } from "./content-encoding.js";
+import {
+  isCompressibleMediaType,
+  minimumCompressedBodyBytes,
+} from "../core/content-variants.js";
 
 const compressWithGzip = promisify(gzip);
 const compressWithBrotli = promisify(brotliCompress);

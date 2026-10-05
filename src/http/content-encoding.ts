@@ -10,25 +10,6 @@ export interface ContentEncoder {
   encode(body: ReadableStream<Uint8Array>, coding: ContentCoding): ReadableStream<Uint8Array>;
 }
 
-/** Media types worth compressing at the Node origin. */
-const compressibleMediaTypes: ReadonlySet<string> = new Set([
-  "application/javascript",
-  "application/json",
-  "image/svg+xml",
-  "text/css",
-  "text/html",
-  "text/javascript",
-]);
-
-/** Smaller bodies gain too little to justify the coding overhead. */
-export const minimumCompressedBodyBytes = 1024;
-
-export function isCompressibleMediaType(contentType: string | null): boolean {
-  if (contentType === null) return false;
-  const mediaType = contentType.split(";")[0]?.trim().toLocaleLowerCase("en-US");
-  return mediaType !== undefined && compressibleMediaTypes.has(mediaType);
-}
-
 /** Prefer Brotli, then gzip; a missing header, identity only, or q=0 selects neither. */
 export function negotiateContentCoding(acceptEncoding: string | null): ContentCoding | null {
   if (acceptEncoding === null) return null;

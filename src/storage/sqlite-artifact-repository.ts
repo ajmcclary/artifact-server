@@ -5817,7 +5817,23 @@ export class SqliteArtifactRepository implements
         ON actions (subject_id, created_at DESC, id DESC)
         WHERE subject_id IS NOT NULL;
     `);
+    this.#addContentVariantsTableIfMissing();
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
+  }
+
+  #addContentVariantsTableIfMissing(): void {
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS content_variants (
+        installation_id TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        coding TEXT NOT NULL CHECK (coding = 'br'),
+        encoder_id TEXT NOT NULL,
+        variant_sha256 TEXT NOT NULL,
+        variant_size INTEGER NOT NULL CHECK (variant_size >= 0),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (installation_id, source_sha256, coding, encoder_id)
+      ) STRICT;
+    `);
   }
 
   #addArtifactSearchNameIfMissing(): void {

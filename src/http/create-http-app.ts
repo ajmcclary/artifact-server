@@ -176,10 +176,12 @@ import {
   appendAcceptEncodingVary,
   type ContentCoding,
   type ContentEncoder,
-  isCompressibleMediaType,
-  minimumCompressedBodyBytes,
   negotiateContentCoding,
 } from "./content-encoding.js";
+import {
+  isCompressibleMediaType,
+  minimumCompressedBodyBytes,
+} from "../core/content-variants.js";
 
 const maximumJsonRequestBytes = 1_500_000;
 const accessSettingSchema = z.enum([
