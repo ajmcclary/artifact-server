@@ -484,3 +484,57 @@ conditions) must be qualified per adapter before any claim there.
 - Local SQLite, 100,000 actions (`pnpm perf:activity-feed`, Apple M1 Max, Node v24.15.0): first page p50 1.51 ms / p95 2.15 ms; summary p50 10.08 ms / p95 11.78 ms. Evidence: `project/evidence/activity-feed-baseline.json`. Two reruns on the same machine stayed within 2.14–2.37 ms (first page p95) and 11.05–11.61 ms (summary p95).
 - Two-process Postgres/MinIO (`pnpm verify:external-storage-performance`, 16 reads): activityFeed p95 16.223 ms; activitySummary p95 13.424 ms.
 - Risk: latest-per-thread folding probes `actions.thread_id` per candidate row; the summary scans open threads per request. Revisit if open threads exceed 10,000 per installation.
+
+## October 2026 browser delivery and streaming compression (CNT-010)
+
+Measured with `pnpm perf:delivery` on October 5, 2026: Chromium 151, unthrottled, five samples per journey, on an Apple M1 Max. Hosted runs used artifacts.backend.app (web build `review-D_MgDfh-.js`) before and after deploying image `sha256:9cbab1600e1102b3092be1f37f24160b2cc5ac1a8869d494dbbdcf1de02fffee` (main `0aac4d3`). The hosted prototype is ExtractionKit's single prototype page. Raw HAR files stayed in private storage; the committed reports in `project/evidence/delivery-baseline-2026-10-05-*.json` contain only route classes, path templates, allowlisted headers, and numbers. Ready means the first Library tile is visible, or the preview frame is attached and its content requests have been quiet for 500 ms.
+
+### Local (synthetic ExtractionKit-shaped fixture; compression ratio not representative)
+
+Before:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 139 ms (132 ms–147 ms) | 104 ms (100 ms–112 ms) | 16 (16–16) | 501.0 KiB (501.0 KiB–501.0 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 73 ms (72 ms–78 ms) | 64 ms (60 ms–64 ms) | 16 (16–16) | 3.1 KiB (3.1 KiB–3.1 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 |
+| prototype | cold | 850 ms (841 ms–901 ms) | 120 ms (120 ms–132 ms) | 31 (31–31) | 15.71 MiB (15.71 MiB–15.71 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | identity | 0 |
+| prototype | warm | 755 ms (732 ms–806 ms) | 92 ms (72 ms–92 ms) | 31 (31–31) | 15.05 MiB (15.05 MiB–15.05 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | identity | 0 |
+
+After:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 150 ms (137 ms–171 ms) | 112 ms (100 ms–112 ms) | 16 (16–16) | 501.0 KiB (501.0 KiB–501.0 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 78 ms (73 ms–142 ms) | 64 ms (60 ms–64 ms) | 16 (16–16) | 3.1 KiB (3.1 KiB–3.1 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 |
+| prototype | cold | 921 ms (880 ms–976 ms) | 136 ms (124 ms–152 ms) | 31 (31–31) | 2.78 MiB (2.78 MiB–2.78 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 |
+| prototype | warm | 818 ms (797 ms–894 ms) | 80 ms (76 ms–92 ms) | 31 (31–31) | 2.12 MiB (2.12 MiB–2.12 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 |
+
+Harness CPU per prototype open (server in the same process): 370 ms before and 501 ms after for a cold open, 318 ms and 412 ms warm. The difference, about 100–130 ms per open, approximates Brotli quality-4 cost for about 17 MiB of text. On loopback the transfer is free, so local ready time only pays that cost.
+
+### Hosted (artifacts.backend.app, ExtractionKit prototype)
+
+Before:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 33422 ms (24419 ms–77178 ms) | 2660 ms (1680 ms–7180 ms) | 179 (179–180) | 1.91 MiB (1.91 MiB–1.93 MiB) | 6.94 MiB (6.94 MiB–6.96 MiB) | identity | 0 |
+| library | warm | 38791 ms (24742 ms–40309 ms) | 992 ms (404 ms–6072 ms) | 181 (180–191) | 1.36 MiB (1.34 MiB–1.44 MiB) | 6.82 MiB (6.80 MiB–6.87 MiB) | identity | 0 |
+| prototype | cold | 14270 ms (10533 ms–20035 ms) | 2328 ms (1244 ms–3208 ms) | 83 (50–87) | 18.67 MiB (2.88 MiB–18.77 MiB) | 19.74 MiB (3.96 MiB–19.84 MiB) | identity | 0 |
+| prototype | warm | 14015 ms (11865 ms–28737 ms) | 624 ms (316 ms–1116 ms) | 82 (81–87) | 18.04 MiB (18.04 MiB–18.14 MiB) | 19.53 MiB (19.53 MiB–19.64 MiB) | identity | 0 |
+
+After:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 22010 ms (20040 ms–30073 ms) | 2852 ms (2308 ms–3748 ms) | 180 (179–181) | 1.93 MiB (1.91 MiB–1.94 MiB) | 6.96 MiB (6.94 MiB–6.97 MiB) | identity | 0 |
+| library | warm | 23328 ms (14974 ms–35560 ms) | 2360 ms (980 ms–4236 ms) | 186 (181–204) | 1.38 MiB (1.34 MiB–1.47 MiB) | 6.86 MiB (6.80 MiB–6.92 MiB) | identity | 0 |
+| prototype | cold | 17895 ms (12725 ms–18675 ms) | 1292 ms (868 ms–2628 ms) | 82 (81–89) | 3.73 MiB (3.73 MiB–4.00 MiB) | 19.70 MiB (19.70 MiB–19.96 MiB) | br | 0 |
+| prototype | warm | 13803 ms (10218 ms–19371 ms) | 444 ms (264 ms–1136 ms) | 85 (68–88) | 3.25 MiB (2.72 MiB–3.41 MiB) | 19.64 MiB (18.24 MiB–19.79 MiB) | br | 0 |
+
+### What this shows and what it does not
+
+- **Transfer fell 80%, but prototype ready time did not improve.** ExtractionKit's prototype transfer dropped from 18.7 MiB to 3.7 MiB cold. Content responses arrived single-encoded as `br` through Traefik; the proxy neither stripped nor re-encoded them. Ready time stayed within noise: cold median 14.3 s before and 17.9 s after, with overlapping ranges (10.5–20.0 s and 12.7–18.7 s); warm 14.0 s and 13.8 s. One before sample reached ready after only 2.9 MiB, so the readiness signal can fire before late data scripts start.
+- **Server-side streaming compression is now the prototype's bottleneck on this network.** In the raw captures, `ek-data-design-record.js` (5.9 MB) received in 3.0–3.7 s as identity. Compressed to 0.2 MB, it took 5.7–11.9 s, and `ds-bundle.js` and `ek-data-viewer.js` behaved the same way. Each open requests about 30 content files at once, and they compress at roughly 0.5 MB/s of input per stream. The pods request one CPU with no limit. Likely causes, not yet isolated: one chunk in flight per stream through the pull-through source, the default four-thread libuv pool shared by zlib, and the S3 read path. Local runs read 64 KiB disk chunks and do not reproduce this. Measuring per-chunk timing on the external-storage runtime, and the effect of `UV_THREADPOOL_SIZE`, comes before tuning.
+- **The Library's cold median moved from 33 s to 22 s, but compression does not cause it.** Library API responses were already compressed by the buffering wrapper, and the Library loads no lease content. The change reflects variance between hosted sessions (before ranged 24–77 s). The Library remains the slowest journey, at about 180 requests per open, and needs the server-side catalog (PLAN.md step 1), not compression.
+- **Every open still transfers and compresses again.** Preview leases are `private, no-store`, and each Review open mints a new lease origin, so a warm open repeats the full transfer and the full compression work. Precompressed variants keyed by digest and coding (deferred approach 2) would remove both the per-open CPU and the throughput ceiling above. Whether the browser can reuse bytes across opens is the separate cache and lease contract decision in PLAN.md step 0.
+- **Memory is bounded.** A size hint for large entries gave Brotli a 16 MiB window, and 20 concurrent 64 MiB reads grew resident memory by 577 MiB. With a 1 MiB window and no size hint, the same reads grew it by 153 MiB, against gzip's 17–70 MiB; `tests/http/content-delivery-compression.test.ts` bounds both codings at 256 MiB of resident growth.

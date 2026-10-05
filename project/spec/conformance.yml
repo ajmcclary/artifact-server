@@ -1375,7 +1375,7 @@ requirements:
       failure: {id: CNT-010-F, description: "Range, If-Range, identity or q=0 refusals, and non-compressible types are served identity with ranges intact; a disconnect stops the storage read; concurrent large reads stay within the memory bound."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local conformance tests prove streaming compression and identity fallbacks. Cloudflare relies on edge compression and needs its own live qualification, which this work does not authorize. Team-deployment conformance runs are unrecorded; the hosted delivery observation will be recorded in project/performance/FINDINGS.md after deployment.
+    proof_gap: Local conformance tests prove streaming compression and identity fallbacks. Cloudflare relies on edge compression and needs its own live qualification, which this work does not authorize. Team-deployment conformance runs are unrecorded; the hosted delivery observation (80% less transfer, ready time unchanged, server compression throughput now limiting) is recorded in project/performance/FINDINGS.md.
     depends_on: [CNT-008]
     evidence:
       - deployment: local
