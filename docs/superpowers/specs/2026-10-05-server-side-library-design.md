@@ -99,9 +99,11 @@ interface LibraryDatesRequest {
   readonly paths: readonly string[];
 }
 
+/** Raw dates for one page; the service derives activity and applies the fallback. */
 interface LibraryPageDates {
-  readonly activityAt: string;
   readonly artifactId: string;
+  readonly changedAt: string;
+  readonly commentedAt: string | null;
   readonly createdAt: string;
   readonly path: string;
 }
@@ -111,7 +113,7 @@ interface LibraryDatesStore {
 }
 ```
 
-It is implemented for SQLite, Postgres, and D1. SQLite and D1 share their SQL text.
+It is a `libraryPageDates` method on the SQLite, Postgres, and D1 artifact repositories. SQLite and D1 share their SQL text and take the requests as one JSON parameter, because D1 caps bound parameters.
 
 ## Date semantics
 
@@ -144,7 +146,7 @@ Times are compared as the ISO 8601 strings they are stored as.
 
 - **An unreadable index** (missing blob, oversized, or invalid) names that artifact in `unreadable`; the rest of the Library loads.
 - **A database or storage error** fails the request with the standard error shape. The screen shows its existing failure state and Refresh.
-- **Authorization runs before any read.** A caller never learns another project's artifact names, counts, or dates. Private artifacts in readable projects behave exactly as they do in the artifact list.
+- **Authorization runs before any read.** Project access in this product is installation-wide: a principal that may list artifacts reads every project in its installation, as the artifact list does today. A principal without `artifact:read` (and not a direct human) is refused before any read, and another installation's projects never appear because every repository query is installation-scoped.
 
 ## Conformance
 
@@ -158,7 +160,7 @@ DSN-005 keeps its wording. Add DSN-006 after it:
     source: {file: artifact-server-product-spec.html, anchor: claude-design-exports}
     acceptance:
       behavior: {id: DSN-006-B, description: "One Library request returns galleries from several projects with dates equal to the reference algorithm over full history, and the Library screen issues no per-gallery version, manifest, index, or comment reads."}
-      failure: {id: DSN-006-F, description: "An artifact with a missing or invalid preview index is named as unreadable while the rest load; a project the caller cannot read contributes nothing; an unauthenticated request is rejected."}
+      failure: {id: DSN-006-F, description: "An artifact with a missing or invalid preview index is named as unreadable while the rest load; a caller without artifact read capability is refused and learns nothing; an unauthenticated request is rejected."}
     deployments: *all
     status: implementing
     proof_gap: Team-deployment conformance runs are unrecorded.
@@ -174,7 +176,7 @@ All tests use real servers and databases and no module mocks.
 
 - **Equivalence:** randomized version histories published through a real server, with additions, removals, re-adds, digest changes, and comments with replies. The endpoint's dates must equal the client's pure `galleryDates`, run on the same records with an unlimited history window and exact reply times.
 - **DSN-006-B:** one request returns galleries from two projects with correct dates, kinds, thumbnail paths, and current version ids. In the browser, the Library screen issues exactly one `/api/v1/library` request and no per-gallery reads.
-- **DSN-006-F:** a missing or invalid index is named in `unreadable`; a project the caller cannot read contributes nothing; an unauthenticated request gets 401.
+- **DSN-006-F:** a missing or invalid index is named in `unreadable`; a caller without `artifact:read` gets 403 and no artifact names; an unauthenticated request gets 401.
 - **Postgres:** the dates query in the Docker Postgres suite.
 - **D1:** the dates query in `check:cloudflare`.
 - **Regression:** the existing DSN-005-B browser journey passes unchanged.
