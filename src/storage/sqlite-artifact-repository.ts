@@ -195,6 +195,13 @@ import {
   defaultGitHistoryMaximumCopiedFiles,
   type GitHistoryLimits,
 } from "../git-history/git-history-capability.js";
+import type {LibraryDatesRequest, LibraryDatesStore, LibraryPageDates} from "../core/library.js";
+import {
+  libraryDatesParameter,
+  mergeLibraryDates,
+  sqliteLibraryCommentDatesSql,
+  sqliteLibraryManifestDatesSql,
+} from "./library-dates-sqlite.js";
 
 const accessSettingSchema = z.enum([
   accessSettings.accountRequired,
@@ -605,6 +612,7 @@ export class SqliteArtifactRepository implements
   CommentRepository,
   ContentSessionRepository,
   GitHistoryMirrorStore,
+  LibraryDatesStore,
   ProjectRepository,
   SourceBindingRepository,
   StagedUploadRepository
@@ -1363,6 +1371,23 @@ export class SqliteArtifactRepository implements
         return project;
       }),
     );
+  }
+
+  libraryPageDates(requests: readonly LibraryDatesRequest[]): Promise<readonly LibraryPageDates[]> {
+    if (requests.length === 0) return Promise.resolve([]);
+    const parameter = libraryDatesParameter(requests);
+    const manifestRows = z.array(z.object({
+      artifactId: z.string(),
+      changedAt: z.string(),
+      createdAt: z.string(),
+      path: z.string(),
+    })).parse(this.#database.prepare(sqliteLibraryManifestDatesSql).all(parameter));
+    const commentRows = z.array(z.object({
+      artifactId: z.string(),
+      commentedAt: z.string(),
+      path: z.string(),
+    })).parse(this.#database.prepare(sqliteLibraryCommentDatesSql).all(parameter));
+    return Promise.resolve(mergeLibraryDates(manifestRows, commentRows));
   }
 
   close(): void {
