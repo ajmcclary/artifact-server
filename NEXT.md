@@ -2,7 +2,7 @@
 
 Date: October 5, 2026
 
-Status: Architecture guidance and setup handoff. Cloudflare account access is available and both setup namespaces were created and verified in the dashboard on October 5, 2026. Provider qualification and production enablement remain separate steps.
+Status: Architecture guidance and setup handoff. Both namespaces were created and verified on October 5, 2026. The owner created the two reviewed API tokens in the dashboard; their values were captured into protected local files and both credentials and namespace access passed read-only API checks. Provider qualification and production enablement remain separate steps.
 
 ## Direction
 
@@ -99,19 +99,28 @@ Account ID: `ee625e5e88a18eea4402075704d78f9f`.
 | `artifact-server-production` namespace | Derived private Git history for this installation | Created and verified; zero repositories |
 | `artifact-server-test-qualification` namespace | Exact, run-prefixed repositories for bounded live qualification | Created and verified; zero repositories |
 | Separate writable workspace namespace | Future editable agent forks and build triggers | Deferred until that capability is designed |
-| `artifact-server-artifacts-production` account API token | Node REST/Git integration; Artifacts Read/Write only; expiry November 4, 2026 | Draft reviewed in dashboard; creation awaits explicit credential confirmation |
-| `artifact-server-artifacts-qualification` account API token | Separate revocable qualification credential; Artifacts Read/Write only; expiry October 12, 2026 | Draft reviewed in dashboard; creation awaits explicit credential confirmation |
+| `artifact-server-artifacts-production` account API token | Node REST/Git integration; Artifacts Read/Write only; configured expiry November 4, 2026 | Owner created; securely captured; API reports active; production namespace GET passed |
+| `artifact-server-artifacts-qualification` account API token | Separate revocable qualification credential; Artifacts Read/Write only; configured expiry October 12, 2026 | Owner created; securely captured; API reports active; qualification namespace GET passed |
 | Provider configuration and mounted secret | Current Kubernetes/Node deployment | Not enabled by namespace creation |
 | Project Git-history setting | Administrator opt-in after estimate and qualification | Not enabled by namespace creation |
 
 The dashboard namespace form exposed only the name and no jurisdiction selector. No US/EU jurisdiction restriction was selected or verified. The namespace-list screenshot is stored outside the repository at `~/Documents/Codex/2026-10-05/cloudflare-artifacts-setup/namespaces.jpg`.
 
-Both token drafts are restricted to this Cloudflare account and have no DNS, Workers, billing, or other permission groups. Their Artifacts Read/Write policy applies across this account's Artifacts resources; namespace isolation is also enforced by the application's configured adapter and dedicated qualification namespace. No IP filter is configured in the drafts. Neither credential has been created, exposed, stored, mounted, or used. The reviewed policies are saved outside Git as `production-token-review.jpg` and `qualification-token-review.jpg` beside the namespace screenshot. Creating persistent credentials requires confirmation at the final browser action.
+The owner created both tokens from the reviewed policies in the dashboard. They are restricted to this Cloudflare account and have no DNS, Workers, billing, or other permission groups. Their Artifacts Read/Write policy applies across this account's Artifacts resources; namespace isolation must also be enforced by the application's configured adapter and dedicated qualification namespace. No IP filter was configured. The values were captured from the one-time success dialogs without emitting them in chat or Git, and the dialogs were closed after capture.
+
+Protected local credential files:
+
+- Production: `~/.config/artifact-server/cloudflare-artifacts/production.token`.
+- Qualification: `~/.config/artifact-server/cloudflare-artifacts/qualification.token`.
+
+The credential directory has mode `0700`; both token files have mode `0600`. Do not copy their contents into this document, shell arguments, logs, or Git. Use the production file as the source for secure deployment secret provisioning, not as a host path that would automatically exist inside a Kubernetes container. Keep qualification credentials separate from production runtime secrets.
+
+Read-only verification returned HTTP 200 and `success: true` for each account-token verify call (`status: active`) and each corresponding namespace GET. These four checks establish credential and namespace access only; they did not create repositories, mirror versions, clone Git history, deploy configuration, or qualify the full provider. The reviewed policy screenshots and secret-free token-list screenshot (`tokens-created.jpg`) are saved outside Git beside the namespace screenshot.
 
 Next operational steps:
 
-1. Verify both namespace names in the dashboard. Keep production and qualification separate.
-2. Provision or verify an account-scoped API credential with only the Artifacts permissions the Node provider requires, restricted to this account. Repository-scoped tokens are issued later for clone/push handoff. Store credentials outside Git and chat; raw token environment configuration is rejected by this fork.
+1. Completed: both namespace names are verified in the dashboard and through authenticated namespace GETs. Keep production and qualification separate.
+2. Completed: the owner provisioned separate Artifacts-only account API credentials, securely captured and verified as described above. Repository-scoped tokens will be issued later for clone/push handoff. Raw token environment configuration is rejected by this fork.
 3. Configure the deployment through its normal GitOps path: provider `cloudflare-artifacts`, the account above, namespace `artifact-server-production`, and `ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_API_TOKEN_FILE` pointing to a mounted secret. Use existing 10 MiB/file and 50 MiB/version copy bounds and an explicit logical storage budget chosen from the estimate. Namespace creation alone does not deploy or start mirroring.
 4. Review current API/tooling compatibility before qualification. The checkout pins Wrangler 4.123.0; current documentation calls for 4.145.0 or later for the newer Workers binding types and Blob-returning remote methods. A Node-only pilot need not adopt those methods, but the Workers-binding qualification should check the supported API shape.
 5. After reviewing the account allowance and an exact bounded test envelope, run qualification only in `artifact-server-test-qualification`. Preserve failed evidence and clean up only the exact run's repositories. Record REST/Git, ordering/recovery, and Workers-binding results separately.
