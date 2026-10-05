@@ -172,6 +172,14 @@ import type {
   RuntimeLifecycle,
   RuntimeLifecycleState,
 } from "../lifecycle/runtime-readiness.js";
+import {
+  appendAcceptEncodingVary,
+  type ContentCoding,
+  type ContentEncoder,
+  isCompressibleMediaType,
+  minimumCompressedBodyBytes,
+  negotiateContentCoding,
+} from "./content-encoding.js";
 
 const maximumJsonRequestBytes = 1_500_000;
 const accessSettingSchema = z.enum([
@@ -514,6 +522,11 @@ export interface HttpAppDependencies {
   readonly browserAccess: BrowserAccess;
   readonly completedRequestLogSampleRate: number;
   readonly contentDomain: string;
+  /**
+   * Streams eligible version content through a content coding. Node runtimes
+   * supply one; the Workers runtime leaves it absent because its edge compresses.
+   */
+  readonly contentEncoder?: ContentEncoder;
   /** Server-only credential accepted from the co-launched Vite proxy. */
   readonly developmentProxyCredential?: Redacted.Redacted;
   /** Secret-free optional Git state exposed through authenticated discovery. */
@@ -3799,8 +3812,15 @@ async function serveStoredVersionContent(
   }
 
   const strongEtag = `"${content.entry.sha256}"`;
+  const coding = selectContentCoding(
+    context.req.raw.headers,
+    content.entry,
+    headers,
+    dependencies.contentEncoder,
+  );
   if (etagMatches(context.req.header("if-none-match"), strongEtag)) {
     headers.delete("Content-Length");
+    headers.delete("Content-Encoding");
     return new Response(null, {headers, status: 304});
   }
 
@@ -3846,10 +3866,43 @@ async function serveStoredVersionContent(
     await blob.body.cancel();
     assertBlobSize(blob.size, content.entry.size, content.entry.sha256);
   }
-  return new Response(blob.body, {
+  const body = coding === null || dependencies.contentEncoder === undefined
+    ? blob.body
+    : dependencies.contentEncoder.encode(blob.body, coding, content.entry.size);
+  return new Response(body, {
     headers,
     status: 200,
   });
+}
+
+/**
+ * Chooses the coding for one version-content response and shapes its headers.
+ * Ranges stay on the identity representation: a request naming a range is never
+ * encoded, and an encoded response stops advertising ranges. Callers serve only
+ * GET and HEAD, and HEAD reports what the matching GET would send.
+ */
+function selectContentCoding(
+  requestHeaders: Headers,
+  entry: ManifestEntry,
+  headers: Headers,
+  encoder: ContentEncoder | undefined,
+): ContentCoding | null {
+  if (
+    encoder === undefined
+    || entry.size < minimumCompressedBodyBytes
+    || !isCompressibleMediaType(entry.mediaType)
+  ) {
+    return null;
+  }
+  appendAcceptEncodingVary(headers);
+  if (requestHeaders.has("range")) return null;
+  const coding = negotiateContentCoding(requestHeaders.get("accept-encoding"));
+  if (coding === null) return null;
+  headers.set("Content-Encoding", coding);
+  headers.delete("Content-Length");
+  headers.delete("Accept-Ranges");
+  headers.set("ETag", `W/"${entry.sha256}"`);
+  return coding;
 }
 
 async function serveVersionFile(

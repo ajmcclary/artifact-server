@@ -82,6 +82,7 @@ import {
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
 import {observeBlobReads, type BlobReadObserver} from "../storage/observed-blob-store.js";
+import {nodeContentEncoder} from "../http/node-content-encoder.js";
 
 export interface LocalRuntimeConfig {
   readonly apiToken: string;
@@ -332,6 +333,7 @@ export async function createLocalRuntime(
         config.completedRequestLogSampleRate ??
           defaultCompletedRequestLogSampleRate,
       contentDomain: config.contentDomain,
+      contentEncoder: nodeContentEncoder,
       gitHistory: gitHistoryMonitor?.reader ??
         fixedGitHistoryCapabilityReader(gitHistory.capability),
       linkedArtifacts: linkedFilesEnabled,

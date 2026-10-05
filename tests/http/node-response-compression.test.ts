@@ -17,7 +17,6 @@ import {
 import {
   commitStagedUpload,
   createStagedUpload,
-  publishNew,
   type TestSiteFile,
   uploadEveryStagedFile,
 } from "../support/publishing.js";
@@ -183,45 +182,6 @@ describe("Node server response compression and asset caching", () => {
     expect(binary.headers.get("content-encoding")).toBeNull();
     expect(binary.headers.get("vary")).toBeNull();
     expect(new Uint8Array(binary.body)).toEqual(binaryFixture);
-  });
-
-  test("foundation: range-capable content responses are never compressed", async () => {
-    const html = `<!doctype html><title>Public</title>${
-      "<p>range fixture padding</p>".repeat(64)
-    }`;
-    const published = await publishNew(server, installation, {
-      accessSetting: "public_link",
-      content: html,
-      idempotencyKey: "compression-range-fixture",
-    });
-    const versionUrl = new URL(published.body.links.version);
-
-    const full = await rawRequest(
-      server,
-      `${versionUrl.pathname}${versionUrl.search}`,
-      {"Accept-Encoding": "gzip"},
-      "GET",
-      `${versionUrl.hostname}:${server.port}`,
-    );
-    expect(full.status).toBe(200);
-    expect(full.headers.get("accept-ranges")).toBe("bytes");
-    expect(full.headers.get("content-encoding")).toBeNull();
-    expect(full.headers.get("vary")).toBeNull();
-    expect(full.body.toString("utf8")).toBe(html);
-
-    const partial = await rawRequest(
-      server,
-      `${versionUrl.pathname}${versionUrl.search}`,
-      {"Accept-Encoding": "gzip", Range: "bytes=0-3"},
-      "GET",
-      `${versionUrl.hostname}:${server.port}`,
-    );
-    expect(partial.status).toBe(206);
-    expect(partial.headers.get("content-encoding")).toBeNull();
-    expect(partial.headers.get("content-range")).toBe(
-      `bytes 0-3/${Buffer.byteLength(html)}`,
-    );
-    expect(partial.body.toString("utf8")).toBe(html.slice(0, 4));
   });
 
   async function publishManyFiles(idempotencyKey: string) {
