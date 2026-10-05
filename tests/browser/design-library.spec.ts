@@ -247,13 +247,15 @@ test("DSN-006-B: the Library loads in one request with no per-gallery reads", as
     await writePreviewSourceFixture(claims);
     await publish(fixture, claims, named("Claims Workspace"));
     await localLogin(fixture);
+    // A fresh page, so requests still in flight from the Review page localLogin opened are not counted.
+    const page = await fixture.context.newPage();
     const apiPaths: string[] = [];
-    fixture.page.on("request", (request) => {
+    page.on("request", (request) => {
       const url = new URL(request.url());
       if (url.pathname.startsWith("/api/v1/")) apiPaths.push(url.pathname);
     });
-    await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
-    const library = fixture.page.getByRole("region", {exact: true, name: "Library"});
+    await page.goto(`${fixture.server.baseUrl}/review/library`);
+    const library = page.getByRole("region", {exact: true, name: "Library"});
     await expect(library.locator("a[data-gallery-path]").first()).toBeVisible();
     expect(apiPaths.filter((pathName) => pathName === "/api/v1/library")).toHaveLength(1);
     // Thumbnails still load through the media route; versions, manifests, indexes and comments must not.
