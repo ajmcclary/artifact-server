@@ -238,3 +238,28 @@ test("DSN-005: an installation with no galleries explains how they appear", asyn
     await stopBrowserFixture(fixture);
   }
 });
+
+test("DSN-006-B: the Library loads in one request with no per-gallery reads", async ({browser}) => {
+  const fixture = await startBrowserFixture(browser);
+  const directory = await mkdtemp(path.join(tmpdir(), "design-library-one-request-"));
+  try {
+    const claims = path.join(directory, "claims");
+    await writePreviewSourceFixture(claims);
+    await publish(fixture, claims, named("Claims Workspace"));
+    await localLogin(fixture);
+    const apiPaths: string[] = [];
+    fixture.page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/v1/")) apiPaths.push(url.pathname);
+    });
+    await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
+    const library = fixture.page.getByRole("region", {exact: true, name: "Library"});
+    await expect(library.locator("a[data-gallery-path]").first()).toBeVisible();
+    expect(apiPaths.filter((pathName) => pathName === "/api/v1/library")).toHaveLength(1);
+    // Thumbnails still load through the media route; versions, manifests, indexes and comments must not.
+    expect(apiPaths.filter((pathName) => /\/versions(\/[^/]+)?$|\/file$|\/comments/u.test(pathName))).toEqual([]);
+  } finally {
+    await stopBrowserFixture(fixture);
+    await rm(directory, {force: true, recursive: true});
+  }
+});

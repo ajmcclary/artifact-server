@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {readBoundedReviewHtml} from "./bounded-text";
+import {previewKinds} from "../review/workspace/preview-index.ts";
 import {
   activityPageSchema,
   type ActivityListParams,
@@ -164,6 +165,35 @@ const manifestEntrySchema = z.object({
   sha256: z.string(),
   size: z.number(),
 });
+
+const libraryResponseSchema = z.object({
+  galleries: z.array(z.object({
+    artifactId: z.string(),
+    artifactName: z.string(),
+    indexTitle: z.string(),
+    items: z.array(z.object({
+      activityAt: z.string(),
+      createdAt: z.string(),
+      description: z.string(),
+      kind: z.enum(previewKinds),
+      path: z.string(),
+      related: z.array(z.object({path: z.string(), title: z.string()})),
+      section: z.string(),
+      thumbnailPath: z.string().nullable(),
+      title: z.string(),
+      viewport: z.object({height: z.number(), width: z.number()}),
+    })),
+    projectId: z.string(),
+    projectName: z.string(),
+    versionId: z.string(),
+  })),
+  generatedAt: z.string(),
+  truncated: z.boolean(),
+  unreadable: z.array(z.string()),
+});
+
+/** The server-assembled Library: every readable gallery with page dates. */
+export type LibraryResponse = z.infer<typeof libraryResponseSchema>;
 
 const versionSchema = z.object({
   artifactId: z.string(),
@@ -917,6 +947,7 @@ export const api = {
   /** Counts for the Activity filter row: people, every entry, and those matching the filters. */
   activityFacets: (params: Omit<ActivityListParams, "cursor" | "limit">) =>
     request(activityFacetsSchema, `/api/v1/activity/facets${activityQueryString(params)}`),
+  library: () => request(libraryResponseSchema, "/api/v1/library"),
   activitySummary: (projects: readonly string[] = []) =>
     request(
       activitySummarySchema,

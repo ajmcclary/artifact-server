@@ -13,7 +13,8 @@ export const previewIndexPath = "artifact-server-previews/index.json";
 export const maximumPreviewIndexBytes = 1024 * 1024;
 
 // The producer emits the first six; Review also reads the office kinds after artboard.
-const previewKinds = [
+/** Every preview kind Review reads, in the order the producer documents them. */
+export const previewKinds = [
   "prototype",
   "template",
   "component",
