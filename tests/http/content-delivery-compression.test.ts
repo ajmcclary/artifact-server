@@ -112,6 +112,11 @@ function trackedMemory(): number {
   return usage.heapUsed + usage.external + usage.arrayBuffers;
 }
 
+/** zlib's encoder state is native memory that only resident set size shows. */
+function residentMemory(): number {
+  return process.memoryUsage().rss;
+}
+
 function decode(coding: string | null, bytes: ArrayBuffer): Uint8Array {
   const buffer = Buffer.from(bytes);
   if (coding === "br") return new Uint8Array(brotliDecompressSync(buffer));
@@ -322,15 +327,15 @@ describe("streaming content-delivery compression", () => {
     expect(identityRevalidation.headers.get("content-encoding")).toBeNull();
   }, 60_000);
 
-  test("foundation: a client that disconnects after the first encoded chunk stops the storage read", async () => {
-    const published = await publishSite("account_required", "disconnect-cancels-read", [
+  test.each(["br", "gzip"] as const)("foundation: a client that disconnects after the first %s chunk stops the storage read", async (coding) => {
+    const published = await publishSite("account_required", `disconnect-cancels-read-${coding}`, [
       {bytes: largeBytes, mediaType: "text/javascript", path: largeEntryPath},
     ]);
     const url = new URL(largeEntryPath, await issuePreviewLease(published)).toString();
     blobBytesRead = 0;
     blobStreamsClosed = 0;
-    const outcome = await streamVersion(server, url, "gzip", true);
-    expect(outcome.coding).toBe("gzip");
+    const outcome = await streamVersion(server, url, coding, true);
+    expect(outcome.coding).toBe(coding);
     const read = await settled(() => blobBytesRead, 300, 10_000);
     expect(read).toBeGreaterThan(0);
     expect(read).toBeLessThan(disconnectReadBound);
@@ -341,25 +346,29 @@ describe("streaming content-delivery compression", () => {
     expect(healthy.status).toBe(200);
   }, 120_000);
 
-  test("foundation: twenty concurrent encoded reads of a 64 MiB entry stay within the memory bound", async () => {
-    const published = await publishSite("account_required", "concurrent-memory", [
+  test.each(["br", "gzip"] as const)("foundation: twenty concurrent %s reads of a 64 MiB entry stay within the memory bound", async (coding) => {
+    const published = await publishSite("account_required", `concurrent-memory-${coding}`, [
       {bytes: largeBytes, mediaType: "text/javascript", path: largeEntryPath},
     ]);
     const url = new URL(largeEntryPath, await issuePreviewLease(published)).toString();
     const baseline = trackedMemory();
+    const residentBaseline = residentMemory();
     let peak = baseline;
+    let residentPeak = residentBaseline;
     const sampler = setInterval(() => {
       peak = Math.max(peak, trackedMemory());
+      residentPeak = Math.max(residentPeak, residentMemory());
     }, 25);
     try {
-      const outcomes = await Promise.all(Array.from({length: 20}, () => streamVersion(server, url, "gzip", false)));
+      const outcomes = await Promise.all(Array.from({length: 20}, () => streamVersion(server, url, coding, false)));
       for (const outcome of outcomes) {
-        expect(outcome.coding).toBe("gzip");
+        expect(outcome.coding).toBe(coding);
         expect(outcome.bytes).toBeGreaterThan(0);
       }
     } finally {
       clearInterval(sampler);
     }
     expect(peak - baseline).toBeLessThan(concurrentReadMemoryBound);
+    expect(residentPeak - residentBaseline).toBeLessThan(concurrentReadMemoryBound);
   }, 180_000);
 });

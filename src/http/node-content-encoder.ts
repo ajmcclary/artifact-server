@@ -3,16 +3,22 @@ import {constants, createBrotliCompress, createGzip} from "node:zlib";
 
 import type {ContentCoding, ContentEncoder} from "./content-encoding.js";
 
-/** Brotli 4 and gzip 6 keep per-open CPU modest while streaming; see FINDINGS "Browser delivery". */
+/** Brotli 4 and gzip 6 keep per-open CPU modest while streaming. */
 const brotliQuality = 4;
+/**
+ * A 1 MiB window and no size hint bound Brotli's native state to about 3 MiB
+ * per stream. A size hint for a 64 MiB entry grows it several-fold, and
+ * concurrent large reads would multiply that.
+ */
+const brotliWindowBits = 20;
 const gzipLevel = 6;
 
-function createCompressor(coding: ContentCoding, sizeHint: number): Transform {
+function createCompressor(coding: ContentCoding): Transform {
   return coding === "br"
     ? createBrotliCompress({
       params: {
         [constants.BROTLI_PARAM_QUALITY]: brotliQuality,
-        [constants.BROTLI_PARAM_SIZE_HINT]: sizeHint,
+        [constants.BROTLI_PARAM_LGWIN]: brotliWindowBits,
       },
     })
     : createGzip({level: gzipLevel});
@@ -77,8 +83,8 @@ function cancellableSource(
 }
 
 export const nodeContentEncoder: ContentEncoder = {
-  encode(body, coding, sizeHint) {
-    const compressor = createCompressor(coding, sizeHint);
+  encode(body, coding) {
+    const compressor = createCompressor(coding);
     return cancellableSource(body, compressor).pipeThrough(webCompression(compressor));
   },
 };

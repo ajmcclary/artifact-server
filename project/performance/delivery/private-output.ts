@@ -1,4 +1,4 @@
-import {chmod, mkdir, readdir, realpath, writeFile} from "node:fs/promises";
+import {chmod, mkdir, readdir, realpath, stat, writeFile} from "node:fs/promises";
 import {homedir} from "node:os";
 import path from "node:path";
 
@@ -55,8 +55,10 @@ export async function preparePrivateRunDirectory(
     );
   }
   const runDirectory = path.join(resolvedRoot, runId);
+  const rootExisted = await stat(resolvedRoot).then(() => true, () => false);
   await mkdir(runDirectory, {mode: 0o700, recursive: true});
-  await chmod(resolvedRoot, 0o700);
+  // An operator may point at an existing shared directory; only tighten what this run created.
+  if (!rootExisted) await chmod(resolvedRoot, 0o700);
   await chmod(runDirectory, 0o700);
   return {runDirectory, stateRoot: resolvedRoot};
 }

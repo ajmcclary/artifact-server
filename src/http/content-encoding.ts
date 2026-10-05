@@ -7,11 +7,7 @@ export type ContentCoding = "br" | "gzip";
  * edge compresses responses.
  */
 export interface ContentEncoder {
-  encode(
-    body: ReadableStream<Uint8Array>,
-    coding: ContentCoding,
-    sizeHint: number,
-  ): ReadableStream<Uint8Array>;
+  encode(body: ReadableStream<Uint8Array>, coding: ContentCoding): ReadableStream<Uint8Array>;
 }
 
 /** Media types worth compressing at the Node origin. */

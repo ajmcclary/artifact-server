@@ -1,5 +1,5 @@
 import {existsSync} from "node:fs";
-import {mkdir, mkdtemp, rm, stat, symlink, writeFile} from "node:fs/promises";
+import {chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -63,5 +63,14 @@ describe("delivery private output", () => {
     await restrictPrivateTree(prepared.runDirectory);
     expect(await mode(har)).toBe(0o600);
     expect(await mode(path.join(prepared.runDirectory, "nested"))).toBe(0o700);
+  });
+
+  test("foundation: an existing state root keeps its own permissions", async () => {
+    const shared = path.join(scratch, "shared");
+    await mkdir(shared);
+    await chmod(shared, 0o755);
+    const prepared = await preparePrivateRunDirectory(shared, "run-1");
+    expect(await mode(shared)).toBe(0o755);
+    expect(await mode(prepared.runDirectory)).toBe(0o700);
   });
 });

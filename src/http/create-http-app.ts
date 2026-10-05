@@ -3868,7 +3868,7 @@ async function serveStoredVersionContent(
   }
   const body = coding === null || dependencies.contentEncoder === undefined
     ? blob.body
-    : dependencies.contentEncoder.encode(blob.body, coding, content.entry.size);
+    : dependencies.contentEncoder.encode(blob.body, coding);
   return new Response(body, {
     headers,
     status: 200,
