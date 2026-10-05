@@ -2,7 +2,7 @@
 
 Date: October 5, 2026
 
-Status: Architecture guidance and setup handoff. Cloudflare account access is available. Namespace creation is being verified in the dashboard; provider qualification and production enablement are separate steps.
+Status: Architecture guidance and setup handoff. Cloudflare account access is available and both setup namespaces were created and verified in the dashboard on October 5, 2026. Provider qualification and production enablement remain separate steps.
 
 ## Direction
 
@@ -96,14 +96,14 @@ Account ID: `ee625e5e88a18eea4402075704d78f9f`.
 
 | Resource | Intended use | Status |
 |---|---|---|
-| `artifact-server-production` namespace | Derived private Git history for this installation | Pending dashboard verification |
-| `artifact-server-test-qualification` namespace | Exact, run-prefixed repositories for bounded live qualification | Pending dashboard verification |
+| `artifact-server-production` namespace | Derived private Git history for this installation | Created and verified; zero repositories |
+| `artifact-server-test-qualification` namespace | Exact, run-prefixed repositories for bounded live qualification | Created and verified; zero repositories |
 | Separate writable workspace namespace | Future editable agent forks and build triggers | Deferred until that capability is designed |
 | Dedicated Artifacts control-plane credential | Node REST/Git integration | Pending secure provisioning or existing credential verification |
 | Provider configuration and mounted secret | Current Kubernetes/Node deployment | Not enabled by namespace creation |
 | Project Git-history setting | Administrator opt-in after estimate and qualification | Not enabled by namespace creation |
 
-The dashboard namespace form exposes only the name and no jurisdiction selector. Record the actual resulting jurisdiction if it is displayed; do not claim a US/EU restriction that was not selected and verified.
+The dashboard namespace form exposed only the name and no jurisdiction selector. No US/EU jurisdiction restriction was selected or verified. The namespace-list screenshot is stored outside the repository at `~/Documents/Codex/2026-10-05/cloudflare-artifacts-setup/namespaces.jpg`.
 
 Next operational steps:
 
