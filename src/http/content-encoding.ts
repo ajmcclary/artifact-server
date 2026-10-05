@@ -1,15 +1,6 @@
 /** A content coding Artifact Server produces at the Node origin. */
 export type ContentCoding = "br" | "gzip";
 
-/**
- * Streams one stored representation through a content coding. Node runtimes
- * supply an implementation; the Workers runtime leaves it absent because its
- * edge compresses responses.
- */
-export interface ContentEncoder {
-  encode(body: ReadableStream<Uint8Array>, coding: ContentCoding): ReadableStream<Uint8Array>;
-}
-
 /** Prefer Brotli, then gzip; a missing header, identity only, or q=0 selects neither. */
 export function negotiateContentCoding(acceptEncoding: string | null): ContentCoding | null {
   if (acceptEncoding === null) return null;

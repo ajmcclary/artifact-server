@@ -295,7 +295,14 @@ async function measurePostgresArm(
     const baseUrl = `http://${server.hostname}:${server.port}`;
     const headers = {Authorization: `Bearer ${apiToken}`};
     const published = await publishNew(
-      {baseUrl, hostname: server.hostname, port: server.port, stop: () => server.close()},
+      {
+        baseUrl,
+        // The external-storage server builds variants in the background; nothing to drain.
+        drainContentVariants: () => Promise.resolve(),
+        hostname: server.hostname,
+        port: server.port,
+        stop: () => server.close(),
+      },
       {apiToken, browserBootstrapToken: "unused", dataDirectory: "unused"},
       {
         accessSetting: "account_required",

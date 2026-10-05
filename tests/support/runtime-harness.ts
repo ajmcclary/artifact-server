@@ -46,6 +46,8 @@ export interface RunningTestServer {
   readonly baseUrl: string;
   readonly hostname: string;
   readonly port: number;
+  /** Runs every queued content-variant build (manual mode). */
+  drainContentVariants(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -88,6 +90,7 @@ export async function startTestServer(
     readonly applicationOrigin?: string;
     readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
     readonly blobReadObserver?: BlobReadObserver;
+    readonly contentVariantBuilds?: "background" | "manual";
     readonly bootstrapAdministratorEmail?: string;
     readonly browserAccess?: BrowserAccess;
     readonly contentDomain?: string;
@@ -123,6 +126,7 @@ export async function startTestServer(
     completedRequestLogSampleRate:
       options.completedRequestLogSampleRate ??
         defaultCompletedRequestLogSampleRate,
+    contentVariantBuilds: options.contentVariantBuilds ?? "manual",
     dataDirectory: installation.dataDirectory,
     localBootstrapToken: installation.browserBootstrapToken,
     observability: options.observability ?? false,
@@ -209,6 +213,7 @@ export async function startTestServer(
   return {
     baseUrl: `http://${server.hostname}:${server.port}`,
     hostname: server.hostname,
+    drainContentVariants: () => server.drainContentVariants(),
     port: server.port,
     stop: () => server.close(),
   };

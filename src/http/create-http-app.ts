@@ -174,13 +174,12 @@ import type {
 } from "../lifecycle/runtime-readiness.js";
 import {
   appendAcceptEncodingVary,
-  type ContentCoding,
-  type ContentEncoder,
   negotiateContentCoding,
 } from "./content-encoding.js";
+import type {ContentVariantDelivery} from "../application/content-variants.js";
 import {
-  isCompressibleMediaType,
-  minimumCompressedBodyBytes,
+  type ContentVariantMapping,
+  isVariantEligible,
 } from "../core/content-variants.js";
 
 const maximumJsonRequestBytes = 1_500_000;
@@ -525,10 +524,10 @@ export interface HttpAppDependencies {
   readonly completedRequestLogSampleRate: number;
   readonly contentDomain: string;
   /**
-   * Streams eligible version content through a content coding. Node runtimes
-   * supply one; the Workers runtime leaves it absent because its edge compresses.
+   * Finds stored Brotli variants of eligible version content. Node runtimes
+   * supply it; the Workers runtime leaves it absent because its edge compresses.
    */
-  readonly contentEncoder?: ContentEncoder;
+  readonly contentVariants?: ContentVariantDelivery;
   /** Server-only credential accepted from the co-launched Vite proxy. */
   readonly developmentProxyCredential?: Redacted.Redacted;
   /** Secret-free optional Git state exposed through authenticated discovery. */
@@ -3814,16 +3813,30 @@ async function serveStoredVersionContent(
   }
 
   const strongEtag = `"${content.entry.sha256}"`;
-  const coding = selectContentCoding(
-    context.req.raw.headers,
-    content.entry,
-    headers,
-    dependencies.contentEncoder,
-  );
-  if (etagMatches(context.req.header("if-none-match"), strongEtag)) {
+  const variants = dependencies.contentVariants;
+  const eligible = variants !== undefined
+    && isVariantEligible(content.entry.mediaType, content.entry.size);
+  if (eligible) appendAcceptEncodingVary(headers);
+  const ifNoneMatch = context.req.header("if-none-match");
+  if (etagMatches(ifNoneMatch, strongEtag)) {
     headers.delete("Content-Length");
-    headers.delete("Content-Encoding");
+    // Echo the validator the client holds; a 304 never relabels a cached copy's coding.
+    const heldTags = new Set((ifNoneMatch ?? "").split(",").map((tag) => tag.trim()));
+    if (heldTags.has(`W/${strongEtag}`) && !heldTags.has(strongEtag)) {
+      headers.set("ETag", `W/${strongEtag}`);
+    }
     return new Response(null, {headers, status: 304});
+  }
+
+  if (eligible && context.req.header("range") === undefined) {
+    const variant = await openStoredVariant(context, content.entry, variants, dependencies.blobs);
+    if (variant !== null) {
+      headers.set("Content-Encoding", "br");
+      headers.set("Content-Length", String(variant.size));
+      headers.delete("Accept-Ranges");
+      headers.set("ETag", `W/${strongEtag}`);
+      return new Response(variant.body, {headers, status: 200});
+    }
   }
 
   const rangeDecision = ifRangeAllowsPartialResponse(
@@ -3868,43 +3881,66 @@ async function serveStoredVersionContent(
     await blob.body.cancel();
     assertBlobSize(blob.size, content.entry.size, content.entry.sha256);
   }
-  const body = coding === null || dependencies.contentEncoder === undefined
-    ? blob.body
-    : dependencies.contentEncoder.encode(blob.body, coding);
-  return new Response(body, {
+  return new Response(blob.body, {
     headers,
     status: 200,
   });
 }
 
+interface StoredVariantBody {
+  /** Null for HEAD: the size was verified without reading the body. */
+  readonly body: ReadableStream<Uint8Array> | null;
+  readonly size: number;
+}
+
 /**
- * Chooses the coding for one version-content response and shapes its headers.
- * Ranges stay on the identity representation: a request naming a range is never
- * encoded, and an encoded response stops advertising ranges. Callers serve only
- * GET and HEAD, and HEAD reports what the matching GET would send.
+ * Opens the stored Brotli variant for one eligible entry, or returns null so
+ * the caller serves identity. A miss queues a build; an unusable variant is
+ * reported for rebuilding. Nothing here fails the request.
  */
-function selectContentCoding(
-  requestHeaders: Headers,
+async function openStoredVariant(
+  context: Context<HttpEnvironment>,
   entry: ManifestEntry,
-  headers: Headers,
-  encoder: ContentEncoder | undefined,
-): ContentCoding | null {
-  if (
-    encoder === undefined
-    || entry.size < minimumCompressedBodyBytes
-    || !isCompressibleMediaType(entry.mediaType)
-  ) {
+  variants: ContentVariantDelivery,
+  blobs: BlobStore,
+): Promise<StoredVariantBody | null> {
+  const span = context.get("requestSpan");
+  if (negotiateContentCoding(context.req.header("accept-encoding") ?? null) !== "br") {
+    span.attribute("content.variant", "ineligible");
     return null;
   }
-  appendAcceptEncodingVary(headers);
-  if (requestHeaders.has("range")) return null;
-  const coding = negotiateContentCoding(requestHeaders.get("accept-encoding"));
-  if (coding === null) return null;
-  headers.set("Content-Encoding", coding);
-  headers.delete("Content-Length");
-  headers.delete("Accept-Ranges");
-  headers.set("ETag", `W/"${entry.sha256}"`);
-  return coding;
+  let mapping: ContentVariantMapping | null;
+  try {
+    mapping = await variants.find(entry.sha256);
+  } catch (error) {
+    variants.reportLookupFailure(error instanceof Error ? error.message : String(error));
+    span.attribute("content.variant", "error");
+    return null;
+  }
+  if (mapping === null) {
+    variants.schedule(entry.sha256, entry.size);
+    span.attribute("content.variant", "miss");
+    return null;
+  }
+  try {
+    if (context.req.method === "HEAD") {
+      const stored = await blobs.inspect(mapping.variantSha256);
+      if (stored.size !== mapping.variantSize) throw new Error("The stored variant has the wrong size.");
+      span.attribute("content.variant", "hit");
+      return {body: null, size: stored.size};
+    }
+    const opened = await blobs.open(mapping.variantSha256);
+    if (opened.size !== mapping.variantSize) {
+      await opened.body.cancel();
+      throw new Error("The stored variant has the wrong size.");
+    }
+    span.attribute("content.variant", "hit");
+    return {body: opened.body, size: opened.size};
+  } catch {
+    variants.reportUnusable(mapping);
+    span.attribute("content.variant", "error");
+    return null;
+  }
 }
 
 async function serveVersionFile(

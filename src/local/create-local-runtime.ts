@@ -82,7 +82,9 @@ import {
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
 import {observeBlobReads, type BlobReadObserver} from "../storage/observed-blob-store.js";
-import {nodeContentEncoder} from "../http/node-content-encoder.js";
+import {ContentVariants} from "../application/content-variants.js";
+import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
+import {SqliteContentVariantIndex} from "../storage/sqlite-content-variant-index.js";
 
 export interface LocalRuntimeConfig {
   readonly apiToken: string;
@@ -114,6 +116,11 @@ export interface LocalRuntimeConfig {
   readonly linkedCaptureHooks?: CaptureHooks;
   /** Observation seam for content-delivery tests; never parsed from the environment. */
   readonly blobReadObserver?: BlobReadObserver;
+  /**
+   * Content-variant build mode. Tests use "manual" so builds run only on an
+   * explicit drain; never parsed from the environment. Defaults to "background".
+   */
+  readonly contentVariantBuilds?: "background" | "manual";
   readonly localBootstrapToken?: string;
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly observability?: boolean;
@@ -130,6 +137,8 @@ export interface LocalRuntime {
   readonly app: ReturnType<typeof createHttpApp>;
   cleanupStaging(limit: number): Promise<ExpiredStagingCleanupReport>;
   close(): Promise<void>;
+  /** Runs every queued content-variant build. */
+  drainContentVariants(): Promise<void>;
 }
 
 export async function createLocalRuntime(
@@ -228,14 +237,37 @@ export async function createLocalRuntime(
         },
       }
       : undefined;
+  const contentVariantIndex = new SqliteContentVariantIndex(databasePath, installationId, runtimeClock);
+  // Builds log through the application runtime, which exists only after the layer is built.
+  let variantLogRuntime: ApplicationRuntime | null = null;
+  const contentVariants = new ContentVariants({
+    blobs,
+    compressor: nodeBrotliVariantCompressor,
+    index: contentVariantIndex,
+    log: (event) => {
+      variantLogRuntime?.runFork(Effect.logInfo("Content variant build finished.").pipe(
+        Effect.annotateLogs({
+          content_variant_duration_ms: Math.round(event.durationMilliseconds),
+          content_variant_error: event.error ?? "",
+          content_variant_outcome: event.outcome,
+          content_variant_source_bytes: event.sourceSize,
+          content_variant_source_sha256: event.sourceSha256,
+          content_variant_variant_bytes: event.variantSize ?? -1,
+        }),
+      ));
+    },
+    mode: config.contentVariantBuilds ?? "background",
+  });
   const resourceLayer = Layer.effectDiscard(
     Effect.acquireRelease(
       Effect.succeed({
+        contentVariantIndex,
         gitHistoryIdentityStore,
         identityRepository,
         repository,
       }),
       (owned) => Effect.sync(() => {
+        owned.contentVariantIndex.close();
         owned.gitHistoryIdentityStore?.close();
         owned.identityRepository.close();
         owned.repository.close();
@@ -294,6 +326,7 @@ export async function createLocalRuntime(
   const applicationRuntime: ApplicationRuntime = ManagedRuntime.make(
     Layer.mergeAll(applicationLayer, resourceLayer, telemetryLayer),
   );
+  variantLogRuntime = applicationRuntime;
   let gitHistoryMonitor: GitHistoryCapabilityMonitor | null = null;
   let gitHistoryWorker: Awaited<ReturnType<typeof startGitHistoryMirrorWorker>> | null = null;
   try {
@@ -333,7 +366,7 @@ export async function createLocalRuntime(
         config.completedRequestLogSampleRate ??
           defaultCompletedRequestLogSampleRate,
       contentDomain: config.contentDomain,
-      contentEncoder: nodeContentEncoder,
+      contentVariants,
       gitHistory: gitHistoryMonitor?.reader ??
         fixedGitHistoryCapabilityReader(gitHistory.capability),
       linkedArtifacts: linkedFilesEnabled,
@@ -372,14 +405,17 @@ export async function createLocalRuntime(
     return {
       app,
       cleanupStaging: (limit) => runStagingCleanupPass(applicationRuntime, limit),
+      drainContentVariants: () => contentVariants.drain(),
       close: async () => {
         if (closeCleanupSchedule !== null) await closeCleanupSchedule();
+        await contentVariants.close();
         if (gitHistoryWorker !== null) await gitHistoryWorker.close();
         if (gitHistoryMonitor !== null) await gitHistoryMonitor.close();
         await applicationRuntime.dispose();
       },
     };
   } catch (error) {
+    await contentVariants.close();
     if (gitHistoryWorker !== null) await gitHistoryWorker.close();
     if (gitHistoryMonitor !== null) await gitHistoryMonitor.close();
     await applicationRuntime.dispose();

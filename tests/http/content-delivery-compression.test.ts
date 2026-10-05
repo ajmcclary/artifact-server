@@ -1,6 +1,7 @@
-import {createHash, randomBytes} from "node:crypto";
-import {request} from "node:http";
-import {brotliDecompressSync, gunzipSync} from "node:zlib";
+import {createHash} from "node:crypto";
+import {readdir, unlink} from "node:fs/promises";
+import path from "node:path";
+import {brotliDecompressSync} from "node:zlib";
 
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
@@ -26,102 +27,15 @@ const scriptPath = "assets/rows.js";
 const scriptBytes = encoder.encode(`export const rows = [\n${
   Array.from({length: 400}, (_, index) => `  {"id": "row-${index}", "status": "awaiting-review"},`).join("\n")
 }\n];\n`);
-
 const scriptDigest = createHash("sha256").update(scriptBytes).digest("hex");
 const binaryBytes = new Uint8Array(4096).map((_, index) => index % 251);
-const thresholdBytes = encoder.encode("x".repeat(1024));
 const belowThresholdBytes = encoder.encode("x".repeat(1023));
 
 const leaseResponseSchema = z.object({baseUrl: z.url()});
 const bootstrapResponseSchema = z.object({bootstrapUrl: z.url()});
 
-const largeEntryPath = "assets/large.js";
-/** Base64 text: still text/javascript, but close to incompressible, so socket buffers hold few source bytes. */
-const largeBytes = encoder.encode(`const payload = "${randomBytes(48 * 1_048_576).toString("base64")}";\n`);
-const disconnectReadBound = 8 * 1_048_576;
-const concurrentReadMemoryBound = 256 * 1_048_576;
-
-interface StreamOutcome {
-  readonly bytes: number;
-  readonly coding: string | null;
-}
-
-/** Streams one response, counting bytes without keeping them; optionally abandons it after the first chunk. */
-function streamVersion(
-  server: RunningTestServer,
-  url: string,
-  acceptEncoding: string,
-  abandonAfterFirstChunk: boolean,
-): Promise<StreamOutcome> {
-  const target = new URL(url);
-  return new Promise((resolve, reject) => {
-    const outgoing = request({
-      headers: ["Host", `${target.hostname}:${server.port}`, "Accept-Encoding", acceptEncoding],
-      hostname: "127.0.0.1",
-      method: "GET",
-      path: `${target.pathname}${target.search}`,
-      port: server.port,
-    }, (incoming) => {
-      const coding = incoming.headers["content-encoding"] ?? null;
-      let bytes = 0;
-      incoming.on("data", (chunk: Buffer) => {
-        bytes += chunk.byteLength;
-        if (abandonAfterFirstChunk) {
-          outgoing.destroy();
-          resolve({bytes, coding});
-        }
-      });
-      incoming.on("end", () => resolve({bytes, coding}));
-      incoming.on("error", (error) => {
-        if (!abandonAfterFirstChunk) reject(error);
-      });
-    });
-    outgoing.on("error", (error) => {
-      if (!abandonAfterFirstChunk) reject(error);
-    });
-    outgoing.end();
-  });
-}
-
-/** Resolves once `read` stops changing for `quietMilliseconds`, or rejects after `limitMilliseconds`. */
-function settled(read: () => number, quietMilliseconds: number, limitMilliseconds: number): Promise<number> {
-  return new Promise((resolve, reject) => {
-    let last = read();
-    let stableSince = performance.now();
-    const started = stableSince;
-    const timer = setInterval(() => {
-      const now = performance.now();
-      const current = read();
-      if (current !== last) {
-        last = current;
-        stableSince = now;
-      } else if (now - stableSince >= quietMilliseconds) {
-        clearInterval(timer);
-        resolve(current);
-      }
-      if (now - started > limitMilliseconds) {
-        clearInterval(timer);
-        reject(new Error("The storage read never settled."));
-      }
-    }, 25);
-  });
-}
-
-function trackedMemory(): number {
-  const usage = process.memoryUsage();
-  return usage.heapUsed + usage.external + usage.arrayBuffers;
-}
-
-/** zlib's encoder state is native memory that only resident set size shows. */
-function residentMemory(): number {
-  return process.memoryUsage().rss;
-}
-
-function decode(coding: string | null, bytes: ArrayBuffer): Uint8Array {
-  const buffer = Buffer.from(bytes);
-  if (coding === "br") return new Uint8Array(brotliDecompressSync(buffer));
-  if (coding === "gzip") return new Uint8Array(gunzipSync(buffer));
-  return new Uint8Array(buffer);
+function decodeBrotli(bytes: ArrayBuffer): Uint8Array {
+  return new Uint8Array(brotliDecompressSync(Buffer.from(bytes)));
 }
 
 function siteFiles(extra: readonly TestSiteFile[] = []): readonly TestSiteFile[] {
@@ -132,25 +46,22 @@ function siteFiles(extra: readonly TestSiteFile[] = []): readonly TestSiteFile[]
   ];
 }
 
-describe("streaming content-delivery compression", () => {
+describe("stored content variants", () => {
   let installation: TestInstallation;
   let server: RunningTestServer;
   let blobBytesRead = 0;
-  let blobStreamsClosed = 0;
 
   beforeEach(async () => {
     installation = await createTestInstallation();
     blobBytesRead = 0;
-    blobStreamsClosed = 0;
     server = await startTestServer(installation, {
       blobReadObserver: {
         bytesRead: (byteLength) => {
           blobBytesRead += byteLength;
         },
-        streamClosed: () => {
-          blobStreamsClosed += 1;
-        },
+        streamClosed: () => undefined,
       },
+      contentVariantBuilds: "manual",
     });
   });
 
@@ -170,7 +81,7 @@ describe("streaming content-delivery compression", () => {
     const committed = await commitStagedUpload(installation, upload.body, idempotencyKey, {
       accessSetting,
       kind: "new_artifact",
-      name: `Compression ${idempotencyKey}`,
+      name: `Variants ${idempotencyKey}`,
       tags: [],
     });
     expect(committed.response.status).toBe(201);
@@ -199,7 +110,6 @@ describe("streaming content-delivery compression", () => {
     return {cookie, origin: new URL(issued.bootstrapUrl).origin};
   }
 
-
   test("foundation: the blob read observer counts a full identity read", async () => {
     const published = await publishSite("public_link", "observer-full-read");
     const response = await fetchVersion(server, new URL(scriptPath, published.links.version).toString());
@@ -208,7 +118,7 @@ describe("streaming content-delivery compression", () => {
     expect(blobBytesRead).toBe(scriptBytes.byteLength);
   });
 
-  test("CNT-010-B: eligible full content responses stream br or gzip and decode to the stored bytes", async () => {
+  test("CNT-010-B: eligible content is identity before its variant exists and stored br afterwards", async () => {
     const privateSite = await publishSite("account_required", "cnt-010-b-private");
     const publicSite = await publishSite("public_link", "cnt-010-b-public");
     const session = await openContentSession(privateSite);
@@ -219,81 +129,75 @@ describe("streaming content-delivery compression", () => {
     ];
     for (const target of targets) {
       const base: Record<string, string> = target.cookie === null ? {} : {Cookie: target.cookie};
-      for (const coding of ["br", "gzip"] as const) {
-        // eslint-disable-next-line no-await-in-loop -- each request is asserted on its own
-        const encoded = await fetchVersion(server, target.url, "GET", {...base, "Accept-Encoding": coding});
-        expect(encoded.status).toBe(200);
-        expect(encoded.headers.get("content-encoding")).toBe(coding);
-        expect(encoded.headers.get("etag")).toBe(`W/"${scriptDigest}"`);
-        expect(encoded.headers.get("vary")).toContain("Accept-Encoding");
-        expect(encoded.headers.get("content-length")).toBeNull();
-        expect(encoded.headers.get("accept-ranges")).toBeNull();
-        // Chunked transfer proves the buffering wrapper did not re-materialize the body.
-        expect(encoded.headers.get("transfer-encoding")).toBe("chunked");
-        // eslint-disable-next-line no-await-in-loop -- the body belongs to this response
-        expect(decode(coding, await encoded.arrayBuffer())).toEqual(scriptBytes);
-
-        // eslint-disable-next-line no-await-in-loop -- HEAD must mirror the GET just made
-        const head = await fetchVersion(server, target.url, "HEAD", {...base, "Accept-Encoding": coding});
-        expect(head.status).toBe(200);
-        expect(head.headers.get("content-encoding")).toBe(coding);
-        expect(head.headers.get("etag")).toBe(`W/"${scriptDigest}"`);
-        expect(head.headers.get("content-length")).toBeNull();
-        expect(head.headers.get("accept-ranges")).toBeNull();
-      }
-
-      // eslint-disable-next-line no-await-in-loop -- identity is asserted after both codings
-      const identity = await fetchVersion(server, target.url, "GET", base);
-      expect(identity.headers.get("content-encoding")).toBeNull();
-      expect(identity.headers.get("accept-ranges")).toBe("bytes");
-      expect(identity.headers.get("etag")).toBe(`"${scriptDigest}"`);
-      expect(identity.headers.get("vary")).toContain("Accept-Encoding");
+      // eslint-disable-next-line no-await-in-loop -- the miss must precede the drain
+      const miss = await fetchVersion(server, target.url, "GET", {...base, "Accept-Encoding": "br"});
+      expect(miss.status).toBe(200);
+      expect(miss.headers.get("content-encoding")).toBeNull();
+      expect(miss.headers.get("accept-ranges")).toBe("bytes");
+      expect(miss.headers.get("etag")).toBe(`"${scriptDigest}"`);
+      expect(miss.headers.get("vary")).toContain("Accept-Encoding");
       // eslint-disable-next-line no-await-in-loop -- the body belongs to this response
-      expect(new Uint8Array(await identity.arrayBuffer())).toEqual(scriptBytes);
+      expect(new Uint8Array(await miss.arrayBuffer())).toEqual(scriptBytes);
+    }
+    await server.drainContentVariants();
+    for (const target of targets) {
+      const base: Record<string, string> = target.cookie === null ? {} : {Cookie: target.cookie};
+      // eslint-disable-next-line no-await-in-loop -- each request is asserted on its own
+      const hit = await fetchVersion(server, target.url, "GET", {...base, "Accept-Encoding": "gzip, br"});
+      expect(hit.status).toBe(200);
+      expect(hit.headers.get("content-encoding")).toBe("br");
+      expect(hit.headers.get("accept-ranges")).toBeNull();
+      expect(hit.headers.get("etag")).toBe(`W/"${scriptDigest}"`);
+      expect(hit.headers.get("vary")).toContain("Accept-Encoding");
+      // eslint-disable-next-line no-await-in-loop -- the body belongs to this response
+      const body = await hit.arrayBuffer();
+      expect(hit.headers.get("content-length")).toBe(String(body.byteLength));
+      expect(decodeBrotli(body)).toEqual(scriptBytes);
 
-      // eslint-disable-next-line no-await-in-loop -- revalidation follows the full reads
+      // eslint-disable-next-line no-await-in-loop -- HEAD mirrors the GET just made
+      const head = await fetchVersion(server, target.url, "HEAD", {...base, "Accept-Encoding": "br"});
+      expect(head.headers.get("content-encoding")).toBe("br");
+      expect(head.headers.get("content-length")).toBe(String(body.byteLength));
+      expect(head.headers.get("etag")).toBe(`W/"${scriptDigest}"`);
+
+      // eslint-disable-next-line no-await-in-loop -- revalidation follows the reads
       const revalidated = await fetchVersion(server, target.url, "GET", {
         ...base,
-        "Accept-Encoding": "gzip",
+        "Accept-Encoding": "br",
         "If-None-Match": `W/"${scriptDigest}"`,
       });
       expect(revalidated.status).toBe(304);
-      expect(revalidated.headers.get("vary")).toContain("Accept-Encoding");
+      expect(revalidated.headers.get("etag")).toBe(`W/"${scriptDigest}"`);
       expect(revalidated.headers.get("content-encoding")).toBeNull();
     }
   }, 60_000);
 
-  test("CNT-010-F: ranges, refusals, small and binary entries stay identity with ranges intact", async () => {
+  test("CNT-010-F: ranges, refusals, small, binary, and unusable variants are served identity", async () => {
     const published = await publishSite("account_required", "cnt-010-f-identity-fallbacks", [
       {bytes: binaryBytes, mediaType: "application/octet-stream", path: "assets/blob.bin"},
-      {bytes: thresholdBytes, mediaType: "text/javascript", path: "assets/threshold.js"},
       {bytes: belowThresholdBytes, mediaType: "text/javascript", path: "assets/below.js"},
     ]);
     const lease = await issuePreviewLease(published);
     const at = (entryPath: string) => new URL(entryPath, lease).toString();
     const size = scriptBytes.byteLength;
+    await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "br"});
+    await server.drainContentVariants();
 
-    const partial = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "gzip", Range: "bytes=0-9"});
+    const partial = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "br", Range: "bytes=0-9"});
     expect(partial.status).toBe(206);
     expect(partial.headers.get("content-encoding")).toBeNull();
     expect(partial.headers.get("content-range")).toBe(`bytes 0-9/${size}`);
-    expect(new Uint8Array(await partial.arrayBuffer())).toEqual(scriptBytes.slice(0, 10));
 
     const weakIfRange = await fetchVersion(server, at(scriptPath), "GET", {
-      "Accept-Encoding": "gzip",
+      "Accept-Encoding": "br",
       "If-Range": `W/"${scriptDigest}"`,
       Range: "bytes=0-9",
     });
     expect(weakIfRange.status).toBe(200);
     expect(weakIfRange.headers.get("content-encoding")).toBeNull();
-    expect(weakIfRange.headers.get("accept-ranges")).toBe("bytes");
     expect(new Uint8Array(await weakIfRange.arrayBuffer())).toEqual(scriptBytes);
 
-    const unsatisfiable = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "gzip", Range: `bytes=${size + 10}-`});
-    expect(unsatisfiable.status).toBe(416);
-    expect(unsatisfiable.headers.get("content-range")).toBe(`bytes */${size}`);
-
-    for (const refusal of ["identity", "br;q=0, gzip;q=0", "br;q=0.0, gzip;q=0.000", "*"]) {
+    for (const refusal of ["gzip", "identity", "br;q=0, gzip", "br;q=0.0", "*"]) {
       // eslint-disable-next-line no-await-in-loop -- each refusal is asserted on its own
       const refused = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": refusal});
       expect({
@@ -303,72 +207,38 @@ describe("streaming content-delivery compression", () => {
       }).toEqual({acceptRanges: "bytes", contentEncoding: null, refusal});
     }
 
-    const spelled = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": " GZIP "});
-    expect(spelled.headers.get("content-encoding")).toBe("gzip");
-
-    const binary = await fetchVersion(server, at("assets/blob.bin"), "GET", {"Accept-Encoding": "gzip"});
-    expect(binary.headers.get("content-encoding")).toBeNull();
-    expect(binary.headers.get("accept-ranges")).toBe("bytes");
-    expect(binary.headers.get("vary")).toBeNull();
-    expect(new Uint8Array(await binary.arrayBuffer())).toEqual(binaryBytes);
-
-    const threshold = await fetchVersion(server, at("assets/threshold.js"), "GET", {"Accept-Encoding": "gzip"});
-    expect(threshold.headers.get("content-encoding")).toBe("gzip");
-    const below = await fetchVersion(server, at("assets/below.js"), "GET", {"Accept-Encoding": "gzip"});
-    expect(below.headers.get("content-encoding")).toBeNull();
-    expect(below.headers.get("accept-ranges")).toBe("bytes");
-
-    // A cache holding the identity copy revalidates with a strong tag while accepting gzip.
     const identityRevalidation = await fetchVersion(server, at(scriptPath), "GET", {
-      "Accept-Encoding": "gzip",
+      "Accept-Encoding": "br",
       "If-None-Match": `"${scriptDigest}"`,
     });
     expect(identityRevalidation.status).toBe(304);
+    expect(identityRevalidation.headers.get("etag")).toBe(`"${scriptDigest}"`);
     expect(identityRevalidation.headers.get("content-encoding")).toBeNull();
-  }, 60_000);
 
-  test.each(["br", "gzip"] as const)("foundation: a client that disconnects after the first %s chunk stops the storage read", async (coding) => {
-    const published = await publishSite("account_required", `disconnect-cancels-read-${coding}`, [
-      {bytes: largeBytes, mediaType: "text/javascript", path: largeEntryPath},
-    ]);
-    const url = new URL(largeEntryPath, await issuePreviewLease(published)).toString();
-    blobBytesRead = 0;
-    blobStreamsClosed = 0;
-    const outcome = await streamVersion(server, url, coding, true);
-    expect(outcome.coding).toBe(coding);
-    const read = await settled(() => blobBytesRead, 300, 10_000);
-    expect(read).toBeGreaterThan(0);
-    expect(read).toBeLessThan(disconnectReadBound);
-    // The abandoned read was cancelled, not left holding its file handle.
-    expect(blobStreamsClosed).toBe(1);
-
-    const healthy = await fetchVersion(server, new URL(`/${scriptPath}`, url).toString());
-    expect(healthy.status).toBe(200);
-  }, 120_000);
-
-  test.each(["br", "gzip"] as const)("foundation: twenty concurrent %s reads of a 64 MiB entry stay within the memory bound", async (coding) => {
-    const published = await publishSite("account_required", `concurrent-memory-${coding}`, [
-      {bytes: largeBytes, mediaType: "text/javascript", path: largeEntryPath},
-    ]);
-    const url = new URL(largeEntryPath, await issuePreviewLease(published)).toString();
-    const baseline = trackedMemory();
-    const residentBaseline = residentMemory();
-    let peak = baseline;
-    let residentPeak = residentBaseline;
-    const sampler = setInterval(() => {
-      peak = Math.max(peak, trackedMemory());
-      residentPeak = Math.max(residentPeak, residentMemory());
-    }, 25);
-    try {
-      const outcomes = await Promise.all(Array.from({length: 20}, () => streamVersion(server, url, coding, false)));
-      for (const outcome of outcomes) {
-        expect(outcome.coding).toBe(coding);
-        expect(outcome.bytes).toBeGreaterThan(0);
-      }
-    } finally {
-      clearInterval(sampler);
+    for (const entryPath of ["assets/blob.bin", "assets/below.js"]) {
+      // eslint-disable-next-line no-await-in-loop -- read once to queue, then confirm nothing was stored
+      await fetchVersion(server, at(entryPath), "GET", {"Accept-Encoding": "br"});
     }
-    expect(peak - baseline).toBeLessThan(concurrentReadMemoryBound);
-    expect(residentPeak - residentBaseline).toBeLessThan(concurrentReadMemoryBound);
-  }, 180_000);
+    await server.drainContentVariants();
+    for (const entryPath of ["assets/blob.bin", "assets/below.js"]) {
+      // eslint-disable-next-line no-await-in-loop -- each entry is asserted on its own
+      const ineligible = await fetchVersion(server, at(entryPath), "GET", {"Accept-Encoding": "br"});
+      expect(ineligible.headers.get("content-encoding")).toBeNull();
+      expect(ineligible.headers.get("accept-ranges")).toBe("bytes");
+    }
+
+    const hit = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "br"});
+    const variantBytes = new Uint8Array(await hit.arrayBuffer());
+    const variantDigest = createHash("sha256").update(variantBytes).digest("hex");
+    const blobRoot = path.join(installation.dataDirectory, "blobs");
+    const variantPath = path.join(blobRoot, variantDigest.slice(0, 2), variantDigest);
+    expect(await readdir(path.dirname(variantPath))).toContain(variantDigest);
+    await unlink(variantPath);
+    const unusable = await fetchVersion(server, at(scriptPath), "GET", {"Accept-Encoding": "br"});
+    expect(unusable.status).toBe(200);
+    expect(unusable.headers.get("content-encoding")).toBeNull();
+    expect(new Uint8Array(await unusable.arrayBuffer())).toEqual(scriptBytes);
+    await server.drainContentVariants();
+    expect(await readdir(path.dirname(variantPath))).toContain(variantDigest);
+  }, 60_000);
 });

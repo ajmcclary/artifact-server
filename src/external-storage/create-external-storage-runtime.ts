@@ -64,7 +64,9 @@ import {
 } from "../git-history/git-history-mirror.js";
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
-import {nodeContentEncoder} from "../http/node-content-encoder.js";
+import {ContentVariants} from "../application/content-variants.js";
+import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
+import {PostgresContentVariantIndex} from "../storage/postgres-content-variant-index.js";
 
 /** Configuration for one stateless Artifact Server process. */
 export interface ExternalStorageRuntimeConfig {
@@ -123,6 +125,7 @@ export async function createExternalStorageRuntime(
   }, "validate");
   let objectStorage: ObjectStorageProvider | null = null;
   let applicationRuntime: ApplicationRuntime | null = null;
+  let contentVariants: ContentVariants | null = null;
   let gitHistoryMonitor: GitHistoryCapabilityMonitor | null = null;
   let gitHistoryWorker: Awaited<ReturnType<typeof startGitHistoryMirrorWorker>> | null = null;
   try {
@@ -162,6 +165,27 @@ export async function createExternalStorageRuntime(
       repository: identityRepository,
     });
     const {blobs, staging} = connectedObjectStorage;
+    // Builds log through the application runtime, which exists only after the layer is built.
+    let variantLogRuntime: ApplicationRuntime | null = null;
+    contentVariants = new ContentVariants({
+      blobs,
+      compressor: nodeBrotliVariantCompressor,
+      index: new PostgresContentVariantIndex(database, config.installationId, runtimeClock),
+      log: (event) => {
+        variantLogRuntime?.runFork(Effect.logInfo("Content variant build finished.").pipe(
+          Effect.annotateLogs({
+            content_variant_duration_ms: Math.round(event.durationMilliseconds),
+            content_variant_error: event.error ?? "",
+            content_variant_outcome: event.outcome,
+            content_variant_source_bytes: event.sourceSize,
+            content_variant_source_sha256: event.sourceSha256,
+            content_variant_variant_bytes: event.variantSize ?? -1,
+          }),
+        ));
+      },
+      mode: "background",
+    });
+    const readyVariants = contentVariants;
     const applicationAdapters: Parameters<typeof createApplicationLayer>[0] = {
       apiToken: null,
       autoAdmitEmailDomains: config.autoAdmitEmailDomains,
@@ -208,6 +232,7 @@ export async function createExternalStorageRuntime(
     );
     await applicationRuntime.context();
     const readyRuntime = applicationRuntime;
+    variantLogRuntime = readyRuntime;
     if (
       configuredGitHistory !== null &&
       gitHistoryIdentityStore !== null &&
@@ -241,7 +266,7 @@ export async function createExternalStorageRuntime(
         config.completedRequestLogSampleRate ??
           defaultCompletedRequestLogSampleRate,
       contentDomain: config.contentDomain,
-      contentEncoder: nodeContentEncoder,
+      contentVariants: readyVariants,
       gitHistory: gitHistoryMonitor?.reader ??
         fixedGitHistoryCapabilityReader(gitHistory.capability),
       readiness: () => externalStorageReadiness(database, connectedObjectStorage),
@@ -271,12 +296,14 @@ export async function createExternalStorageRuntime(
       cleanupStaging: (limit) => runStagingCleanupPass(readyRuntime, limit),
       close: async () => {
         if (closeCleanupSchedule !== null) await closeCleanupSchedule();
+        await readyVariants.close();
         if (gitHistoryWorker !== null) await gitHistoryWorker.close();
         if (gitHistoryMonitor !== null) await gitHistoryMonitor.close();
         await readyRuntime.dispose();
       },
     };
   } catch (cause) {
+    if (contentVariants !== null) await contentVariants.close();
     if (gitHistoryWorker !== null) await gitHistoryWorker.close();
     if (gitHistoryMonitor !== null) await gitHistoryMonitor.close();
     if (applicationRuntime === null) {

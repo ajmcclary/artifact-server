@@ -30,6 +30,8 @@ export interface RunningLocalServer {
   readonly port: number;
   /** Withdraw readiness and gracefully drain accepted HTTP work. */
   close(): Promise<void>;
+  /** Runs every queued content-variant build. */
+  drainContentVariants(): Promise<void>;
 }
 
 export async function startLocalServer(
@@ -92,8 +94,9 @@ export async function startLocalServer(
   });
 
   return {
+    close,
+    drainContentVariants: () => runtime.drainContentVariants(),
     hostname: address.address,
     port: address.port,
-    close,
   };
 }
