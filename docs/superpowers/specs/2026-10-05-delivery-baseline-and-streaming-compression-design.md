@@ -72,9 +72,15 @@ Options:
 | `--target local` or `--target <https URL>` | Where to measure | `local` |
 | `--label <text>` | Names the run in the report filename, such as `before` or `after` | required |
 | `--samples <n>` | Samples per journey | 5 |
-| `--network <profile>` | Chrome DevTools Protocol (CDP) throttling profile; omitted means unthrottled | none |
 | `--deployment-revision <digest>` | Image digest recorded beside the detected `review-*.js` hash | none |
-| `--library-artifact`, `--prototype-artifact`, `--prototype-path` | Selects the hosted journey's artifact and entry page | the ExtractionKit artifact and its gallery entry |
+| `--prototype-url <Review URL>` | The hosted prototype to open, copied from the Library (ExtractionKit for this work) | required for hosted |
+| `--content-domain <domain>` | The hosted content domain, used to classify lease and version-content hosts | required for hosted |
+| `--state-root <directory>` | Where the session state and raw captures live | `~/.local/state/artifact-server/delivery` |
+| `--output <path>` | The sanitized report path | `project/evidence/delivery-baseline-<date>-<target>-<label>.json` |
+
+All runs are unthrottled and record the network as `unthrottled`. CDP
+throttling applies per target and does not reliably cover the out-of-process
+preview iframe, so a throttled profile would misstate the prototype journey.
 
 ### Targets
 
@@ -85,8 +91,9 @@ in. It saves Playwright storage state to
 Later runs reuse that state headlessly. An expired state prompts a new sign-in
 before any sample starts, never midway through a run.
 
-**Local.** The runner starts a compiled local server in a temporary directory
-and publishes a deterministic synthetic fixture shaped like ExtractionKit: one
+**Local.** The runner starts an in-process local server (the same harness the
+HTTP tests use, serving the compiled web bundle) in a temporary directory, signs
+in as the local owner without loading any application page, and publishes a deterministic synthetic fixture shaped like ExtractionKit: one
 HTML entry, a 1.7 MB JavaScript bundle, 1 MB of CSS, and 13 MB of seeded
 JSON-like JavaScript data split across three files, plus a preview index so the
 Library shows it. The report marks local runs as regression evidence whose
@@ -106,13 +113,18 @@ reach its ready signal within 120 seconds is recorded as a timeout, not dropped.
 
 ### Recorded per sample
 
-- Requests by route class: `app-shell`, `api`, `preview-lease`, `bootstrap`,
+- Requests by route class: `app-shell`, `api`, `preview-lease`,
+  `version-content` (content-domain hosts that are not leases), `bootstrap`,
   `external-cdn`, `other`.
-- Per class: request count, transferred bytes (CDP `encodedDataLength`),
+- Per class: request count, transferred bytes (Playwright's encoded response
+  body size),
   decoded body bytes, and the observed values of `Content-Encoding`,
   `Cache-Control`, `Vary`, and `Server-Timing`.
-- First contentful paint, the journey's ready time, and total time to ready.
-- Run context: target kind, browser version, network profile, cache state,
+- First contentful paint and the journey's ready time.
+- For local runs, the harness process's CPU time during the sample. The server
+  runs in that process, so the before/after difference approximates per-open
+  compression CPU.
+- Run context: target kind, browser version, cache state,
   detected `review-*.js` hash, optional deployment revision, sample index.
 
 The report aggregates each journey's samples into median, minimum, and maximum.
@@ -124,14 +136,17 @@ template (for example `/:artifact/:version/:path`, never a real path), the four
 allowlisted response headers above, and numbers. It never contains a URL,
 hostname, cookie, request header, query string, or body.
 
-Raw HAR files and traces go to
+Raw HAR files (recorded without bodies) go to
 `~/.local/state/artifact-server/delivery/<runId>/`, with the directory created
 `0700` and every file `0600`. The runner refuses any raw-output path that
 resolves inside the repository root.
 
 ### Output
 
-- `project/evidence/delivery-baseline-<date>-<label>.json`.
+- `project/evidence/delivery-baseline-<date>-<target>-<label>.json`.
+- Before writing, the runner collects every lease hostname, query value, cookie
+  value, and authorization value it saw and refuses to write a report containing
+  any of them.
 - A new "Browser delivery" section in `project/performance/FINDINGS.md` with the
   before and after tables and the per-open compression CPU measured locally.
 
@@ -153,12 +168,14 @@ Unit tests for the report builder and the classifier, with no browser:
 
 ### Components
 
-- `src/http/content-encoding-negotiation.ts`: the compressible media-type set,
-  the 1 KiB minimum, and `Accept-Encoding` negotiation, moved out of
-  `node-response-compression.ts` so both paths share one definition.
-- `src/http/streaming-content-encoding.ts`: a narrow `ContentEncoder` port,
-  `encode(body: ReadableStream<Uint8Array>, encoding: "br" | "gzip"): ReadableStream<Uint8Array>`,
-  and its `node:zlib` implementation adapted to web streams.
+- `src/http/content-encoding.ts`: the compressible media-type set, the 1 KiB
+  minimum, `Accept-Encoding` negotiation (moved out of
+  `node-response-compression.ts` so both paths share one definition), and the
+  narrow `ContentEncoder` port,
+  `encode(body: ReadableStream<Uint8Array>, coding: "br" | "gzip", sizeHint: number): ReadableStream<Uint8Array>`.
+- `src/http/node-content-encoder.ts`: the `node:zlib` implementation adapted to
+  web streams. Keeping it separate means the Workers bundle never imports
+  `node:zlib`.
 - `HttpAppDependencies.contentEncoder?: ContentEncoder`. The local and
   external-storage compositions inject the `node:zlib` implementation. The
   Workers composition injects nothing, so Workers responses are unchanged and
@@ -200,7 +217,9 @@ An identity response for a compressible type also carries
 `Vary: Accept-Encoding`. `HEAD` returns the headers its matching `GET` would
 return. A 304 is already produced for `If-None-Match: W/"<sha256>"`. A later
 `If-Range: W/"<sha256>"` fails the strong comparison required by RFC 9110 and
-receives an identity full response.
+receives an identity full response. A 304 never carries `Content-Encoding`, so
+a cache that holds the identity bytes cannot relabel them as encoded when it
+merges the 304's headers.
 
 ### Streaming, cancellation, and errors
 
@@ -281,8 +300,11 @@ Add CNT-010 to `project/spec/conformance.yml`:
     evidence: []
 ```
 
-Its status advances only for deployments with recorded evidence: local after
-the tests pass, and Kubernetes after the hosted after-run.
+Once the local test run passes, the ledger validator requires
+`behavior_verified` with local evidence (`project/evidence/local-foundation.json`).
+The hosted after-run is a browser observation, not a conformance test run, so
+it is recorded in FINDINGS and named in `proof_gap` rather than attached as
+Kubernetes ledger evidence.
 
 ## Sequence
 
