@@ -26,12 +26,14 @@ import opencodeDarkLogoUrl from "../assets/agents/opencode-dark.svg";
 import opencodeLightLogoUrl from "../assets/agents/opencode-light.svg";
 import piLogoUrl from "../assets/agents/pi.svg";
 import piLightLogoUrl from "../assets/agents/pi-light.svg";
+import {focusButtonStyle} from "./focus-mode.tsx";
 import {accessChangeWarning, changeArtifactAccess} from "./artifact-access.ts";
 
 type ShareScreen = "access" | "agents" | "overview";
 type ShareTarget = "latest" | "version";
 
 export interface SharePopoverProps {
+  readonly chrome?: "navy" | "workspace";
   readonly details: ArtifactDetails | null;
   readonly onArtifactChanged: (artifact: ArtifactDetails["artifact"]) => void;
   /** Opens the access controls elsewhere (the Details panel); without it Share edits access itself. */
@@ -87,6 +89,7 @@ const visuallyHiddenStyle = {
 
 /** Share one exact version from the review toolbar or the focus controls. */
 export function SharePopover({
+  chrome = "workspace",
   details,
   onArtifactChanged,
   onManageAccess,
@@ -172,8 +175,10 @@ export function SharePopover({
           ariaLabel="Share this version"
           disabled={details === null || selectedVersion === null}
           icon="bi-share"
-          size="sm"
+          size={chrome === "navy" ? "xs" : "sm"}
+          style={chrome === "navy" ? focusButtonStyle : {}}
           title="Share"
+          variant={chrome === "navy" ? "navy" : "ghost"}
         />
       )}
       width={380}

@@ -71,6 +71,7 @@ export interface PreviewCanvasProps {
   readonly emptyProject: ReactNode;
   /** The artboard width chosen in the toolbar, or null to fit the column. */
   readonly frameWidth: number | null;
+  readonly focusControls: ReactNode;
   /** A native design gallery that replaces the version's entry page, or null. */
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
   /** Explains why a version's gallery fell back to its entry page. */
@@ -170,6 +171,7 @@ export function PreviewCanvas({
   awaitingCatalog,
   emptyProject,
   frameWidth,
+  focusControls,
   gallery,
   galleryNotice,
   hasDetails,
@@ -204,7 +206,7 @@ export function PreviewCanvas({
         tabIndex={-1}
         width={focus ? null : frameWidth}
         {...(focus ? {
-          meta: version === null ? null : `v${version.version.number}`,
+          meta: <span style={{alignItems: "center", display: "inline-flex", gap: 8, minHeight: 20}}>{version === null ? null : `v${version.version.number}`}{focusControls}</span>,
           title: gallery?.title ?? path ?? artifactName,
         } : {})}
       >

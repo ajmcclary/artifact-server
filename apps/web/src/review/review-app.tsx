@@ -1041,6 +1041,7 @@ function ProjectReview({
   const comparisonOpen = comparisonView !== null && details !== null;
   const sharePopover = (placement: "focus" | "toolbar") => (
     <SharePopover
+      chrome={placement === "focus" ? "navy" : "workspace"}
       details={details}
       key={`${placement}-share-${details?.artifact.id ?? "empty"}`}
       onArtifactChanged={updateArtifact}
@@ -1267,6 +1268,25 @@ function ProjectReview({
                 awaitingCatalog={catalog.loading && catalog.items.length === 0}
                 detailLoading={detailLoading}
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
+                focusControls={focusMode ? (
+                  <FocusViewerControls
+                    annotate={annotateToggle}
+                    collapsed={focusControlsCollapsed}
+                    commentCount={openCommentCount}
+                    commentsOpen={focusCommentsOpen}
+                    commentsToggleRef={commentsToggleRef}
+                    onOpenRawArtifact={() => void openRawArtifact()}
+                    opening={opening}
+                    rawAvailable={selectedVersion !== null}
+                    onExit={exitFocusMode}
+                    onHide={hideFocusControls}
+                    onReturnToGallery={galleryCanvas.onReturnToGallery}
+                    onShow={showFocusControls}
+                    onToggleComments={() => setFocusCommentsOpen((open) => !open)}
+                    restoreRef={restoreControlsRef}
+                    share={sharePopover("focus")}
+                  />
+                ) : null}
                 frameWidth={artboardPreset?.px ?? null}
                 gallery={galleryCanvas.gallery}
                 galleryNotice={galleryCanvas.galleryNotice}
@@ -1322,23 +1342,6 @@ function ProjectReview({
             <FocusComments commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
               {commentsTab}
             </FocusComments>
-          ) : null}
-          {focusMode ? (
-            <FocusViewerControls
-              annotate={annotateToggle}
-              collapsed={focusControlsCollapsed}
-              commentCount={openCommentCount}
-              commentsOpen={focusCommentsOpen}
-              commentsToggleRef={commentsToggleRef}
-              download={download}
-              onExit={exitFocusMode}
-              onHide={hideFocusControls}
-              onReturnToGallery={galleryCanvas.onReturnToGallery}
-              onShow={showFocusControls}
-              onToggleComments={() => setFocusCommentsOpen((open) => !open)}
-              restoreRef={restoreControlsRef}
-              share={sharePopover("focus")}
-            />
           ) : null}
         </div>
       </div>

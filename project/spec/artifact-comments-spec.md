@@ -336,7 +336,10 @@ Review URL. Share remains unavailable until the selected version resolves.
 
 ### Complete version downloads
 
-Review provides **Download** in standard and full-screen modes. For an artifact
+Review provides **Download** in the standard view. Full-screen controls live in
+the slim navy preview title bar as borderless icons, with Share, Open raw, and
+Exit full screen in the same order as the standard view. Full-screen mode omits
+Download. For an artifact
 with one file, the action downloads that original file with its original base
 name. For an artifact with multiple files, the action downloads a ZIP that
 preserves every manifest path and byte from the selected immutable version.
@@ -434,7 +437,7 @@ Module `artifact-comments` (new entry in `allowed_modules`). Deployments `*all`.
 | CMT-013 | security | The version file route serves exact manifest-entry bytes to artifact-read principals with non-renderable headers on the app origin, and never on the content domain. | Anonymous, public-link, and read-incapable-key requests are denied; the response cannot render as a document on the app origin; unknown paths 404 without disclosure. |
 | CMT-014 | security | The Review annotation viewer executes artifact HTML only inside an opaque-origin sandboxed document that holds no credential; comment writes happen only in the signed-in app document. | Hostile artifact JavaScript cannot reach the app origin, the comment API, cookies, or storage from inside the annotation viewer. |
 | CMT-015 | behavior | Review routes use the dedicated artifact-first viewport shell, with comments and version navigation closed by default, compact version and linked-source context, responsive on-demand surfaces, sharing, and reversible focus mode. | Management chrome or a permanently open side surface cannot displace the artifact, narrow screens cannot make a docked panel crush the artifact, and focus mode cannot leave the viewer without a visible way back. |
-| CMT-021 | behavior | Review downloads one original file or a path-preserving ZIP of the selected immutable version in standard and full-screen modes. | Unauthorized or mismatched artifact, project, and version requests return no archive; downloading cannot open comments, change the selected version, or leave full-screen mode. |
+| CMT-021 | behavior | Review downloads one original file or a path-preserving ZIP of the selected immutable version in the standard view. | Unauthorized or mismatched artifact, project, and version requests return no archive; downloading cannot open comments, change the selected version, or leave full-screen mode. |
 | CMT-022 | security | Script-dependent HTML can run in an isolated Interactive preview of the exact selected version and switch back to the opaque-origin annotation viewer. | Interactive artifact code cannot access the application document or comment API; a private or historical preview cannot bypass its expiring exact-version lease; Interactive preview never gains annotation-bridge authority. |
 
 `SCP-003` is edited to keep notifications and workspace collaboration excluded. `PLN-003` moves comments and replies to Artifact Server's column and its acceptance tests are rewritten. `AUD-001` gains the six comment action kinds in its behavior test.

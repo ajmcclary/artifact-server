@@ -2956,7 +2956,7 @@ requirements:
         tests: [CMT-015-B, CMT-015-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-09-30T15:39:53.728Z"
+        recorded_at: "2026-10-05T14:38:50.693Z"
 
   - id: CMT-016
     kind: behavior
@@ -3060,11 +3060,11 @@ requirements:
 
   - id: CMT-021
     kind: behavior
-    behavior: Review downloads an artifact's selected immutable version in standard and full-screen modes; one-file versions return the original file, while multi-file versions return a streamed path-preserving ZIP without opening another Review panel.
+    behavior: Review downloads an artifact's selected immutable version in the standard view; one-file versions return the original file, while multi-file versions return a streamed path-preserving ZIP without opening another Review panel.
     owner: artifact-comments
     source: {file: artifact-comments-spec.md, anchor: complete-version-downloads}
     acceptance:
-      behavior: {id: CMT-021-B, description: "Download one-file and multi-file current and historical versions from standard and full-screen Review; verify original filenames, ZIP paths, exact bytes, stable archive metadata, and unchanged Review state."}
+      behavior: {id: CMT-021-B, description: "Download one-file and multi-file current and historical versions from standard Review, and verify full-screen controls omit Download; verify original filenames, ZIP paths, exact bytes, stable archive metadata, and unchanged Review state."}
       failure: {id: CMT-021-F, description: "Anonymous, unauthorized, cross-project, cross-artifact, and mismatched-version requests return no bytes, and downloading cannot open comments, change the selected version, or leave full-screen mode."}
     deployments: *all
     status: behavior_verified
@@ -3075,12 +3075,12 @@ requirements:
         tests: [CMT-021-B, CMT-021-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-03T16:08:06.755Z"
+        recorded_at: "2026-10-05T14:38:50.693Z"
       - deployment: local
         tests: [CMT-021-B, CMT-021-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-09-30T15:39:53.728Z"
+        recorded_at: "2026-10-05T14:38:50.693Z"
 
   - id: CMT-022
     kind: security

@@ -1,9 +1,8 @@
 import {useEffect, type CSSProperties, type ReactNode, type RefObject} from "react";
 
-import {Button, CountBadge, IconButton, SlideOver, Toolbar} from "@/arkcase";
+import {CountBadge, IconButton, SlideOver, Toolbar} from "@/arkcase";
 
 import type {AnnotateToggle} from "./review-toolbar.tsx";
-import type {ReviewDownload} from "./workspace-types.ts";
 
 export interface FocusViewerControlsProps {
   readonly annotate: AnnotateToggle;
@@ -14,7 +13,9 @@ export interface FocusViewerControlsProps {
   readonly commentsOpen: boolean;
   /** Wraps the Comments toggle so the review can return focus to it. */
   readonly commentsToggleRef: RefObject<HTMLSpanElement | null>;
-  readonly download: ReviewDownload | null;
+  readonly onOpenRawArtifact: () => void;
+  readonly opening: boolean;
+  readonly rawAvailable: boolean;
   readonly onExit: () => void;
   readonly onHide: () => void;
   readonly onShow: () => void;
@@ -32,26 +33,21 @@ export interface FocusCommentsProps {
   readonly onClose: () => void;
 }
 
-const controlsDockStyle = {position: "absolute", right: 12, top: 12, zIndex: 3} satisfies CSSProperties;
-const controlsStyle = {
-  background: "var(--surface-card)",
-  border: "1px solid var(--border-color-strong)",
-  borderRadius: "var(--radius-lg, 8px)",
-  boxShadow: "var(--shadow-lg)",
-  padding: 4,
-} satisfies CSSProperties;
-const restoreStyle = {display: "inline-flex", position: "absolute", right: 12, top: 12, zIndex: 3} satisfies CSSProperties;
-const commentsDockStyle = {bottom: 0, display: "flex", position: "absolute", right: 0, top: 0, zIndex: 2} satisfies CSSProperties;
+export const focusButtonStyle = {background: "transparent", height: 20} satisfies CSSProperties;
+const controlsStyle = {background: "transparent", padding: 0} satisfies CSSProperties;
+const commentsDockStyle = {bottom: 0, display: "flex", position: "absolute", right: 0, top: 34, zIndex: 2} satisfies CSSProperties;
 const inlineStyle = {display: "inline-flex"} satisfies CSSProperties;
 
-/** The floating controls of the expanded workspace; hidden, they leave a single restore button. */
+/** Compact controls in the expanded preview title bar; hidden, they leave a restore button. */
 export function FocusViewerControls({
   annotate,
   collapsed,
   commentCount,
   commentsOpen,
   commentsToggleRef,
-  download,
+  onOpenRawArtifact,
+  opening,
+  rawAvailable,
   onExit,
   onHide,
   onReturnToGallery,
@@ -62,76 +58,67 @@ export function FocusViewerControls({
 }: FocusViewerControlsProps) {
   return (
     <>
-      <div hidden={collapsed} style={controlsDockStyle}>
-        <Toolbar gap={6} label="Artifact viewer controls" style={controlsStyle}>
+      <div hidden={collapsed}>
+        <Toolbar gap={4} label="Artifact viewer controls" style={controlsStyle} variant="navy">
           {onReturnToGallery === null ? null : (
-            <Button icon="bi-grid-3x3-gap" onClick={onReturnToGallery} outline size="sm" title="Back to gallery" variant="secondary">
-              Back to gallery
-            </Button>
+            <IconButton ariaLabel="Back to gallery" icon="bi-arrow-left" onClick={onReturnToGallery} size="xs" style={focusButtonStyle} variant="navy" />
           )}
           {annotate.available ? (
-            <Button
+            <IconButton
+              ariaLabel={annotate.active ? "Annotate mode" : "Interact mode"}
               icon="bi-pencil-square"
               onClick={annotate.onToggle}
-              outline
               pressed={annotate.active}
-              size="sm"
+              size="xs"
+              style={focusButtonStyle}
               title={annotate.active
                 ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
                 : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
-              variant="secondary"
-            >
-              {annotate.active ? "Annotate mode" : "Interact mode"}
-            </Button>
+              variant="navy"
+            />
           ) : null}
           <span ref={commentsToggleRef} style={inlineStyle}>
-            <Button
+            <IconButton
               aria-controls={commentsOpen ? "review-focus-comments" : undefined}
+              ariaLabel="Comments"
+              count={commentCount}
+              countLabel={`${commentCount} open threads`}
               expanded={commentsOpen}
               icon="bi-chat-square-text"
               keyshortcuts="]"
               onClick={onToggleComments}
-              outline
-              size="sm"
+              size="xs"
+              style={focusButtonStyle}
               title="Toggle comments (])"
-              variant="secondary"
-            >
-              Comments <CountBadge count={commentCount} tone="primary" />
-            </Button>
+              variant="navy"
+            />
           </span>
           {share}
-          {download === null ? (
-            <Button aria-label="Download" disabled icon="bi-download" outline size="sm" variant="secondary">Download</Button>
-          ) : (
-            <Button
-              aria-label="Download"
-              download
-              href={download.href}
-              icon="bi-download"
-              outline
-              size="sm"
-              title={download.title}
-              variant="secondary"
-            >
-              Download
-            </Button>
-          )}
-          <Button icon="bi-fullscreen" keyshortcuts="F" onClick={onExit} size="sm" title="Exit full screen (F)">
-            Exit full screen
-          </Button>
-          <IconButton ariaLabel="Hide viewer controls" icon="bi-chevron-bar-right" onClick={onHide} size="sm" />
+          <IconButton
+            ariaLabel={opening ? "Opening raw in a new window" : "Open raw in a new window"}
+            disabled={!rawAvailable || opening}
+            icon="bi-box-arrow-up-right"
+            onClick={onOpenRawArtifact}
+            size="xs"
+            style={focusButtonStyle}
+            title="Open raw"
+            variant="navy"
+          />
+          <IconButton ariaLabel="Exit full screen" icon="bi-arrows-angle-contract" keyshortcuts="F" onClick={onExit} size="xs" style={focusButtonStyle} title="Exit full screen (F)" variant="navy" />
+          <IconButton ariaLabel="Hide viewer controls" icon="bi-chevron-bar-right" onClick={onHide} size="xs" style={focusButtonStyle} variant="navy" />
         </Toolbar>
       </div>
       {collapsed ? (
-        <span ref={restoreRef} style={restoreStyle}>
+        <span ref={restoreRef} style={inlineStyle}>
           <IconButton
             ariaLabel="Show viewer controls"
             icon="bi-chevron-bar-left"
             keyshortcuts="Meta+\ Control+\"
             onClick={onShow}
-            size="sm"
+            size="xs"
+            style={focusButtonStyle}
             title="Show viewer controls (Command/Control + \)"
-            variant="light"
+            variant="navy"
           />
         </span>
       ) : null}

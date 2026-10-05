@@ -54,6 +54,22 @@ test.describe("Artifact review full screen", () => {
       await page.keyboard.press("f");
       const controls = page.getByRole("toolbar", {name: "Artifact viewer controls"});
       await expect(controls).toBeVisible();
+      await expect(page.locator("[data-preview-bar]").getByRole("toolbar", {name: "Artifact viewer controls"})).toBeVisible();
+      expect(await page.locator("[data-preview-bar]").evaluate((bar) => bar.getBoundingClientRect().height)).toBeLessThanOrEqual(36);
+      const share = controls.getByRole("button", {name: "Share this version", exact: true});
+      const raw = controls.getByRole("button", {name: "Open raw in a new window", exact: true});
+      const exit = controls.getByRole("button", {name: "Exit full screen"});
+      expect((await share.boundingBox())?.x).toBeLessThan((await raw.boundingBox())?.x ?? 0);
+      expect((await raw.boundingBox())?.x).toBeLessThan((await exit.boundingBox())?.x ?? 0);
+      const buttonStyles = await controls.getByRole("button").evaluateAll((buttons) => buttons.map((element) => ({background: getComputedStyle(element).backgroundColor, border: getComputedStyle(element).borderWidth})));
+      expect(buttonStyles.every((style) => style.background === "rgba(0, 0, 0, 0)" && style.border === "0px")).toBe(true);
+      await page.screenshot({path: "test-results/browser/focus-titlebar-desktop.png"});
+      await page.setViewportSize({width: 390, height: 844});
+      await expect(controls.getByRole("button", {name: "Exit full screen"})).toBeInViewport();
+      await expect(controls.getByRole("button", {name: "Hide viewer controls"})).toBeInViewport();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+      await page.screenshot({path: "test-results/browser/focus-titlebar-phone.png"});
+      await page.setViewportSize(viewport);
       await expect(controls.getByRole("button", {name: "Exit full screen"})).toHaveAttribute("aria-keyshortcuts", "F");
       expect(new URL(page.url()).searchParams.get("view")).toBe("focus");
       await expect(page.getByRole("complementary", {name: "Artifact catalog"})).toHaveCount(0);
@@ -74,8 +90,7 @@ test.describe("Artifact review full screen", () => {
       await page.keyboard.press("]");
       await expect(focusComments.getByRole("article", {name: /^Comment by /u}).filter({hasText: "Full screen seeded thread"}))
         .toBeVisible();
-      await page.getByRole("region", {name: "Artifact preview"}).focus();
-      await page.keyboard.press("Escape");
+      await controls.getByRole("button", {name: /^Comments/u}).click();
       await expect(focusComments).toHaveCount(0);
 
       // Commenting in full screen keeps the canvas uninterrupted until asked.

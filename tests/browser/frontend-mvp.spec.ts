@@ -605,7 +605,7 @@ test.describe("Artifact Server frontend MVP", () => {
     }
   });
 
-  test("CMT-021-B CMT-021-F: Review downloads the selected version in standard and full-screen modes without opening comments", async ({browser}) => {
+  test("CMT-021-B CMT-021-F: Review downloads the selected version in the standard view and omits Download in full screen", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const downloadFixture = await publishReviewDownloadFixture(fixture);
@@ -643,22 +643,8 @@ test.describe("Artifact Server frontend MVP", () => {
         name: "Comments",
       });
       await expect(focusComments).toBeHidden();
-      const focusDownload = focusControls.getByRole("link", {
-        exact: true,
-        name: "Download",
-      });
-      await expect(focusDownload).toHaveAttribute(
-        "title",
-        "Download 2 files as a ZIP",
-      );
-      const [focusArchive] = await Promise.all([
-        fixture.page.waitForEvent("download"),
-        focusDownload.click(),
-      ]);
-      expectDownloadArchive(
-        await requiredDownloadBytes(focusArchive.path()),
-        downloadFixture.files,
-      );
+      await expect(focusControls.getByRole("link", {name: "Download", exact: true})).toHaveCount(0);
+      await expect(focusControls.getByRole("button", {name: "Download", exact: true})).toHaveCount(0);
       await expect(focusComments).toBeHidden();
       await expect(
         fixture.page.getByRole("button", {name: "Exit full screen"}),
