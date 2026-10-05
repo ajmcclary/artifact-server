@@ -1,3 +1,4 @@
+import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import {existsSync} from "node:fs";
 import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
@@ -15,6 +16,7 @@ import {publishPath} from "../../src/client/file-publication-client.js";
 import {
   createTestInstallation,
   removeTestInstallation,
+  reserveLoopbackPort,
   startTestServer,
 } from "../../tests/support/runtime-harness.js";
 import {ContentNetworkMonitor, ExchangeRecorder, measureSample} from "./delivery/browser-capture.js";
@@ -46,6 +48,8 @@ import {captureMeasurementContext} from "./measurement-context.js";
 const viewport = {height: 1000, width: 1680} as const;
 const signInTimeoutMilliseconds = 300_000;
 const sessionCheckTimeoutMilliseconds = 15_000;
+const signInPollMilliseconds = 2_000;
+const chromeExecutable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const optionsSchema = z.object({
   contentDomain: z.string().min(1).optional(),
@@ -148,21 +152,70 @@ async function sessionStillValid(browser: Browser, application: URL, statePath: 
   }
 }
 
+/** Retries until a just-launched Chrome accepts a DevTools connection. */
+async function connectToChrome(port: number, deadline: number): Promise<Browser> {
+  try {
+    return await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  } catch (error) {
+    if (performance.now() >= deadline) throw error;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250);
+    });
+    return connectToChrome(port, deadline);
+  }
+}
+
+/** Polls the application's session endpoint until the person in the window has signed in. */
+async function waitForSignedIn(context: BrowserContext, application: URL, deadline: number): Promise<void> {
+  const response = await context.request.get(new URL("/api/v1/session", application).toString());
+  if (response.ok()) return;
+  if (performance.now() >= deadline) throw new Error("Sign-in did not complete within 5 minutes.");
+  await new Promise((resolve) => {
+    setTimeout(resolve, signInPollMilliseconds);
+  });
+  await waitForSignedIn(context, application, deadline);
+}
+
+function belongsTo(application: URL, cookieDomain: string): boolean {
+  const domain = cookieDomain.replace(/^\./u, "");
+  return application.hostname === domain || application.hostname.endsWith(`.${domain}`);
+}
+
+/**
+ * Sign-in pages refuse automated browsers, so the person signs in through an
+ * ordinary Chrome window on a private profile. Only after the session exists
+ * does the harness read that profile's application cookies over DevTools.
+ */
 async function ensureHostedSession(browser: Browser, application: URL, statePath: string): Promise<void> {
   if (await sessionStillValid(browser, application, statePath)) return;
-  const headed = await chromium.launch({headless: false});
+  const profile = path.join(path.dirname(statePath), "chrome-sign-in-profile");
+  await mkdir(profile, {mode: 0o700, recursive: true});
+  const port = await reserveLoopbackPort();
+  const chrome = spawn(chromeExecutable, [
+    `--user-data-dir=${profile}`,
+    `--remote-debugging-port=${port}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    new URL("/review", application).toString(),
+  ], {stdio: "ignore"});
   try {
-    const context = await headed.newContext({viewport});
-    const page = await context.newPage();
-    await page.goto(new URL("/review", application).toString());
-    process.stdout.write("Sign in to the hosted server in the opened browser window. Waiting up to 5 minutes.\n");
-    await page.getByRole("link", {name: "Artifact Server"}).waitFor({state: "visible", timeout: signInTimeoutMilliseconds});
-    if (new URL(page.url()).origin !== application.origin) {
-      throw new Error("Sign-in did not return to the measured server.");
+    process.stdout.write("Sign in to the hosted server in the Chrome window that opened. Waiting up to 5 minutes.\n");
+    const deadline = performance.now() + signInTimeoutMilliseconds;
+    const connected = await connectToChrome(port, performance.now() + 15_000);
+    try {
+      const [context] = connected.contexts();
+      if (context === undefined) throw new Error("Chrome exposed no browser context.");
+      await waitForSignedIn(context, application, deadline);
+      const state = await context.storageState();
+      await writePrivateFile(statePath, JSON.stringify({
+        cookies: state.cookies.filter((cookie) => belongsTo(application, cookie.domain)),
+        origins: state.origins.filter((origin) => origin.origin === application.origin),
+      }));
+    } finally {
+      await connected.close();
     }
-    await writePrivateFile(statePath, JSON.stringify(await context.storageState()));
   } finally {
-    await headed.close();
+    chrome.kill();
   }
 }
 
