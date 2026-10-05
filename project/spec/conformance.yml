@@ -1365,6 +1365,25 @@ requirements:
     depends_on: []
     evidence: []
 
+  - id: CNT-010
+    kind: behavior
+    behavior: Eligible full content responses are compressed when the client accepts it, without buffering the artifact, while range requests and refusals stay on the identity representation.
+    owner: content-delivery
+    source: {file: artifact-server-product-spec.html, anchor: architecture}
+    acceptance:
+      behavior: {id: CNT-010-B, description: "Serve an eligible full GET as br or gzip that decodes to the exact stored bytes, with consistent HEAD, 304, Vary, and weak validator behavior."}
+      failure: {id: CNT-010-F, description: "Range, If-Range, identity or q=0 refusals, and non-compressible types are served identity with ranges intact; a disconnect stops the storage read; concurrent large reads stay within the memory bound."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local conformance tests prove streaming compression and identity fallbacks. Cloudflare relies on edge compression and needs its own live qualification, which this work does not authorize. Team-deployment conformance runs are unrecorded; the hosted delivery observation is recorded in project/performance/FINDINGS.md.
+    depends_on: [CNT-008]
+    evidence:
+      - deployment: local
+        tests: [CNT-010-B, CNT-010-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-05T20:36:17.696Z"
+
   - id: VER-001
     kind: behavior
     behavior: Each intentional publish creates a new immutable version, the stable artifact link opens the current version, and an exact version link never changes.

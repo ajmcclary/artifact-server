@@ -1,8 +1,8 @@
 {
   "arch": "arm64",
   "availableParallelism": 10,
-  "capturedAt": "2026-10-05T14:46:08.261Z",
-  "commit": "315fe23f4ce7ec632ba05f16684dea9a8f35fc01",
+  "capturedAt": "2026-10-05T20:50:38.799Z",
+  "commit": "8c52133d3290cecd999e4a45e5b848bf8e4001dd",
   "cpu": "Apple M1 Max",
   "details": {
     "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
