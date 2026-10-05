@@ -89,7 +89,8 @@ const program = new Command()
 
 async function startLocalTarget(): Promise<DeliveryTarget> {
   const installation = await createTestInstallation();
-  const server = await startTestServer(installation);
+  // Production builds variants in the background; the harness measures that behavior.
+  const server = await startTestServer(installation, {contentVariantBuilds: "background"});
   const fixture = await mkdtemp(path.join(tmpdir(), "delivery-baseline-fixture-"));
   try {
     await writeSyntheticPrototype(fixture);
@@ -102,6 +103,8 @@ async function startLocalTarget(): Promise<DeliveryTarget> {
         target: {accessSetting: "account_required", kind: "new_artifact", name: "Synthetic delivery prototype", tags: []},
       },
     ).pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)));
+    // Sample after the publish-queued builds finish, as a reviewer opening later would.
+    await server.drainContentVariants();
     const application = new URL(server.baseUrl);
     const prototypeUrl = new URL("/review", application);
     prototypeUrl.searchParams.set("project", "prj_default");

@@ -2738,8 +2738,8 @@ v12-7f3a.content.example.net</code></pre>
                   requests; a missing JavaScript, stylesheet, image, or other asset still returns
                   404. Responses use an explicit media type, <code>nosniff</code>, ETag, and safe
                   download disposition. Media supports byte ranges. Eligible text responses are
-                  compressed when the browser accepts it; byte-range requests always receive the
-                  uncompressed bytes.
+                  served from a stored Brotli copy when one exists and the browser accepts it;
+                  byte-range requests always receive the uncompressed bytes.
                 </p>
               </div>
             </details>

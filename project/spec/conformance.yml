@@ -1367,22 +1367,41 @@ requirements:
 
   - id: CNT-010
     kind: behavior
-    behavior: Eligible full content responses are compressed when the client accepts it, without buffering the artifact, while range requests and refusals stay on the identity representation.
+    behavior: Eligible full content responses are served from a stored Brotli variant when one exists and the client accepts it, and otherwise as identity, while range requests and refusals always stay on the identity representation.
     owner: content-delivery
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
-      behavior: {id: CNT-010-B, description: "Serve an eligible full GET as br or gzip that decodes to the exact stored bytes, with consistent HEAD, 304, Vary, and weak validator behavior."}
-      failure: {id: CNT-010-F, description: "Range, If-Range, identity or q=0 refusals, and non-compressible types are served identity with ranges intact; a disconnect stops the storage read; concurrent large reads stay within the memory bound."}
+      behavior: {id: CNT-010-B, description: "Serve an eligible full GET as identity before its variant exists and as stored br with a real Content-Length afterwards, decoding to the exact stored bytes, with consistent HEAD, 304, Vary, and weak validator behavior."}
+      failure: {id: CNT-010-F, description: "Range, If-Range, gzip-only, identity or q=0 refusals, small and non-compressible entries are served identity with ranges intact; a 304 never carries Content-Encoding; a mapped variant whose blob is missing is served identity and rebuilt."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local conformance tests prove streaming compression and identity fallbacks. Cloudflare relies on edge compression and needs its own live qualification, which this work does not authorize. Team-deployment conformance runs are unrecorded; the hosted delivery observation (80% less transfer, ready time unchanged, server compression throughput now limiting) is recorded in project/performance/FINDINGS.md.
+    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded.
     depends_on: [CNT-008]
     evidence:
       - deployment: local
         tests: [CNT-010-B, CNT-010-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-05T21:17:27.626Z"
+        recorded_at: "2026-10-05T22:24:32.912Z"
+
+  - id: CNT-011
+    kind: behavior
+    behavior: Compressed content variants are derived once per source digest and encoder, after publish, on a read miss, or by the backfill command, and are stored only when they save at least 10 percent.
+    owner: content-delivery
+    source: {file: artifact-server-product-spec.html, anchor: architecture}
+    acceptance:
+      behavior: {id: CNT-011-B, description: "Publish and observe stored br variants within a bounded wait; run the backfill and see built counts, then all skipped on a second run; variant mappings survive a restart."}
+      failure: {id: CNT-011-F, description: "Incompressible text stores no variant and stays identity; a source over 64 MiB is skipped; a conflicting mapping is rejected; building a 60 MiB entry stays within the resident memory bound."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded.
+    depends_on: [CNT-010]
+    evidence:
+      - deployment: local
+        tests: [CNT-011-B, CNT-011-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-05T22:24:32.912Z"
 
   - id: VER-001
     kind: behavior
