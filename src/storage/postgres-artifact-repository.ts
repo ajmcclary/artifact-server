@@ -180,6 +180,8 @@ import {
 } from "../git-history/git-history-mirror.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../git-history/git-history-capability.js";
+import type {LibraryDatesRequest, LibraryDatesStore, LibraryPageDates} from "../core/library.js";
+import {libraryDatesParameter, mergeLibraryDates} from "./library-dates-sqlite.js";
 
 const accessSettingSchema = z.enum([
   accessSettings.accountRequired,
@@ -571,6 +573,81 @@ interface ChangedCommentThreadValues {
 }
 
 /** Installation-scoped Postgres persistence for artifacts and browser content sessions. */
+const libraryManifestRowSchema = z.object({
+  artifactId: z.string(),
+  changedAt: z.string(),
+  createdAt: z.string(),
+  path: z.string(),
+});
+
+const libraryCommentRowSchema = z.object({
+  artifactId: z.string(),
+  commentedAt: z.string(),
+  path: z.string(),
+});
+
+const postgresLibraryRequested = `
+  requested AS (
+    -- Record columns take the JSON parameter's own key names.
+    SELECT requested."artifactId" AS artifact_id, requested."currentNumber" AS current_number, requested.paths
+    FROM jsonb_to_recordset($1::jsonb) AS requested("artifactId" text, "currentNumber" int, paths jsonb)
+  ),
+  wanted AS (
+    SELECT requested.artifact_id, wanted_path AS path
+    FROM requested, jsonb_array_elements_text(requested.paths) AS wanted_path
+  )`;
+
+/** Page created/changed times; see library-dates-sqlite.ts for the shared semantics. */
+const postgresLibraryManifestDatesSql = `
+  WITH ${postgresLibraryRequested},
+  ranked AS (
+    SELECT version.id, version.artifact_id, version.created_at,
+           ROW_NUMBER() OVER (PARTITION BY version.artifact_id ORDER BY version.number) AS rank
+    FROM versions AS version
+    JOIN requested ON requested.artifact_id = version.artifact_id
+    WHERE version.installation_id = $2 AND version.number <= requested.current_number
+  ),
+  present AS (
+    SELECT ranked.artifact_id, entry.path, ranked.rank, ranked.created_at, entry.sha256
+    FROM ranked
+    JOIN manifest_entries AS entry ON entry.installation_id = $2 AND entry.version_id = ranked.id
+    JOIN wanted ON wanted.artifact_id = ranked.artifact_id AND wanted.path = entry.path
+  ),
+  flagged AS (
+    SELECT artifact_id, path, created_at,
+           CASE WHEN LAG(rank) OVER page IS NULL
+                  OR LAG(rank) OVER page <> rank - 1
+                  OR LAG(sha256) OVER page <> sha256
+                THEN 1 ELSE 0 END AS changed
+    FROM present
+    WINDOW page AS (PARTITION BY artifact_id, path ORDER BY rank)
+  )
+  SELECT artifact_id AS "artifactId", path, MIN(created_at) AS "createdAt",
+         MAX(CASE WHEN changed = 1 THEN created_at END) AS "changedAt"
+  FROM flagged GROUP BY artifact_id, path`;
+
+/** The newest thread or reply time per page over threads on the considered versions. */
+const postgresLibraryCommentDatesSql = `
+  WITH ${postgresLibraryRequested},
+  threads AS (
+    SELECT thread.id, thread.artifact_id, thread.path, thread.created_at
+    FROM comment_threads AS thread
+    JOIN versions AS version ON version.installation_id = $2 AND version.id = thread.version_id
+    JOIN requested ON requested.artifact_id = thread.artifact_id
+    JOIN wanted ON wanted.artifact_id = thread.artifact_id AND wanted.path = thread.path
+    WHERE thread.installation_id = $2 AND version.number <= requested.current_number
+  ),
+  times AS (
+    SELECT artifact_id, path, created_at AS at FROM threads
+    UNION ALL
+    SELECT threads.artifact_id, threads.path, reply.created_at
+    FROM comment_replies AS reply
+    JOIN threads ON threads.id = reply.thread_id
+    WHERE reply.installation_id = $2
+  )
+  SELECT artifact_id AS "artifactId", path, MAX(at) AS "commentedAt"
+  FROM times GROUP BY artifact_id, path`;
+
 export class PostgresArtifactRepository implements
   ActivityLog,
   AgentDispatchRepository,
@@ -578,6 +655,7 @@ export class PostgresArtifactRepository implements
   CommentRepository,
   ContentSessionRepository,
   GitHistoryMirrorStore,
+  LibraryDatesStore,
   ProjectRepository,
   StagedUploadRepository
 {
@@ -644,6 +722,22 @@ export class PostgresArtifactRepository implements
 
   async findProject(projectId: string): Promise<ProjectRecord | null> {
     return this.#database.run(this.#readProjectOrNull(projectId));
+  }
+
+  async libraryPageDates(requests: readonly LibraryDatesRequest[]): Promise<readonly LibraryPageDates[]> {
+    if (requests.length === 0) return [];
+    const installationId = this.#installationId;
+    const parameter = libraryDatesParameter(requests);
+    const [manifestRows, commentRows] = await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const manifest = yield* sql.unsafe<object>(postgresLibraryManifestDatesSql, [parameter, installationId]);
+      const comments = yield* sql.unsafe<object>(postgresLibraryCommentDatesSql, [parameter, installationId]);
+      return [manifest, comments] as const;
+    }));
+    return mergeLibraryDates(
+      libraryManifestRowSchema.array().parse(manifestRows),
+      libraryCommentRowSchema.array().parse(commentRows),
+    );
   }
 
   async listProjects(): Promise<readonly ProjectRecord[]> {

@@ -135,6 +135,13 @@ import {
   registeredAgentRetentionMilliseconds,
 } from "../../../src/core/publishing-limits.js";
 import {createManifest} from "../../../src/manifest/create-manifest.js";
+import type {LibraryDatesRequest, LibraryDatesStore, LibraryPageDates} from "../../../src/core/library.js";
+import {
+  libraryDatesParameter,
+  mergeLibraryDates,
+  sqliteLibraryCommentDatesSql,
+  sqliteLibraryManifestDatesSql,
+} from "../../../src/storage/library-dates-sqlite.js";
 import {
   publicLinkInventoryRowSchema,
   publicLinkPageFromRows,
@@ -649,10 +656,23 @@ interface PageResult<Item> {
   readonly nextCursor: PageCursor | null;
 }
 
+const libraryManifestRowSchema = z.object({
+  artifactId: z.string(),
+  changedAt: z.string(),
+  createdAt: z.string(),
+  path: z.string(),
+});
+
+const libraryCommentRowSchema = z.object({
+  artifactId: z.string(),
+  commentedAt: z.string(),
+  path: z.string(),
+});
+
 export type D1ArtifactRepository = ActivityLog & AgentDispatchRepository & ArtifactRepository &
   CommentRepository & ContentSessionRepository & ProjectRepository &
   ProjectGitHistoryStore & GitHistoryMirrorStore & GitHistoryPurgeStore &
-  StagedUploadRepository & {
+  StagedUploadRepository & LibraryDatesStore & {
     readonly listPublicLinks: (
       command: ListPublicLinks,
     ) => Promise<PublicLinkInventoryPage>;
@@ -1662,6 +1682,20 @@ export function createD1ArtifactRepository(
   return {
     assertPublicationSourceReady: assertSourceReady,
     close: () => undefined,
+
+    libraryPageDates: async (requests: readonly LibraryDatesRequest[]): Promise<readonly LibraryPageDates[]> => {
+      if (requests.length === 0) return [];
+      // One JSON parameter: D1 caps bound parameters per statement.
+      const parameter = libraryDatesParameter(requests);
+      const [manifest, comments] = await Promise.all([
+        database.prepare(sqliteLibraryManifestDatesSql).bind(parameter).all(),
+        database.prepare(sqliteLibraryCommentDatesSql).bind(parameter).all(),
+      ]);
+      return mergeLibraryDates(
+        libraryManifestRowSchema.array().parse(manifest.results),
+        libraryCommentRowSchema.array().parse(comments.results),
+      );
+    },
 
     createProject: async (command: CreateProject) => {
       if (command.installationId !== installationId) {
