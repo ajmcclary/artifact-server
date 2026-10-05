@@ -90,7 +90,7 @@ As documented October 5, Artifacts billing begins October 14, 2026 and requires 
 
 ## Setup and operational handoff
 
-Use the existing checkout at `~/artifact-server`; there is no separate `~/artifacts-server` checkout. The background implementation is using branch `delivery-compression`. Commit only this document on that active branch without switching the background agent's checkout; it can follow that branch into main with the implementation.
+Use the existing checkout at `~/artifact-server`; there is no separate `~/artifacts-server` checkout. The background implementation initially used `delivery-compression`, then moved the checkout to `main` before the setup-status commit. The document and verified namespace status are committed on main; changes to unrelated implementation files were preserved.
 
 Account ID: `ee625e5e88a18eea4402075704d78f9f`.
 
@@ -99,11 +99,14 @@ Account ID: `ee625e5e88a18eea4402075704d78f9f`.
 | `artifact-server-production` namespace | Derived private Git history for this installation | Created and verified; zero repositories |
 | `artifact-server-test-qualification` namespace | Exact, run-prefixed repositories for bounded live qualification | Created and verified; zero repositories |
 | Separate writable workspace namespace | Future editable agent forks and build triggers | Deferred until that capability is designed |
-| Dedicated Artifacts control-plane credential | Node REST/Git integration | Pending secure provisioning or existing credential verification |
+| `artifact-server-artifacts-production` account API token | Node REST/Git integration; Artifacts Read/Write only; expiry November 4, 2026 | Draft reviewed in dashboard; creation awaits explicit credential confirmation |
+| `artifact-server-artifacts-qualification` account API token | Separate revocable qualification credential; Artifacts Read/Write only; expiry October 12, 2026 | Draft reviewed in dashboard; creation awaits explicit credential confirmation |
 | Provider configuration and mounted secret | Current Kubernetes/Node deployment | Not enabled by namespace creation |
 | Project Git-history setting | Administrator opt-in after estimate and qualification | Not enabled by namespace creation |
 
 The dashboard namespace form exposed only the name and no jurisdiction selector. No US/EU jurisdiction restriction was selected or verified. The namespace-list screenshot is stored outside the repository at `~/Documents/Codex/2026-10-05/cloudflare-artifacts-setup/namespaces.jpg`.
+
+Both token drafts are restricted to this Cloudflare account and have no DNS, Workers, billing, or other permission groups. Their Artifacts Read/Write policy applies across this account's Artifacts resources; namespace isolation is also enforced by the application's configured adapter and dedicated qualification namespace. No IP filter is configured in the drafts. Neither credential has been created, exposed, stored, mounted, or used. The reviewed policies are saved outside Git as `production-token-review.jpg` and `qualification-token-review.jpg` beside the namespace screenshot. Creating persistent credentials requires confirmation at the final browser action.
 
 Next operational steps:
 
