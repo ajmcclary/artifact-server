@@ -966,6 +966,20 @@ const addMemberAdmissionAndActivity = Effect.gen(function*() {
   for (const statement of statements) yield* sql.unsafe(statement);
 });
 
+const addContentVariants = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`CREATE TABLE IF NOT EXISTS content_variants (
+    installation_id TEXT NOT NULL REFERENCES artifact_installations(id),
+    source_sha256 TEXT NOT NULL,
+    coding TEXT NOT NULL CHECK (coding = 'br'),
+    encoder_id TEXT NOT NULL,
+    variant_sha256 TEXT NOT NULL,
+    variant_size BIGINT NOT NULL CHECK (variant_size >= 0),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (installation_id, source_sha256, coding, encoder_id)
+  )`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -986,10 +1000,11 @@ const migrationLoader = Migrator.fromRecord({
   "0017_staged_upload_cleanup_claim": addStagedUploadCleanupClaim,
   "0018_installation_activity_log": addInstallationActivityLog,
   "0019_member_admission_and_activity": addMemberAdmissionAndActivity,
+  "0020_content_variants": addContentVariants,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 19;
+export const requiredPostgresSchemaVersion = 20;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1101,6 +1116,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 19,
     name: "member_admission_and_activity",
+  }, {
+    migration_id: 20,
+    name: "content_variants",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,
