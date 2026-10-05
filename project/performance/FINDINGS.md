@@ -538,3 +538,54 @@ After:
 - **The Library's cold median moved from 33 s to 22 s, but compression does not cause it.** Library API responses were already compressed by the buffering wrapper, and the Library loads no lease content. The change reflects variance between hosted sessions (before ranged 24–77 s). The Library remains the slowest journey, at about 180 requests per open, and needs the server-side catalog (PLAN.md step 1), not compression.
 - **Every open still transfers and compresses again.** Preview leases are `private, no-store`, and each Review open mints a new lease origin, so a warm open repeats the full transfer and the full compression work. Precompressed variants keyed by digest and coding (deferred approach 2) would remove both the per-open CPU and the throughput ceiling above. Whether the browser can reuse bytes across opens is the separate cache and lease contract decision in PLAN.md step 0.
 - **Memory is bounded.** A size hint for large entries gave Brotli a 16 MiB window, and 20 concurrent 64 MiB reads grew resident memory by 577 MiB. With a 1 MiB window and no size hint, the same reads grew it by 153 MiB, against gzip's 17–70 MiB; `tests/http/content-delivery-compression.test.ts` bounds both codings at 256 MiB of resident growth.
+
+## October 2026 precompressed content variants (CNT-011)
+
+Each eligible version-content file is now compressed once with Brotli (quality 9, 4 MiB window, encoder `br-q9-w22-v1`), stored as an ordinary content-addressed blob, and found through the installation-scoped `content_variants` table. A stored variant is served as `br` with a real `Content-Length`; a missing one is served as identity and built in the background. The per-request streaming encoder from CNT-010 was removed. Measured on October 5, 2026 with `pnpm perf:delivery` (Chromium 151, unthrottled, five samples per journey, Apple M1 Max). The hosted run used artifacts.backend.app on image `sha256:c30005b09d6f66d4f6f004ca18aa343437a1dc29a605044c32f07d2516216be1` (main `ad1585a`), after the one-time production backfill.
+
+### Local (synthetic ExtractionKit-shaped fixture)
+
+Before (today's streaming encoder):
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 141 ms (135 ms–151 ms) | 104 ms (100 ms–116 ms) | 16 (16–16) | 501.0 KiB (501.0 KiB–501.0 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 76 ms (72 ms–77 ms) | 64 ms (60 ms–64 ms) | 16 (16–16) | 3.1 KiB (3.1 KiB–3.1 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 |
+| prototype | cold | 879 ms (867 ms–900 ms) | 124 ms (120 ms–136 ms) | 31 (31–31) | 2.88 MiB (2.88 MiB–2.88 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 |
+| prototype | warm | 818 ms (810 ms–825 ms) | 88 ms (72 ms–96 ms) | 31 (31–31) | 2.23 MiB (2.23 MiB–2.23 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 |
+
+After (stored variants, built after publish):
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 139 ms (133 ms–142 ms) | 100 ms (100 ms–108 ms) | 16 (16–16) | 501.0 KiB (501.0 KiB–501.0 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 77 ms (72 ms–80 ms) | 64 ms (56 ms–64 ms) | 16 (16–16) | 3.1 KiB (3.1 KiB–3.1 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 |
+| prototype | cold | 853 ms (847 ms–868 ms) | 124 ms (124 ms–132 ms) | 31 (31–31) | 2.37 MiB (2.37 MiB–2.37 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 |
+| prototype | warm | 767 ms (764 ms–789 ms) | 76 ms (72 ms–80 ms) | 31 (31–31) | 1.72 MiB (1.72 MiB–1.72 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 |
+
+Harness CPU per prototype open, with the server in the same process: 455 ms before and 331 ms after for a cold open, 416 ms and 294 ms warm. Requests no longer compress, and the one-time quality-9 build cuts transfer from 2.88 MiB to 2.37 MiB cold. On loopback, ready time stays within noise (879 ms and 853 ms).
+
+### Hosted (artifacts.backend.app, ExtractionKit prototype)
+
+After stored variants:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 25813 ms (18814 ms–30636 ms) | 1892 ms (1312 ms–4844 ms) | 179 (179–180) | 1.91 MiB (1.91 MiB–1.93 MiB) | 6.94 MiB (6.94 MiB–6.96 MiB) | identity | 0 |
+| library | warm | 20220 ms (15986 ms–32842 ms) | 1484 ms (500 ms–4184 ms) | 183 (179–192) | 1.36 MiB (1.34 MiB–1.48 MiB) | 6.81 MiB (6.80 MiB–6.86 MiB) | identity | 0 |
+| prototype | cold | 8900 ms (7630 ms–11471 ms) | 1228 ms (664 ms–2832 ms) | 81 (80–87) | 3.38 MiB (3.38 MiB–3.52 MiB) | 19.70 MiB (19.70 MiB–19.84 MiB) | br | 0 |
+| prototype | warm | 9737 ms (5878 ms–15008 ms) | 324 ms (180 ms–756 ms) | 81 (80–87) | 2.79 MiB (2.79 MiB–2.94 MiB) | 19.53 MiB (19.53 MiB–19.68 MiB) | br | 0 |
+
+The earlier hosted runs are in the CNT-010 section above: 14.3 s cold and 14.0 s warm before compression (18.7 MiB transferred), and 17.9 s cold and 13.8 s warm with per-request streaming compression (3.7 MiB).
+
+### Production backfill
+
+`artifact-server maintenance build-content-variants --once --mode external-storage`, run once in one server pod after the rollout: 389 distinct eligible files examined, 379 built, 10 skipped (already built by reads since the deploy), 0 not beneficial, 0 too large, 0 failed. The built sources total 38.5 MiB and their variants 6.81 MiB. The pass took about 5 minutes.
+
+### What this shows and what it does not
+
+- **The success criteria are met.** ExtractionKit's cold ready median fell from 14.3 s before compression (and 17.9 s with streaming) to 8.9 s, and the after range (7.6–11.5 s) sits almost entirely below the before range (10.5–20.0 s). Warm opens fell from 14.0 s to 9.7 s. Transfer is 3.38 MiB cold, below the 3.7 MiB streaming result, and requests spend no CPU on compression.
+- **Ready time is still about 9 seconds.** About 20 MiB of decoded script and CSS still has to be parsed and run on every open, and every open mints a new lease origin with `no-store` responses, so even a warm open transfers about 2.8 MiB again. Splitting ExtractionKit's eager data scripts (PLAN.md step 2) and the cache and lease contract decision (PLAN.md step 0) are the next levers.
+- **The Library is unchanged and remains the slowest journey**, at about 20–26 s median with roughly 180 requests per open. Compression does not touch it; it needs the server-side catalog (PLAN.md step 1).
+- **Hosted timings vary widely between sessions.** The Library, which these changes do not affect, measured 33 s, 22 s, and 26 s cold across the three hosted runs. Read single comparisons with that in mind.
+- **Rollout and rollback.** Migration 20 runs in the pre-upgrade hook, so the old pods report "schema newer" and go not-ready until the new ones are ready; expect a brief readiness gap, as with migrations 18 and 19. Rolling back the image needs `DELETE FROM artifact_server_postgres_migrations WHERE migration_id = 20;` first. The table itself is harmless to an older image.

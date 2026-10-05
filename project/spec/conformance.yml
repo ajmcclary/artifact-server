@@ -1375,7 +1375,7 @@ requirements:
       failure: {id: CNT-010-F, description: "Range, If-Range, gzip-only, identity or q=0 refusals, small and non-compressible entries are served identity with ranges intact; a 304 never carries Content-Encoding; a mapped variant whose blob is missing is served identity and rebuilt."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded.
+    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded; the hosted delivery observation (ExtractionKit cold ready 14.3 s to 8.9 s, 3.4 MiB transferred) is recorded in project/performance/FINDINGS.md.
     depends_on: [CNT-008]
     evidence:
       - deployment: local
@@ -1394,7 +1394,7 @@ requirements:
       failure: {id: CNT-011-F, description: "Incompressible text stores no variant and stays identity; a source over 64 MiB is skipped; a conflicting mapping is rejected; building a 60 MiB entry stays within the resident memory bound."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded.
+    proof_gap: Local conformance tests prove the behavior. Cloudflare relies on edge compression and does not compose variants. Team-deployment conformance runs are unrecorded; the hosted delivery observation (ExtractionKit cold ready 14.3 s to 8.9 s, 3.4 MiB transferred) is recorded in project/performance/FINDINGS.md.
     depends_on: [CNT-010]
     evidence:
       - deployment: local
