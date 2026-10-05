@@ -1,5 +1,5 @@
 import {createHash, randomBytes} from "node:crypto";
-import {mkdtemp, rm, stat, unlink} from "node:fs/promises";
+import {mkdtemp, rm, stat, unlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {brotliDecompressSync} from "node:zlib";
@@ -123,6 +123,41 @@ describe("ContentVariants", () => {
     service.reportUnusable(mapping);
     await service.drain();
     expect((await stat(variantPath)).size).toBe(mapping.variantSize);
+  });
+
+  test("foundation: a variant reported unusable while its blob is intact is not recompressed", async () => {
+    const service = variants();
+    const source = await store(compressibleText);
+    expect(await service.build(source)).toBe("built");
+    const mapping = await service.find(source.sha256);
+    if (mapping === null) throw new Error("The variant was not recorded.");
+    // A transient storage error on a hit reports the variant unusable although the blob is fine.
+    service.reportUnusable(mapping);
+    await service.drain();
+    expect(events.map((event) => event.outcome)).toEqual(["built", "skipped"]);
+    expect(await service.find(source.sha256)).toEqual(mapping);
+  });
+
+  test("foundation: a rebuild that cannot succeed backs off instead of repeating on every report", async () => {
+    const service = variants();
+    const source = await store(compressibleText);
+    expect(await service.build(source)).toBe("built");
+    const mapping = await service.find(source.sha256);
+    if (mapping === null) throw new Error("The variant was not recorded.");
+    // A wrong-size blob cannot be replaced by a create-only put, so the rebuild fails.
+    const variantPath = path.join(blobRoot, mapping.variantSha256.slice(0, 2), mapping.variantSha256);
+    await writeFile(variantPath, "truncated");
+    service.reportUnusable(mapping);
+    await service.drain();
+    expect(events.map((event) => event.outcome)).toEqual(["built", "failed"]);
+    clock += 30_001;
+    service.reportUnusable(mapping);
+    await service.drain();
+    expect(events.map((event) => event.outcome)).toEqual(["built", "failed"]);
+    clock += 10 * 60_000;
+    service.reportUnusable(mapping);
+    await service.drain();
+    expect(events.map((event) => event.outcome)).toEqual(["built", "failed", "failed"]);
   });
 
   test("foundation: the backfill builds each digest once and counts every outcome", async () => {

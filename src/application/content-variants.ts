@@ -16,6 +16,8 @@ import type {BlobStore} from "../core/ports.js";
 const maximumQueuedSources = 1_000;
 const maximumCachedMappings = 10_000;
 const missCacheMilliseconds = 30_000;
+/** A forced rebuild that failed is not retried for this long, so a persistent fault cannot loop. */
+const rebuildBackoffMilliseconds = 10 * 60_000;
 
 export type ContentVariantBuildOutcome = "built" | "failed" | "not_beneficial" | "skipped" | "too_large";
 
@@ -54,7 +56,7 @@ export interface ContentVariantDelivery {
 }
 
 export interface ContentVariantDependencies {
-  readonly blobs: Pick<BlobStore, "open" | "put">;
+  readonly blobs: Pick<BlobStore, "inspect" | "open" | "put">;
   readonly compressor: ContentVariantCompressor;
   readonly index: ContentVariantIndex;
   readonly log: (event: ContentVariantBuildEvent) => void;
@@ -67,6 +69,8 @@ export interface ContentVariantDependencies {
 interface QueuedSource {
   readonly forceRebuild: boolean;
   readonly size: number;
+  /** The mapping reported unusable, checked before any recompression. */
+  readonly unusable: ContentVariantMapping | null;
 }
 
 function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
@@ -86,6 +90,7 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
   readonly #notBeneficial = new Set<string>();
   readonly #now: () => number;
   readonly #queue = new Map<string, QueuedSource>();
+  readonly #rebuildBackoff = new Map<string, number>();
   #closed = false;
   #running: Promise<void> | null = null;
 
@@ -119,13 +124,15 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
   }
 
   schedule(sourceSha256: string, sourceSize: number): void {
-    this.#enqueue(sourceSha256, {forceRebuild: false, size: sourceSize});
+    this.#enqueue(sourceSha256, {forceRebuild: false, size: sourceSize, unusable: null});
   }
 
   reportUnusable(mapping: ContentVariantMapping): void {
     this.#mappings.delete(mapping.sourceSha256);
     this.#misses.set(mapping.sourceSha256, this.#now() + missCacheMilliseconds);
-    this.#enqueue(mapping.sourceSha256, {forceRebuild: true, size: Number.NaN});
+    const backoffUntil = this.#rebuildBackoff.get(mapping.sourceSha256);
+    if (backoffUntil !== undefined && backoffUntil > this.#now()) return;
+    this.#enqueue(mapping.sourceSha256, {forceRebuild: true, size: Number.NaN, unusable: mapping});
   }
 
   reportLookupFailure(message: string): void {
@@ -146,7 +153,7 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
   }
 
   async build(source: ContentVariantSource): Promise<ContentVariantBuildOutcome> {
-    return this.#build(source.sha256, source.size, false);
+    return this.#build(source.sha256, source.size, null);
   }
 
   async backfill(
@@ -161,7 +168,7 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
       seen.add(source.sha256);
       counts.examined += 1;
       // eslint-disable-next-line no-await-in-loop -- the backfill builds one variant at a time
-      const outcome = await this.#build(source.sha256, source.size, false);
+      const outcome = await this.#build(source.sha256, source.size, null);
       counts[outcome] += 1;
     }
     return counts;
@@ -207,14 +214,17 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
       const [sourceSha256, queued] = next;
       this.#queue.delete(sourceSha256);
       // eslint-disable-next-line no-await-in-loop -- one build per process at a time
-      await this.#build(sourceSha256, queued.size, queued.forceRebuild);
+      const outcome = await this.#build(sourceSha256, queued.size, queued.unusable);
+      if (queued.forceRebuild && outcome === "failed") {
+        this.#rebuildBackoff.set(sourceSha256, this.#now() + rebuildBackoffMilliseconds);
+      }
     }
   }
 
   async #build(
     sourceSha256: string,
     declaredSize: number,
-    forceRebuild: boolean,
+    unusable: ContentVariantMapping | null,
   ): Promise<ContentVariantBuildOutcome> {
     const started = this.#now();
     const finish = (
@@ -234,11 +244,18 @@ export class ContentVariants implements ContentVariantDelivery, PublishedContent
     };
     try {
       const key = {coding: "br", encoderId: brotliVariantEncoderId, sourceSha256} as const;
-      if (!forceRebuild) {
+      if (unusable === null) {
         const existing = await this.#dependencies.index.find(key);
         if (existing !== null) {
           this.#remember(existing);
           return finish("skipped", existing.variantSize, null);
+        }
+      } else {
+        // A transient read error also reports a variant unusable; recompress only if the blob is really bad.
+        const stored = await this.#dependencies.blobs.inspect(unusable.variantSha256).catch(() => null);
+        if (stored !== null && stored.size === unusable.variantSize) {
+          this.#remember(unusable);
+          return finish("skipped", stored.size, null);
         }
       }
       if (this.#notBeneficial.has(sourceSha256)) return finish("not_beneficial", null, null);
