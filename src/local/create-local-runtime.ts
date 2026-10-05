@@ -81,6 +81,7 @@ import {
 } from "../git-history/git-history-mirror.js";
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
+import {observeBlobReads, type BlobReadObserver} from "../storage/observed-blob-store.js";
 
 export interface LocalRuntimeConfig {
   readonly apiToken: string;
@@ -110,6 +111,8 @@ export interface LocalRuntimeConfig {
   readonly linkRoots?: readonly string[];
   /** Observation seam for mid-read drift tests; never parsed from the environment. */
   readonly linkedCaptureHooks?: CaptureHooks;
+  /** Observation seam for content-delivery tests; never parsed from the environment. */
+  readonly blobReadObserver?: BlobReadObserver;
   readonly localBootstrapToken?: string;
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly observability?: boolean;
@@ -321,7 +324,9 @@ export async function createLocalRuntime(
     }
     let appDependenciesWithoutOAuth: HttpAppDependencies = {
       applicationRuntime,
-      blobs,
+      blobs: config.blobReadObserver === undefined
+        ? blobs
+        : observeBlobReads(blobs, config.blobReadObserver),
       browserAccess: config.browserAccess,
       completedRequestLogSampleRate:
         config.completedRequestLogSampleRate ??

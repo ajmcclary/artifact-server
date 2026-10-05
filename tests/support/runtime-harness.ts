@@ -32,6 +32,7 @@ import {localOwnerBrowserAccess} from "../../src/core/browser-access.js";
 import type {BrowserAccess} from "../../src/core/browser-access.js";
 import {defaultCompletedRequestLogSampleRate} from
   "../../src/observability/application-observability.js";
+import type {BlobReadObserver} from "../../src/storage/observed-blob-store.js";
 
 const assignedAddressSchema = z.object({port: z.number().int().positive()});
 
@@ -86,6 +87,7 @@ export async function startTestServer(
   options: {
     readonly applicationOrigin?: string;
     readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
+    readonly blobReadObserver?: BlobReadObserver;
     readonly bootstrapAdministratorEmail?: string;
     readonly browserAccess?: BrowserAccess;
     readonly contentDomain?: string;
@@ -127,6 +129,9 @@ export async function startTestServer(
     port: options.port ?? 0,
   };
   let config: LocalServerConfig = baseConfig;
+  if (options.blobReadObserver !== undefined) {
+    config = {...config, blobReadObserver: options.blobReadObserver};
+  }
   if (options.applicationOrigin !== undefined) {
     config = {...config, applicationOrigin: options.applicationOrigin};
   }
