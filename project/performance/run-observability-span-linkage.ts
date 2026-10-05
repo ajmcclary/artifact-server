@@ -297,6 +297,7 @@ async function measurePostgresArm(
     const published = await publishNew(
       {
         baseUrl,
+        buildContentVariants: () => Promise.reject(new Error("This probe never backfills content variants.")),
         // The external-storage server builds variants in the background; nothing to drain.
         drainContentVariants: () => Promise.resolve(),
         hostname: server.hostname,

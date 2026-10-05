@@ -5,6 +5,7 @@ import {getRequestListener} from "@hono/node-server";
 import {z} from "zod";
 
 import {createLocalRuntime, type LocalRuntimeConfig} from "./create-local-runtime.js";
+import type {ContentVariantBackfillReport} from "../application/content-variants.js";
 import {createGracefulHttpShutdown} from
   "../lifecycle/graceful-http-shutdown.js";
 import {withNodeResponseCompression} from
@@ -30,6 +31,8 @@ export interface RunningLocalServer {
   readonly port: number;
   /** Withdraw readiness and gracefully drain accepted HTTP work. */
   close(): Promise<void>;
+  /** Builds variants for every current version's eligible files. */
+  buildContentVariants(limit: number): Promise<ContentVariantBackfillReport>;
   /** Runs every queued content-variant build. */
   drainContentVariants(): Promise<void>;
 }
@@ -94,6 +97,7 @@ export async function startLocalServer(
   });
 
   return {
+    buildContentVariants: (limit) => runtime.buildContentVariants(limit),
     close,
     drainContentVariants: () => runtime.drainContentVariants(),
     hostname: address.address,

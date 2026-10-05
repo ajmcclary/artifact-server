@@ -139,6 +139,7 @@ import type {
   StagedUploadRepository,
   StagingStore,
 } from "../core/ports.js";
+import type {PublishedContentObserver} from "../core/content-variants.js";
 import type {IdentityRepository} from "../core/identity-ports.js";
 import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
@@ -205,6 +206,8 @@ export interface ApplicationAdapters {
    * files in one pass, preserving single-request behavior on Node runtimes.
    */
   readonly publicationPreparationConfig?: PublicationPreparationConfig;
+  /** Notified after a commit creates a version, for example to queue content variants. */
+  readonly publishedContent?: PublishedContentObserver;
 }
 
 /** Node-only linked-artifact adapters supplied by the local deployment. */
@@ -323,6 +326,9 @@ export function createApplicationLayer(
         }),
     },
   };
+  if (adapters.publishedContent !== undefined) {
+    Object.assign(publishDependencies, {publishedContent: adapters.publishedContent});
+  }
   const stagingPort: StagingStoragePort = {
     open: (uploadId, storageToken) =>
       Effect.tryPromise({

@@ -64,6 +64,7 @@ import {
   browserLoginKinds,
   privateTeamBrowserAccess,
 } from "../core/browser-access.js";
+import {z} from "zod";
 
 interface StartExternalStorageOptions {
   readonly host: string;
@@ -138,6 +139,32 @@ function configureMaintenance(program: Command): void {
         await runtime.close();
       }
     });
+  maintenance
+    .command("build-content-variants")
+    .description("Build stored Brotli variants for every current version's eligible files.")
+    .requiredOption("--once", "run one bounded pass and exit")
+    .option("--limit <count>", "maximum distinct files to examine", "100000")
+    .addOption(modeOption())
+    .addOption(dataOption())
+    .addOption(hostOption())
+    .addOption(portOption())
+    .action(async (options: CleanupStagingOptions) => {
+      const configuration = await lifecycleConfiguration(options);
+      const runtime = configuration.deploymentMode === "compact"
+        ? await createLocalRuntime({...compactMaintenanceConfig(configuration), contentVariantBuilds: "manual"})
+        : await createExternalStorageRuntime(externalMaintenanceConfig(configuration));
+      try {
+        const report = await runtime.buildContentVariants(parseVariantLimit(options.limit));
+        console.log(JSON.stringify(report, null, 2));
+        if (report.failed > 0) process.exitCode = 2;
+      } finally {
+        await runtime.close();
+      }
+    });
+}
+
+function parseVariantLimit(value: string): number {
+  return z.coerce.number().int().min(1).max(1_000_000).parse(value);
 }
 
 function configureInitialization(program: Command): void {

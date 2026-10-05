@@ -33,6 +33,7 @@ import type {BrowserAccess} from "../../src/core/browser-access.js";
 import {defaultCompletedRequestLogSampleRate} from
   "../../src/observability/application-observability.js";
 import type {BlobReadObserver} from "../../src/storage/observed-blob-store.js";
+import type {ContentVariantBackfillReport} from "../../src/application/content-variants.js";
 
 const assignedAddressSchema = z.object({port: z.number().int().positive()});
 
@@ -46,6 +47,8 @@ export interface RunningTestServer {
   readonly baseUrl: string;
   readonly hostname: string;
   readonly port: number;
+  /** Builds variants for every current version's eligible files. */
+  buildContentVariants(limit: number): Promise<ContentVariantBackfillReport>;
   /** Runs every queued content-variant build (manual mode). */
   drainContentVariants(): Promise<void>;
   stop(): Promise<void>;
@@ -213,6 +216,7 @@ export async function startTestServer(
   return {
     baseUrl: `http://${server.hostname}:${server.port}`,
     hostname: server.hostname,
+    buildContentVariants: (limit) => server.buildContentVariants(limit),
     drainContentVariants: () => server.drainContentVariants(),
     port: server.port,
     stop: () => server.close(),

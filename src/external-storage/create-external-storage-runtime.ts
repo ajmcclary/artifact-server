@@ -64,7 +64,11 @@ import {
 } from "../git-history/git-history-mirror.js";
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
-import {ContentVariants} from "../application/content-variants.js";
+import {
+  type ContentVariantBackfillReport,
+  ContentVariants,
+} from "../application/content-variants.js";
+import {currentVersionEntries} from "../application/current-version-entries.js";
 import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
 import {PostgresContentVariantIndex} from "../storage/postgres-content-variant-index.js";
 
@@ -103,6 +107,8 @@ export interface ExternalStorageRuntimeConfig {
 /** One ready external-storage runtime and its protocol adapter. */
 export interface ExternalStorageRuntime {
   readonly app: ReturnType<typeof createHttpApp>;
+  /** Builds variants for every current version's eligible files. */
+  buildContentVariants(limit: number): Promise<ContentVariantBackfillReport>;
   cleanupStaging(limit: number): Promise<ExpiredStagingCleanupReport>;
   close(): Promise<void>;
 }
@@ -187,6 +193,7 @@ export async function createExternalStorageRuntime(
     });
     const readyVariants = contentVariants;
     const applicationAdapters: Parameters<typeof createApplicationLayer>[0] = {
+      publishedContent: readyVariants,
       apiToken: null,
       autoAdmitEmailDomains: config.autoAdmitEmailDomains,
       blobs,
@@ -293,6 +300,7 @@ export async function createExternalStorageRuntime(
       app: createHttpApp(config.runtimeLifecycle === undefined
         ? appDependencies
         : {...appDependencies, runtimeLifecycle: config.runtimeLifecycle}),
+      buildContentVariants: (limit) => readyVariants.backfill(currentVersionEntries(repository), limit),
       cleanupStaging: (limit) => runStagingCleanupPass(readyRuntime, limit),
       close: async () => {
         if (closeCleanupSchedule !== null) await closeCleanupSchedule();

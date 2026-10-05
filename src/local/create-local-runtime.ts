@@ -82,7 +82,11 @@ import {
 import {CloudflareArtifactsGitHistoryProvider} from
   "../git-history/cloudflare-artifacts-git-history-provider.js";
 import {observeBlobReads, type BlobReadObserver} from "../storage/observed-blob-store.js";
-import {ContentVariants} from "../application/content-variants.js";
+import {
+  type ContentVariantBackfillReport,
+  ContentVariants,
+} from "../application/content-variants.js";
+import {currentVersionEntries} from "../application/current-version-entries.js";
 import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
 import {SqliteContentVariantIndex} from "../storage/sqlite-content-variant-index.js";
 
@@ -137,6 +141,8 @@ export interface LocalRuntime {
   readonly app: ReturnType<typeof createHttpApp>;
   cleanupStaging(limit: number): Promise<ExpiredStagingCleanupReport>;
   close(): Promise<void>;
+  /** Builds variants for every current version's eligible files. */
+  buildContentVariants(limit: number): Promise<ContentVariantBackfillReport>;
   /** Runs every queued content-variant build. */
   drainContentVariants(): Promise<void>;
 }
@@ -275,6 +281,7 @@ export async function createLocalRuntime(
     ),
   );
   let applicationAdapters: Parameters<typeof createLocalApplicationLayer>[0] = {
+    publishedContent: contentVariants,
     apiToken: config.browserAccess.mode === browserAccessModes.localOwner
       ? apiToken
       : null,
@@ -405,6 +412,7 @@ export async function createLocalRuntime(
     return {
       app,
       cleanupStaging: (limit) => runStagingCleanupPass(applicationRuntime, limit),
+      buildContentVariants: (limit) => contentVariants.backfill(currentVersionEntries(repository), limit),
       drainContentVariants: () => contentVariants.drain(),
       close: async () => {
         if (closeCleanupSchedule !== null) await closeCleanupSchedule();

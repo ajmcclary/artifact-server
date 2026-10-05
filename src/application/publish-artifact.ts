@@ -47,6 +47,7 @@ import {
   installPublicationFile,
   type PublicationFileSource,
 } from "./install-publication-file.js";
+import type {PublishedContentObserver} from "../core/content-variants.js";
 
 export type {PublicationFileSource} from "./install-publication-file.js";
 
@@ -136,6 +137,8 @@ export interface PublishArtifactDependencies {
   readonly blobs: PublishBlobStorage;
   readonly clock: ApplicationClock;
   readonly ids: IdGenerator;
+  /** Queues follow-up work, such as content variants, after a version commits. */
+  readonly publishedContent?: PublishedContentObserver;
   readonly repository: PublishArtifactRepository;
 }
 
@@ -278,7 +281,7 @@ function makePublishArtifactService(
 
     const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
 
-    return yield* dependencies.repository.commitNewArtifact({
+    const published = yield* dependencies.repository.commitNewArtifact({
       accessSetting: command.accessSetting,
       artifactId: dependencies.ids.artifactId(),
       contentToken: dependencies.ids.contentToken(),
@@ -295,6 +298,8 @@ function makePublishArtifactService(
       tags,
       versionId: dependencies.ids.versionId(),
     });
+    notifyPublished(dependencies, published, command.manifest);
+    return published;
   });
 
   const publishPreparedVersion = Effect.fn(
@@ -339,7 +344,7 @@ function makePublishArtifactService(
 
     const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
 
-    return yield* dependencies.repository.commitVersion({
+    const published = yield* dependencies.repository.commitVersion({
       artifactId: command.artifactId,
       contentToken: dependencies.ids.contentToken(),
       createdAt,
@@ -354,6 +359,8 @@ function makePublishArtifactService(
       source: command.source,
       versionId: dependencies.ids.versionId(),
     });
+    notifyPublished(dependencies, published, command.manifest);
+    return published;
   });
 
   return PublishArtifactService.of({
@@ -427,4 +434,18 @@ function publicationSourcesByPath(
     throw new Error("Publication file sources do not match the canonical manifest.");
   }
   return sources;
+}
+
+/** Queue follow-up work for a newly committed version; never fails publication. */
+function notifyPublished(
+  dependencies: PublishArtifactDependencies,
+  published: PublishedVersion,
+  manifest: CanonicalManifest,
+): void {
+  if (published.replayed) return;
+  try {
+    dependencies.publishedContent?.versionPublished(manifest.entries);
+  } catch {
+    // The observer only queues optional work; publication has already committed.
+  }
 }
