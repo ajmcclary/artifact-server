@@ -23,6 +23,7 @@ export default defineConfig({
       "tests/integration/postgres-staged-upload-idempotency.test.ts",
       "tests/integration/postgres-staged-upload-preparation.test.ts",
       "tests/integration/postgres-version-pagination.test.ts",
+      "tests/integration/prj-004-project-migration.test.ts",
     ],
     pool: "forks",
     testTimeout: 60_000,
