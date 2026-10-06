@@ -9,6 +9,7 @@ import {
 } from "../application/authentication.js";
 import {
   digestIdentitySecret,
+  type IdentitySecretProvider,
   InstallationAccessService,
 } from "../application/installation-access.js";
 import {
@@ -143,6 +144,7 @@ import type {PublishedContentObserver} from "../core/content-variants.js";
 import type {IdentityRepository} from "../core/identity-ports.js";
 import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
+import {InvitationService} from "../application/invitations.js";
 import { FileVerificationError } from "../storage/verified-file.js";
 import {defaultStagingCleanupPolicy} from
   "../lifecycle/staging-cleanup.js";
@@ -242,6 +244,7 @@ export function createApplicationLayer(
   | GitHistoryAccessService
   | InstallationAccessService
   | InteractiveLoginService
+  | InvitationService
   | LibraryCatalogService
   | PrincipalActivityService
   | LinkedArtifactService
@@ -948,6 +951,10 @@ export function createApplicationLayer(
     clock: adapters.clock,
     recorder: identityRepository,
   });
+  const identitySecrets: IdentitySecretProvider = {
+    digest: digestIdentitySecret,
+    issue: () => randomBase64Url(32),
+  };
   const identityLayer = InstallationAccessService.layer({
     autoAdmitEmailDomains: adapters.autoAdmitEmailDomains,
     contentAccessRevocation: {
@@ -998,6 +1005,14 @@ export function createApplicationLayer(
       createLoginAttempt: (attempt) => identityEffect(
         "createLoginAttempt",
         () => identityRepository.createLoginAttempt(attempt),
+      ),
+      findInvite: (installationId, inviteId) => identityEffect(
+        "findInvite",
+        () => identityRepository.findInvite(installationId, inviteId),
+      ),
+      redeemInvite: (record) => identityEffect(
+        "redeemInvite",
+        () => identityRepository.redeemInvite(record),
       ),
       deactivateMember: (installationId, memberId, updatedAt, attribution) =>
         identityEffectWithConflictOrNotFound(
@@ -1079,10 +1094,7 @@ export function createApplicationLayer(
           ),
         ),
     },
-    secrets: {
-      digest: digestIdentitySecret,
-      issue: () => randomBase64Url(32),
-    },
+    secrets: identitySecrets,
     sessionLifetimeMilliseconds: 12 * 60 * 60 * 1_000,
   });
   const authenticationLayer = Layer.effect(
@@ -1190,6 +1202,51 @@ export function createApplicationLayer(
       ),
     },
   }).pipe(Layer.provideMerge(identityLayer));
+  const invitationLayer = InvitationService.layer({
+    clock: adapters.clock,
+    destinations: {
+      describe: (destination) => Effect.tryPromise({
+        try: async () => {
+          const artifact = await adapters.repository.findArtifact(destination.projectId, destination.artifactId);
+          if (artifact === null || artifact.deletedAt !== null) return null;
+          const version = await adapters.repository.findVersionMetadata(
+            destination.projectId,
+            destination.artifactId,
+            destination.versionId,
+          );
+          return version === null ? null : {artifactName: artifact.name, versionNumber: version.number};
+        },
+        catch: (cause) => repositoryFailure("findVersionRecord", cause),
+      }),
+    },
+    enabled: adapters.interactiveIdentityProvider !== null,
+    ids: {inviteId: () => `inv_${randomUUID()}`},
+    installationId: adapters.installationId,
+    repository: {
+      createInvite: (record) => identityEffect("createInvite", () => identityRepository.createInvite(record)),
+      findInvite: (installationId, inviteId) => identityEffect(
+        "findInvite",
+        () => identityRepository.findInvite(installationId, inviteId),
+      ),
+      findMember: (installationId, memberId) => identityEffect(
+        "findMember",
+        () => identityRepository.findMember(installationId, memberId),
+      ),
+      listInvites: (installationId) => identityEffect(
+        "listInvites",
+        () => identityRepository.listInvites(installationId),
+      ),
+      listMembers: (installationId) => identityEffect(
+        "listMembers",
+        () => identityRepository.listMembers(installationId),
+      ),
+      revokeInvite: (record) => identityEffectWithConflictOrNotFound(
+        "revokeInvite",
+        () => identityRepository.revokeInvite(record),
+      ),
+    },
+    secrets: identitySecrets,
+  });
   const authorizationLayer = AuthorizationService.layer({
     installationId: adapters.installationId,
   });
@@ -1387,6 +1444,7 @@ export function createApplicationLayer(
     dispatchLayer,
     identityLayer,
     interactiveLoginLayer,
+    invitationLayer,
     stagedLayer,
     preparationLayer,
     contentLayer,

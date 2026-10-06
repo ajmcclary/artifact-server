@@ -24,7 +24,15 @@ import {
   IdentityAdmissionDenied,
   IdentityConflict,
   IdentityNotFound,
+  InviteRejected,
 } from "../core/errors.js";
+import type {RedeemInviteRecord, RedeemInviteResult} from "../core/invitation-ports.js";
+import {
+  type InviteOutcome,
+  inviteOutcomeMessages,
+  inviteOutcomes,
+  type StoredInvite,
+} from "../core/invitations.js";
 import type {
   ArtifactRepositoryFailure,
   IdentityRepositoryFailure,
@@ -133,6 +141,13 @@ export interface InstallationIdentityRepository {
     installationId: string,
     keyId: string,
   ) => Effect.Effect<StoredManagedApiKey | null, IdentityRepositoryFailure>;
+  readonly findInvite: (
+    installationId: string,
+    inviteId: string,
+  ) => Effect.Effect<StoredInvite | null, IdentityRepositoryFailure>;
+  readonly redeemInvite: (
+    record: RedeemInviteRecord,
+  ) => Effect.Effect<RedeemInviteResult, IdentityRepositoryFailure>;
   readonly findApplicationSession: (
     installationId: string,
     tokenDigest: string,
@@ -270,11 +285,13 @@ export interface InstallationAccessOperations {
   >;
   readonly completeExternalIdentity: (
     identity: ExternalIdentity,
+    inviteId?: string | null,
   ) => Effect.Effect<
     IssuedApplicationSession,
     | IdentityAdmissionDenied
     | IdentityConflict
     | IdentityRepositoryFailure
+    | InviteRejected
   >;
   readonly deactivateMember: (
     principal: Principal,
@@ -514,15 +531,60 @@ function makeInstallationAccessService(
 
   const completeExternalIdentity = Effect.fn(
     "InstallationAccessService.completeExternalIdentity",
-  )(function*(identity: ExternalIdentity) {
-    const member = yield* resolveExternalMember(identity);
+  )(function*(identity: ExternalIdentity, inviteId: string | null = null) {
+    const member = yield* resolveExternalMember(identity, inviteId);
     return yield* issueSession(member);
   });
 
+  const redeemInvite = Effect.fn("InstallationAccessService.redeemInvite")(
+    function*(identity: ExternalIdentity, email: string, inviteId: string) {
+      if (identity.emailVerificationAsserted !== true) {
+        return yield* rejectInvite(inviteOutcomes.unverified);
+      }
+      const invite = yield* dependencies.repository.findInvite(dependencies.installationId, inviteId);
+      if (invite === null) return yield* rejectInvite(inviteOutcomes.invalid);
+      const inviter = yield* dependencies.repository.findMember(
+        dependencies.installationId,
+        invite.createdByPrincipalId,
+      );
+      const now = dependencies.clock.now().toISOString();
+      const memberId = dependencies.ids.memberId();
+      const result = yield* dependencies.repository.redeemInvite({
+        admission: {
+          admittedHow: memberAdmissions.invite,
+          attribution: {
+            actor: {displayName: inviter?.displayName ?? "Administrator", kind: principalKinds.human},
+            authorizedByPrincipalId: null,
+            principalId: invite.createdByPrincipalId,
+          },
+          createdAt: now,
+          displayName: identity.displayName,
+          email,
+          id: memberId,
+          installationId: dependencies.installationId,
+          role: invite.role,
+        },
+        binding: {
+          boundAt: now,
+          email,
+          memberId,
+          provider: identity.provider,
+          subject: identity.subject,
+        },
+        email,
+        inviteId,
+        redeemedAt: now,
+      });
+      if (result.kind === "refused") return yield* rejectInvite(result.outcome);
+      return result.member;
+    },
+  );
+
   const resolveExternalMember = Effect.fn(
     "InstallationAccessService.resolveExternalMember",
-  )(function*(identity: ExternalIdentity) {
+  )(function*(identity: ExternalIdentity, inviteId: string | null) {
     if (!identity.emailVerified) {
+      if (inviteId !== null) return yield* rejectInvite(inviteOutcomes.unverified);
       return yield* Effect.fail(new IdentityAdmissionDenied({
         message: "The login provider did not verify the email address.",
       }));
@@ -538,6 +600,10 @@ function makeInstallationAccessService(
         dependencies.installationId,
         email,
       );
+    }
+    if (member === null && inviteId !== null) {
+      // The redemption transaction already bound the identity.
+      return yield* redeemInvite(identity, email, inviteId);
     }
     if (member === null) {
       const hasMembers = yield* dependencies.repository.hasMembers(
@@ -584,7 +650,11 @@ function makeInstallationAccessService(
   const authenticateExternalIdentity = Effect.fn(
     "InstallationAccessService.authenticateExternalIdentity",
   )(function*(identity: ExternalIdentity) {
-    const member = yield* resolveExternalMember(identity);
+    // Bearer authentication never carries an invite, so no invite refusal can occur here.
+    const member = yield* resolveExternalMember(identity, null).pipe(
+      Effect.catchTag("InviteRejected", (rejected) =>
+        Effect.fail(new IdentityAdmissionDenied({message: rejected.message}))),
+    );
     yield* noteActivity({id: member.id, kind: "member"});
     return humanPrincipal(member);
   });
@@ -894,6 +964,10 @@ function makeInstallationAccessService(
     revokeSession,
     rotateApiKey,
   });
+}
+
+function rejectInvite(outcome: InviteOutcome): Effect.Effect<never, InviteRejected> {
+  return Effect.fail(new InviteRejected({message: inviteOutcomeMessages[outcome], outcome}));
 }
 
 function humanPrincipal(member: InstallationMember): Principal {

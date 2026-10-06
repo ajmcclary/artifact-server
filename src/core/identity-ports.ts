@@ -1,4 +1,5 @@
 import type {ActionAttribution} from "./action-attribution.js";
+import type {InvitationRepository} from "./invitation-ports.js";
 import type {PrincipalActivityRecorder} from "./ports.js";
 import type {
   ApplicationSession,
@@ -55,7 +56,7 @@ export interface CreateApplicationSessionRecord {
 }
 
 /** Persistent identity operations required by the Node application composition. */
-export interface IdentityRepository extends PrincipalActivityRecorder {
+export interface IdentityRepository extends PrincipalActivityRecorder, InvitationRepository {
   admitMember(command: AdmitMemberRecord): Promise<InstallationMember>;
   bindExternalIdentity(command: BindExternalIdentityRecord): Promise<void>;
   consumeLoginAttempt(

@@ -13,6 +13,7 @@ import type { CompareArtifactService } from "./compare-artifact.js";
 import type { InstallationAccessService } from "./installation-access.js";
 import type { PrincipalActivityService } from "./principal-activity.js";
 import type { InteractiveLoginService } from "./interactive-login.js";
+import type { InvitationService } from "./invitations.js";
 import type { LibraryCatalogService } from "./library-catalog.js";
 import type { LinkedArtifactService } from "./linked-artifacts.js";
 import type {ProjectManagementService} from "./project-management.js";
@@ -37,6 +38,7 @@ export type ApplicationServices =
   | GitHistoryAccessService
   | InstallationAccessService
   | InteractiveLoginService
+  | InvitationService
   | LibraryCatalogService
   | PrincipalActivityService
   | LinkedArtifactService

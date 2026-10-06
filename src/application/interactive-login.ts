@@ -9,6 +9,7 @@ import type {
   IdentityConflict,
   IdentityProviderFailure,
   IdentityRepositoryFailure,
+  InviteRejected,
 } from "../core/errors.js";
 import type {
   ExternalIdentity,
@@ -97,6 +98,7 @@ interface InteractiveLoginOperations {
     | IdentityProviderFailure
     | IdentityRepositoryFailure
     | InteractiveLoginUnavailable
+    | InviteRejected
     | LoginAttemptRejected
   >;
   readonly start: (
@@ -177,7 +179,7 @@ function makeInteractiveLoginService(
         attempt.codeVerifier,
         attempt.nonce,
       );
-      const issued = yield* installationAccess.completeExternalIdentity(identity);
+      const issued = yield* installationAccess.completeExternalIdentity(identity, attempt.inviteId);
       return {issued, returnTo: attempt.returnTo};
     },
   );
