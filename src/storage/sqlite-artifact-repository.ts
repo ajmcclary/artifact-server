@@ -6445,7 +6445,6 @@ export class SqliteArtifactRepository implements
         END;
       `);
     });
-    this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
 
   #addActionAuthorizerColumnIfMissing(): void {
