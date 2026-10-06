@@ -3,6 +3,7 @@ import path from "node:path";
 import {type Command, Option} from "commander";
 import {Redacted} from "effect";
 
+import {writeInviteSignUpNotice} from "./invite-sign-up-notice.js";
 import {
   createExternalStorageRuntime,
   type ExternalStorageRuntimeConfig,
@@ -350,6 +351,7 @@ function configureExternalStorageStart(
         : oidc !== null
         ? privateTeamBrowserAccess(browserLoginKinds.oidc)
         : missingPrivateTeamIdentityProvider();
+      writeInviteSignUpNotice(browserAccess);
       let serverConfig: ExternalStorageServerConfig = {
         apiToken: parsed.apiToken,
         applicationOrigin: parsed.applicationOrigin,
@@ -424,6 +426,7 @@ async function startCompactServer(
     : oidc !== null
     ? privateTeamBrowserAccess(browserLoginKinds.oidc)
     : missingPrivateTeamIdentityProvider();
+  writeInviteSignUpNotice(browserAccess);
   let serverConfig: LocalServerConfig = {
     apiToken: Redacted.value(configuration.apiToken),
     applicationOrigin: configuration.applicationOrigin,

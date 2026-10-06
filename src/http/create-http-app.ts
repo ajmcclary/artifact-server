@@ -30,6 +30,11 @@ import {
   InstallationAccessService,
 } from "../application/installation-access.js";
 import { InteractiveLoginService } from "../application/interactive-login.js";
+import { InvitationService } from "../application/invitations.js";
+import {
+  InviteRateLimiter,
+  type InviteRateLimitPolicy,
+} from "./invite-rate-limiter.js";
 import { ProjectManagementService } from "../application/project-management.js";
 import {ProjectGitHistoryService} from
   "../application/project-git-history.js";
@@ -84,6 +89,7 @@ import {
   ContentBootstrapRejected,
   errorCodes,
   InvalidPagination,
+  InviteRejected,
   isArtifactServerFailure,
   VersionNotFound,
 } from "../core/errors.js";
@@ -467,6 +473,32 @@ const admitMemberSchema = z.object({
   email: z.email().max(320),
   role: memberRoleSchema.default(membershipRoles.member),
 });
+const inviteLifetimeSchema = z.enum(["24h", "7d", "30d"]);
+const inviteDestinationSchema = z.object({
+  artifactId: z.string().min(1).max(200),
+  projectId: z.string().min(1).max(200),
+  versionId: z.string().min(1).max(200),
+}).strict();
+const createInviteSchema = z.discriminatedUnion("kind", [
+  z.object({
+    email: z.string().trim().min(3).max(320),
+    expiresIn: inviteLifetimeSchema,
+    kind: z.literal("person"),
+    opens: inviteDestinationSchema.optional(),
+    role: memberRoleSchema.default(membershipRoles.member),
+  }).strict(),
+  z.object({
+    expiresIn: inviteLifetimeSchema,
+    kind: z.literal("link"),
+    maxUses: z.number().int(),
+    opens: inviteDestinationSchema.optional(),
+    role: memberRoleSchema.default(membershipRoles.member),
+  }).strict(),
+]);
+const inviteTokenBodySchema = z.object({
+  forceSignIn: z.boolean().default(false),
+  token: z.string().min(1).max(512),
+}).strict();
 const principalCapabilitySchema = z.enum([
   principalCapabilities.connectAgents,
   principalCapabilities.createArtifact,
@@ -546,6 +578,8 @@ export interface HttpAppDependencies {
   readonly readiness?: ReadinessProbe;
   readonly runtimeLifecycle?: RuntimeLifecycle;
   readonly trustedApplicationOrigin: string | null;
+  /** Failed invite lookups tolerated per window; the default suits production. */
+  readonly inviteRateLimit?: InviteRateLimitPolicy;
   readonly webAssets?: WebAssetStore;
 }
 
@@ -614,6 +648,7 @@ export function createHttpApp(
     mode: dependencies.trustedApplicationOrigin === null ? "local" : "remote",
     oauthResource: dependencies.mcpOAuthResource?.resource ?? null,
   });
+  const inviteLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
   const boundedJsonBody = bodyLimit({
     maxSize: maximumJsonRequestBytes,
     onError: (context) =>
@@ -1048,6 +1083,60 @@ export function createHttpApp(
     return context.redirect("/", 303);
   });
 
+  const inviteRetry = (context: Context<HttpEnvironment>): Response | null => {
+    const seconds = inviteLimiter.retryAfterSeconds();
+    if (seconds === null) return null;
+    context.header("Retry-After", String(seconds));
+    context.header("Cache-Control", "private, no-store");
+    return context.json({
+      error: {code: errorCodes.rateLimited, message: "Too many invite attempts. Try again shortly."},
+    }, 429);
+  };
+
+  app.post("/auth/invites/preview", boundedJsonBody, async (context) => {
+    requireApplicationOrigin(context, dependencies);
+    const limited = inviteRetry(context);
+    if (limited !== null) return limited;
+    const body = inviteTokenBodySchema.parse(await context.req.json());
+    const preview = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InvitationService.use((invitations) => invitations.preview(body.token)),
+    );
+    if (preview.status === "invalid") inviteLimiter.noteFailure();
+    context.header("Cache-Control", "private, no-store");
+    context.header("Referrer-Policy", "no-referrer");
+    return context.json(preview);
+  });
+
+  app.post("/auth/invites/start", boundedJsonBody, async (context) => {
+    requireApplicationOrigin(context, dependencies);
+    const limited = inviteRetry(context);
+    if (limited !== null) return limited;
+    const body = inviteTokenBodySchema.parse(await context.req.json());
+    const plan = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InvitationService.use((invitations) => invitations.planLogin(body.token, body.forceSignIn)),
+    );
+    context.header("Cache-Control", "private, no-store");
+    context.header("Referrer-Policy", "no-referrer");
+    if (plan.kind === "unavailable") {
+      if (plan.preview.status === "invalid") inviteLimiter.noteFailure();
+      return context.json(plan.preview);
+    }
+    const started = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InteractiveLoginService.use((login) =>
+        login.start(plan.returnTo, {hints: plan.hints, inviteId: plan.inviteId})),
+    );
+    setLoginHandshakeCookie(context, dependencies, started.handshake);
+    return context.json({authorizationUrl: started.authorizationUrl});
+  });
+
+  app.on(["GET", "HEAD"], "/join", (context) => redirectWithRequestQuery(context, "/review/join"));
+
   app.get("/auth/login", async (context) => {
     const query = interactiveLoginQuerySchema.parse(context.req.query());
     const started = await runHttpApplicationEffect(
@@ -1066,13 +1155,23 @@ export function createHttpApp(
       context,
       applicationCookieNames(dependencies).handshake,
     ) ?? null;
-    const completed = await runHttpApplicationEffect(
-      context,
-      dependencies,
-      InteractiveLoginService.use((login) =>
-        login.complete({...query, handshake})
-      ),
-    );
+    let completed;
+    try {
+      completed = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        InteractiveLoginService.use((login) =>
+          login.complete({...query, handshake})
+        ),
+      );
+    } catch (error) {
+      if (!(error instanceof InviteRejected)) throw error;
+      // An invite that admitted no one explains itself on the join screen, never as JSON.
+      clearLoginHandshakeCookie(context, dependencies);
+      context.header("Cache-Control", "private, no-store");
+      context.header("Referrer-Policy", "no-referrer");
+      return context.redirect(`/review/join?${new URLSearchParams({outcome: error.outcome})}`, 303);
+    }
     clearLoginHandshakeCookie(context, dependencies);
     setApplicationSessionCookies(context, dependencies, completed.issued);
     context.header("Cache-Control", "private, no-store");
@@ -1148,6 +1247,53 @@ export function createHttpApp(
       ),
     );
     return context.json({member});
+  });
+
+  app.get("/api/v1/invites", async (context) => {
+    const invites = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InvitationService.use((invitations) => invitations.list(context.get("principal"))),
+    );
+    return context.json({invites});
+  });
+
+  app.post("/api/v1/invites", boundedJsonBody, async (context) => {
+    const body = createInviteSchema.parse(await context.req.json());
+    const issued = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InvitationService.use((invitations) => invitations.create(body.kind === "person"
+        ? {
+          email: body.email,
+          expiresIn: body.expiresIn,
+          kind: body.kind,
+          opens: body.opens,
+          principal: context.get("principal"),
+          role: body.role,
+        }
+        : {
+          expiresIn: body.expiresIn,
+          kind: body.kind,
+          maxUses: body.maxUses,
+          opens: body.opens,
+          principal: context.get("principal"),
+          role: body.role,
+        })),
+    );
+    const origin = dependencies.trustedApplicationOrigin ?? new URL(context.req.url).origin;
+    context.header("Cache-Control", "private, no-store");
+    return context.json({invite: issued.invite, url: `${origin}/join#${issued.token}`}, 201);
+  });
+
+  app.post("/api/v1/invites/:inviteId/revoke", async (context) => {
+    const invite = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      InvitationService.use((invitations) =>
+        invitations.revoke(context.get("principal"), context.req.param("inviteId"))),
+    );
+    return context.json({invite});
   });
 
   app.get("/api/v1/api-keys", async (context) => {
@@ -2861,7 +3007,8 @@ function responseApplicationUrl(
   return requestUrl;
 }
 
-function requireBrowserMutationSecurity(
+/** Refuse a browser request that did not come from the application's own origin. */
+function requireApplicationOrigin(
   context: Context<HttpEnvironment>,
   dependencies: HttpAppDependencies,
 ): void {
@@ -2878,6 +3025,13 @@ function requireBrowserMutationSecurity(
       message: "Browser mutations must come from the Artifact Server application origin.",
     });
   }
+}
+
+function requireBrowserMutationSecurity(
+  context: Context<HttpEnvironment>,
+  dependencies: HttpAppDependencies,
+): void {
+  requireApplicationOrigin(context, dependencies);
 
   const names = applicationCookieNames(dependencies);
   const headerToken = csrfTokenSchema.safeParse(context.req.header("x-csrf-token"));

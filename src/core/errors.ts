@@ -25,6 +25,7 @@ export const errorCodes = {
   invalidLinkPath: "INVALID_LINK_PATH",
   inviteRejected: "INVITE_REJECTED",
   invitesUnavailable: "INVITES_UNAVAILABLE",
+  rateLimited: "RATE_LIMITED",
   invalidManifestPath: "INVALID_MANIFEST_PATH",
   linkPathOutsideRoots: "LINK_PATH_OUTSIDE_ROOTS",
   linkPathProtected: "LINK_PATH_PROTECTED",

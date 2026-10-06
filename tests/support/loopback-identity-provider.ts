@@ -26,14 +26,18 @@ export class LoopbackIdentityProvider implements InteractiveIdentityProvider {
   };
   readonly name = "workos";
   readonly startedWith: LoginHints[] = [];
+  /** The identity each issued code completes as, captured when its login started. */
+  readonly #identities = new Map<string, ExternalIdentity>();
   #starts = 0;
 
   start(hints: LoginHints = {}): Effect.Effect<InteractiveAuthorization, IdentityProviderFailure> {
     this.#starts += 1;
     this.startedWith.push(hints);
     const state = `loopback-login-state-with-sufficient-entropy-${this.#starts}`;
+    const code = `${this.authorizationCode}-${this.#starts}`;
+    this.#identities.set(code, this.identity);
     const url = new URL("/auth/callback", this.baseUrl);
-    url.searchParams.set("code", this.authorizationCode);
+    url.searchParams.set("code", code);
     url.searchParams.set("state", state);
     return Effect.succeed({
       authorizationUrl: url.toString(),
@@ -44,8 +48,9 @@ export class LoopbackIdentityProvider implements InteractiveIdentityProvider {
   }
 
   complete(code: string): Effect.Effect<ExternalIdentity, IdentityProviderFailure> {
-    return code === this.authorizationCode
-      ? Effect.succeed(this.identity)
-      : Effect.fail(new IdentityProviderFailure({message: "Unexpected code."}));
+    const identity = this.#identities.get(code);
+    return identity === undefined
+      ? Effect.fail(new IdentityProviderFailure({message: "Unexpected code."}))
+      : Effect.succeed(identity);
   }
 }
