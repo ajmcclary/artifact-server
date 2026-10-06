@@ -184,6 +184,7 @@ describe("content access lifecycle", () => {
           artifactId: published.artifact.id,
           principal: testPrincipal,
           projectId: null,
+          reuseToken: null,
           versionId: published.version.id,
         })
       ),

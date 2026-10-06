@@ -40,6 +40,8 @@ import {
 
 const bootstrapLifetimeMilliseconds = 2 * 60 * 1_000;
 const contentSessionLifetimeMilliseconds = 15 * 60 * 1_000;
+/** A preview lease is reused across opens for a working day; reuse never extends it. */
+export const previewLeaseLifetimeMilliseconds = 12 * 60 * 60 * 1_000;
 /** Distinguishes short-lived Review leases from immutable content tokens. */
 export const previewLeaseTokenPrefix = "review-";
 
@@ -120,9 +122,11 @@ export interface IssuedContentSession {
   readonly token: Redacted.Redacted;
 }
 
-/** One short-lived content-host lease for embedded exact-version Review. */
+/** One content-host lease for embedded exact-version Review. */
 export interface IssuedPreviewLease {
   readonly expiresAt: string;
+  /** True when an earlier lease was confirmed instead of a new one issued. */
+  readonly reused: boolean;
   readonly token: Redacted.Redacted;
   readonly versionId: string;
 }
@@ -151,11 +155,13 @@ export interface AuthorizeVersionContentCommand {
   readonly sessionToken: Redacted.Redacted | null;
 }
 
-/** Input for issuing one embedded Review lease for an exact saved version. */
+/** Input for issuing, or confirming for reuse, one embedded Review lease for an exact saved version. */
 export interface IssuePreviewLeaseCommand {
   readonly artifactId: string;
   readonly principal: Principal;
   readonly projectId: string | null;
+  /** A lease token the caller holds from an earlier issuance; null asks for a new lease. */
+  readonly reuseToken: Redacted.Redacted | null;
   readonly versionId: string;
 }
 
@@ -303,6 +309,22 @@ function makeContentAccessService(
       target: {kind: "version", versionId: command.versionId},
     });
     const now = yield* dependencies.clock.now;
+    if (command.reuseToken !== null && isPreviewLeaseToken(Redacted.value(command.reuseToken))) {
+      const existing = yield* dependencies.repository.findPreviewLease(
+        dependencies.secrets.digest(command.reuseToken),
+        DateTime.formatIso(now),
+      );
+      // Only the caller's own lease for this exact version is confirmed; anything else gets a new lease.
+      if (
+        existing !== null
+        && existing.principalId === command.principal.id
+        && existing.projectId === project.id
+        && existing.artifactId === artifact.id
+        && existing.versionId === target.id
+      ) {
+        return {expiresAt: existing.expiresAt, reused: true, token: command.reuseToken, versionId: target.id};
+      }
+    }
     const issued = dependencies.secrets.issue();
     // A DNS label may contain at most 63 characters. The provider digest is
     // uniform lowercase hexadecimal, so 56 characters plus the `review-`
@@ -313,7 +335,7 @@ function makeContentAccessService(
       {label: "preview-lease-token"},
     );
     const expiresAt = DateTime.formatIso(
-      DateTime.addDuration(now, contentSessionLifetimeMilliseconds),
+      DateTime.addDuration(now, previewLeaseLifetimeMilliseconds),
     );
     yield* dependencies.repository.createPreviewLease({
       artifactId: artifact.id,
@@ -325,7 +347,7 @@ function makeContentAccessService(
       tokenDigest: dependencies.secrets.digest(token),
       versionId: target.id,
     });
-    return {expiresAt, token, versionId: target.id};
+    return {expiresAt, reused: false, token, versionId: target.id};
   });
 
   const exchangeContentBootstrap = Effect.fn(

@@ -2515,7 +2515,9 @@ export function createHttpApp(
 
   app.post(
     "/api/v1/artifacts/:artifactId/versions/:versionId/preview-leases",
+    boundedJsonBody,
     async (context) => {
+      const reuseToken = previewLeaseReuseToken(await requestBodyText(context), dependencies.contentDomain);
       const issued = await runHttpApplicationEffect(
         context,
         dependencies,
@@ -2524,6 +2526,7 @@ export function createHttpApp(
             artifactId: context.req.param("artifactId"),
             principal: context.get("principal"),
             projectId: requestedProjectId(context),
+            reuseToken,
             versionId: context.req.param("versionId"),
           })
         ),
@@ -2536,7 +2539,7 @@ export function createHttpApp(
         ),
         expiresAt: issued.expiresAt,
         versionId: issued.versionId,
-      }, 201);
+      }, issued.reused ? 200 : 201);
     },
   );
 
@@ -4369,6 +4372,31 @@ function emptyByteStream(): ReadableStream<Uint8Array> {
       controller.close();
     },
   });
+}
+
+/** An optional earlier lease the Review client asks the server to confirm for reuse. */
+const previewLeaseRequestSchema = z.object({reuse: z.string().max(2_048).optional()});
+
+async function requestBodyText(context: Context<HttpEnvironment>): Promise<string> {
+  return context.req.raw.body === null ? "" : context.req.text();
+}
+
+/** The lease token in an earlier lease base URL, or null; nothing malformed is an error. */
+function previewLeaseReuseToken(body: string, contentDomain: string): Redacted.Redacted | null {
+  if (body === "") return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  const parsed = previewLeaseRequestSchema.safeParse(value);
+  const reuse = parsed.success ? parsed.data.reuse : undefined;
+  if (reuse === undefined || !URL.canParse(reuse)) return null;
+  const token = tokenFromContentHost(new URL(reuse).hostname, contentDomain);
+  return token !== null && isPreviewLeaseToken(token)
+    ? Redacted.make(token, {label: "preview-lease-token"})
+    : null;
 }
 
 function tokenFromContentHost(
