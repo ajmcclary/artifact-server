@@ -1,0 +1,43 @@
+{
+  "accountId": "ee625e5e88a18eea4402075704d78f9f",
+  "checks": {
+    "providerAvailability": "pass",
+    "estimateWithoutRemoteEffects": "pass",
+    "backfillAndFollowOn": "pass",
+    "readOnlyExactClone": "pass",
+    "outageIsolationAndRecovery": "pass",
+    "crashDuringPushRecovery": "pass",
+    "twoProcessConvergence": "pass",
+    "disableAndResume": "pass",
+    "operatorPurge": "pass"
+  },
+  "cleanup": {
+    "outcome": "purged",
+    "repositoriesCreated": 4,
+    "selection": "operator purge of this run's installation",
+    "namespaceRepositoriesAtEnd": 0,
+    "namespaceRepositoriesAtStart": 0,
+    "remainingAfterPurge": 0,
+    "removedBySafetyNet": []
+  },
+  "completedAt": "2026-10-06T14:29:29.064Z",
+  "costPosture": {
+    "clones": 4,
+    "estimatedProviderOperations": "about 4 per mirrored version plus 2 per repository and 1 per clone",
+    "loadOrQuotaTesting": false,
+    "versionsMirrored": "15"
+  },
+  "deployment": "single_server",
+  "installationId": "cfa-qualification-muwrtvg3-bcedaf7b",
+  "limits": {
+    "fileCopyLimitBytes": 256,
+    "maximumMirroredVersions": 16,
+    "maximumRepositories": 4
+  },
+  "namespace": "artifact-server-test-qualification",
+  "nodeVersion": "v24.15.0",
+  "runId": "muwrtvg3-bcedaf7b",
+  "runtime": "compiled Node external-storage server, disposable pinned Postgres and MinIO",
+  "schemaVersion": 1,
+  "sourceCommit": "55b303ed3ea1e9c52f296061f9763b91cacf4858"
+}
