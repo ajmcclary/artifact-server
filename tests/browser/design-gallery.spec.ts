@@ -175,6 +175,8 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     const mode = page.getByRole("group", {name: "HTML preview mode"});
     await expect(mode.getByRole("button", {name: "Interactive preview"})).toHaveAttribute("aria-pressed", "true");
     await mode.getByRole("button", {name: "Annotate"}).click();
+    await page.getByRole("toolbar", {exact: true, name: "Artifact"})
+      .getByRole("button", {name: /^Interact mode:/u}).click();
     const preview = previewFrame(page);
     await expect(preview.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
     await preview.getByRole("heading", {name: "Examiner app"}).click();

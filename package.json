@@ -30,7 +30,8 @@
     },
     "patchedDependencies": {
       "undici@7.29.0": "patches/undici@7.29.0.patch",
-      "@plannotator/agent-bridge@0.1.1": "patches/@plannotator__agent-bridge@0.1.1.patch"
+      "@plannotator/agent-bridge@0.1.1": "patches/@plannotator__agent-bridge@0.1.1.patch",
+      "@plannotator/ui@0.31.0": "patches/@plannotator__ui@0.31.0.patch"
     }
   },
   "scripts": {

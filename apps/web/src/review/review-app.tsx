@@ -451,7 +451,7 @@ function ProjectReview({
   const [focusMode, setFocusMode] = useState(initialLocation.view === "focus");
   const [focusCommentsOpen, setFocusCommentsOpen] = useState(false);
   const [focusControlsCollapsed, setFocusControlsCollapsed] = useState(false);
-  const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(true);
+  const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(false);
   const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
   // The artboard width lives in the toolbar's More menu; the presets offered are those the canvas has room for.
   const canvasSlotRef = useRef<HTMLDivElement | null>(null);

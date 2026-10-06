@@ -21,6 +21,9 @@ patchedDependencies:
   '@plannotator/agent-bridge@0.1.1':
     hash: 179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4
     path: patches/@plannotator__agent-bridge@0.1.1.patch
+  '@plannotator/ui@0.31.0':
+    hash: 37deebd8c34eec1ad2b16d4456eab732c0064e32f06f62043143621a8e54632b
+    path: patches/@plannotator__ui@0.31.0.patch
   undici@7.29.0:
     hash: c72a7ae9c9c076955d9fb259f0686ea52d72763b2e9bf853da3e07be3200176e
     path: patches/undici@7.29.0.patch
@@ -192,7 +195,7 @@ importers:
     dependencies:
       '@plannotator/ui':
         specifier: 0.31.0
-        version: 0.31.0(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@lezer/markdown@1.7.2)(@shikijs/themes@4.4.3)(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)(typescript@6.0.3)
+        version: 0.31.0(patch_hash=37deebd8c34eec1ad2b16d4456eab732c0064e32f06f62043143621a8e54632b)(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@lezer/markdown@1.7.2)(@shikijs/themes@4.4.3)(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)(typescript@6.0.3)
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -9803,7 +9806,7 @@ snapshots:
       '@codemirror/lang-yaml': 6.1.3
       '@codemirror/legacy-modes': 6.5.3
 
-  '@plannotator/ui@0.31.0(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@lezer/markdown@1.7.2)(@shikijs/themes@4.4.3)(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)(typescript@6.0.3)':
+  '@plannotator/ui@0.31.0(patch_hash=37deebd8c34eec1ad2b16d4456eab732c0064e32f06f62043143621a8e54632b)(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@lezer/markdown@1.7.2)(@shikijs/themes@4.4.3)(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)(typescript@6.0.3)':
     dependencies:
       '@base-ui/react': 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@codemirror/autocomplete': 6.20.3

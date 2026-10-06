@@ -164,7 +164,7 @@ test.describe("Review sandbox isolation", () => {
       await expect(modes.getByRole("button", {exact: true, name: "Annotate"}))
         .toHaveAttribute("aria-pressed", "true");
       await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
-        .getByRole("button", {name: /Annotate mode:/u}))
+        .getByRole("button", {name: /Interact mode:/u}))
         .toBeVisible();
       await expect(annotationFrame(fixture.page).locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
       await modes.getByRole("button", {exact: true, name: "Interactive preview"}).click();

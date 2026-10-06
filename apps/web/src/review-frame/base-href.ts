@@ -15,6 +15,21 @@ const resourceUrlAttributes = [
   ["object[data]", "data"],
 ] as const;
 
+// The asset base must not turn a same-document fragment into a content-host
+// navigation. Listen at the end of bubbling so authored handlers and the
+// annotation bridge retain their clicks. Delegation includes runtime links.
+const fragmentNavigationScript = `window.addEventListener('click', function (event) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  var link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!link || link.hasAttribute('download')) return;
+  var target = link.getAttribute('target');
+  if (target && target.toLowerCase() !== '_self') return;
+  var href = link.getAttribute('href').trim();
+  if (!href.startsWith('#')) return;
+  event.preventDefault();
+  window.location.hash = href;
+});`;
+
 /** Return `html` with a `<base href>` in place, or unchanged when it cannot be. */
 export function withBaseHref(html: string, baseHref: string | null): string {
   if (baseHref === null || !absoluteHttpUrl.test(baseHref)) return html;
@@ -35,6 +50,9 @@ function withResolvedDocumentResources(html: string, baseHref: string): string {
   const base = parsed.createElement("base");
   base.href = baseHref;
   parsed.head.prepend(base);
+  const fragmentNavigation = parsed.createElement("script");
+  fragmentNavigation.textContent = fragmentNavigationScript;
+  parsed.head.append(fragmentNavigation);
   for (const [selector, attribute] of resourceUrlAttributes) {
     for (const element of parsed.querySelectorAll(selector)) {
       const value = element.getAttribute(attribute);

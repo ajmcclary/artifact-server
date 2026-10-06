@@ -48,7 +48,7 @@ function toAnnotation(review: ReviewAnnotation): Annotation {
 
 function sessionFrom(init: ReviewInit): ReviewSession {
   return {
-    annotateModeActive: init.annotateModeActive ?? true,
+    annotateModeActive: init.annotateModeActive ?? false,
     annotations: init.annotations.map(toAnnotation),
     entryPath: init.entryPath,
     html: withBaseHref(init.html, init.baseHref),

@@ -94,6 +94,9 @@ test.describe("Artifact review full screen", () => {
       await expect(focusComments).toHaveCount(0);
 
       // Commenting in full screen keeps the canvas uninterrupted until asked.
+      const interact = controls.getByRole("button", {exact: true, name: "Interact mode"});
+      await expect(interact).toHaveAttribute("aria-pressed", "false");
+      await interact.click();
       const annotate = controls.getByRole("button", {exact: true, name: "Annotate mode"});
       await expect(annotate).toHaveAttribute("aria-pressed", "true");
       await previewFrame(page).locator("#focus-target").click();

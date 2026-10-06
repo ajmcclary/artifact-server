@@ -141,12 +141,14 @@ test.describe("Artifact Server frontend MVP", () => {
       const annotateMode = fixture.page.getByRole("button", {
         name: /^Annotate mode:/u,
       });
-      await expect(annotateMode).toHaveAttribute("aria-pressed", "true");
-      await preview.locator("#review-native-action").focus();
-      await fixture.page.keyboard.press("Escape");
       const interactMode = fixture.page.getByRole("button", {
         name: /^Interact mode:/u,
       });
+      await expect(interactMode).toHaveAttribute("aria-pressed", "false");
+      await interactMode.click();
+      await expect(annotateMode).toHaveAttribute("aria-pressed", "true");
+      await preview.locator("#review-native-action").focus();
+      await fixture.page.keyboard.press("Escape");
       await expect(interactMode).toHaveAttribute("aria-pressed", "false");
       await preview.locator("#review-native-action").click();
       await expect(preview.locator("#review-native-action"))

@@ -38,6 +38,56 @@ import {
  * Chromium suite owns the cosmetic coverage. Tag: @critical.
  */
 test.describe("critical engine review paths @critical", () => {
+  test("CMT-015-B CMT-015-F: Interact defaults on and fragment navigation survives annotation toggles @critical", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const published = await publishNew(fixture.server, fixture.installation, {
+        accessSetting: "account_required",
+        content: `<!doctype html><html lang="en"><head><title>Fragment router</title></head><body>
+          <nav><a href="#claims"><span>Claims</span></a></nav>
+          <h1>Dashboard</h1><button onclick="this.textContent = 'Action saved'">Save action</button>
+          <script>
+            window.addEventListener('hashchange', function () {
+              document.querySelector('h1').textContent = location.hash === '#claims' ? 'Claims screen' : 'Dashboard';
+            });
+            var home = document.createElement('a');
+            home.href = '#dashboard'; home.textContent = 'Dashboard';
+            document.querySelector('nav').appendChild(home);
+          </script></body></html>`,
+        idempotencyKey: "critical-fragment-navigation",
+        name: "Fragment router",
+      });
+      await localLogin(fixture);
+      await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
+      const page = fixture.page;
+      const reviewFrame = isolatedReviewFrame(page);
+      const preview = reviewFrame.frameLocator("iframe");
+      const toggle = page.getByRole("toolbar", {exact: true, name: "Artifact"})
+        .getByRole("button", {name: /Annotate mode:|Interact mode:/u});
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await preview.getByRole("button", {name: "Save action"}).click();
+      await preview.getByRole("link", {name: "Claims", exact: true}).click();
+      await expect(preview.getByRole("heading", {name: "Claims screen"})).toBeVisible();
+      await expect(preview.getByRole("button", {name: "Action saved"})).toBeVisible();
+
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await preview.getByRole("link", {name: "Dashboard", exact: true}).click();
+      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toBeVisible();
+      await expect(preview.getByRole("heading", {name: "Claims screen"})).toBeVisible();
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toHaveCount(0);
+      await preview.getByRole("link", {name: "Dashboard", exact: true}).click();
+      await expect(preview.getByRole("heading", {name: "Dashboard"})).toBeVisible();
+      await expect(preview.getByRole("button", {name: "Action saved"})).toBeVisible();
+      await expect(reviewFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
+      expect(await preview.locator("body").evaluate(() => window.origin)).toBe("null");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
   test("CMT-016-B CMT-016-F: an exact Review URL renders the pinned version @critical", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
