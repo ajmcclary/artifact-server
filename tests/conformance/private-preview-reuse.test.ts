@@ -1,8 +1,13 @@
+import {createHash, randomBytes} from "node:crypto";
+import path from "node:path";
+import {DatabaseSync} from "node:sqlite";
+
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
 import type {Clock} from "../../src/core/ports.js";
 import {signInAdministrator} from "../support/agent-dispatch.js";
+import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
   createTestInstallation,
@@ -252,4 +257,85 @@ describe("reusable preview leases", () => {
     expect((await adminFetch(admin, `/api/v1/members/${member.id}/deactivate`, "POST")).status).toBe(200);
     expect((await bearerLease(endpoint, memberKey.token, memberLease.baseUrl)).status).toBe(401);
   });
+
+  test("foundation: a logout whose lease revocation fails keeps the session so signing out can be retried", async () => {
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>Logout retry</title>",
+      idempotencyKey: "reuse-logout-retry-v1",
+      name: "Logout retry",
+    });
+    const endpoint = leaseEndpoint(published.body.artifact.id, published.body.version.id, published.body.artifact.projectId);
+    const cookies = await signInAdministrator(server, installation);
+    const lease = leaseSchema.parse(await (await adminFetch(cookies, `${new URL(endpoint).pathname}${new URL(endpoint).search}`, "POST")).json());
+
+    const database = new DatabaseSync(path.join(installation.dataDirectory, "artifact-server.db"));
+    try {
+      database.exec("ALTER TABLE content_sessions RENAME TO content_sessions_unavailable");
+      expect((await adminFetch(cookies, "/api/v1/session/logout", "POST")).status).toBeGreaterThanOrEqual(500);
+      expect((await adminFetch(cookies, "/api/v1/session", "GET")).status, "the session survives a failed sign-out").toBe(200);
+      database.exec("ALTER TABLE content_sessions_unavailable RENAME TO content_sessions");
+    } finally {
+      database.close();
+    }
+    expect((await adminFetch(cookies, "/api/v1/session/logout", "POST")).status).toBe(204);
+    expect((await fetchVersion(server, lease.baseUrl)).status).toBe(401);
+  });
+
+  test("foundation: rotating an API key ends the old key's leases", async () => {
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>Rotation</title>",
+      idempotencyKey: "reuse-rotation-v1",
+      name: "Rotation",
+    });
+    const endpoint = leaseEndpoint(published.body.artifact.id, published.body.version.id, published.body.artifact.projectId);
+    const admin = await signInAdministrator(server, installation);
+    const key = issuedKeySchema.parse(await (await adminFetch(admin, "/api/v1/api-keys", "POST", {
+      capabilities: leaseReaderCapabilities,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      name: "Rotated reader",
+    })).json());
+    const lease = leaseSchema.parse(await (await bearerLease(endpoint, key.token)).json());
+    expect((await fetchVersion(server, lease.baseUrl)).status).toBe(200);
+    expect((await adminFetch(admin, `/api/v1/api-keys/${key.apiKey.id}/rotate`, "POST")).status).toBe(201);
+    expect((await fetchVersion(server, lease.baseUrl)).status).toBe(401);
+  });
+
+  test("foundation: a lease that lands just after a deactivation is swept once sign-in caches have expired", async () => {
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>Late lease</title>",
+      idempotencyKey: "reuse-late-lease-v1",
+      name: "Late lease",
+    });
+    const admin = await signInAdministrator(server, installation);
+    const member = z.object({member: z.object({id: z.string()})}).parse(await (await adminFetch(admin, "/api/v1/members", "POST", {
+      displayName: "Late Member",
+      email: "late-member@example.test",
+    })).json()).member;
+    expect((await adminFetch(admin, `/api/v1/members/${member.id}/deactivate`, "POST")).status).toBe(200);
+
+    // A lease issued by a request that authenticated before the deactivation and committed after its revocation.
+    const token = `review-${randomBytes(28).toString("hex")}`;
+    const repository = new SqliteArtifactRepository(path.join(installation.dataDirectory, "artifact-server.db"), "local");
+    try {
+      await repository.createPreviewLease({
+        artifactId: published.body.artifact.id,
+        contentToken: new URL(published.body.links.version).hostname.split(".")[0] ?? "",
+        createdAt: clock.now().toISOString(),
+        expiresAt: new Date(clock.now().getTime() + twelveHours).toISOString(),
+        principalId: member.id,
+        projectId: published.body.artifact.projectId,
+        tokenDigest: createHash("sha256").update(token).digest("hex"),
+        versionId: published.body.version.id,
+      });
+    } finally {
+      repository.close();
+    }
+    const lateLease = `http://${token}.localhost/`;
+    expect((await fetchVersion(server, lateLease)).status).toBe(200);
+    await expect.poll(async () => (await fetchVersion(server, lateLease)).status, {interval: 1_000, timeout: 45_000})
+      .toBe(401);
+  }, 60_000);
 });

@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import { Context, Effect, Layer, Redacted, Schema } from "effect";
+import { Context, Effect, Layer, Redacted, Schema, type Scope } from "effect";
 
 import type { AuthenticatedApplicationSession } from "./authentication.js";
 import type {
@@ -338,7 +338,11 @@ export interface InstallationAccessOperations {
     keyId: string,
   ) => Effect.Effect<
     IssuedManagedApiKey,
-    AuthorizationDenied | IdentityConflict | IdentityNotFound | IdentityRepositoryFailure
+    | ArtifactRepositoryFailure
+    | AuthorizationDenied
+    | IdentityConflict
+    | IdentityNotFound
+    | IdentityRepositoryFailure
   >;
 }
 
@@ -350,14 +354,18 @@ export class InstallationAccessService extends Context.Service<
   static readonly layer = (
     dependencies: InstallationAccessDependencies,
   ): Layer.Layer<InstallationAccessService> =>
-    Layer.succeed(
+    Layer.effect(
       InstallationAccessService,
-      makeInstallationAccessService(dependencies),
+      Effect.map(Effect.scope, (scope) => makeInstallationAccessService(dependencies, scope)),
     );
 }
 
+/** Margin past the authentication cache's lifetime before the second revocation sweep. */
+const revocationSweepMarginMilliseconds = 5_000;
+
 function makeInstallationAccessService(
   dependencies: InstallationAccessDependencies,
+  scope: Scope.Scope,
 ): InstallationAccessOperations {
   const cachePolicy = dependencies.authenticationCache === undefined
     ? defaultAuthenticationCachePolicy
@@ -370,6 +378,21 @@ function makeInstallationAccessService(
     : new AuthenticationCache<Principal>(cachePolicy);
   const cacheKey = (digest: string): string =>
     `${dependencies.installationId}:${digest}`;
+  // A request that authenticated before access ended (from a cached credential in any process,
+  // or still in flight) can issue a lease after the first sweep, so a second sweep follows once
+  // every cached credential has expired. It runs in the service's scope and ends with it.
+  const sweepDelayMilliseconds = (cachePolicy?.ttlMilliseconds ?? 0) + revocationSweepMarginMilliseconds;
+  const endContentAccess = (principalIds: readonly string[]) =>
+    Effect.andThen(
+      dependencies.contentAccessRevocation.revokeForPrincipals(principalIds),
+      Effect.forkIn(
+        Effect.sleep(sweepDelayMilliseconds).pipe(
+          Effect.andThen(dependencies.contentAccessRevocation.revokeForPrincipals(principalIds)),
+          Effect.ignore,
+        ),
+        scope,
+      ),
+    );
   const noteActivity = (subject: PrincipalActivitySubject) =>
     dependencies.principalActivity === undefined
       ? Effect.void
@@ -721,7 +744,7 @@ function makeInstallationAccessService(
     apiKeyCache?.clear();
     // The identity change stands even if this fails; a retry re-runs revocation.
     // A member's API keys act as the member's own principal, so this covers their leases too.
-    yield* dependencies.contentAccessRevocation.revokeForPrincipals([memberId]);
+    yield* endContentAccess([memberId]);
     return member;
   });
 
@@ -790,7 +813,7 @@ function makeInstallationAccessService(
     // Key entries are keyed by presented-credential digest, not key id, so
     // this rare administrative mutation clears the cache instead of indexing.
     apiKeyCache?.clear();
-    yield* dependencies.contentAccessRevocation.revokeForPrincipals([revoked.principalId]);
+    yield* endContentAccess([revoked.principalId]);
     return revoked;
   });
 
@@ -833,6 +856,8 @@ function makeInstallationAccessService(
       attributionOf(principal),
     );
     apiKeyCache?.clear();
+    // The replacement keeps the principal, so this also costs the new key's holder one cold load.
+    yield* endContentAccess([previous.principalId]);
     return {apiKey, token};
   });
 
@@ -840,13 +865,14 @@ function makeInstallationAccessService(
     "InstallationAccessService.revokeSession",
   )(function*(credential: Redacted.Redacted, principalId: string) {
     const tokenDigest = dependencies.secrets.digest(Redacted.value(credential));
+    // Content access ends first: if it fails, the session survives and signing out can be retried.
+    yield* endContentAccess([principalId]);
     yield* dependencies.repository.revokeApplicationSession(
       dependencies.installationId,
       tokenDigest,
       dependencies.clock.now().toISOString(),
     );
     sessionCache?.evict(cacheKey(tokenDigest));
-    yield* dependencies.contentAccessRevocation.revokeForPrincipals([principalId]);
   });
 
   return InstallationAccessService.of({
