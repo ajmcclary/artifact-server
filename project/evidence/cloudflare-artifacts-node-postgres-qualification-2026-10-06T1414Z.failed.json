@@ -1,0 +1,31 @@
+{
+  "accountId": "ee625e5e88a18eea4402075704d78f9f",
+  "checks": {},
+  "cleanup": {
+    "outcome": "not-run",
+    "namespaceRepositoriesAtEnd": 0,
+    "namespaceRepositoriesAtStart": 0,
+    "remainingAfterPurge": 0,
+    "removedBySafetyNet": []
+  },
+  "completedAt": "2026-10-06T14:14:48.159Z",
+  "costPosture": {
+    "clones": 0,
+    "estimatedProviderOperations": "about 4 per mirrored version plus 2 per repository and 1 per clone",
+    "loadOrQuotaTesting": false,
+    "versionsMirrored": "unknown"
+  },
+  "deployment": "single_server",
+  "installationId": "cfa-qualification-muwrfn39-49276419",
+  "limits": {
+    "fileCopyLimitBytes": 256,
+    "maximumMirroredVersions": 16,
+    "maximumRepositories": 4
+  },
+  "namespace": "artifact-server-test-qualification",
+  "nodeVersion": "v24.15.0",
+  "runId": "muwrfn39-49276419",
+  "runtime": "compiled Node external-storage server, disposable pinned Postgres and MinIO",
+  "schemaVersion": 1,
+  "sourceCommit": "4458e3aadf85554877a0edd812bf2755ba3355f6"
+}

@@ -20,10 +20,10 @@ if [[ -z "${ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_ACCOUNT_ID:-}" ]]; then
   exit 64
 fi
 
-readonly run_date="$(date -u +%Y-%m-%d)"
+readonly run_stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 readonly evidence_dir="project/evidence"
-readonly summary="${evidence_dir}/cloudflare-artifacts-node-postgres-qualification-${run_date}.json"
-readonly report="${evidence_dir}/cloudflare-artifacts-node-postgres-qualification-${run_date}.vitest.json"
+readonly summary="${evidence_dir}/cloudflare-artifacts-node-postgres-qualification-${run_stamp}.json"
+readonly report="${evidence_dir}/cloudflare-artifacts-node-postgres-qualification-${run_stamp}.vitest.json"
 
 source_commit="$(git rev-parse HEAD)"
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then

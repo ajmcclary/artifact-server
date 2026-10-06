@@ -146,6 +146,8 @@ describe.skipIf(!live)("Cloudflare Artifacts Node/Postgres product qualification
       region,
     });
     await s3.send(new CreateBucketCommand({Bucket: bucket}));
+    const migrated = await runCli(["migrate", "apply"]);
+    if (migrated.exitCode !== 0) throw new Error(`Migration failed: ${migrated.output}`);
     namespaceRepositoriesAtStart = await countNamespaceRepositories();
   }, liveTimeout);
 
