@@ -83,6 +83,21 @@ administrator by email. An absent or false claim is refused; configure the
 issuer to include the claim. Leave the setting absent for closed admission;
 removing a domain does not deactivate existing members.
 
+### Admit people with invite links
+
+An administrator can create invite links from Share or Settings › Invites. A
+one-person invite works once for a matching verified email and may grant the
+Member or Administrator role; a link invite works for up to 100 people and
+only admits Members. Links expire after 24 hours, 7 days or 30 days, and the
+link is shown once. Artifact Server sends no email.
+
+Invites need an identity provider (WorkOS or OIDC). Keep sign-up enabled at
+the provider so a person without an account can create one; Artifact Server
+still refuses anyone it has not admitted. With WorkOS AuthKit, the invitee can
+choose any method the environment enables, such as a passkey, Google, GitHub
+or Magic Auth. The Node server prints a reminder about provider sign-up at
+startup in team mode.
+
 ### Use a generic OIDC issuer for MCP
 
 The issuer configured for browser login also protects `/mcp`. Agents present an

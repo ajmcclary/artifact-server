@@ -154,6 +154,14 @@ The checked-in starting configuration is
 `src/deployment-input.ts` applies Cloudflare package pins after it calls the
 shared parser in `src/deployment/index.ts`.
 
+### Invite links
+
+Administrators can admit people with invite links (Share or Settings ›
+Invites). Invites need the configured WorkOS or OIDC provider, and that
+provider must keep sign-up enabled so someone without an account can create
+one; Artifact Server still refuses anyone it has not admitted. A Worker has no
+startup console, so this note replaces the reminder the Node server prints.
+
 ## Prepare authentication and state
 
 Log in to the approved Cloudflare account:
