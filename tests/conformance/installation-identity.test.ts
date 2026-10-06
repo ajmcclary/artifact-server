@@ -699,6 +699,46 @@ describe("installation identity and access", () => {
       "legacy-installation-bearer-with-sufficient-entropy",
     )).toBe(401);
     expect(await bearerStatus(server, installation.apiToken)).toBe(200);
+
+    // Team denial, provider failure, and deactivation create no session and
+    // never redirect toward a local login.
+    const completeLogin = async (code: string) => {
+      const started = await fetch(`${server.baseUrl}/auth/login`, {redirect: "manual"});
+      expect(started.status).toBe(302);
+      expect(started.headers.get("location")).toBe(provider.authorizationUrl);
+      const callbackUrl = new URL("/auth/callback", server.baseUrl);
+      callbackUrl.searchParams.set("code", code);
+      callbackUrl.searchParams.set("state", provider.authorization.state);
+      return fetch(callbackUrl, {
+        headers: {Cookie: loginHandshakeCookie(started)},
+        redirect: "manual",
+      });
+    };
+    const refusal = {issuedSession: false, offersLocalLogin: false, refused: true};
+
+    const administratorLogin = await completeLogin(provider.authorizationCode);
+    expect(administratorLogin.status).toBe(303);
+    const administratorCookies = applicationCookies(administratorLogin.headers.getSetCookie());
+    const admitted = await fetch(`${server.baseUrl}/api/v1/members`, {
+      body: JSON.stringify({displayName: "Team member", email: "member@example.test"}),
+      headers: browserMutationHeaders(server.baseUrl, administratorCookies),
+      method: "POST",
+    });
+    expect(admitted.status).toBe(201);
+    const teamMember = z.object({member: z.object({id: z.string()})}).parse(await admitted.json()).member;
+
+    provider.identity = {...provider.identity, email: "outsider@example.test", subject: "team-outsider"};
+    expect(refusedWithoutSession(await completeLogin(provider.authorizationCode))).toEqual(refusal);
+    expect(refusedWithoutSession(await completeLogin("provider-rejected-code"))).toEqual(refusal);
+
+    provider.identity = {...provider.identity, email: "member@example.test", subject: "team-member"};
+    expect(issuedSession(await completeLogin(provider.authorizationCode))).toBe(true);
+    expect((await fetch(`${server.baseUrl}/api/v1/members/${teamMember.id}/deactivate`, {
+      headers: browserMutationHeaders(server.baseUrl, administratorCookies),
+      method: "POST",
+    })).status).toBe(200);
+    expect(refusedWithoutSession(await completeLogin(provider.authorizationCode))).toEqual(refusal);
+
     await expect(startTestServer(installation, {
       browserAccess: privateTeamBrowserAccess(browserLoginKinds.oidc),
     })).rejects.toThrow("requires exactly one OIDC or WorkOS");
@@ -1447,6 +1487,21 @@ async function localOwnerDeactivationByAnotherAdministrator(): Promise<{
     repository.close();
     await rm(dataDirectory, {force: true, recursive: true});
   }
+}
+
+function issuedSession(response: Response): boolean {
+  return response.headers.getSetCookie().some((cookie) =>
+    /^(?:__Host-)?artifact_session=[^;]+/u.test(cookie)
+  );
+}
+
+/** How a login response ended: refused, with or without a session, and where it points. */
+function refusedWithoutSession(response: Response) {
+  return {
+    issuedSession: issuedSession(response),
+    offersLocalLogin: (response.headers.get("location") ?? "").includes("/auth/local"),
+    refused: response.status >= 400,
+  };
 }
 
 /** POST the local-owner exchange with exact raw headers, including Host. */
