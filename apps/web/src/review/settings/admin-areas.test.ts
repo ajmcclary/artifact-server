@@ -35,6 +35,11 @@ describe("administration areas", () => {
       .toBe("/review/settings/members");
   });
 
+  it("labels a member admitted by invite with the inviter's name", () => {
+    expect(admittedLabel({admittedBy: {name: "Jordan Lee"}, admittedHow: "invite"})).toBe("Jordan Lee · Invite");
+    expect(admittedLabel({admittedBy: null, admittedHow: "invite"})).toBe("— · Invite");
+  });
+
   it("names how a member was admitted without inventing an admitter", () => {
     expect(admittedLabel({admittedBy: null, admittedHow: "automatic"})).toBe("Automatic");
     expect(admittedLabel({admittedBy: null, admittedHow: "owner"})).toBe("Installation owner");

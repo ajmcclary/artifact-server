@@ -10,6 +10,7 @@ import {AnnouncerProvider} from "@/ui/announcer";
 import {DensityProvider} from "@/ui/density";
 import {ToastProvider} from "@/ui/toasts";
 
+import {JoinApp} from "./join/join-app.tsx";
 import {ReviewApp} from "./review-app.tsx";
 import {startReviewHistory} from "./review-history.ts";
 import "@/arkcase/tokens/fonts.css";
@@ -42,7 +43,7 @@ createRoot(rootElement).render(
       <AnnouncerProvider>
         <ToastProvider>
           <PaletteProvider>
-            <ReviewApp />
+            {window.location.pathname === "/review/join" ? <JoinApp /> : <ReviewApp />}
           </PaletteProvider>
         </ToastProvider>
       </AnnouncerProvider>

@@ -765,7 +765,7 @@ const nameReferenceSchema = z.object({ name: z.string() }).nullable();
 const administeredMemberSchema = memberSchema.extend({
   admittedAt: z.string(),
   admittedBy: nameReferenceSchema,
-  admittedHow: z.enum(["manual", "automatic", "owner"]).nullable(),
+  admittedHow: z.enum(["manual", "automatic", "owner", "invite"]).nullable(),
   lastActiveAt: z.string().nullable(),
 });
 
@@ -775,6 +775,61 @@ const administeredApiKeySchema = apiKeySchema.extend({
   revokedBy: nameReferenceSchema,
   status: z.enum(["active", "revoked", "expired"]),
 });
+
+const inviteStatusSchema = z.enum(["active", "expired", "revoked", "used"]);
+const inviteKindSchema = z.enum(["link", "person"]);
+const invitePreviewSchema = z.union([
+  z.object({status: z.literal("invalid")}),
+  z.object({
+    expiresAt: z.string(),
+    inviterName: z.string().nullable(),
+    kind: inviteKindSchema,
+    maskedEmail: z.string().nullable(),
+    opens: z.object({artifactName: z.string(), versionNumber: z.number().int()}).nullable(),
+    role: membershipRoleSchema,
+    status: inviteStatusSchema,
+    usesLeft: z.number().int(),
+  }),
+]);
+const administeredInviteSchema = z.object({
+  createdAt: z.string(),
+  createdByName: z.string().nullable(),
+  email: z.string().nullable(),
+  expiresAt: z.string(),
+  id: z.string(),
+  kind: inviteKindSchema,
+  maxUses: z.number().int(),
+  opens: z.object({artifactId: z.string(), projectId: z.string(), versionId: z.string()}).nullable(),
+  revokedAt: z.string().nullable(),
+  role: membershipRoleSchema,
+  status: inviteStatusSchema,
+  tokenPrefix: z.string(),
+  useCount: z.number().int(),
+});
+
+export type InvitePreview = z.infer<typeof invitePreviewSchema>;
+export type AdministeredInvite = z.infer<typeof administeredInviteSchema>;
+export type CreateInviteBody =
+  | {readonly email: string; readonly expiresIn: "24h" | "7d" | "30d"; readonly kind: "person"; readonly opens?: {readonly artifactId: string; readonly projectId: string; readonly versionId: string}; readonly role: "administrator" | "member"}
+  | {readonly expiresIn: "24h" | "7d" | "30d"; readonly kind: "link"; readonly maxUses: number; readonly opens?: {readonly artifactId: string; readonly projectId: string; readonly versionId: string}};
+
+/** The token the join screen sends to the public invite endpoints. */
+interface InviteTokenBody {
+  readonly forceSignIn?: boolean;
+  readonly token: string;
+}
+
+/** Same-origin public POST: no CSRF header and no session-expiry event. */
+async function publicPost<T>(schema: z.ZodType<T>, path: string, body: InviteTokenBody): Promise<T> {
+  const response = await fetch(path, {
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+    headers: {"Content-Type": "application/json"},
+    method: "POST",
+  });
+  if (!response.ok) throw await parseFailure(response);
+  return schema.parse(await response.json());
+}
 
 export type AdministeredMember = z.infer<typeof administeredMemberSchema>;
 export type AdministeredApiKey = z.infer<typeof administeredApiKeySchema>;
@@ -1433,6 +1488,26 @@ export const api = {
     `/api/v1/members/${encodeURIComponent(memberId)}/deactivate`,
     { headers: mutationHeaders(), method: "POST" },
   ).then(({ member }) => member),
+  previewInvite: (token: string) => publicPost(invitePreviewSchema, "/auth/invites/preview", {token}),
+  startInvite: (token: string, forceSignIn: boolean) => publicPost(
+    z.union([z.object({authorizationUrl: z.string()}), invitePreviewSchema]),
+    "/auth/invites/start",
+    {forceSignIn, token},
+  ),
+  invites: () => request(
+    z.object({invites: z.array(administeredInviteSchema)}),
+    "/api/v1/invites",
+  ).then(({invites}) => invites),
+  createInvite: (body: CreateInviteBody) => request(
+    z.object({invite: administeredInviteSchema, url: z.string()}),
+    "/api/v1/invites",
+    {body: JSON.stringify(body), headers: mutationHeaders(), method: "POST"},
+  ),
+  revokeInvite: (inviteId: string) => request(
+    z.object({invite: administeredInviteSchema}),
+    `/api/v1/invites/${encodeURIComponent(inviteId)}/revoke`,
+    {headers: mutationHeaders(), method: "POST"},
+  ).then(({invite}) => invite),
   apiKeys: () => request(
     z.object({ apiKeys: z.array(administeredApiKeySchema) }),
     "/api/v1/api-keys",

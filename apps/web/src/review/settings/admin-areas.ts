@@ -85,14 +85,15 @@ export function selectedRecordHref(
   return search.size === 0 ? location.pathname : `${location.pathname}?${search}`;
 }
 
-/** "Automatic", "Installation owner", the admitter's name, or a dash when unrecorded. */
+/** "Automatic", "Installation owner", the admitter's name (with "· Invite" for an invite), or a dash. */
 export function admittedLabel(member: {
   readonly admittedBy: {readonly name: string} | null;
-  readonly admittedHow: "automatic" | "manual" | "owner" | null;
+  readonly admittedHow: "automatic" | "invite" | "manual" | "owner" | null;
 }): string {
   if (member.admittedHow === "automatic") return "Automatic";
   if (member.admittedHow === "owner") return "Installation owner";
-  return member.admittedBy?.name ?? "—";
+  const admitter = member.admittedBy?.name ?? "—";
+  return member.admittedHow === "invite" ? `${admitter} · Invite` : admitter;
 }
 
 function instantOf(iso: string | null): number {

@@ -20,7 +20,8 @@ const gatePoints: AuthLayoutPoint[] = [
   {icon: "bi-send", text: "Send open comments to a connected agent."},
 ];
 
-function GateFrame({children}: {readonly children: ReactNode}) {
+/** The split sign-in frame every gate and the join screen share. */
+export function GateFrame({children}: {readonly children: ReactNode}) {
   return (
     <AuthLayout
       brand={<BrandLock label="ArkCase" product="Artifact Server" size={17} tone="reversed" />}
