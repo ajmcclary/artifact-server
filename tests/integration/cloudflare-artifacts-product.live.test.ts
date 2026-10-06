@@ -208,7 +208,7 @@ describe.skipIf(!live)("Cloudflare Artifacts Node/Postgres product qualification
     checks["estimateWithoutRemoteEffects"] = "pass";
   }, liveTimeout);
 
-  test("GIT-002 GIT-008 live: enablement backfills oldest-first and a new publication follows", async () => {
+  test("GIT-002-B GIT-008 live: enablement backfills oldest-first and a new publication opens before it is mirrored", async () => {
     const server = await startServer();
     await waitForAvailable(server.baseUrl);
     await setProjectGitHistory(server.baseUrl, true);
@@ -216,6 +216,13 @@ describe.skipIf(!live)("Cloudflare Artifacts Node/Postgres product qualification
     await publishArtifactVersions(server.baseUrl, "alpha", [
       "<!doctype html><title>alpha four</title>",
     ]);
+    // The primary version is readable at once, whatever the mirror has done.
+    const opened = await fetch(
+      `${server.baseUrl}/api/v1/artifacts/${artifactId("alpha")}?project=${defaultProjectId}`,
+      {headers: {Authorization: `Bearer ${apiToken}`}},
+    );
+    expect(opened.status).toBe(200);
+    expect(await opened.text()).toContain(versionAt("alpha", 3).id);
     const mappings = await waitForMappings("alpha", 4);
     expect(new Set(mappings.map((mapping) => mapping.commitId)).size).toBe(4);
     await stopProcess(server.child, "SIGTERM");
@@ -257,7 +264,7 @@ describe.skipIf(!live)("Cloudflare Artifacts Node/Postgres product qualification
     checks["readOnlyExactClone"] = "pass";
   }, liveTimeout);
 
-  test("GIT-003 live: a rejected provider credential never blocks publication and work resumes", async () => {
+  test("GIT-003-B live: a rejected provider credential never blocks publication and the copy retries after recovery", async () => {
     const invalidTokenFile = path.join(workDirectory, "invalid.token");
     await writeFile(invalidTokenFile, "invalid-qualification-token\n", {mode: 0o600});
     const degraded = await startServer({tokenFile: invalidTokenFile});
