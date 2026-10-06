@@ -933,6 +933,11 @@ describe("authenticated CLI profiles and remote publication", () => {
       authorization.expireAccessTokens();
       expect((await cli(["auth", "status", "--profile-data", profileData])).exitCode)
         .toBe(0);
+      // Status renews both browser grants concurrently; each rotated grant
+      // must be the one the credential store kept.
+      const renewedStore = await readFile(helperState, "utf8");
+      expect(renewedStore).toContain(authorization.currentRefreshToken("usr_cli001_alice"));
+      expect(renewedStore).toContain(authorization.currentRefreshToken("usr_cli001_bob"));
       expect((await cli([
         "publish", fixture, "--profile", "alpha", "--profile-data", profileData,
       ])).exitCode).toBe(0);
@@ -1289,30 +1294,61 @@ async function credentialHelperEnvironment(
   helper: string,
   statePath: string,
 ): Promise<NodeJS.ProcessEnv> {
+  // Real credential stores update one entry atomically, and the CLI renews
+  // several profiles concurrently (auth status), so this file-backed store
+  // serializes each read-modify-write under an exclusive lock and replaces
+  // the file by rename. Without that, concurrent writes lose updates.
   await writeFile(helper, `#!/usr/bin/env node
-import {appendFileSync, existsSync, readFileSync, writeFileSync} from "node:fs";
+import {appendFileSync, closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync} from "node:fs";
 const argvLog = process.env.ARTIFACT_SERVER_TEST_ARGV_LOG;
 if (argvLog !== undefined) appendFileSync(argvLog, JSON.stringify(process.argv.slice(2)) + "\\n");
 const input = JSON.parse(readFileSync(0, "utf8"));
 const statePath = process.env.CREDENTIAL_HELPER_STATE;
 if (statePath === undefined) process.exit(3);
-const state = existsSync(statePath)
-  ? JSON.parse(readFileSync(statePath, "utf8"))
-  : {};
-const operation = process.argv[2];
-if (operation === "read") {
-  if (!(input.account in state)) process.exit(2);
-  process.stdout.write(state[input.account]);
-} else if (operation === "write") {
-  state[input.account] = input.secret;
-  writeFileSync(statePath, JSON.stringify(state));
-} else if (operation === "delete") {
-  if (!(input.account in state)) process.exit(2);
-  delete state[input.account];
-  writeFileSync(statePath, JSON.stringify(state));
-} else {
-  process.exit(3);
+const lockPath = statePath + ".lock";
+const deadline = Date.now() + 15000;
+let lock;
+for (;;) {
+  try {
+    lock = openSync(lockPath, "wx");
+    break;
+  } catch (error) {
+    if (error.code !== "EEXIST" || Date.now() > deadline) process.exit(4);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
 }
+let exitCode = 0;
+try {
+  const state = existsSync(statePath)
+    ? JSON.parse(readFileSync(statePath, "utf8"))
+    : {};
+  const save = () => {
+    const pending = statePath + "." + process.pid + ".tmp";
+    writeFileSync(pending, JSON.stringify(state));
+    renameSync(pending, statePath);
+  };
+  const operation = process.argv[2];
+  if (operation === "read") {
+    if (input.account in state) process.stdout.write(state[input.account]);
+    else exitCode = 2;
+  } else if (operation === "write") {
+    state[input.account] = input.secret;
+    save();
+  } else if (operation === "delete") {
+    if (input.account in state) {
+      delete state[input.account];
+      save();
+    } else {
+      exitCode = 2;
+    }
+  } else {
+    exitCode = 3;
+  }
+} finally {
+  closeSync(lock);
+  unlinkSync(lockPath);
+}
+process.exitCode = exitCode;
 `, {mode: 0o700});
   await chmod(helper, 0o700);
   const inherited = {...process.env};
