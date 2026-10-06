@@ -74,6 +74,7 @@
     "qualify:cloudflare:recovery": "node deploy/cloudflare/scripts/coordinated-recovery.mjs",
     "qualify:cloudflare-artifacts": "tsx scripts/qualify-cloudflare-artifacts.ts qualify",
     "qualify:cloudflare-artifacts:binding": "tsx scripts/qualify-cloudflare-artifacts-binding.ts",
+    "qualify:cloudflare-artifacts:product": "bash scripts/run-cloudflare-artifacts-product-qualification.sh",
     "purge:cloudflare-artifacts": "tsx scripts/purge-cloudflare-artifacts.ts",
     "redact:browser-diagnostics": "node --import tsx scripts/redact-browser-diagnostics.ts",
     "cleanup:cloudflare-artifacts": "tsx scripts/qualify-cloudflare-artifacts.ts cleanup",
