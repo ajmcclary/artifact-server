@@ -119,6 +119,7 @@ const loginAttemptRowSchema = z.object({
   codeVerifier: z.string(),
   createdAt: z.string(),
   expiresAt: z.string(),
+  inviteId: z.string().nullable(),
   nonce: z.string().nullable(),
   provider: z.string(),
   returnTo: z.string(),
@@ -304,7 +305,8 @@ export function createD1IdentityRepository(
         `).bind(consumedAt, stateDigest, provider, consumedAt),
         database.prepare(`
           SELECT state_digest AS stateDigest, provider,
-            code_verifier AS codeVerifier, nonce, return_to AS returnTo,
+            code_verifier AS codeVerifier, nonce, invite_id AS inviteId,
+            return_to AS returnTo,
             created_at AS createdAt, expires_at AS expiresAt
           FROM login_attempts
           WHERE state_digest = ? AND provider = ? AND consumed_at = ?
@@ -364,14 +366,15 @@ export function createD1IdentityRepository(
       `).bind(attempt.createdAt).run();
       await database.prepare(`
         INSERT INTO login_attempts (
-          state_digest, provider, code_verifier, nonce, return_to, created_at,
-          expires_at, consumed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+          state_digest, provider, code_verifier, nonce, invite_id, return_to,
+          created_at, expires_at, consumed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `).bind(
         attempt.stateDigest,
         attempt.provider,
         attempt.codeVerifier,
         attempt.nonce,
+        attempt.inviteId,
         attempt.returnTo,
         attempt.createdAt,
         attempt.expiresAt,

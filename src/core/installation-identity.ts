@@ -68,6 +68,8 @@ export interface LoginAttempt {
   readonly codeVerifier: string;
   readonly createdAt: string;
   readonly expiresAt: string;
+  /** The invite this login redeems; null for an ordinary sign-in. */
+  readonly inviteId: string | null;
   readonly nonce: string | null;
   readonly provider: string;
   readonly returnTo: string;

@@ -120,6 +120,7 @@ const loginAttemptRowSchema = z.object({
   codeVerifier: z.string(),
   createdAt: z.string(),
   expiresAt: z.string(),
+  inviteId: z.string().nullable(),
   nonce: z.string().nullable(),
   provider: z.string(),
   returnTo: z.string(),
@@ -658,11 +659,11 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
         WHERE installation_id = ${installationId}
           AND expires_at <= ${attempt.createdAt}`;
       yield* sql`INSERT INTO login_attempts (
-        installation_id, state_digest, provider, code_verifier, nonce, return_to,
-        created_at, expires_at, consumed_at
+        installation_id, state_digest, provider, code_verifier, nonce, invite_id,
+        return_to, created_at, expires_at, consumed_at
       ) VALUES (
         ${installationId}, ${attempt.stateDigest}, ${attempt.provider},
-        ${attempt.codeVerifier}, ${attempt.nonce}, ${attempt.returnTo},
+        ${attempt.codeVerifier}, ${attempt.nonce}, ${attempt.inviteId}, ${attempt.returnTo},
         ${attempt.createdAt}, ${attempt.expiresAt}, NULL
       )`;
     }));
@@ -679,7 +680,8 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
       return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
         const rows = yield* sql.unsafe<object>(
           `SELECT state_digest AS "stateDigest", provider,
-            code_verifier AS "codeVerifier", nonce, return_to AS "returnTo",
+            code_verifier AS "codeVerifier", nonce, invite_id AS "inviteId",
+            return_to AS "returnTo",
             created_at AS "createdAt", expires_at AS "expiresAt"
            FROM login_attempts
            WHERE installation_id = $1 AND state_digest = $2 AND provider = $3

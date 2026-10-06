@@ -5,6 +5,7 @@ import {z} from "zod";
 import type {
   InteractiveAuthorization,
   InteractiveIdentityProvider,
+  LoginHints,
 } from "../application/interactive-login.js";
 import {IdentityProviderFailure} from "../core/errors.js";
 import type {ExternalIdentity} from "../core/installation-identity.js";
@@ -104,7 +105,7 @@ export class OidcIdentityProvider implements InteractiveIdentityProvider {
   }
 
   readonly start = Effect.fn("OidcIdentityProvider.start")(
-    function*(this: OidcIdentityProvider) {
+    function*(this: OidcIdentityProvider, hints: LoginHints = {}) {
       const discovery = yield* this.#discovery();
       const codeVerifier = randomBase64Url(codeVerifierByteLength);
       const codeChallenge = yield* Effect.tryPromise({
@@ -122,6 +123,12 @@ export class OidcIdentityProvider implements InteractiveIdentityProvider {
       authorizationUrl.searchParams.set("nonce", nonce);
       authorizationUrl.searchParams.set("code_challenge", codeChallenge);
       authorizationUrl.searchParams.set("code_challenge_method", "S256");
+      if (hints.loginHint !== undefined) {
+        authorizationUrl.searchParams.set("login_hint", hints.loginHint);
+      }
+      if (hints.forceSignIn === true) {
+        authorizationUrl.searchParams.set("prompt", "login");
+      }
       const authorization: InteractiveAuthorization = {
         authorizationUrl: authorizationUrl.toString(),
         codeVerifier,

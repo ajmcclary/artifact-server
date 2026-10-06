@@ -123,6 +123,7 @@ const loginAttemptRowSchema = z.object({
   codeVerifier: z.string(),
   createdAt: z.string(),
   expiresAt: z.string(),
+  inviteId: z.string().nullable(),
   nonce: z.string().nullable(),
   provider: z.string(),
   returnTo: z.string(),
@@ -737,14 +738,15 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     `).run(attempt.createdAt);
     this.#database.prepare(`
       INSERT INTO login_attempts (
-        state_digest, provider, code_verifier, nonce, return_to, created_at,
-        expires_at, consumed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+        state_digest, provider, code_verifier, nonce, invite_id, return_to,
+        created_at, expires_at, consumed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
     `).run(
       attempt.stateDigest,
       attempt.provider,
       attempt.codeVerifier,
       attempt.nonce,
+      attempt.inviteId,
       attempt.returnTo,
       attempt.createdAt,
       attempt.expiresAt,
@@ -764,6 +766,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
           provider,
           code_verifier AS codeVerifier,
           nonce,
+          invite_id AS inviteId,
           return_to AS returnTo,
           created_at AS createdAt,
           expires_at AS expiresAt
@@ -882,6 +885,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         provider TEXT NOT NULL,
         code_verifier TEXT NOT NULL,
         nonce TEXT,
+        invite_id TEXT,
         return_to TEXT NOT NULL,
         created_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
@@ -906,6 +910,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
       ) STRICT;
     `);
     this.#addLoginAttemptNonceIfMissing();
+    this.#addLoginAttemptInviteIfMissing();
     this.#addAdmissionAndActivityColumnsIfMissing();
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
@@ -913,6 +918,11 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
   #addLoginAttemptNonceIfMissing(): void {
     if (this.#tableColumns("login_attempts").includes("nonce")) return;
     this.#database.exec("ALTER TABLE login_attempts ADD COLUMN nonce TEXT");
+  }
+
+  #addLoginAttemptInviteIfMissing(): void {
+    if (this.#tableColumns("login_attempts").includes("invite_id")) return;
+    this.#database.exec("ALTER TABLE login_attempts ADD COLUMN invite_id TEXT");
   }
 
   #addAdmissionAndActivityColumnsIfMissing(): void {

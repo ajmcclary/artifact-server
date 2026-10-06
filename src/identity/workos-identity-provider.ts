@@ -4,9 +4,14 @@ import { Effect, Redacted } from "effect";
 import type {
   InteractiveAuthorization,
   InteractiveIdentityProvider,
+  LoginHints,
 } from "../application/interactive-login.js";
 import { IdentityProviderFailure } from "../core/errors.js";
 import type { ExternalIdentity } from "../core/installation-identity.js";
+
+type AuthorizationOptions = Parameters<
+  WorkOS["userManagement"]["getAuthorizationUrlWithPKCE"]
+>[0];
 
 export interface WorkOsIdentityProviderConfig {
   readonly apiKey: Redacted.Redacted;
@@ -30,15 +35,20 @@ export class WorkOsIdentityProvider implements InteractiveIdentityProvider {
     });
   }
 
-  start(): Effect.Effect<InteractiveAuthorization, IdentityProviderFailure> {
+  start(hints: LoginHints = {}): Effect.Effect<InteractiveAuthorization, IdentityProviderFailure> {
     return Effect.tryPromise({
       try: async () => {
+        const options: AuthorizationOptions = {
+          clientId: this.#clientId,
+          provider: "authkit",
+          redirectUri: this.#redirectUri,
+        };
+        if (hints.loginHint !== undefined) options.loginHint = hints.loginHint;
+        if (hints.screenHint !== undefined) options.screenHint = hints.screenHint;
+        // AuthKit re-authenticates when the last sign-in is older than max_age seconds.
+        if (hints.forceSignIn === true) options.maxAge = 0;
         const authorization = await this.#workos.userManagement
-          .getAuthorizationUrlWithPKCE({
-            clientId: this.#clientId,
-            provider: "authkit",
-            redirectUri: this.#redirectUri,
-          });
+          .getAuthorizationUrlWithPKCE(options);
         return {
           authorizationUrl: authorization.url,
           codeVerifier: authorization.codeVerifier,

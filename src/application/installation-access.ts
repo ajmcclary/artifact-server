@@ -456,6 +456,7 @@ function makeInstallationAccessService(
       codeVerifier: "not-applicable",
       createdAt: now.toISOString(),
       expiresAt,
+      inviteId: null,
       nonce: null,
       provider: localBrowserLoginProvider,
       returnTo: "/",

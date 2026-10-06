@@ -333,6 +333,7 @@ const schemaSql = `
     provider TEXT NOT NULL,
     code_verifier TEXT NOT NULL,
     nonce TEXT,
+    invite_id TEXT,
     return_to TEXT NOT NULL,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -659,6 +660,7 @@ export async function migrateD1(
   }
   await addInstallationActivityLogIfMissing(database);
   await addAdmissionAndActivityColumnsIfMissing(database);
+  await addLoginAttemptInviteIfMissing(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -913,6 +915,13 @@ async function addCommentThreadDispatchMarkerIfMissing(
     CREATE INDEX IF NOT EXISTS comment_threads_dispatch
       ON comment_threads(dispatch_id)
   `).run();
+}
+
+async function addLoginAttemptInviteIfMissing(database: D1Database): Promise<void> {
+  const columns = await database.prepare("PRAGMA table_info(login_attempts)")
+    .all<{name: string}>();
+  if (columns.results.some((column) => column.name === "invite_id")) return;
+  await database.prepare("ALTER TABLE login_attempts ADD COLUMN invite_id TEXT").run();
 }
 
 async function addLoginAttemptNonceIfMissing(

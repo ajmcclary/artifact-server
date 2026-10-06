@@ -980,6 +980,11 @@ const addContentVariants = Effect.gen(function*() {
   )`);
 });
 
+const addLoginAttemptInvite = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe("ALTER TABLE IF EXISTS login_attempts ADD COLUMN IF NOT EXISTS invite_id TEXT");
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1001,10 +1006,11 @@ const migrationLoader = Migrator.fromRecord({
   "0018_installation_activity_log": addInstallationActivityLog,
   "0019_member_admission_and_activity": addMemberAdmissionAndActivity,
   "0020_content_variants": addContentVariants,
+  "0021_login_attempt_invite": addLoginAttemptInvite,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 20;
+export const requiredPostgresSchemaVersion = 21;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1119,6 +1125,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 20,
     name: "content_variants",
+  }, {
+    migration_id: 21,
+    name: "login_attempt_invite",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

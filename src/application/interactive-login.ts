@@ -29,6 +29,22 @@ export interface InteractiveAuthorization {
   readonly state: string;
 }
 
+/** Provider-neutral sign-in hints; a provider ignores any it does not support. */
+export interface LoginHints {
+  /** Ask the provider to re-authenticate even with a live provider session. */
+  readonly forceSignIn?: boolean;
+  /** Pre-fill the email field. */
+  readonly loginHint?: string;
+  /** Open the provider's sign-up or sign-in screen first. */
+  readonly screenHint?: "sign-in" | "sign-up";
+}
+
+/** The invite one browser login redeems, with the hints that suit it. */
+export interface InviteLogin {
+  readonly hints: LoginHints;
+  readonly inviteId: string;
+}
+
 /** External browser-login provider isolated from Artifact Server policy. */
 export interface InteractiveIdentityProvider {
   readonly complete: (
@@ -37,7 +53,7 @@ export interface InteractiveIdentityProvider {
     nonce: string | null,
   ) => Effect.Effect<ExternalIdentity, IdentityProviderFailure>;
   readonly name: string;
-  readonly start: () => Effect.Effect<InteractiveAuthorization, IdentityProviderFailure>;
+  readonly start: (hints?: LoginHints) => Effect.Effect<InteractiveAuthorization, IdentityProviderFailure>;
 }
 
 export interface LoginAttemptRepository {
@@ -85,6 +101,7 @@ interface InteractiveLoginOperations {
   >;
   readonly start: (
     returnTo: string,
+    invite?: InviteLogin | null,
   ) => Effect.Effect<
     StartedInteractiveLogin,
     IdentityProviderFailure | IdentityRepositoryFailure | InteractiveLoginUnavailable
@@ -112,10 +129,10 @@ function makeInteractiveLoginService(
   installationAccess: InstallationAccessOperations,
 ): InteractiveLoginOperations {
   const start = Effect.fn("InteractiveLoginService.start")(
-    function*(returnTo: string) {
+    function*(returnTo: string, invite: InviteLogin | null = null) {
       const provider = dependencies.provider;
       if (provider === null) return yield* unavailable();
-      const authorization = yield* provider.start();
+      const authorization = yield* provider.start(invite?.hints ?? {});
       const now = dependencies.clock.now();
       yield* dependencies.repository.create({
         codeVerifier: authorization.codeVerifier,
@@ -123,6 +140,7 @@ function makeInteractiveLoginService(
         expiresAt: new Date(
           now.getTime() + dependencies.attemptLifetimeMilliseconds,
         ).toISOString(),
+        inviteId: invite?.inviteId ?? null,
         nonce: authorization.nonce,
         provider: provider.name,
         returnTo: safeReturnTo(returnTo),
