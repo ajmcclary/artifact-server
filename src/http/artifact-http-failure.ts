@@ -26,6 +26,12 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
       return {code: errorCodes.identityConflict, message: failure.message, status: 409};
     case "IdentityNotFound":
       return {code: errorCodes.identityNotFound, message: failure.message, status: 404};
+    case "InviteRejected":
+      return {code: errorCodes.inviteRejected, message: failure.message, status: 403};
+    case "InvitesUnavailable":
+      return {code: errorCodes.invitesUnavailable, message: failure.message, status: 409};
+    case "InvalidInvite":
+      return {code: errorCodes.invalidInput, message: failure.message, status: 422};
     case "IdentityProviderFailure":
       return {code: errorCodes.identityProviderFailure, message: failure.message, status: 502};
     case "InteractiveLoginUnavailable":

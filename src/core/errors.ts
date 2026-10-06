@@ -23,6 +23,8 @@ export const errorCodes = {
   invalidDispatch: "INVALID_DISPATCH",
   invalidInput: "INVALID_INPUT",
   invalidLinkPath: "INVALID_LINK_PATH",
+  inviteRejected: "INVITE_REJECTED",
+  invitesUnavailable: "INVITES_UNAVAILABLE",
   invalidManifestPath: "INVALID_MANIFEST_PATH",
   linkPathOutsideRoots: "LINK_PATH_OUTSIDE_ROOTS",
   linkPathProtected: "LINK_PATH_PROTECTED",
@@ -84,6 +86,35 @@ export class IdentityConflict extends Schema.TaggedError<IdentityConflict>()(
 /** A requested member, session, or API key does not exist. */
 export class IdentityNotFound extends Schema.TaggedError<IdentityNotFound>()(
   "IdentityNotFound",
+  messageField,
+) {}
+
+/** An invite redemption admitted no one; `outcome` names why. */
+export class InviteRejected extends Schema.TaggedError<InviteRejected>()(
+  "InviteRejected",
+  {
+    message: Schema.String,
+    outcome: Schema.Literals([
+      "account_unavailable",
+      "expired",
+      "invalid",
+      "revoked",
+      "unverified",
+      "used",
+      "wrong_account",
+    ]),
+  },
+) {}
+
+/** Invites need an interactive identity provider; this installation has none. */
+export class InvitesUnavailable extends Schema.TaggedError<InvitesUnavailable>()(
+  "InvitesUnavailable",
+  messageField,
+) {}
+
+/** An invite request broke a rule the caller can fix. */
+export class InvalidInvite extends Schema.TaggedError<InvalidInvite>()(
+  "InvalidInvite",
   messageField,
 ) {}
 
@@ -481,6 +512,11 @@ export class IdentityRepositoryFailure extends Schema.TaggedError<IdentityReposi
       "revokeApiKey",
       "revokeApplicationSession",
       "rotateApiKey",
+      "createInvite",
+      "findInvite",
+      "listInvites",
+      "redeemInvite",
+      "revokeInvite",
     ]),
   },
 ) {}
@@ -518,6 +554,9 @@ const artifactServerFailureSchema = Schema.Union([
   IdentityConflict,
   IdentityNotFound,
   IdentityProviderFailure,
+  InvalidInvite,
+  InviteRejected,
+  InvitesUnavailable,
   InteractiveLoginUnavailable,
   LoginAttemptRejected,
   AuthorizationDenied,

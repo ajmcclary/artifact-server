@@ -50,6 +50,9 @@ export const feedKindsByType = {
     installationActionKinds.projectCreate,
     installationActionKinds.projectArchive,
     installationActionKinds.projectUnarchive,
+    installationActionKinds.inviteCreate,
+    installationActionKinds.inviteRedeem,
+    installationActionKinds.inviteRevoke,
   ],
   agents: [
     installationActionKinds.dispatchCreate,
@@ -72,6 +75,9 @@ export const administrationKinds: readonly ActionKind[] = [
   installationActionKinds.keyIssue,
   installationActionKinds.keyRotate,
   installationActionKinds.keyRevoke,
+  installationActionKinds.inviteCreate,
+  installationActionKinds.inviteRedeem,
+  installationActionKinds.inviteRevoke,
 ];
 
 const actionKindSchema = z.union([

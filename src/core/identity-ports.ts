@@ -13,6 +13,7 @@ import type {
 /** How a member entered the installation (spec §3 "Admitted by"). */
 export const memberAdmissions = {
   automatic: "automatic",
+  invite: "invite",
   manual: "manual",
   owner: "owner",
 } as const;

@@ -28,6 +28,9 @@ export const projectScopedActionKinds = [
 
 /** Kinds that belong to the installation as a whole. */
 export const installationScopedActionKinds = [
+  installationActionKinds.inviteCreate,
+  installationActionKinds.inviteRedeem,
+  installationActionKinds.inviteRevoke,
   installationActionKinds.keyIssue,
   installationActionKinds.keyRevoke,
   installationActionKinds.keyRotate,

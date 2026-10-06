@@ -58,6 +58,9 @@ export const artifactHistoryActionKinds: readonly ArtifactActionKind[] = [
 export const installationActionKinds = {
   dispatchAddressed: "dispatch_addressed",
   dispatchCreate: "dispatch_create",
+  inviteCreate: "invite_create",
+  inviteRedeem: "invite_redeem",
+  inviteRevoke: "invite_revoke",
   keyIssue: "key_issue",
   keyRevoke: "key_revoke",
   keyRotate: "key_rotate",
@@ -194,7 +197,11 @@ export interface ActivityDetail {
   readonly agentDisplayName?: string;
   readonly agentId?: string;
   readonly capabilities?: readonly string[];
+  readonly expiresAt?: string;
   readonly how?: string;
+  readonly inviteId?: string;
+  readonly inviteKind?: string;
+  readonly maxUses?: number;
   readonly name?: string;
   readonly ownerPrincipalId?: string;
   readonly replacedKeyId?: string;

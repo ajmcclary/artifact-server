@@ -77,6 +77,9 @@ const verbs = {
   comment_resolve: ["resolution", "resolved"],
   dispatch_addressed: ["agent", "answered"],
   dispatch_create: ["agent", "sent"],
+  invite_create: ["admin", "created"],
+  invite_redeem: ["admin", "joined with"],
+  invite_revoke: ["admin", "revoked"],
   key_issue: ["admin", "issued"],
   key_revoke: ["admin", "revoked"],
   key_rotate: ["admin", "rotated"],
@@ -135,6 +138,9 @@ function subjectOf(
       : {id: row.project.id, name: row.project.name};
   }
   if (subjectId === null) return undefined;
+  if (action.startsWith("invite_")) {
+    return {id: subjectId, name: row.action.detail?.subjectName ?? null};
+  }
   if (action.startsWith("member_")) {
     return {id: subjectId, name: names.members.get(subjectId) ?? null};
   }
