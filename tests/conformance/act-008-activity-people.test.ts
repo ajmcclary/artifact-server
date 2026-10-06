@@ -131,6 +131,13 @@ describe("activity people filter and counts", () => {
       ["version", "Stage bar"],
     ]);
     expect((await facets(local, both)).matching).toBe(2);
+
+    // One person with a type: Rosa published nothing, so her versions are none.
+    const rosaVersions = activityQueryString({people: [rosaId], types: ["versions"]});
+    expect(await walk(local, rosaVersions)).toEqual([]);
+    const rosaVersionCounts = await facets(local, rosaVersions);
+    expect([rosaVersionCounts.matching, rosaVersionCounts.total]).toEqual([0, everyone.total]);
+    expect(rosaVersionCounts.people).toEqual(everyone.people);
   });
 
   test("ACT-008: an administrator's own administration counts for them alone; a member never sees it", async () => {

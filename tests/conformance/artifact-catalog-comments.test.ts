@@ -19,6 +19,15 @@ const artifactPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+/** The catalog's newest-first order: creation time, then ID, both descending. */
+function newestFirst(
+  artifacts: readonly {readonly createdAt: string; readonly id: string}[],
+): string[] {
+  return artifacts.toSorted((left, right) =>
+    right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
+  ).map(({id}) => id);
+}
+
 describe("artifact catalog comment queries", () => {
   let installation: TestInstallation;
   let server: RunningTestServer;
@@ -99,6 +108,34 @@ describe("artifact catalog comment queries", () => {
       noComments.body.artifact.id,
     ]);
 
+    // Filtering runs before pagination: one-item pages of commented artifacts
+    // in newest order hold only commented artifacts, every one of them, even
+    // though the newest artifact in the project has no comments.
+    expect(await walkIds({comments: "with", limit: "1", sort: "newest"})).toEqual(
+      newestFirst([mostCommented.body.artifact, oneComment.body.artifact]),
+    );
+    expect(await walkIds({comments: "without", limit: "1", sort: "comments"})).toEqual([
+      noComments.body.artifact.id,
+    ]);
+
+    // Equal totals page in one deterministic order, newest first, with no
+    // artifact repeated or skipped across pages.
+    const tiedComment = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "tied comment",
+      idempotencyKey: "catalog-comments-tied",
+      name: "Tied comment",
+    });
+    await createComment(tiedComment.body.artifact.id, tiedComment.body.version.id, 4);
+    const tied = newestFirst([tiedComment.body.artifact, oneComment.body.artifact]);
+    const expectedOrder = [
+      mostCommented.body.artifact.id,
+      ...tied,
+      noComments.body.artifact.id,
+    ];
+    expect(await walkIds({limit: "1", sort: "comments"})).toEqual(expectedOrder);
+    expect(await walkIds({limit: "3", sort: "comments"})).toEqual(expectedOrder);
+
     const chronological = await list({limit: "1", sort: "newest"});
     const mismatchedCursor = await fetch(`${server.baseUrl}/api/v1/artifacts?${
       new URLSearchParams({
@@ -122,6 +159,15 @@ describe("artifact catalog comment queries", () => {
     }`, {headers: {Authorization: `Bearer ${installation.apiToken}`}});
     expect(response.status).toBe(200);
     return artifactPageSchema.parse(await response.json());
+  }
+
+  async function walkIds(
+    query: Readonly<Record<string, string>>,
+    cursor: string | null = null,
+  ): Promise<string[]> {
+    const page = await list(cursor === null ? query : {...query, cursor});
+    const ids = page.artifacts.map(({artifact}) => artifact.id);
+    return page.nextCursor === null ? ids : [...ids, ...await walkIds(query, page.nextCursor)];
   }
 
   async function createComment(
