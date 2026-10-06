@@ -106,11 +106,39 @@ class UnsupportedMcpClient extends Schema.TaggedError<UnsupportedMcpClient>()(
 /** AI clients supported by the local onboarding command. */
 export type McpClientId = z.infer<typeof clientIdSchema>;
 
-/** Safe registration inspection for one supported client. */
+/**
+ * Safe registration inspection for one supported client.
+ *
+ * `registration` compares the client's own configuration with the entry this
+ * CLI created: `none` when it owns no entry, `unknown` when its private record
+ * is unreadable, and `unavailable` when the client cannot be inspected.
+ */
 export interface McpClientRegistrationInspection {
   readonly client: McpClientId;
   readonly installed: boolean;
   readonly managed: boolean;
+  readonly reason?: string;
+  readonly registration:
+    | "changed"
+    | "matching"
+    | "missing"
+    | "none"
+    | "unavailable"
+    | "unknown";
+  readonly remediation?: readonly string[];
+}
+
+/** Every client's registration and the private record that owns them. */
+export interface McpRegistrationsInspection {
+  readonly clients: readonly McpClientRegistrationInspection[];
+  readonly record:
+    | {readonly state: "valid"}
+    | {
+      readonly path: string;
+      readonly reason: string;
+      readonly remediation: string;
+      readonly state: "invalid";
+    };
 }
 
 /** Parse a user-provided MCP client name. */
@@ -206,16 +234,139 @@ export async function disconnectMcpClient(
 export async function inspectMcpClientRegistrations(
   dataDirectory: string,
   environment: NodeJS.ProcessEnv = process.env,
-): Promise<readonly McpClientRegistrationInspection[]> {
+): Promise<McpRegistrationsInspection> {
+  const recordPath = path.join(dataDirectory, "mcp-registrations.json");
   const [installed, state] = await Promise.all([
     detectInstalledMcpClients(environment),
-    readRegistrationState(dataDirectory),
+    readRegistrationRecord(dataDirectory),
   ]);
-  return clientIdSchema.options.map((client) => ({
+  if (state.state === "invalid") {
+    return {
+      clients: clientIdSchema.options.map((client) => ({
+        client,
+        installed: installed.includes(client),
+        managed: false,
+        registration: "unknown",
+      })),
+      record: {
+        path: recordPath,
+        reason: state.reason,
+        remediation: `Restore ${recordPath} from a backup, or remove it together with the artifact-server entries it managed, then run artifactserver connect.`,
+        state: "invalid",
+      },
+    };
+  }
+  return {
+    clients: await Promise.all(clientIdSchema.options.map((client) =>
+      inspectClientRegistration(
+        client,
+        installed.includes(client),
+        state.value.registrations.find((item) => item.client === client),
+        environment,
+      )
+    )),
+    record: {state: "valid"},
+  };
+}
+
+async function inspectClientRegistration(
+  client: McpClientId,
+  installed: boolean,
+  owned: Registration | undefined,
+  environment: NodeJS.ProcessEnv,
+): Promise<McpClientRegistrationInspection> {
+  if (owned === undefined) {
+    return {client, installed, managed: false, registration: "none"};
+  }
+  const name = displayName(client);
+  const reconnect = [
+    `artifactserver disconnect ${client}`,
+    `artifactserver connect ${client}`,
+  ];
+  let location = `${name}'s MCP configuration`;
+  let comparison: "changed" | "matching" | "missing";
+  try {
+    if (client === "codex" || client === "claude") {
+      if (!installed) {
+        return {
+          client,
+          installed,
+          managed: true,
+          reason: `${name} is not installed or is not available on PATH.`,
+          registration: "unavailable",
+          remediation: [`Make ${name} available on PATH, then run artifactserver doctor ${client} again.`],
+        };
+      }
+      const inspection = await inspectNativeClient(client, environment);
+      comparison = !inspection.exists
+        ? "missing"
+        : nativeInspectionMatches(inspection, owned) ? "matching" : "changed";
+    } else {
+      location = jsonClientConfigPath(client, environment);
+      const document = await readJsoncDocument(location);
+      const existing = inspectManagedEntry(
+        document.value,
+        client === "cursor" ? "mcpServers" : "servers",
+      );
+      comparison = existing.state === "absent"
+        ? "missing"
+        : existing.state === "valid"
+          && JSON.stringify(existing.entry) === JSON.stringify(jsonEntry(client, owned))
+          ? "matching"
+          : "changed";
+    }
+  } catch (error) {
+    return {
+      client,
+      installed,
+      managed: true,
+      reason: error instanceof Error ? error.message : `${name} could not be inspected.`,
+      registration: "unavailable",
+      remediation: [`Repair ${location}, then run artifactserver doctor ${client} again.`],
+    };
+  }
+  if (comparison === "matching") {
+    return {client, installed, managed: true, registration: "matching"};
+  }
+  if (comparison === "missing") {
+    return {
+      client,
+      installed,
+      managed: true,
+      reason: `${name} no longer has the ${managedServerName} entry that Artifact Server created.`,
+      registration: "missing",
+      remediation: reconnect,
+    };
+  }
+  return {
     client,
-    installed: installed.includes(client),
-    managed: state.registrations.some((item) => item.client === client),
-  }));
+    installed,
+    managed: true,
+    reason: `${name}'s ${managedServerName} entry changed after Artifact Server created it.`,
+    registration: "changed",
+    remediation: [
+      `Restore or remove the ${managedServerName} entry in ${location}, then run ${reconnect.join(" and ")}.`,
+    ],
+  };
+}
+
+async function readRegistrationRecord(
+  dataDirectory: string,
+): Promise<
+  | {readonly reason: string; readonly state: "invalid"}
+  | {readonly state: "valid"; readonly value: RegistrationState}
+> {
+  try {
+    return {state: "valid", value: await readRegistrationState(dataDirectory)};
+  } catch (error) {
+    let reason = "The Artifact Server MCP registration record could not be read.";
+    if (error instanceof SyntaxError) {
+      reason = "The Artifact Server MCP registration record is not valid JSON.";
+    } else if (error instanceof z.ZodError) {
+      reason = "The Artifact Server MCP registration record has an unsupported format.";
+    }
+    return {reason, state: "invalid"};
+  }
 }
 
 /** List client IDs currently owned by this Artifact Server installation. */
@@ -256,7 +407,9 @@ async function planNativeChange(
       `${displayName(client)} already has an unmanaged ${managedServerName} entry.`,
     );
   }
-  const before = owned === undefined
+  // Disconnecting an entry the user already removed only forgets ownership.
+  const forgetRemovedEntry = after === null && !current.exists;
+  const before = owned === undefined || forgetRemovedEntry
     ? null
     : {args: [...owned.args], command: owned.command};
   if (!nativeInspectionMatches(current, before)) {
@@ -286,11 +439,14 @@ async function planJsonChange(
       `${displayName(client)} already has an unmanaged ${managedServerName} entry.`,
     );
   }
-  const beforeEntry = owned === undefined
+  // Disconnecting an entry the user already removed only forgets ownership.
+  const forgetRemovedEntry = after === null && existing.state === "absent";
+  const beforeEntry = owned === undefined || forgetRemovedEntry
     ? null
     : jsonEntry(client, owned);
   if (
     owned !== undefined
+    && !forgetRemovedEntry
     && (
       existing.state !== "valid"
       || JSON.stringify(existing.entry) !== JSON.stringify(beforeEntry)
@@ -504,6 +660,7 @@ async function applyJsonClientChange(
   if (digestText(next) !== nextDigest) {
     throw new Error("The MCP client configuration no longer matches its journal.");
   }
+  if (next === document.text) return;
   await writeJsoncDocument(change.configPath, document.text, next);
 }
 
