@@ -15,7 +15,7 @@ import {
   stopBrowserFixture,
   type BrowserFixture,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, selectThread, toast} from "./review-helpers.js";
+import {openAgentControls, openInspectorTab, openReview, selectThread, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml =
@@ -93,6 +93,7 @@ test.describe("PRS-004 one-click send and undo", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId});
       await openInspectorTab(page, "Comments");
+      await openAgentControls(page);
       const cards = page.getByRole("article", {name: /^Comment by /u});
       await expect(cards).toHaveCount(2);
       await expect(page.getByLabel("Selected annotations")).toHaveCount(0);

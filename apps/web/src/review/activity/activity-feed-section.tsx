@@ -8,7 +8,8 @@ import {ActivityThumbnail} from "./activity-thumbnail";
 import {type ActivityFeedState, useActivityFeed} from "./use-activity-feed";
 
 /** One feed's loading, failure, empty and loaded states. The empty state comes from the vendored feed. */
-export function ActivityFeedBody({feed, filtered, label, onChanged, onClearFilters, onRetry, principalId, stickyTop}: {
+export function ActivityFeedBody({density = "comfortable", feed, filtered, label, onChanged, onClearFilters, onRetry, principalId, stickyTop}: {
+  readonly density?: "comfortable" | "compact";
   readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string;
   readonly onChanged?: (() => void) | undefined; readonly onClearFilters: () => void;
   readonly onRetry: () => void; readonly principalId: string; readonly stickyTop: number;
@@ -24,7 +25,7 @@ export function ActivityFeedBody({feed, filtered, label, onChanged, onClearFilte
   }
   return (
     <ActivityFeedPanel
-      feed={feed} filtered={filtered} label={label} onChanged={onChanged} onClearFilters={onClearFilters}
+      density={density} feed={feed} filtered={filtered} label={label} onChanged={onChanged} onClearFilters={onClearFilters}
       principalId={principalId} renderThumbnail={(entry, artifactName) => <ActivityThumbnail artifactName={artifactName} entry={entry} />}
       stickyTop={stickyTop}
     />
@@ -40,7 +41,7 @@ export function ActivityFeedSection({principalId, projectId}: {readonly principa
   const feed = useActivityFeed(filters);
   return (
     <ActivityFeedBody
-      feed={feed} filtered={false} label={projectId === null ? "Activity" : "Project activity"}
+      density="compact" feed={feed} filtered={false} label={projectId === null ? "Activity" : "Project activity"}
       onClearFilters={() => undefined} onRetry={feed.reload} principalId={principalId} stickyTop={0}
     />
   );

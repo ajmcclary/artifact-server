@@ -16,7 +16,7 @@ export interface ResizeSeamOptions {
   side?: 'start' | 'end';
   /** One arrow press, px. */
   step?: number;
-  /** As it reads in a sentence: 'claim list', 'navigation'; capitalised for the announcement. */
+  /** As it reads in a sentence: 'case list', 'navigation'; capitalised for the announcement. */
   name?: string;
   /** The measured axis: 'x' is a width fed clientX; 'y' is a height fed clientY, with `side` naming the docked edge ('end' = bottom) and only the vertical arrows in the key table. @default "x" */
   axis?: 'x' | 'y';
@@ -24,7 +24,7 @@ export interface ResizeSeamOptions {
   holdMs?: number;
   /** The clamped width on a commit; null on a reset. */
   onWidthChange?: (width: number | null) => void;
-  /** 'Claim list width set to 400 pixels.' / 'Claim list width reset to the default.' */
+  /** 'Case list width set to 400 pixels.' / 'Case list width reset to the default.' */
   onAnnounce?: (text: string) => void;
   /** Fires once when a drag has held at minWidth for holdMs; omitted, nothing arms. */
   onOvershoot?: () => void;
@@ -55,7 +55,7 @@ export interface ResizeSeamApi {
 }
 
 /**
- * A factory, not a component: the seam arithmetic Panel, SideNav and the Workers Compensation
+ * A factory, not a component: the seam arithmetic Panel, SideNav and a product's own seam
  * scanner share — clamp, direction, hold-to-collapse, commit on change, reset, keys, announcements.
  * No DOM, no store, no window.
  */

@@ -21,7 +21,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, previewFrame, reloadReview, selectThread, toast} from "./review-helpers.js";
+import {openAgentControls, openInspectorTab, openReview, previewFrame, reloadReview, selectThread, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -119,6 +119,7 @@ test.describe("Review send-all", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
+      await openAgentControls(page);
       await expect(page.getByRole("button", {
         name: "Send all open (101) to builder",
       })).toBeVisible();
@@ -198,6 +199,7 @@ test.describe("Review send-all", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
+      await openAgentControls(page);
       await expect(page.getByText("No agent connected — connect one to send."))
         .toBeVisible();
 

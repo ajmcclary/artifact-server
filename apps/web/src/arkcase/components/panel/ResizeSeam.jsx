@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * ArkCase ResizeSeam — a factory, not a component: the drag arithmetic Panel's and SideNav's
- * seams share, and the Workers Compensation seam scanner too, as one implementation with no
+ * seams share, and a product's own seam scanner too, as one implementation with no
  * renderer of its own. It holds the clamp (rounded, bounded), the side-to-direction rule, the
  * one-second hold-to-collapse on reaching the minimum, commit-on-up only when the width changed,
  * the reset, the key table and the two announcements. Nothing here touches the DOM, a store or

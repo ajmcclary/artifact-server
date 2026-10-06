@@ -30,7 +30,7 @@ import { PIN_CUE_MS, PIN_RING, PIN_CUE_CHIP_STYLE, ensurePinCueKeyframes } from 
  * and every change goes out through `onPinChange`, `onWidthChange` and
  * `onAnnounce`. Admission comes from `canPin`, or from the nearest
  * `PanelBudget` by `id`. `railLabel` is the rail's vertical word when the pane's name does not
- * read well vertically — "Claims" for the claim list — and defaults to the capitalised name;
+ * read well vertically — "Cases" for the case list — and defaults to the capitalised name;
  * `countLabel` names the rail's count for a reader ("3 unread notifications") where the number
  * alone would not.
  *
@@ -68,7 +68,7 @@ function isFocusVisible(el) {
 }
 const capitalise = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 
-/* The pin itself — 24px hit area, ghost hover at the 5% cyan rung, pressed at 10%. */
+/* The pin itself — 24px hit area, ghost hover at the 5% ArkCase blue rung, pressed at 10%. */
 function PinButton({ pressed, label, disabled, onClick, cue, reduce, buttonRef, onFocus, onBlur }) {
   const [hover, setHover] = React.useState(false);
   const [focus, setFocus] = React.useState(false);
@@ -284,7 +284,7 @@ export function Panel({
      panel pin this way, and the visible "Unpin the menu" is the SideNav's alone. A two-second
      cue chip names the new state after a toggle, the App's pinCue as the component's own.
      Since E5h `pinName` names the pin's object without its article where a host has its own
-     word — "claim information" reads "Pin claim information"; the default is "the " + name. */
+     word — "case information" reads "Pin case information"; the default is "the " + name. */
   const who = pinName != null ? pinName : 'the ' + name;
   const pinLabel = (isPinned ? 'Unpin ' : 'Pin ') + who;
   const chip = cue && cueText && (
@@ -401,7 +401,7 @@ export function Panel({
           <span aria-label={countLabel} style={{
             display: 'inline-block', minWidth: 18, padding: '1px 5px', borderRadius: 'var(--radius-pill, 10px)',
             background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)',
-            fontFamily: 'var(--font-data, ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: '14px',
+            fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: '14px',
           }}>{count}</span>
         )}
         <span style={{ writingMode: 'vertical-rl', fontSize: 'var(--font-size-label, 11px)', letterSpacing: '.05em', color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap' }}>{railLabel != null ? railLabel : Name}</span>
@@ -473,7 +473,7 @@ export function Panel({
         <Button variant="ghost" size="xs" icon={icon} onClick={toggle} aria-expanded={open} aria-controls={open ? stackId : undefined}>{text}</Button>
         {count != null && !open && (
           <span aria-label={countLabel} style={{
-            fontFamily: 'var(--font-data, ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600,
+            fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600,
             color: 'var(--text-secondary, #5a6268)',
           }}>{count}</span>
         )}

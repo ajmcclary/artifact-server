@@ -47,7 +47,7 @@ function RevealToggle({ revealed, disabled, controls, onToggle, label, touch }) 
 /**
  * ArkCase Input — Bootstrap `.form-control`. Optional leading icon, label,
  * helper/error text, sizes, `autoFocus` for a dialog's search field.
- * Cyan focus ring. `variant="pill"` rounds the field; `trailing` places
+ * ArkCase blue focus ring. `variant="pill"` rounds the field; `trailing` places
  * content (a divider and compact select, a clear button) inside the border.
  * `leading` places content (a ColorSwatch) before the input; `status` adds a
  * semantic border and status glyph; `mono` sets the value in the data font.
@@ -68,12 +68,13 @@ export function Input({
   const [focusWithin, setFocusWithin] = React.useState(false);
   const [revealed, setRevealed] = React.useState(false);
   const inputId = useFieldId(id);
-  // touch: a 44px control, 0 × 12px padding and a 15px value — the phone measure.
+  // touch: a 44px control, 0 × 12px padding and a 16px value (--font-size-md, Button's touch label) — the
+  // phone measure; at 16px iOS Safari does not zoom the page on focus.
   const pads = touch
     ? { sm: { y: '0', x: '12px' }, md: { y: '0', x: '12px' }, lg: { y: '0', x: '12px' } }
     : { sm: { y: '0.25rem', x: '0.5rem' }, md: { y: FIELD_PAD_Y, x: FIELD_PAD_X }, lg: { y: '0.5rem', x: '0.875rem' } };
   const fonts = touch
-    ? { sm: '0.9375rem', md: '0.9375rem', lg: '0.9375rem' }
+    ? { sm: 'var(--font-size-md, 1rem)', md: 'var(--font-size-md, 1rem)', lg: 'var(--font-size-md, 1rem)' }
     : { sm: '0.875rem', md: '1rem', lg: '1.25rem' };
   const touchHeight = touch ? { height: '44px', boxSizing: 'border-box' } : null;
   // revealable: only a password field gets the Show/Hide toggle.

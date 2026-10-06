@@ -81,6 +81,13 @@ export async function openInspectorTab(
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 }
 
+/** Reveals the presence and send controls from the Comments panel header. */
+export async function openAgentControls(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", {name: "Agent controls", exact: true});
+  if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
 /**
  * Opens a settings screen on the server `page` is already showing. The
  * project screen opens the current `project` parameter, else Default.

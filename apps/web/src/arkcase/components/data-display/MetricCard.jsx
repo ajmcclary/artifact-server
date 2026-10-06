@@ -30,7 +30,7 @@ const EYEBROW_INK = {
  * tile as a native button and `pressed` exposes aria-pressed.
  *
  * `size="sm"` is the compact strip tile (a 20px/600 value, a one-line 13px caption) that
- * reserve, report and audit strips use; `labelVariant="eyebrow"` sets the caption as an
+ * fee, report and audit strips use; `labelVariant="eyebrow"` sets the caption as an
  * 11px uppercase label in the colour's text-safe ink; `color="navy"` is the navy wash.
  */
 const DELTA_TONES = {

@@ -121,8 +121,8 @@ export function DisplayProfile({ force = null, ladder = defaultLadder, as = 'div
   return React.createElement(as, { 'data-ac-profile': value.profile, style, ...rest }, provided);
 }
 
-/* The reading and the ladder, reachable by a host that keeps its own state: the Workers
-   Compensation display family reads them, so the two copies of the rule cannot drift. Statics,
+/* The reading and the ladder, reachable by a host that keeps its own state: a product's own
+   display family reads them, so the two copies of the rule cannot drift. Statics,
    because the compiler exposes nothing but the capitalised export. */
 DisplayProfile.read = readProfile;
 DisplayProfile.ladder = defaultLadder;

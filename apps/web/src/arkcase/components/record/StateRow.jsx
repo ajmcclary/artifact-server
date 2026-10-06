@@ -5,7 +5,7 @@ import { StatusPill } from '../data-display/StatusPill.jsx';
 
 /* The row's tone vocabulary, drawn in StatusPill's: what the row wants from the reader. */
 const PILL_TONE = { attention: 'warning', running: 'primary', settled: 'success', failed: 'danger', neutral: 'neutral' };
-const DATA_FONT = 'var(--font-data, monospace)';
+const DATA_FONT = 'var(--font-data, "Source Code Pro", ui-monospace, monospace)';
 const ONE_LINE = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 /**

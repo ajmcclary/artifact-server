@@ -92,7 +92,7 @@ export function MentionComposer({ value, onChange, onSubmit, label, placeholder,
       {open && (
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 4, zIndex: 4,
           background: 'var(--surface-card, #fff)', border: '1px solid var(--border-color, #dee2e6)', borderRadius: 'var(--radius-md, 5px)',
-          boxShadow: 'var(--shadow-up, 0 -4px 12px rgba(0,0,0,.08))', padding: '4px 0' }}>
+          boxShadow: 'var(--shadow-up, 0 -6px 16px rgba(0, 0, 0, 0.14))', padding: '4px 0' }}>
           <Eyebrow as="div" style={{ padding: '6px 12px 4px' }}>Mention</Eyebrow>
           <div role="listbox" id={listId} aria-label="People to mention">
             {matches.map((person, i) => (
@@ -121,7 +121,7 @@ export function MentionComposer({ value, onChange, onSubmit, label, placeholder,
           onSelect: (e) => setCaret(e.currentTarget.selectionStart), onClick: (e) => setCaret(e.currentTarget.selectionStart) }}
         hint={notify} meta={<><ShortcutKey label="Command Enter">⌘↵</ShortcutKey> to post</>}
         tools={<>{tools}<Button variant="ghost" size="xs" aria-label="Mention someone" title="Mention someone" hasPopup="listbox"
-          expanded={open} onClick={startMention} style={{ fontFamily: 'var(--font-data, monospace)', fontWeight: 600 }}>@</Button></>} />
+          expanded={open} onClick={startMention} style={{ fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontWeight: 600 }}>@</Button></>} />
     </div>
   );
 }

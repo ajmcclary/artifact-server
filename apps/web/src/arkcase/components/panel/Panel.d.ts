@@ -12,11 +12,11 @@ export interface PanelPeekApi {
 export interface PanelProps {
   /** The key the budget knows this panel by. */
   id?: string;
-  /** Lower-case name as it reads in a sentence — "claim list". Labels use it as given; announcements capitalise it. @default "panel" */
+  /** Lower-case name as it reads in a sentence — "case list". Labels use it as given; announcements capitalise it. @default "panel" */
   name?: string;
-  /** The rail's vertical word — "Claims" for a name of "claim list". @default the capitalised name */
+  /** The rail's vertical word — "Cases" for a name of "case list". @default the capitalised name */
   railLabel?: string;
-  /** The pin's object without its article — "claim information" reads "Pin claim information". @default "the " + name */
+  /** The pin's object without its article — "case information" reads "Pin case information". @default "the " + name */
   pinName?: string;
   /** `bi-*` icon class for the rail — "bi-folder2". */
   icon?: string;
@@ -87,7 +87,7 @@ export interface PanelProps {
   selection?: React.ReactNode;
   /** Footer right — a result count, a last-refreshed time. Never actions. A child with `slot="footerMeta"` fills it on a portable page. */
   footerMeta?: React.ReactNode;
-  /** Every state change is spoken here: "Claim list pinned.", "Claim list width set to 400 pixels." */
+  /** Every state change is spoken here: "Case list pinned.", "Case list width set to 400 pixels." */
   onAnnounce?: (text: string) => void;
   /** Style overrides for the Panel root. */
   style?: React.CSSProperties;

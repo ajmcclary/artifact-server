@@ -186,7 +186,7 @@ export function Popover({
             background: 'var(--surface-card, #fff)',
             border: '1px solid var(--border-color-strong, #ced4da)',
             borderRadius: 'var(--radius-lg, 8px)',
-            boxShadow: 'var(--shadow-lg, 0 8px 16px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.08))',
+            boxShadow: 'var(--shadow-lg, 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.14))',
             ...contentStyle,
           }}
         >

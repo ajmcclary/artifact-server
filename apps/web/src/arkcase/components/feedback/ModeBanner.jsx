@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../actions/Button.jsx';
 
 /* The floating variant's own small pill control: outlined on navy, with a light
-   focus ring because the shared cyan outline is too faint on the navy ground. */
+   focus ring because the shared primary outline is too faint on the navy ground. */
 function FloatingAction({ label, icon, onClick }) {
   const [hover, setHover] = React.useState(false);
   const [focusVisible, setFocusVisible] = React.useState(false);

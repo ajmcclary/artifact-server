@@ -1,10 +1,10 @@
 import React from 'react';
 
 /**
- * ArkCase Tabs — underline tab bar. Active tab shows a cyan underline + text.
+ * ArkCase Tabs — underline tab bar. Active tab shows a primary underline + text.
  *
- * `variant="stacked"` is the Workers' Compensation locked icon-over-label bar (`stackTabs()`):
- * the underline tab button (8px 14px, cyan 2px underline) holding a label block with
+ * `variant="stacked"` is the locked icon-over-label record bar (`stackTabs()`):
+ * the underline tab button (8px 14px, primary 2px underline) holding a label block with
  * `padding: 3px 0 1px`, `margin: 0 -9px` (cancelling most of the button's side padding),
  * `minWidth: 66`, a 20px glyph over a 13px label, `gap: 6`, bottom-aligned. Counts ride the
  * icon's top-right corner as a solid primary badge and show only when greater than zero.
@@ -87,8 +87,8 @@ export function Tabs({ tabs = [], active, onChange, variant = 'underline', orien
     if (KEYS.indexOf(e.key) < 0) return;
     const buttons = Array.from(e.currentTarget.querySelectorAll('[role="tab"]:not([disabled])')).filter((b) => b.offsetWidth > 0 || b.offsetHeight > 0);
     if (!buttons.length) return;
-    /* This bar owns its keys: a host that also roves inside any tablist (Workers Compensation's
-       document-level rovingKey) must not see the event, or one press moves two tabs. */
+    /* This bar owns its keys: a host that also roves inside any tablist (a record
+       screen's document-level rovingKey) must not see the event, or one press moves two tabs. */
     e.preventDefault();
     e.stopPropagation();
     const at = Math.max(0, buttons.indexOf(document.activeElement));
@@ -207,7 +207,7 @@ export function Tabs({ tabs = [], active, onChange, variant = 'underline', orien
             background: 'transparent',
             border: 'none', cursor: t.disabled ? 'default' : 'pointer',
             padding: '0.5rem 0.875rem',
-            fontSize: '0.9375rem',
+            fontSize: 'var(--font-size-sm, 0.875rem)',
             fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
             fontWeight: on ? 600 : 400,
             color: on ? 'var(--text-link-on-tint, #00688f)' : isHover ? 'var(--text-body, #212529)' : 'var(--text-secondary, #5a6268)',

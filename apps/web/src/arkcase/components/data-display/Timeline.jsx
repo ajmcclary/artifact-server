@@ -17,8 +17,8 @@ const TONES = {
   neutral: 'var(--text-secondary, #5a6268)',
 };
 
-/* `markerStyle="soft"` grounds: the pill tint under the tone's ink, no ring — the stepper the
-   Workers' Compensation notices, workflows and approvals draw. */
+/* `markerStyle="soft"` grounds: the pill tint under the tone's ink, no ring — the stepper that
+   record notices, workflows and approvals draw. */
 const SOFT_GROUNDS = {
   primary: { bg: 'var(--tint-primary-selected, rgba(0,121,168,.10))', fg: 'var(--pill-primary-fg, #0369a1)' },
   success: { bg: 'var(--pill-success-bg, #dcfce7)', fg: 'var(--pill-success-fg, #15803d)' },

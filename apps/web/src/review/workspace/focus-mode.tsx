@@ -1,11 +1,10 @@
 import {useEffect, type CSSProperties, type ReactNode, type RefObject} from "react";
 
-import {CountBadge, IconButton, SlideOver, Toolbar} from "@/arkcase";
+import {Button, CountBadge, IconButton, SlideOver, Toolbar} from "@/arkcase";
 
 import type {AnnotateToggle} from "./review-toolbar.tsx";
 
 export interface FocusViewerControlsProps {
-  readonly annotate: AnnotateToggle;
   /** Returns to the version's design gallery while one of its pages is open. */
   readonly onReturnToGallery: (() => void) | null;
   readonly collapsed: boolean;
@@ -26,6 +25,7 @@ export interface FocusViewerControlsProps {
 }
 
 export interface FocusCommentsProps {
+  readonly actions?: ReactNode;
   readonly children: ReactNode;
   readonly commentCount: number;
   /** The docked comment composer. */
@@ -38,9 +38,28 @@ const controlsStyle = {background: "transparent", padding: 0} satisfies CSSPrope
 const commentsDockStyle = {bottom: 0, display: "flex", position: "absolute", right: 0, top: 34, zIndex: 2} satisfies CSSProperties;
 const inlineStyle = {display: "inline-flex"} satisfies CSSProperties;
 
+/** Annotation belongs beside the file and version in the preview bar. */
+export function FocusAnnotationControl({annotate, collapsed}: {readonly annotate: AnnotateToggle; readonly collapsed: boolean}) {
+  return <span hidden={collapsed} style={{display: collapsed ? "none" : "inline-flex"}}>
+  {annotate.available ? (
+    <IconButton
+      ariaLabel={annotate.active ? "Annotate mode" : "Interact mode"}
+      icon="bi-pencil-square"
+      onClick={annotate.onToggle}
+      pressed={annotate.active}
+      size="xs"
+      style={focusButtonStyle}
+      title={annotate.active
+        ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
+        : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
+      variant="navy"
+    />
+  ) : null}
+  </span>;
+}
+
 /** Compact controls in the expanded preview title bar; hidden, they leave a restore button. */
 export function FocusViewerControls({
-  annotate,
   collapsed,
   commentCount,
   commentsOpen,
@@ -63,20 +82,6 @@ export function FocusViewerControls({
           {onReturnToGallery === null ? null : (
             <IconButton ariaLabel="Back to gallery" icon="bi-arrow-left" onClick={onReturnToGallery} size="xs" style={focusButtonStyle} variant="navy" />
           )}
-          {annotate.available ? (
-            <IconButton
-              ariaLabel={annotate.active ? "Annotate mode" : "Interact mode"}
-              icon="bi-pencil-square"
-              onClick={annotate.onToggle}
-              pressed={annotate.active}
-              size="xs"
-              style={focusButtonStyle}
-              title={annotate.active
-                ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
-                : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
-              variant="navy"
-            />
-          ) : null}
           <span ref={commentsToggleRef} style={inlineStyle}>
             <IconButton
               aria-controls={commentsOpen ? "review-focus-comments" : undefined}
@@ -104,7 +109,13 @@ export function FocusViewerControls({
             title="Open raw"
             variant="navy"
           />
-          <IconButton ariaLabel="Exit full screen" icon="bi-arrows-angle-contract" keyshortcuts="F" onClick={onExit} size="xs" style={focusButtonStyle} title="Exit full screen (F)" variant="navy" />
+          <Button aria-label="Exit full screen" aria-keyshortcuts="F" onClick={onExit} pressed size="xs"
+            style={{height: 20, padding: 0, width: 24}} title="Exit full screen (F)" variant="navy">
+            <span aria-hidden="true" style={{display: "inline-flex", fontSize: "var(--icon-xs, 0.75rem)", transform: "rotate(-45deg) scale(0.65)"}}>
+              <i className="bi bi-arrow-right" data-icon-state="active" />
+              <i className="bi bi-arrow-left" data-icon-state="active" />
+            </span>
+          </Button>
           <IconButton ariaLabel="Hide viewer controls" icon="bi-chevron-bar-right" onClick={onHide} size="xs" style={focusButtonStyle} variant="navy" />
         </Toolbar>
       </div>
@@ -127,10 +138,11 @@ export function FocusViewerControls({
 }
 
 /** The comments column of the expanded workspace, beside the canvas at its end edge. */
-export function FocusComments({children, commentCount, footer = null, onClose}: FocusCommentsProps) {
+export function FocusComments({actions = null, children, commentCount, footer = null, onClose}: FocusCommentsProps) {
   return (
     <div id="review-focus-comments" style={commentsDockStyle}>
       <SlideOver
+        actions={actions}
         bodyStyle={{gap: 0, padding: 0}}
         closeLabel="Close comments"
         footer={footer}

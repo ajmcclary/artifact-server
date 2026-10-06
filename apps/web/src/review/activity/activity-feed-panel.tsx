@@ -91,7 +91,8 @@ function ReplyComposer({context, onDone, onPosted, principalId}: {
 }
 
 /** The feed body shared by Activity and a project's Activity section. */
-export function ActivityFeedPanel({feed, filtered, label, onChanged, onClearFilters, principalId, renderThumbnail, stickyTop}: {
+export function ActivityFeedPanel({density = "comfortable", feed, filtered, label, onChanged, onClearFilters, principalId, renderThumbnail, stickyTop}: {
+  readonly density?: "comfortable" | "compact";
   readonly feed: ActivityFeedState; readonly filtered: boolean; readonly label: string;
   /** Called after a reply or a resolve lands, so counts read beside the feed can re-read. */
   readonly onChanged?: (() => void) | undefined;
@@ -161,6 +162,7 @@ export function ActivityFeedPanel({feed, filtered, label, onChanged, onClearFilt
 
   return (
     <ActivityFeed
+      density={density}
       events={entries}
       expandedIds={expanded}
       filtered={filtered}

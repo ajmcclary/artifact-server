@@ -5,7 +5,7 @@ import { countText, leftToBrowser } from '../navigation/nav-helpers.jsx';
 
 const GROUP_LABEL = {
   fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', lineHeight: '16px',
-  fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, .06em)',
+  fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, 0.025em)',
   textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)', padding: '16px 0 10px',
 };
 

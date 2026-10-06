@@ -13,14 +13,14 @@ export function ActionRow({ icon, date, title, meta, note, noteTone = 'default',
       {date && (
         <div style={{ flex:'none', width:52, textAlign:'center', background:'var(--surface-navy-subtle, #eaf1f6)', borderRadius:'var(--radius-md, 5px)', padding:'6px 4px' }}>
           <div style={{ fontSize:'var(--font-size-label, 11px)', letterSpacing:'.025em', textTransform:'uppercase', color:'var(--text-link-on-tint, #00688f)' }}>{date.month}</div>
-          <div style={{ fontFamily:'var(--font-data, monospace)', fontVariantNumeric:'var(--font-numeric-feature, tabular-nums)', fontSize:18, fontWeight:600, color:'var(--text-navy, #073652)' }}>{date.day}</div>
+          <div style={{ fontFamily:'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontVariantNumeric:'var(--font-numeric-feature, tabular-nums)', fontSize:18, fontWeight:600, color:'var(--text-navy, #073652)' }}>{date.day}</div>
         </div>
       )}
       {!date && icon && <i aria-hidden="true" className={'bi ' + icon} style={{ fontSize:18, color:'var(--bs-primary, #0079a8)' }} />}
       <div style={{ flex:1, minWidth:200 }}>
         <div style={{ fontSize:'var(--font-size-sm, 14px)', fontWeight:500, color:'var(--text-body, #212529)' }}>{title}</div>
-        {meta != null && <div style={{ fontSize:'var(--font-size-sm, 13px)', color:'var(--text-secondary, #5a6268)' }}>{meta}</div>}
-        {note != null && <div style={{ fontSize:'var(--font-size-sm, 13px)', color:noteColor, marginTop:4, maxWidth:'52em', textWrap:'pretty' }}>{note}</div>}
+        {meta != null && <div style={{ fontSize:'var(--font-size-sm, 14px)', color:'var(--text-secondary, #5a6268)' }}>{meta}</div>}
+        {note != null && <div style={{ fontSize:'var(--font-size-sm, 14px)', color:noteColor, marginTop:4, maxWidth:'52em', textWrap:'pretty' }}>{note}</div>}
       </div>
       {status}
       {children}

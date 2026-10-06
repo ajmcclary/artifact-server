@@ -55,7 +55,7 @@ export function PreviewFrame({
         <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: DOT[dotTone] || DOT.info }} />
         <span style={{ flex: '1 1 auto', minWidth: 0, fontSize: 12, color: 'var(--text-on-navy, #fff)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
         {meta != null && meta !== '' && (
-          <span style={{ flex: 'none', fontFamily: 'var(--font-data, monospace)', fontSize: 11, color: 'var(--text-on-navy-secondary, rgba(255,255,255,.72))' }}>{meta}</span>
+          <span style={{ flex: 'none', fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 11, color: 'var(--text-on-navy-secondary, rgba(255,255,255,.72))' }}>{meta}</span>
         )}
       </div>}
       <div data-preview-body="" style={{ position: 'relative', ...bodyStyle }}>

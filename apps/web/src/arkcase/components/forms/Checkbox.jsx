@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * ArkCase Checkbox — Bootstrap `.form-check-input`. Cyan when checked.
+ * ArkCase Checkbox — Bootstrap `.form-check-input`. ArkCase blue (`bs-primary`) when checked.
  * Set `radio` for a radio control. `meta` sets a data-font value inline after
  * the label (a capability scope such as `artifact:read`); `description` adds a
  * 12px secondary line beneath it. Both describe the input (aria-describedby)
@@ -21,8 +21,8 @@ export function Checkbox({ label, checked, defaultChecked, disabled = false, rad
   const metaId = `${cid}-meta`;
   const descriptionId = `${cid}-description`;
   const describedBy = [rest['aria-describedby'], hasMeta ? metaId : null, hasDescription ? descriptionId : null].filter(Boolean).join(' ') || undefined;
-  // The label's line box: 15px × 1.5. The box is centred in it so it sits on the first line.
-  const LINE = '1.40625rem';
+  // The label's line box: --font-size-sm (14px) × 1.5. The box is centred in it so it sits on the first line.
+  const LINE = 'calc(var(--font-size-sm, 0.875rem) * 1.5)';
   const control = (
     <span style={{ position: 'relative', display: 'inline-flex', width: '1em', height: '1em', fontSize: '1rem', flex: 'none' }}>
       <input
@@ -55,7 +55,7 @@ export function Checkbox({ label, checked, defaultChecked, disabled = false, rad
     return (
       <label htmlFor={cid} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.65 : 1, ...style }}>
         {control}
-        {label && <span style={{ fontSize: '0.9375rem' }}>{label}</span>}
+        {label && <span style={{ fontSize: 'var(--font-size-sm, 0.875rem)' }}>{label}</span>}
       </label>
     );
   }
@@ -65,7 +65,7 @@ export function Checkbox({ label, checked, defaultChecked, disabled = false, rad
         {/* Disabled dims the control and label only: meta and description stay legible (AA). */}
         <label htmlFor={cid} style={{ display: 'inline-flex', alignItems: 'flex-start', gap: '0.5rem', minWidth: 0, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.65 : 1 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', height: LINE, flex: 'none' }}>{control}</span>
-          {label && <span style={{ fontSize: '0.9375rem', lineHeight: 1.5, color: 'var(--text-body, #212529)' }}>{label}</span>}
+          {label && <span style={{ fontSize: 'var(--font-size-sm, 0.875rem)', lineHeight: 1.5, color: 'var(--text-body, #212529)' }}>{label}</span>}
         </label>
         {hasMeta && (
           <span id={metaId} style={{

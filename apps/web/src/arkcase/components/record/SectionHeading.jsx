@@ -55,7 +55,7 @@ export function SectionHeading({ level, size = 'md', title, titleFace = 'display
   const stacks = Number(stack) > 0;
   React.useLayoutEffect(() => { if (stacks) ensureSectionHeadingStyles(stack); }, [stacks, stack]);
 
-  /* `titleFace="data"` sets a record identifier as the title (the Portal claim header's claim
+  /* `titleFace="data"` sets a record identifier as the title (the portal case header's case
      number): the data face, tabular figures, 600, navy ink, at the size step's px. */
   const dataFace = titleFace === 'data'
     ? { fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)', fontWeight: 600, color: 'var(--text-navy, #073652)' }

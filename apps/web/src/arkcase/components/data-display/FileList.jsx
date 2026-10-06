@@ -19,7 +19,7 @@ export function fileTypeIcon(name) {
 function RowContent({ file }) {
   return (
     <>
-      <i aria-hidden="true" className={`bi ${file.icon || fileTypeIcon(file.name)}`} style={{ flex: 'none', fontSize: 'var(--icon-xs, 14px)' }} />
+      <i aria-hidden="true" className={`bi ${file.icon || fileTypeIcon(file.name)}`} style={{ flex: 'none', fontSize: 'var(--icon-xs, 12px)' }} />
       <span
         style={{
           flex: '1 1 auto',
@@ -43,7 +43,7 @@ function RowContent({ file }) {
 const ROW = {
   display: 'flex',
   alignItems: 'center',
-  gap: 'var(--space-2, 10px)',
+  gap: 'var(--space-2, 8px)',
   minHeight: 40,
   boxSizing: 'border-box',
   padding: '6px 14px',

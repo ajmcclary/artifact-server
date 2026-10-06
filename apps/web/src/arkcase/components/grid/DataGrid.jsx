@@ -11,7 +11,7 @@ export { usesDataFont, comparatorFor } from './data-grid-model.js';
 /**
  * ArkCase DataGrid — a faithful recreation of the app's AG Grid Enterprise
  * surface (Quartz/Alpine theme tuned to brand tokens). Sortable headers,
- * checkbox selection, pinned columns, striped rows, cyan hover, a toolbar,
+ * checkbox selection, pinned columns, striped rows, primary hover, a toolbar,
  * a quick filter, and a status bar. Cell renderers are plain functions.
  *
  * Accessibility (WCAG 2.1.1 / 1.3.1 / 4.1.3): the grid is a proper
@@ -464,7 +464,7 @@ export function DataGrid({
   return (
     <div
       style={{
-        border: `1px solid ${B}`, borderRadius: 'var(--radius-md, 6px)',
+        border: `1px solid ${B}`, borderRadius: 'var(--radius-md, 5px)',
         overflow: 'hidden', background: 'var(--surface-card, #fff)',
         fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
         display: 'flex', flexDirection: 'column',
@@ -668,7 +668,7 @@ export function DataGrid({
       )}
 
       {statusBar && (
-        <div role="status" aria-live="polite" style={{ display: 'flex', gap: 18, padding: '6px 12px', borderTop: `1px solid ${B}`, background: 'var(--surface-secondary, #f8f9fa)', fontSize: 12.5, color: 'var(--text-data, #495057)' }}>
+        <div role="status" aria-live="polite" style={{ display: 'flex', gap: 18, padding: '6px 12px', borderTop: `1px solid ${B}`, background: 'var(--surface-secondary, #f8f9fa)', fontSize: 'var(--font-size-xs, 0.75rem)', color: 'var(--text-data, #495057)' }}>
           <span>Rows: <strong>{sorted.length}</strong>{filtered.length !== rows.length ? ` of ${rows.length}` : ''}</span>
           {selected.size > 0 && <span>Selected: <strong>{selected.size}</strong></span>}
         </div>

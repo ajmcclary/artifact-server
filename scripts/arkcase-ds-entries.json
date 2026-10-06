@@ -9,6 +9,7 @@
     "actions/IconButton.jsx",
     "actions/LoadMore.jsx",
     "actions/RowActions.jsx",
+    "actions/SplitButton.jsx",
     "actions/Toolbar.jsx",
     "app/AdminConsole.jsx",
     "app/AutoGrid.jsx",

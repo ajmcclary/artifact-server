@@ -30,7 +30,7 @@ export interface CheckboxProps {
 }
 
 /**
- * Checkbox / radio — Bootstrap `.form-check-input`, cyan when active, with an
+ * Checkbox / radio — Bootstrap `.form-check-input`, ArkCase blue when active, with an
  * optional inline data `meta` and a secondary `description` line.
  */
 export function Checkbox(props: CheckboxProps): React.JSX.Element;

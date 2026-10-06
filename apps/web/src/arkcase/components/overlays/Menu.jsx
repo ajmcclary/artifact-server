@@ -205,7 +205,7 @@ export function Menu({
     const trailing = (
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 'none' }}>
         {hasMeta && (
-          <span id={`${id}-m`} style={{ fontFamily: 'var(--font-data, monospace)', fontSize: 'var(--font-size-dense, 13px)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-data, #495057)', fontWeight: 400 }}>{it.meta}</span>
+          <span id={`${id}-m`} style={{ fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 'var(--font-size-dense, 13px)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-data, #495057)', fontWeight: 400 }}>{it.meta}</span>
         )}
         {hasShortcut && (
           <ShortcutKey id={`${id}-k`} label={it.shortcutLabel}>

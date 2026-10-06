@@ -224,7 +224,7 @@ export function Modal({ open = true, title, subtitle, icon, size = 'md', onClose
               </span>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              {title && <H id={id} style={{ margin: 0, fontFamily: 'var(--font-display, "Source Serif 4", Georgia, serif)', fontSize: 'var(--font-size-lg, 16px)', fontWeight: 600, color: 'var(--text-navy, #073652)', lineHeight: 1.25 }}>{title}</H>}
+              {title && <H id={id} style={{ margin: 0, fontFamily: 'var(--font-display, "Source Serif 4", Georgia, serif)', fontSize: 'var(--font-size-lg, 20px)', fontWeight: 600, color: 'var(--text-navy, #073652)', lineHeight: 1.25 }}>{title}</H>}
               {subtitle && <div style={{ marginTop: 2, fontSize: 'var(--font-size-dense, 13px)', lineHeight: 1.45, color: 'var(--text-secondary, #5a6268)' }}>{subtitle}</div>}
             </div>
             {headerEnd != null && <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>{headerEnd}</div>}

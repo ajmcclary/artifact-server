@@ -61,8 +61,14 @@ test.describe("Artifact review full screen", () => {
       const exit = controls.getByRole("button", {name: "Exit full screen"});
       expect((await share.boundingBox())?.x).toBeLessThan((await raw.boundingBox())?.x ?? 0);
       expect((await raw.boundingBox())?.x).toBeLessThan((await exit.boundingBox())?.x ?? 0);
-      const buttonStyles = await controls.getByRole("button").evaluateAll((buttons) => buttons.map((element) => ({background: getComputedStyle(element).backgroundColor, border: getComputedStyle(element).borderWidth})));
+      const buttonStyles = await controls.getByRole("button").evaluateAll((buttons) => buttons.filter((element) => element.getAttribute("aria-label") !== "Exit full screen").map((element) => ({background: getComputedStyle(element).backgroundColor, border: getComputedStyle(element).borderWidth})));
       expect(buttonStyles.every((style) => style.background === "rgba(0, 0, 0, 0)" && style.border === "0px")).toBe(true);
+      const bar = page.locator("[data-preview-bar]");
+      const annotation = bar.getByRole("button", {name: "Interact mode", exact: true});
+      const version = bar.getByText("v1", {exact: true});
+      expect((await version.boundingBox())?.x).toBeLessThan((await annotation.boundingBox())?.x ?? 0);
+      expect((await annotation.boundingBox())?.x).toBeLessThan((await share.boundingBox())?.x ?? 0);
+      await expect(exit).toHaveAttribute("aria-pressed", "true");
       await page.screenshot({path: "test-results/browser/focus-titlebar-desktop.png"});
       await page.setViewportSize({width: 390, height: 844});
       await expect(controls.getByRole("button", {name: "Exit full screen"})).toBeInViewport();
@@ -94,10 +100,10 @@ test.describe("Artifact review full screen", () => {
       await expect(focusComments).toHaveCount(0);
 
       // Commenting in full screen keeps the canvas uninterrupted until asked.
-      const interact = controls.getByRole("button", {exact: true, name: "Interact mode"});
+      const interact = page.locator("[data-preview-bar]").getByRole("button", {exact: true, name: "Interact mode"});
       await expect(interact).toHaveAttribute("aria-pressed", "false");
       await interact.click();
-      const annotate = controls.getByRole("button", {exact: true, name: "Annotate mode"});
+      const annotate = page.locator("[data-preview-bar]").getByRole("button", {exact: true, name: "Annotate mode"});
       await expect(annotate).toHaveAttribute("aria-pressed", "true");
       await previewFrame(page).locator("#focus-target").click();
       const composer = annotationFrame(page).getByPlaceholder("Add a comment...");

@@ -82,6 +82,12 @@ test.describe("Projects screen", () => {
       await expect(details.getByRole("region", {name: "Project identity"})).toBeVisible();
       await expect(details.getByRole("region", {name: "Artifacts in this project"}).getByText("Alpha page")).toBeVisible();
       await expect(details.getByRole("region", {name: "Activity"}).getByText("Alpha page").first()).toBeVisible();
+      const activity = details.locator('[data-activity-feed="Project activity"]');
+      await expect(activity).toHaveAttribute("data-density", "compact");
+      const day = activity.locator('[data-day]').first();
+      await expect(day).toHaveCSS("box-shadow", "none");
+      await expect(day).toHaveCSS("border-top-width", "0px");
+      await page.screenshot({path: "test-results/browser/project-activity-compact.png"});
       await expect(details.getByRole("region", {name: "Activity"}).getByText("Default page")).toHaveCount(0);
       await expect(details.getByRole("link", {name: "Open latest artifact"}))
         .toHaveAttribute("href", `/review?project=${alphaId}`);

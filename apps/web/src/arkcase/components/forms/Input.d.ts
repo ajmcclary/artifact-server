@@ -53,7 +53,7 @@ export interface InputProps {
   statusIcon?: boolean;
   /** Set the value in the data font (`--font-data`) with tabular numerals, for token values and ids. @default false */
   mono?: boolean;
-  /** Touch measure for phone columns: a 44px control, 0 × 12px padding and a 15px value. @default false */
+  /** Touch measure for phone columns: a 44px control, 0 × 12px padding and a 16px value (`font-size-md`, as Button's touch label; no iOS focus zoom). @default false */
   touch?: boolean;
   /** With `type="password"`, adds a trailing Show/Hide text button (`aria-pressed`) that switches the field between password and text; it follows any `trailing` content. Ignored for other types. @default false */
   revealable?: boolean;
@@ -74,7 +74,7 @@ export interface InputProps {
 }
 
 /**
- * Text input — Bootstrap `.form-control` with cyan focus ring, optional pill
+ * Text input — Bootstrap `.form-control` with the ArkCase blue focus ring, optional pill
  * shape, leading/trailing in-field content, validation status, data font, a
  * 44px touch measure and a Show/Hide toggle for password fields.
  */

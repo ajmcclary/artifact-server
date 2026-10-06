@@ -78,7 +78,7 @@ export function AuthLayout({
             <h1 style={{ margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", Georgia, serif)', fontWeight: 600, fontSize: 30, lineHeight: 1.18, color: 'var(--text-on-navy, #fff)', textWrap: 'pretty' }}>{headline}</h1>
           )}
           {has(lead) && (
-            <p style={{ margin: has(headline) ? '14px 0 0' : 0, maxWidth: '32ch', fontSize: '0.9375rem', lineHeight: 1.6, color: 'var(--text-on-navy-secondary, rgba(255,255,255,.72))', textWrap: 'pretty' }}>{lead}</p>
+            <p style={{ margin: has(headline) ? '14px 0 0' : 0, maxWidth: '32ch', fontSize: 'var(--font-size-md, 1rem)', lineHeight: 1.6, color: 'var(--text-on-navy-secondary, rgba(255,255,255,.72))', textWrap: 'pretty' }}>{lead}</p>
           )}
         </div>
       )}

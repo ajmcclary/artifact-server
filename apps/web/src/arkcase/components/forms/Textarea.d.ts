@@ -42,6 +42,6 @@ export interface TextareaProps {
 }
 
 /**
- * Labelled multiline input — Bootstrap `.form-control` with cyan focus ring.
+ * Labelled multiline input — Bootstrap `.form-control` with the ArkCase blue focus ring.
  */
 export function Textarea(props: TextareaProps): React.JSX.Element;

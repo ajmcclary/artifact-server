@@ -84,7 +84,7 @@ export function MobileSectionBar({
           display: 'flex', height: 46, boxSizing: 'border-box',
           background: 'var(--surface-card, #ffffff)', borderTop: '1px solid var(--border-color, #dee2e6)', borderBottom: '1px solid var(--border-color, #dee2e6)',
           boxShadow: docked ? 'var(--shadow-md, 0 2px 4px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.10))' : 'none',
-          transition: 'box-shadow var(--transition-fast, .15s) ease', fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
+          transition: 'box-shadow var(--transition-fast, 0.15s ease) ease', fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)',
           ...style,
         }}
         {...rest}
@@ -127,7 +127,7 @@ export function MobileSectionBar({
       <BottomSheet open={sheet} onClose={() => setSheet(false)} title={sheetTitle || label} returnFocusSelector="[data-ak-section-all]">
         {groups.map((g, gi) => (
           <section key={g.name || gi} aria-label={g.name || undefined}>
-            {g.name && <h3 style={{ margin: 0, padding: gi ? '14px 0 8px' : '4px 0 8px', fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', lineHeight: '16px', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, .06em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{g.name}</h3>}
+            {g.name && <h3 style={{ margin: 0, padding: gi ? '14px 0 8px' : '4px 0 8px', fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', lineHeight: '16px', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, 0.025em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{g.name}</h3>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
               {g.items.map((s) => {
                 const active = s.id === activeId;

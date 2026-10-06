@@ -5,7 +5,7 @@ export interface SurfaceStateRestriction {
   unit: string;
   /** Called when the reader activates Request Access. */
   onRequest?: () => void;
-  /** Replaces the "Restricted for your role" title, e.g. "Special Fund is restricted". */
+  /** Replaces the "Restricted for your role" title, e.g. "Legal Review is restricted". */
   title?: string;
   /** Replaces the sentence naming `unit`, for a product's own restriction copy. */
   body?: string;
@@ -17,7 +17,7 @@ export interface SurfaceStateProps {
   phase?: 'ready' | 'loading' | 'failed';
   /** Rows the surface holds. With phase "ready" and a count above 0, renders nothing. */
   count?: number;
-  /** Plural noun for the copy — "claims", "investigations", "documents". @default "records" */
+  /** Plural noun for the copy — "cases", "investigations", "documents". @default "records" */
   noun?: string;
   /** True when filters are applied — switches the empty copy to the filtered wording. */
   filtered?: boolean;
@@ -53,7 +53,7 @@ export interface SurfaceStateProps {
   secondaryAction?: { label: string; icon?: string; onClick: () => void };
   /** Extra attributes for the primary action's button, e.g. `{ 'data-route': '/runs' }`. */
   actionProps?: Record<string, unknown>;
-  /** Block states: a 13px secondary footnote under the body, e.g. "Signed in as Examiner" on a restricted page. Not drawn by `inline`. */
+  /** Block states: a 13px secondary footnote under the body, e.g. "Signed in as Case Manager" on a restricted page. Not drawn by `inline`. */
   meta?: React.ReactNode;
   /** `bi-*` glyph before `meta`, e.g. "bi-person-badge". Decorative. */
   metaIcon?: string;

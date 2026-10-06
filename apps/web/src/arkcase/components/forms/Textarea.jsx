@@ -3,7 +3,7 @@ import { FIELD_PAD_X, FIELD_PAD_Y, FieldLabel, FieldMessage, fieldDescription, f
 
 /**
  * ArkCase Textarea — labelled multiline input matching the Input palette:
- * Bootstrap `.form-control` border, cyan focus ring, helper/error text.
+ * Bootstrap `.form-control` border, ArkCase blue focus ring, helper/error text.
  * `mono` sets the value in the data font at 12px for tokens, keys and code.
  * `toolbar` draws a formatting strip inside the field border, above the text: the box
  * then carries the one border, focus ring (focus-within), error and disabled states, and

@@ -66,7 +66,7 @@ function RailTab({ item, pressed, divider, labels, placement, onSelect, reduce }
         {hasCount && (
           <span aria-hidden="true" style={{
             flex: 'none', padding: '0 5px', borderRadius: 'var(--radius-pill, 10px)',
-            fontFamily: 'var(--font-data, ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', lineHeight: '16px',
+            fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', lineHeight: '16px',
             ...pill,
           }}>{item.count}</span>
         )}

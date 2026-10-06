@@ -30,7 +30,7 @@ export function SlideOver({ title, subtitle, leading, titleMeta, actions, onClos
         {leading != null && <div style={{ flex:'none', display:'flex', alignItems:'center' }}>{leading}</div>}
         <div style={{ flex:'1 1 auto', minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-            <div style={{ flex:'0 1 auto', minWidth:0, fontFamily:'var(--font-heading, Georgia, serif)', fontSize:'var(--font-size-lg, 16px)', fontWeight:600, color:'var(--text-strong, #111827)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</div>
+            <div style={{ flex:'0 1 auto', minWidth:0, fontFamily:'var(--font-heading, "Source Serif 4", Georgia, serif)', fontSize:'var(--font-size-lg, 20px)', fontWeight:600, color:'var(--text-strong, #111827)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</div>
             {titleMeta != null && <div style={{ flex:'none', display:'inline-flex', alignItems:'center' }}>{titleMeta}</div>}
           </div>
           {subtitle != null && <div style={{ fontSize:'var(--font-size-xs, 12px)', color:'var(--text-secondary, #5a6268)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{subtitle}</div>}

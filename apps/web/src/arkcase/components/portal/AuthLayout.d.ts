@@ -14,7 +14,7 @@ export interface AuthLayoutProps {
   brandCompact?: React.ReactNode;
   /** Serif 30px headline in the aside — the page's h1 (kept as a visually hidden h1 when stacked). */
   headline?: React.ReactNode;
-  /** One sentence under the headline, 15px secondary-on-navy. */
+  /** One sentence under the headline, 16px (`font-size-md`) secondary-on-navy. */
   lead?: React.ReactNode;
   /** Icon-and-text points listed under the lead. */
   points?: AuthLayoutPoint[];

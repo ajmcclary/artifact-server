@@ -459,6 +459,8 @@ export interface ActivityArtifactGroup {
 /** A feed entry: a plain event, a burst or an artifact's conversations (`groupEntries`). */
 export type ActivityEntry = ActivityEvent | ActivityBurst | ActivityArtifactGroup;
 export interface ActivityFeedProps {
+  /** Compact rows and flat day dividers for a panel; comfortable day cards for a page. @default "comfortable" */
+  density?: 'comfortable' | 'compact';
   /** One page of newest-first entries. Plain comment or resolution events are shown as one-thread cards. */
   events: ActivityEntry[];
   /** Reference time for the Today / Yesterday day labels. */

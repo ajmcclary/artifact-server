@@ -17,7 +17,7 @@ const TONES = {
 
 /* default is the message size; compact is the inline note a panel carries (13px, tighter). */
 const ALERT_DENSITY = {
-  default: { pad: '0.625rem 0.875rem', gap: '0.625rem', size: '0.9375rem', icon: '1.05rem', radius: 'var(--radius-md, 6px)' },
+  default: { pad: '0.625rem 0.875rem', gap: '0.625rem', size: '0.9375rem', icon: '1.05rem', radius: 'var(--radius-md, 5px)' },
   compact: { pad: 'var(--space-2, 8px) var(--space-3, 12px)', gap: 'var(--space-2, 8px)', size: 'var(--font-size-dense, 13px)', icon: 'var(--icon-sm, 14px)', radius: 'var(--radius-sm, 4px)' },
 };
 
@@ -111,7 +111,7 @@ export function Alert({ variant = 'primary', density = 'default', title, childre
         ) : body}
       </div>
       {onClose && (
-        <button onClick={onClose} aria-label="Dismiss" style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '0.9rem', opacity: 0.7, padding: 0, lineHeight: 1 }}>
+        <button onClick={onClose} aria-label="Dismiss" style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'var(--icon-sm, 0.875rem)', opacity: 0.7, padding: 0, lineHeight: 1 }}>
           <i className="bi bi-x-lg" />
         </button>
       )}

@@ -9,7 +9,7 @@ import { matchesMedia, countText, leftToBrowser } from './nav-helpers.jsx';
 const RAIL_WIDTH = 'var(--navigator-rail-width, 52px)';
 const GROUP_LABEL = { fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, letterSpacing: 'var(--letter-spacing-wide, .025em)', textTransform: 'uppercase', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', whiteSpace: 'nowrap' };
 const COUNT = { marginLeft: 'auto', flex: 'none', minWidth: 20, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, lineHeight: 1.45, borderRadius: 'var(--radius-pill, 10px)', padding: '1px 6px' };
-const MINI_COUNT = { position: 'absolute', top: 2, right: 2, minWidth: 16, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 10, fontWeight: 700, lineHeight: 1.6, borderRadius: 8, padding: '0 3px', boxShadow: '0 0 0 2px var(--ac-nav-surface, var(--surface-body, #fff))' };
+const MINI_COUNT = { position: 'absolute', top: 2, right: 2, minWidth: 16, textAlign: 'center', background: 'var(--bs-danger, #d83506)', color: 'var(--text-on-primary, #fff)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, lineHeight: '16px', borderRadius: 8, padding: '0 3px', boxShadow: '0 0 0 2px var(--ac-nav-surface, var(--surface-body, #fff))' };
 
 const COUNT_NEUTRAL = { ...COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
 const MINI_COUNT_NEUTRAL = { ...MINI_COUNT, background: 'var(--pill-neutral-bg, #e9ecef)', color: 'var(--pill-neutral-fg, #495057)' };
@@ -220,7 +220,7 @@ export function SideNav({
           borderLeft: `3px solid ${active ? 'var(--ac-nav-marker, var(--bs-primary, #0079a8))' : 'transparent'}`,
           backgroundColor: active ? 'var(--ac-nav-selected, var(--tint-primary-selected, rgba(0,121,168,.10)))' : isHover ? 'var(--ac-nav-hover, var(--tint-primary-hover, rgba(0,121,168,.05)))' : 'transparent',
           fontWeight: active ? 600 : 400,
-          fontSize: '0.9375rem',
+          fontSize: 'var(--font-size-sm, 0.875rem)',
           transition: 'color .15s ease, background-color .15s ease, border-color .15s ease',
         };
     return React.createElement(
@@ -429,7 +429,7 @@ export function SideNav({
           color: 'var(--ac-nav-text, var(--text-body, #212529))',
         display: 'flex', flexDirection: 'column',
         height: '100%',
-        boxShadow: isDrawer ? 'var(--shadow-nav, 0 0 15px rgba(0,0,0,0.2))' : 'none',
+        boxShadow: isDrawer ? 'var(--shadow-nav, 0 0 24px rgba(0, 0, 0, 0.12))' : 'none',
         borderRight: isDrawer ? 'none' : '1px solid var(--ac-nav-divider, var(--border-color, #dee2e6))',
         transition: reduceMotion || dragging ? 'none' : 'width .2s ease',
         ...surfaceVars, ...(tone === 'navy' ? navyNavigationStyle : null),

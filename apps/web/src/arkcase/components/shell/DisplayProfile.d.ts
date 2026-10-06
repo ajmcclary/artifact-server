@@ -9,7 +9,7 @@ export type DisplayProfileForce = 'Mobile' | 'Tablet' | 'Laptop' | 'Desktop' | n
  * app-bar presentation threshold that sits inside the tablet band. `widths` are
  * the nominal viewport a forced profile stands in for.
  *
- * The default is the Workers Compensation ladder (768 / 900 / 1100 / 1440). The
+ * The default is the ArkCase default ladder (768 / 900 / 1100 / 1440). The
  * ExtractionKit alternative is `{ mobile: 576, compact: 768, laptop: 992,
  * desktop: 1400 }` — pass it as `ladder` and the shell reflows on those numbers;
  * any key left out keeps its default.
@@ -58,7 +58,7 @@ export interface DisplayProfileProps extends DisplayProfileOptions {
   children?: React.ReactNode;
 }
 
-/** The Workers Compensation ladder: 768 / 900 / 1100 / 1440 with nominal widths 390 / 900 / 1280 / 1600. */
+/** The ArkCase default ladder: 768 / 900 / 1100 / 1440 with nominal widths 390 / 900 / 1280 / 1600. */
 export const defaultLadder: Required<DisplayLadder>;
 
 /** Provided by `DisplayProfile`; null outside one, so consumers fall back to their own defaults. */

@@ -36,7 +36,7 @@ const RECORD_PANEL_TONE = {
   success: { border: 'var(--pill-success-border, #a7e3ba)', cap: 'var(--pill-success-bg, #dcfce7)', capRule: 'var(--pill-success-border, #a7e3ba)', ink: 'var(--pill-success-fg, #15803d)' },
 };
 
-/* Cap grounds a host can pick independently of emphasis — the five the Workers' Compensation
+/* Cap grounds a host can pick independently of emphasis — the five the product record
    cards draw. `solid` is the filled primary cap with a sentence-case white label. */
 const RECORD_PANEL_CAP = {
   secondary: 'var(--surface-secondary, #f8f9fa)',
@@ -59,7 +59,7 @@ const RECORD_PANEL_CAP = {
  * the body, capped at `maxHeight` and scrolled; `collapsible.placement="strip"` moves
  * the toggle to a full-width strip under the body instead.
  *
- * The Workers' Compensation cards add the rest, all additive too: `actions` (a sans
+ * The product record cards add the rest, all additive too: `actions` (a sans
  * cap slot for buttons, links and audit lines), `tone` (danger / warning / success
  * frames), `capTone` (the cap ground: secondary, navy, tint, solid primary or plain),
  * `capSize="md"` (their 12px cap label), `footerVariant="note"` (an unbanded footnote)
@@ -226,7 +226,7 @@ export function RecordPanel({
           {(meta || toggle || hasActions) && (
             <span data-record-panel-aside="" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: metaWrap ? 'wrap' : undefined }}>
               {meta && (
-                <span data-record-panel-meta="" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, fontFamily: 'var(--font-data, monospace)', fontSize: 'var(--font-size-label, 11px)', color: sideInk, whiteSpace: metaWrap ? 'normal' : 'nowrap', overflowWrap: metaWrap ? 'anywhere' : undefined }}>
+                <span data-record-panel-meta="" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 'var(--font-size-label, 11px)', color: sideInk, whiteSpace: metaWrap ? 'normal' : 'nowrap', overflowWrap: metaWrap ? 'anywhere' : undefined }}>
                   {meta}
                 </span>
               )}

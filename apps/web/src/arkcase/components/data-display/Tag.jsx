@@ -215,7 +215,7 @@ export function Tag({
   const navy = tone === 'navy' && !dashed;
   const label = hasMeta ? (
     <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <span style={{ fontSize: 'var(--font-size-dense, 13px)', fontWeight: 600, lineHeight: 'var(--line-height-tight, 1.4)', color: tone === 'default' ? 'var(--text-body, #212529)' : t.fg }}>{children}</span>
+      <span style={{ fontSize: 'var(--font-size-dense, 13px)', fontWeight: 600, lineHeight: 'var(--line-height-tight, 1.25)', color: tone === 'default' ? 'var(--text-body, #212529)' : t.fg }}>{children}</span>
       <span data-tag-meta="" style={{ fontFamily: BODY_FACE, fontSize: 'var(--font-size-label, 11px)', fontWeight: 400, color: navy ? 'var(--text-on-navy-secondary, rgba(255,255,255,.72))' : 'var(--text-secondary, #5a6268)' }}>{meta}</span>
     </span>
   ) : children;
@@ -244,7 +244,7 @@ export function Tag({
           ? 'var(--font-size-xs, 12px)'
           : dataFace ? 'var(--font-size-label, 11px)' : 'var(--font-size-xs, 12px)',
         fontWeight: navy ? 600 : toned && !hasMeta ? 500 : undefined,
-        lineHeight: 'var(--line-height-tight, 1.4)',
+        lineHeight: 'var(--line-height-tight, 1.25)',
         overflowWrap: 'anywhere',
         ...style,
       }}

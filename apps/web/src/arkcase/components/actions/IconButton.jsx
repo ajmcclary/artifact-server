@@ -118,7 +118,7 @@ export function IconButton({
         padding: hasCount ? (size === 'xs' ? '0 var(--space-1, 4px)' : '0 var(--space-2, 8px)') : 0,
         gap: hasCount ? 'var(--space-1, 4px)' : undefined,
         border: 'none',
-        borderRadius: shape === 'circle' ? '50%' : 'var(--radius-md, 6px)',
+        borderRadius: shape === 'circle' ? '50%' : 'var(--radius-md, 5px)',
         ...(style?.background != null ? {} : { backgroundColor: bg }),
         color: fg,
         fontSize: fonts[size] || 18,

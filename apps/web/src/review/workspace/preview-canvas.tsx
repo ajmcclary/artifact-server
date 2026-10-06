@@ -72,6 +72,7 @@ export interface PreviewCanvasProps {
   /** The artboard width chosen in the toolbar, or null to fit the column. */
   readonly frameWidth: number | null;
   readonly focusControls: ReactNode;
+  readonly focusTitleControls: ReactNode;
   /** A native design gallery that replaces the version's entry page, or null. */
   readonly gallery: {readonly content: ReactNode; readonly title: string} | null;
   /** Explains why a version's gallery fell back to its entry page. */
@@ -172,6 +173,7 @@ export function PreviewCanvas({
   emptyProject,
   frameWidth,
   focusControls,
+  focusTitleControls,
   gallery,
   galleryNotice,
   hasDetails,
@@ -206,8 +208,12 @@ export function PreviewCanvas({
         tabIndex={-1}
         width={focus ? null : frameWidth}
         {...(focus ? {
-          meta: <span style={{alignItems: "center", display: "inline-flex", gap: 8, minHeight: 20}}>{version === null ? null : `v${version.version.number}`}{focusControls}</span>,
-          title: gallery?.title ?? path ?? artifactName,
+          meta: focusControls,
+          title: <span style={{alignItems: "center", display: "flex", gap: 8, minWidth: 0}}>
+            <span style={{minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{gallery?.title ?? path ?? artifactName}</span>
+            {version === null ? null : <span style={{color: "var(--text-on-navy-secondary)", flex: "none", fontFamily: "var(--font-data)"}}>v{version.version.number}</span>}
+            {focusTitleControls}
+          </span>,
         } : {})}
       >
         {artifactId === null && emptyProject !== null ? (

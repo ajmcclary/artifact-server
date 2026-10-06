@@ -42,7 +42,7 @@ export interface RecordPanelProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   tone?: 'default' | 'danger' | 'warning' | 'success';
   /** Cap ground, independent of emphasis: `secondary` (`surface-secondary`), `navy` (`surface-navy-subtle`), `tint` (the 10% primary tint), `solid` (a `bs-primary` fill with a 13px sentence-case `text-on-primary` label, meta and actions in the same ink — no uppercase) or `plain` (the card surface over a `list-divider` rule). `auto` follows `tone`, then `emphasis`. @default "auto" */
   capTone?: 'auto' | 'secondary' | 'navy' | 'tint' | 'solid' | 'plain';
-  /** Cap label step: `sm` is the 11px navy label; `md` the 12px uppercase label in `text-link-hover` with a 10px cap padding, the Workers' Compensation card cap. Ignored by `capTone="solid"`. @default "sm" */
+  /** Cap label step: `sm` is the 11px navy label; `md` the 12px uppercase label in `text-link-hover` with a 10px cap padding, the larger card cap. Ignored by `capTone="solid"`. @default "sm" */
   capSize?: 'sm' | 'md';
   /** Cross-axis alignment of the cap row. `center` also gives the cap a 46px minimum height, for caps that hold a button. @default "baseline" */
   capAlign?: 'baseline' | 'start' | 'center';

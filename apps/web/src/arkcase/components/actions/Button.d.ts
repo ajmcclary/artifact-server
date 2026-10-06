@@ -40,7 +40,7 @@ export interface ButtonProps {
   title?: string;
   /** Rests an outline or `light` button on `--surface-card` so it reads as a control on a tinted bar. @default false */
   onTint?: boolean;
-  /** Touch target: min-height 44px, a 15px label, line-height 1.3 and 9px vertical padding; the label may wrap. For portal and sign-in columns on phones. @default false */
+  /** Touch target: min-height 44px, a 16px label (`--font-size-md`), line-height 1.3 and 9px vertical padding; the label may wrap. For portal and sign-in columns on phones. @default false */
   touch?: boolean;
   /** DOM id forwarded to the button element. */
   id?: string;

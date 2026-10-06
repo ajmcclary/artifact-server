@@ -12,7 +12,7 @@ export interface AppShellProps {
   chrome?: AppShellChrome;
   /** Pin the display profile, as the App's Display tweak does. @default null */
   force?: DisplayProfileForce | string | null;
-  /** Breakpoint ladder; the Workers Compensation numbers by default. */
+  /** Breakpoint ladder; the ArkCase default ladder (768 / 900 / 1100 / 1440) when omitted. */
   ladder?: DisplayLadder;
   /** The app bar — a `TopNav`; rendered only when `chrome="top"`. */
   bar?: React.ReactNode;

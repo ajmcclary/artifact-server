@@ -3,7 +3,7 @@ import React from 'react';
 export interface MobileHistoryEntry {
   /** Stable key; defaults to the index. */
   id?: string;
-  /** Screen name — "Claims", "Boateng, Akosua". */
+  /** Screen name — "Cases", "Osei, Samuel". */
   label: React.ReactNode;
   /** Second line — a record id, the section, a filter. */
   sub?: React.ReactNode;

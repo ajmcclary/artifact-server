@@ -8,7 +8,7 @@ export interface CommandPaletteResult {
   kind?: string;
   /** The row's main text, 13px semibold. */
   title: React.ReactNode;
-  /** Secondary context line, e.g. "Claims intake · v4". */
+  /** Secondary context line, e.g. "Records intake · v4". */
   meta?: React.ReactNode;
   /** Identifier, date or author line in the data font, e.g. a version id. */
   note?: React.ReactNode;

@@ -2,7 +2,7 @@ import React from 'react';
 import type { StatusPillProps } from './StatusPill';
 
 export interface MetricCardProps {
-  /** Caption above the value, e.g. "Claims Received". */
+  /** Caption above the value, e.g. "Cases Received". */
   label: React.ReactNode;
   /** Large primary figure, e.g. "248" or "94.8%". */
   value: string;
@@ -21,7 +21,7 @@ export interface MetricCardProps {
    * Render the big value in the data font (`var(--font-data)` + tabular-nums).
    * Set it for amounts, counts and durations: display-scale figures keep the
    * data font at every size so stacked metrics align and a total lines up with
-   * the mono column it sums. Leave off for word values ("Medical Only").
+   * the mono column it sums. Leave off for word values ("Records request").
    * Never switch the value to the serif display face — its figures are
    * proportional. In `quiet` it defaults to on for numeric values and off for words.
    * @default false
@@ -43,7 +43,7 @@ export interface MetricCardProps {
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   /** Toggle state of a clickable tile, exposed as aria-pressed with a selected border. */
   pressed?: boolean;
-  /** `sm` is the compact strip tile — reserve, report and audit strips: 12px 14px padding, a one-line 13px caption (ellipsis, full text in its title) and a 20px/600 value. @default "md" */
+  /** `sm` is the compact strip tile — fee, report and audit strips: 12px 14px padding, a one-line 13px caption (ellipsis, full text in its title) and a 20px/600 value. @default "md" */
   size?: 'sm' | 'md';
   /** `eyebrow` sets the caption as an 11px/600 uppercase label in the colour's text-safe ink (`text-link-hover` for primary and info, `text-navy`, or the pill foreground) — the benefit and report tiles. @default "default" */
   labelVariant?: 'default' | 'eyebrow';

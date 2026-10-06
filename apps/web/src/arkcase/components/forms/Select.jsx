@@ -26,7 +26,7 @@ function selectShownLabel(root) {
 
 /**
  * ArkCase Select — Bootstrap `.form-select`. Native select with the brand
- * chevron indicator and cyan focus ring. `variant="bare"` drops the border,
+ * chevron indicator and ArkCase blue focus ring. `variant="bare"` drops the border,
  * fill and own focus ring so the select can sit inside another field (Input
  * `trailing`), whose focus-within ring then marks focus. `variant="flush"` keeps
  * the size's geometry and fill but drops border and radius, for a segment of a

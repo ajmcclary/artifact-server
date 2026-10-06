@@ -118,7 +118,7 @@ export function AppShell({
   const framed = useAppShellFrame(frame, force, ladder);
   const frameStyle = framed ? {
     boxSizing: 'border-box', width: framed.width, margin: '0 auto',
-    boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,.18))',
+    boxShadow: 'var(--shadow-lg, 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.14))',
     borderLeft: '1px solid var(--border-color, #dee2e6)', borderRight: '1px solid var(--border-color, #dee2e6)',
   } : null;
   const profile = useDisplayProfile({ force, ladder: ladder || defaultLadder });

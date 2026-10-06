@@ -101,7 +101,7 @@ export function useResizeSeam({
           padding: '3px 7px', borderRadius: 'var(--radius-md, 5px)',
           background: arming ? 'var(--bs-tertiary, #005a7d)' : 'var(--surface-header, #073652)',
           color: 'var(--text-on-primary, #fff)',
-          fontFamily: arming ? 'var(--font-sans, system-ui, sans-serif)' : 'var(--font-data, ui-monospace, monospace)',
+          fontFamily: arming ? 'var(--font-sans, "Public Sans", system-ui, sans-serif)' : 'var(--font-data, "Source Code Pro", ui-monospace, monospace)',
           fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)',
           fontSize: 'var(--font-size-xs, 12px)', fontWeight: arming ? 600 : 400, whiteSpace: 'nowrap', pointerEvents: 'none',
           opacity: dragging ? 1 : 0.92, boxShadow: 'var(--shadow-md, 0 2px 4px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.1))',

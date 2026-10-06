@@ -34,7 +34,7 @@ export interface SwitchProps {
 }
 
 /**
- * Toggle switch — Bootstrap `.form-switch`, cyan track when on; optionally two-sided
+ * Toggle switch — Bootstrap `.form-switch`, ArkCase blue track when on; optionally two-sided
  * ("Monthly / Annual") and toned for the navy band.
  */
 export function Switch(props: SwitchProps): React.JSX.Element;

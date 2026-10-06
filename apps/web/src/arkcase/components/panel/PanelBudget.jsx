@@ -116,7 +116,7 @@ export function PanelBudget({ order, wants, widths, floors, seed, viewportWidth,
   return React.createElement(panelBudgetContext().Provider, { value }, children);
 }
 
-/* The pure decision, reachable by a host that keeps its own state: the Workers Compensation
+/* The pure decision, reachable by a host that keeps its own state: a product's own
    budget family reads these, so `pinFloor`, `canPin` and the walk have one definition. */
 PanelBudget.pinFloor = pinFloor;
 PanelBudget.canPin = canPin;

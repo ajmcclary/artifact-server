@@ -133,6 +133,15 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(shortcutMap).toBeHidden();
       await expect(inspector.getByRole("combobox", {name: "Who can open this artifact"})).toHaveValue("account_required");
       await expect(inspector.getByText("Account required", {exact: true})).toHaveCount(0);
+      await openInspectorTab(fixture.page, "Comments");
+      const agentToggle = fixture.page.getByRole("button", {name: "Agent controls", exact: true});
+      await expect(agentToggle).toHaveAttribute("aria-expanded", "false");
+      await expect(fixture.page.getByRole("region", {name: "Agents"})).toBeHidden();
+      await agentToggle.click();
+      await expect(fixture.page.getByRole("region", {name: "Agents"})).toBeVisible();
+      await agentToggle.click();
+      await expect(agentToggle).toHaveAttribute("aria-expanded", "false");
+      await fixture.page.screenshot({path: "test-results/browser/comments-panel-compact.png"});
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
@@ -614,17 +623,26 @@ test.describe("Artifact Server frontend MVP", () => {
       await localLogin(fixture);
       await openReview(fixture, {artifactId: downloadFixture.artifactId, projectId: downloadFixture.projectId, versionId: downloadFixture.versionId});
 
-      // Download is docked at the Files panel's foot; the toolbar carries none.
       await openInspectorTab(fixture.page, "Files");
-      const standardDownload = fixture.page.getByRole("link", {
-        exact: true,
-        name: "Download Artifact",
-      });
-      await expect(standardDownload).toBeVisible();
-      await expect(standardDownload).toHaveAttribute(
-        "title",
-        "Download 2 files as a ZIP",
-      );
+      const panel = fixture.page.getByRole("complementary", {name: "Artifact inspector"});
+      const fileDownload = panel.getByRole("button", {exact: true, name: "Download File"});
+      await expect(fileDownload).toBeVisible();
+      await expect(panel.getByLabel("Selected file")).toContainText("index.html");
+      const [selectedFile] = await Promise.all([fixture.page.waitForEvent("download"), fileDownload.click()]);
+      expect(await requiredDownloadBytes(selectedFile.path())).toEqual(downloadFixture.files[0]?.bytes);
+      await panel.getByRole("treeitem", {name: /^app\.js\b/u}).click();
+      await expect(panel.getByLabel("Selected file")).toContainText("assets/app.js");
+      const [changedSelection] = await Promise.all([fixture.page.waitForEvent("download"), fileDownload.click()]);
+      expect(await requiredDownloadBytes(changedSelection.path())).toEqual(downloadFixture.files[1]?.bytes);
+      expect((await fileDownload.boundingBox())?.y).toBeLessThan((await panel.getByLabel("Selected file").boundingBox())?.y ?? 0);
+      await fixture.page.screenshot({path: "test-results/browser/files-panel-download.png"});
+      await waitForSettledPaint(fixture.page);
+      const filesAccessibility = await new AxeBuilder({page: fixture.page})
+        .exclude(artifactFrameSelectors[0]).exclude(artifactFrameSelectors[1])
+        .withTags(["wcag2a", "wcag2aa"]).analyze();
+      expect(filesAccessibility.violations).toEqual([]);
+      await panel.getByRole("button", {name: "Download options"}).click();
+      const standardDownload = fixture.page.getByRole("menuitem", {name: "Download Full Artifact"});
       const [standardArchive] = await Promise.all([
         fixture.page.waitForEvent("download"),
         standardDownload.click(),

@@ -88,7 +88,7 @@ export function MobileNavDrawer({
           borderRadius: '50%', border: 0, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'var(--surface-header, #073652)', color: 'var(--text-on-navy, #fff)',
-          boxShadow: 'var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))',
+          boxShadow: 'var(--shadow-md, 0 2px 4px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.10))',
           marginTop: 'env(safe-area-inset-top)',
         }}
       >
@@ -112,7 +112,7 @@ export function MobileNavDrawer({
           position: 'fixed', top: 0, bottom: 0, left: 0, width, zIndex: 1031,
           background: 'var(--surface-navy-subtle, #eaf1f6)',
           display: 'flex', flexDirection: 'column',
-          boxShadow: 'var(--shadow-lg, 0 0 32px rgba(0,0,0,.28))',
+          boxShadow: 'var(--shadow-lg, 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.14))',
           paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)',
           outline: 'none',
           transform: entered ? 'translateX(0)' : 'translateX(-100%)',
@@ -123,7 +123,7 @@ export function MobileNavDrawer({
       >
         <div data-icon-tone="current" style={{ height: 56, flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 0 16px', background: 'var(--surface-header, #073652)', color: 'var(--text-on-navy, #fff)' }}>
           {brand}
-          {title != null && <span style={{ fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-on-navy-secondary, #e0f2fe)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{title}</span>}
+          {title != null && <span style={{ fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-on-navy-secondary, rgba(255, 255, 255, 0.72))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{title}</span>}
           <button
             type="button"
             onClick={close}
@@ -154,7 +154,7 @@ export function MobileNavDrawer({
                   onMouseLeave={() => setHover(null)}
                   style={{
                     flex: 'none', display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '8px 12px',
-                    fontSize: 15, textDecoration: 'none', overflow: 'hidden',
+                    fontSize: 'var(--font-size-md, 1rem)', textDecoration: 'none', overflow: 'hidden',
                     borderLeft: `3px solid ${active ? 'var(--bs-primary, #0079a8)' : 'transparent'}`,
                     background: active ? 'var(--tint-primary-selected, rgba(0,121,168,.10))' : on ? 'var(--tint-primary-hover, rgba(0,121,168,.05))' : 'transparent',
                     color: active ? 'var(--text-link-hover, #005a7d)' : 'var(--text-body, #212529)',

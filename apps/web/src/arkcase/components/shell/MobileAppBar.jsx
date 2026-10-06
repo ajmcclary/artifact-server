@@ -66,7 +66,7 @@ function HistoryMenu({ entries, label, onSelect, onClose, anchorRef }) {
         boxShadow: 'var(--shadow-lg, 0 4px 8px rgba(0,0,0,.06), 0 12px 32px rgba(0,0,0,.14))', overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '12px 16px 6px', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, .06em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{label}</div>
+      <div style={{ padding: '12px 16px 6px', fontSize: 'var(--font-size-label, 11px)', fontWeight: 600, letterSpacing: 'var(--letter-spacing-wide, 0.025em)', textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{label}</div>
       {entries.map((entry, i) => {
         const current = i === entries.length - 1 && entry.current !== false;
         return (
@@ -85,7 +85,7 @@ function HistoryMenu({ entries, label, onSelect, onClose, anchorRef }) {
           >
             {entry.icon && <i aria-hidden="true" className={'bi ' + entry.icon} style={{ flex: 'none', fontSize: 'var(--icon-lg, 20px)', color: current ? 'var(--bs-primary, #0079a8)' : 'var(--icon-primary, #073652)' }} />}
             <span style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: current ? 'var(--text-link, #0079a8)' : 'var(--text-strong, #111827)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
+              <span style={{ fontSize: 'var(--font-size-md, 1rem)', fontWeight: 600, color: current ? 'var(--text-link, #0079a8)' : 'var(--text-strong, #111827)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
               {(current || entry.sub) && <span style={{ fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5a6268)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current ? 'You are here' : entry.sub}</span>}
             </span>
           </button>

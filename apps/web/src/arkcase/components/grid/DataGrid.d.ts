@@ -183,7 +183,7 @@ export interface DataGridColumnChooserProps {
 /**
  * Enterprise data grid — the app's signature surface. Sortable headers,
  * checkbox selection, pinned columns, zebra-striped rows (every 2nd body row
- * on #F8F9FA), cyan hover, quick filter, status bar. Use `cellRenderer` to drop
+ * on #F8F9FA), primary hover, quick filter, status bar. Use `cellRenderer` to drop
  * in StatusPill / Avatar / links.
  *
  * Data font: set `type` or `dataFont` on a column rather than writing

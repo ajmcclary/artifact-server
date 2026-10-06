@@ -18,7 +18,7 @@ import {
   localLogin,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openInspectorTab, openReview, reloadReview, toast} from "./review-helpers.js";
+import {openAgentControls, openInspectorTab, openReview, reloadReview, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml =
@@ -107,6 +107,7 @@ test.describe("PRS-006 presence avatar", () => {
       const page = fixture.page;
       await openReview(fixture, {artifactId, versionId: published.version.id});
       await openInspectorTab(page, "Comments");
+      await openAgentControls(page);
       const cards = page.getByRole("article", {name: /^Comment by /u});
       await expect(cards).toHaveCount(2);
 

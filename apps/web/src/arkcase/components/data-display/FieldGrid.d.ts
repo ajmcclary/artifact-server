@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface FieldGridField {
-  /** Uppercase noun phrase — "Date of Injury", "Insurance Carrier". */
+  /** Uppercase noun phrase — "Date Received", "Assigned Unit". */
   label: React.ReactNode;
   /** The field's value; `null`, `undefined` or `''` draws the em dash (or `absent`). */
   value?: React.ReactNode;

@@ -4,7 +4,7 @@ import { visuallyHiddenStyle } from '../utilities/VisuallyHidden.jsx';
 const has = (v) => v != null && v !== '' && v !== false;
 
 /**
- * ArkCase Switch — Bootstrap `.form-switch` toggle. Cyan track when on.
+ * ArkCase Switch — Bootstrap `.form-switch` toggle. ArkCase blue track when on.
  *
  * With `offLabel` / `onLabel` it becomes a two-sided switch ("Monthly [switch] Annual"): the
  * side in effect is drawn in full ink and weight 600, the other in secondary ink, and clicking
@@ -74,7 +74,7 @@ export function Switch({
         }} />
       </span>
       {has(label) && (
-        <span data-switch-label="" style={twoSided ? visuallyHiddenStyle : { fontSize: '0.9375rem' }}>{label}</span>
+        <span data-switch-label="" style={twoSided ? visuallyHiddenStyle : { fontSize: 'var(--font-size-sm, 0.875rem)' }}>{label}</span>
       )}
     </label>
   );

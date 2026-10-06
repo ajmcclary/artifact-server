@@ -188,7 +188,7 @@ export function RecordTable({
                 ...pin,
                 padding: '7px 12px',
                 borderBottom: lastRow ? 'none' : '1px solid ' + (toned ? toned.rule : 'var(--bs-light, #f1f5f7)'),
-                fontFamily: mono ? 'var(--font-data, monospace)' : undefined,
+                fontFamily: mono ? 'var(--font-data, "Source Code Pro", ui-monospace, monospace)' : undefined,
                 fontSize: 'var(--font-size-dense, 13px)',
                 fontWeight: cell.strong ? 600 : 400,
                 lineHeight: 1.45,
@@ -243,7 +243,7 @@ export function RecordTable({
                 padding: '7px 12px',
                 borderTop: RECORD_TABLE_HEADER_RULE_STRONG,
                 background: tone ? (pinFirst && c === 0 ? opaque(tone.bg) : tone.bg) : 'var(--surface-secondary, #f8f9fa)',
-                fontFamily: mono ? 'var(--font-data, monospace)' : undefined,
+                fontFamily: mono ? 'var(--font-data, "Source Code Pro", ui-monospace, monospace)' : undefined,
                 fontVariantNumeric: mono || col.align === 'right' ? 'var(--font-numeric-feature, tabular-nums)' : undefined,
                 fontSize: 'var(--font-size-dense, 13px)',
                 fontWeight: cell.strong === false ? 400 : 600,
@@ -349,7 +349,7 @@ function StackedValue({ cell, col, bare = false }) {
   return (
     <span style={{
       minWidth: 0, overflowWrap: 'anywhere', lineHeight: 1.45,
-      fontFamily: mono ? 'var(--font-data, monospace)' : undefined,
+      fontFamily: mono ? 'var(--font-data, "Source Code Pro", ui-monospace, monospace)' : undefined,
       fontSize: 'var(--font-size-dense, 13px)',
       fontWeight: cell.strong ? 600 : 400,
       fontStyle: cell.absent ? 'italic' : undefined,

@@ -36,7 +36,7 @@ export function AnnotationPin({
           ...place, zIndex: 35, width: 24, height: 24,
           border: '2px dashed var(--bs-primary, #0079a8)',
           background: 'var(--surface-card, #fff)', color: 'var(--text-link-on-tint, #00688f)',
-          boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7,54,82,.20))',
+          boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7, 54, 82, 0.10))',
           pointerEvents: 'none',
           ...style,
         }}
@@ -64,9 +64,9 @@ export function AnnotationPin({
       style={{
         ...place, zIndex: selected ? 31 : 30, width: size, height: size,
         border: '2px solid ' + edge, background: fill, color: ink,
-        fontFamily: 'var(--font-data, monospace)', fontSize: 12, fontWeight: 600, lineHeight: 1,
+        fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontSize: 12, fontWeight: 600, lineHeight: 1,
         cursor: onClick ? 'pointer' : 'default',
-        boxShadow: selected ? '0 2px 8px rgba(7,54,82,.30)' : 'var(--shadow-card, 0 1px 3px rgba(7,54,82,.20))',
+        boxShadow: selected ? '0 2px 8px rgba(7,54,82,.30)' : 'var(--shadow-card, 0 1px 3px rgba(7, 54, 82, 0.10))',
         ...style,
       }}
       {...rest}

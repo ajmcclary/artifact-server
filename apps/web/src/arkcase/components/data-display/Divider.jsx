@@ -45,7 +45,7 @@ export function Divider({ label, labelAlign = 'center', orientation = 'horizonta
   return (
     <div
       {...a11y}
-      style={{ display: 'flex', alignItems: 'center', gap: start ? 8 : 'var(--space-2, 10px)', width: '100%', ...style }}
+      style={{ display: 'flex', alignItems: 'center', gap: start ? 8 : 'var(--space-2, 8px)', width: '100%', ...style }}
       {...rest}
     >
       {!start && <span aria-hidden="true" style={rule} />}

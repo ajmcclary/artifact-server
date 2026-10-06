@@ -49,7 +49,7 @@ const fieldGridLength = (v) => (typeof v === 'number' ? v + 'px' : v);
 
 /**
  * ArkCase FieldGrid — the label-over-value block every detail card is built from
- * (Overview, Injury, Claimant, Coverage, and the registries' record cards).
+ * (Overview, Request, Requester, Fees, and the registries' record cards).
  *
  * Labels are 11px uppercase noun phrases; values sit at 14px. A coded value —
  * identifier, date, amount, code, contact string — takes `mono: true` and renders
@@ -62,7 +62,7 @@ const fieldGridLength = (v) => (typeof v === 'number' ? v + 'px' : v);
  * side panel); `size="summary"` is the three-up fact block that heads a reading;
  * `collapseBelow` drops the grid to one pair per row when its box narrows.
  *
- * The Workers' Compensation record cards add, all opt-in: `divided` rows with a
+ * The record cards add, all opt-in: `divided` rows with a
  * `list-divider` hairline (the ledger list), `labelWidth`, `valueAlign="end"` and
  * `valueWeight` for the spread key/value row, `variant="cells"` (the ruled cell grid),
  * `minColumnWidth` (auto-fit tracks), and per-field `icon`, `note`/`noteTone` and `id`.

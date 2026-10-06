@@ -23,7 +23,7 @@ export interface TabItem {
   panelId?: string;
 }
 export interface TabsProps {
-  /** Underline bar, the stacked icon-over-label bar the record screens use, or the navy-chrome bar for `surface-header`. `stacked` reproduces the Workers' Compensation locked `stackTabs()` bar exactly: the underline button (8px 14px) around a label block (`padding: 3px 0 1px`, `margin: 0 -9px`, `minWidth: 66`, `gap: 6`, bottom-aligned) with a 20px glyph over a 13px label; an iconed tab's count always rides the icon corner (primary badge, 11px/600, `2px 6px`) and is drawn only when greater than zero. @default "underline" */
+  /** Underline bar, the stacked icon-over-label bar the record screens use, or the navy-chrome bar for `surface-header`. `stacked` reproduces the locked `stackTabs()` record bar exactly: the underline button (8px 14px) around a label block (`padding: 3px 0 1px`, `margin: 0 -9px`, `minWidth: 66`, `gap: 6`, bottom-aligned) with a 20px glyph over a 13px label; an iconed tab's count always rides the icon corner (primary badge, 11px/600, `2px 6px`) and is drawn only when greater than zero. @default "underline" */
   variant?: 'underline' | 'stacked' | 'navy';
   /** Horizontal bar, or a vertical list with the indicator on the inline-start edge (emits aria-orientation). @default "horizontal" */
   orientation?: 'horizontal' | 'vertical';
@@ -44,7 +44,7 @@ export interface TabsProps {
 }
 
 /**
- * Underline tab bar — active tab gets a cyan underline; optional count badges. Arrow keys, Home
+ * Underline tab bar — active tab gets a primary underline; optional count badges. Arrow keys, Home
  * and End move focus and select; the handler stops propagation so a host's roving handler does
  * not move the same press twice.
  */

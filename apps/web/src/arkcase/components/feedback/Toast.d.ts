@@ -9,7 +9,7 @@ export interface ToastProps {
   children?: React.ReactNode;
   /** Repeats collapse into a count instead of stacking. @default 1 */
   count?: number;
-  /** Single follow-up verb ("Undo", "Open claim"). */
+  /** Single follow-up verb ("Undo", "Open case"). */
   actionLabel?: string;
   /** Called when the primary action is activated. */
   onAction?: () => void;

@@ -161,7 +161,7 @@ export function Disclosure({
         font: 'inherit',
         textAlign: 'left',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'background var(--transition-fast, 0.15s)',
+        transition: 'background var(--transition-fast, 0.15s ease)',
       }}
     >
       {leading != null && <span data-disclosure-leading="" style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>{leading}</span>}
@@ -173,7 +173,7 @@ export function Disclosure({
             fontSize: d.title,
             fontWeight: 600,
             lineHeight: 'var(--line-height-snug, 1.375)',
-            color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #343a40)' : 'var(--text-strong, #111827)',
+            color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #374151)' : 'var(--text-strong, #111827)',
             textWrap: 'pretty',
             ...(dense ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : null),
           }}
@@ -223,7 +223,7 @@ export function Disclosure({
       <i
         className={'bi ' + (open ? 'bi-chevron-down' : 'bi-chevron-right')}
         aria-hidden="true"
-        style={{ justifySelf: 'center', fontSize: 'var(--font-size-xs, 12px)', color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #343a40)' : undefined }}
+        style={{ justifySelf: 'center', fontSize: 'var(--font-size-xs, 12px)', color: disabled ? 'var(--text-secondary, #5a6268)' : dense ? 'var(--text-emphasis, #374151)' : undefined }}
       />
     </button>
   );

@@ -7,7 +7,7 @@ export interface MobileSection {
   label: string;
   /** Count chip after the label; zero draws nothing. */
   count?: number;
-  /** Group heading in the all-sections sheet — "Claim", "Process", "Record". */
+  /** Group heading in the all-sections sheet — "Case", "Process", "Record". */
   group?: string;
 }
 

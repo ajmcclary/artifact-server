@@ -102,7 +102,7 @@ export function CodeBlock({ children, tone = 'neutral', variant = 'default', wra
         gap: 'var(--space-1, 4px)',
         maxWidth: '100%',
         boxSizing: 'border-box',
-        paddingRight: 'var(--space-1, 6px)',
+        paddingRight: 'var(--space-1, 4px)',
         ...box,
         ...style,
       }}
@@ -115,7 +115,7 @@ export function CodeBlock({ children, tone = 'neutral', variant = 'default', wra
         copiedLabel={copy.copiedLabel}
         onCopy={copy.onCopy}
         onAnnounce={copy.onAnnounce}
-        style={{ flex: 'none', marginTop: singleLine ? 0 : 'var(--space-1, 5px)' }}
+        style={{ flex: 'none', marginTop: singleLine ? 0 : 'var(--space-1, 4px)' }}
       />
     </div>
   );

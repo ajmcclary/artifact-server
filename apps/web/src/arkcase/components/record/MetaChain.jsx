@@ -12,7 +12,7 @@ export function MetaChain({ items = [], separator = '·', style, ...rest }) {
       {parts.map((p, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span style={{ color: 'var(--bs-gray-600, #6c757d)' }}>{separator}</span>}
-          <span style={p.mono ? { fontFamily: 'var(--font-data, monospace)' } : undefined}>{p.value}</span>
+          <span style={p.mono ? { fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)' } : undefined}>{p.value}</span>
         </React.Fragment>
       ))}
     </div>

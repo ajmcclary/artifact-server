@@ -7,7 +7,7 @@ export interface SectionHeadingProps extends Omit<React.HTMLAttributes<HTMLDivEl
   size?: 'sm' | 'md' | 'default' | 'lg' | 'xl';
   /** Visible title for the SectionHeading — the only text inside the heading element. */
   title: React.ReactNode;
-  /** `data` sets the title in the data face — tabular figures, 600, `text-navy` — for a heading that is a record identifier (the Portal claim header's claim number). @default "display" */
+  /** `data` sets the title in the data face — tabular figures, 600, `text-navy` — for a heading that is a record identifier (the portal case header's case number). @default "display" */
   titleFace?: 'display' | 'data';
   /** A node directly after the title, before the count chip and meta — typically a StatusPill ("Active", "Hearing Requested"). Rendered outside the heading element, so the heading's name stays the title. */
   badge?: React.ReactNode;

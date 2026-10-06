@@ -2,8 +2,8 @@ import React from 'react';
 
 /**
  * ArkCase SegmentedControl — two to four mutually exclusive views of one surface
- * (Open / Closed / All, Employee / Employer report, Month / Week / Day). The
- * selected segment fills with the tertiary teal, not the primary cyan: the
+ * (Open / Closed / All, Requester / Agency copy, Month / Week / Day). The
+ * selected segment fills with the tertiary teal, not the primary blue: the
  * control is a view switch, not the page's action.
  *
  * `variant="pill"` is the dense tool-chrome look: a tertiary-surface track with pill

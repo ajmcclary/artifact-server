@@ -9,12 +9,12 @@ import React from 'react';
 export function DataRef({ variant = 'plain', children, style, ...rest }) {
   if (variant === 'absent') {
     return (
-      <span style={{ fontStyle: 'italic', fontFamily: 'var(--font-sans, system-ui)', fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5a6268)', ...style }} {...rest}>
+      <span style={{ fontStyle: 'italic', fontFamily: 'var(--font-sans, "Public Sans", system-ui, sans-serif)', fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5a6268)', ...style }} {...rest}>
         {children || 'not recorded by this run'}
       </span>
     );
   }
-  const base = { fontFamily: 'var(--font-data, monospace)', fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)' };
+  const base = { fontFamily: 'var(--font-data, "Source Code Pro", ui-monospace, monospace)', fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)' };
   const skins = {
     plain: { fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)' },
     strong: { fontSize: 'var(--font-size-dense, 13px)', fontWeight: 600, color: 'var(--text-navy, #073652)' },

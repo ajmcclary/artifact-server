@@ -266,10 +266,10 @@ test.describe("Artifact review workspace layout", () => {
       await page.keyboard.press("Escape");
       await expect(page.getByRole("menu", {name: "More artifact actions"})).toHaveCount(0);
 
-      // Download moved to the Files panel's foot; Delete moved to Details.
+      // Files owns its download controls; Delete belongs to Details.
       await openInspectorTab(page, "Files");
-      await expect(page.getByRole("link", {exact: true, name: "Download Artifact"}))
-        .toHaveAttribute("title", "Download 2 files as a ZIP");
+      await expect(page.getByRole("button", {exact: true, name: "Download File"})).toBeVisible();
+      await expect(page.getByLabel("Selected file")).toContainText("about.html");
       await openInspectorTab(page, "Details");
       await expect(page.getByRole("button", {name: "Delete Artifact"})).toBeEnabled();
     } finally {

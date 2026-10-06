@@ -136,7 +136,7 @@ export function ChoiceGroup({
         data-ak-choice-option=""
         data-checked={on ? '' : undefined}
         data-disabled={off ? '' : undefined}
-        style={{ ...shell, transition: 'background-color var(--transition-fast, .15s), border-color var(--transition-fast, .15s)' }}
+        style={{ ...shell, transition: 'background-color var(--transition-fast, 0.15s ease), border-color var(--transition-fast, 0.15s ease)' }}
       >
         <div
           ref={(el) => { refs.current[o.id] = el; }}

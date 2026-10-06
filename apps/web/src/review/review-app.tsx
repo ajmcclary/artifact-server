@@ -24,7 +24,7 @@ import {
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
-import {Button, dismissInnermost, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
+import {Button, dismissInnermost, IconButton, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
@@ -32,8 +32,8 @@ import {CommentsComposer, CommentsTab, type CommentsTabHandle} from "./workspace
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {useDesignGalleryCanvas} from "./workspace/design-gallery-canvas.tsx";
 import {DetailsTab} from "./workspace/details-tab.tsx";
-import {FocusComments, FocusViewerControls, useFocusContainment} from "./workspace/focus-mode.tsx";
-import {FilesDownload, FilesTab} from "./workspace/files-tab.tsx";
+import {FocusAnnotationControl, FocusComments, FocusViewerControls, useFocusContainment} from "./workspace/focus-mode.tsx";
+import {FilesDownload, FilesSelection, FilesTab} from "./workspace/files-tab.tsx";
 import {InspectorPanel, type InspectorRailItem} from "./workspace/inspector-panel.tsx";
 import {mediaTypeEssence} from "./workspace/page-inventory.ts";
 import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
@@ -451,6 +451,7 @@ function ProjectReview({
   const [focusMode, setFocusMode] = useState(initialLocation.view === "focus");
   const [focusCommentsOpen, setFocusCommentsOpen] = useState(false);
   const [focusControlsCollapsed, setFocusControlsCollapsed] = useState(false);
+  const [agentControlsOpen, setAgentControlsOpen] = useState(false);
   const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(false);
   const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
   // The artboard width lives in the toolbar's More menu; the presets offered are those the canvas has room for.
@@ -1065,10 +1066,20 @@ function ProjectReview({
       versionId={selectedVersionId}
     />
   );
+  const agentControlsToggle = <IconButton aria-controls="review-agent-controls" ariaLabel="Agent controls"
+    expanded={agentControlsOpen} icon="bi-cpu" onClick={() => setAgentControlsOpen((open) => !open)}
+    pressed={agentControlsOpen} size="xs" title={agentControlsOpen ? "Hide agent controls" : "Show agent controls"} />;
+  const selectedFilePath = selectedPath ?? selectedVersion?.manifest.entryPath ?? "";
+  const selectedFileDownload: ReviewDownload | null = selectedArtifactId === null || selectedVersion === null
+    || !selectedVersion.manifest.entries.some((entry) => entry.path === selectedFilePath) ? null : {
+      href: api.versionFileUrl(projectId, selectedArtifactId, selectedVersion.version.id, selectedFilePath),
+      title: `Download ${selectedFilePath}`,
+    };
   const commentsTab = (
     <>
       <div ref={setPreviewModeTarget} />
       <CommentsTab
+        agentControlsOpen={agentControlsOpen}
         canComment={canComment}
         canDeleteAny={canDeleteAnyComment}
         onShowInArtifact={showThreadInArtifact}
@@ -1272,7 +1283,6 @@ function ProjectReview({
                 emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
                 focusControls={focusMode ? (
                   <FocusViewerControls
-                    annotate={annotateToggle}
                     collapsed={focusControlsCollapsed}
                     commentCount={openCommentCount}
                     commentsOpen={focusCommentsOpen}
@@ -1289,6 +1299,7 @@ function ProjectReview({
                     share={sharePopover("focus")}
                   />
                 ) : null}
+                focusTitleControls={focusMode ? <FocusAnnotationControl annotate={annotateToggle} collapsed={focusControlsCollapsed} /> : null}
                 frameWidth={artboardPreset?.px ?? null}
                 gallery={galleryCanvas.gallery}
                 galleryNotice={galleryCanvas.galleryNotice}
@@ -1317,7 +1328,8 @@ function ProjectReview({
                 <Button icon="bi-layout-split" onClick={() => openComparison(null, "compare")} size="sm" variant="ghost">
                   Compare
                 </Button>
-              ) : null}
+              ) : inspectorTab === "comments" ? agentControlsToggle
+                : inspectorTab === "files" ? <FilesDownload download={download} selected={selectedFileDownload} /> : null}
               active={inspectorTab}
               canPin={!phone && viewportWidth >= workspaceBudget.inspector}
               items={inspectorItems}
@@ -1330,7 +1342,7 @@ function ProjectReview({
               pinned={inspectorPreference.pinned}
               railLabels={viewportHeight >= 680}
               footer={inspectorTab === "files" && selectedVersion !== null
-                ? <FilesDownload download={download} />
+                ? <FilesSelection selectedPath={selectedFilePath} version={selectedVersion} />
                 : inspectorTab === "comments" && selectedArtifactId !== null ? commentsComposer : null}
               sheet={phone}
               title={inspectorTitles[inspectorTab]}
@@ -1341,7 +1353,7 @@ function ProjectReview({
             </InspectorPanel>
           )}
           {focusMode && focusCommentsOpen ? (
-            <FocusComments commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
+            <FocusComments actions={agentControlsToggle} commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
               {commentsTab}
             </FocusComments>
           ) : null}

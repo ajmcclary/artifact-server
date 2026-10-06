@@ -54,6 +54,7 @@ export interface CommentsTabHandle {
 }
 
 export interface CommentsTabProps {
+  readonly agentControlsOpen: boolean;
   readonly canComment: boolean;
   /** Brings the thread's place on the page into view. */
   readonly onShowInArtifact: (threadId: string) => void;
@@ -102,6 +103,7 @@ const contextStrongStyle = {color: "var(--text-emphasis)"} satisfies CSSProperti
  * The composer is docked at the panel's foot (`CommentsComposer`).
  */
 export function CommentsTab({
+  agentControlsOpen,
   canComment,
   canDeleteAny,
   onShowInArtifact,
@@ -333,6 +335,7 @@ export function CommentsTab({
 
   return (
     <div style={tabStyle}>
+      <div hidden={!agentControlsOpen} id="review-agent-controls" style={{display: agentControlsOpen ? "flex" : "none", flexDirection: "column", gap: 8}}>
       <section aria-label="Agents" style={agentsStyle}>
         <div style={agentsSummaryStyle}>
           <strong>Agents</strong>
@@ -359,9 +362,9 @@ export function CommentsTab({
             resolveBundle={() => Promise.resolve(bundleOfThreads(openThreads))}
           />
         </div>
-      ) : (
-        <p style={noteStyle}>Comments are read-only for this account or archived project.</p>
-      )}
+      ) : null}
+      </div>
+      {!canComment ? <p style={noteStyle}>Comments are read-only for this account or archived project.</p> : null}
       {session.error === null ? null : <Alert variant="danger">{session.error.message}</Alert>}
       {sentError === null ? null : <Alert variant="danger">{sentError.message}</Alert>}
       <SegmentedControl

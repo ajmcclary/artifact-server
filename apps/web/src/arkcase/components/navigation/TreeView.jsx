@@ -211,7 +211,7 @@ export function TreeView({
                   border: 0, borderTop: idx > 0 ? '1px solid var(--border-color, #dee2e6)' : 0,
                   borderBottom: '1px solid var(--border-color, #dee2e6)', boxSizing: 'border-box',
                   background: hoverId === row.id ? 'var(--surface-tertiary, #e9ecef)' : 'var(--surface-secondary, #f8f9fa)',
-                  color: hoverId === row.id ? 'var(--text-emphasis, #212529)' : 'var(--text-secondary, #5a6268)',
+                  color: hoverId === row.id ? 'var(--text-emphasis, #374151)' : 'var(--text-secondary, #5a6268)',
                   cursor: 'pointer', font: 'inherit', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 600,
                   letterSpacing: 'var(--letter-spacing-wide, 0.025em)', textTransform: 'uppercase', textAlign: 'left',
                 }}>
@@ -289,9 +289,9 @@ export function TreeView({
                   onClick={(e) => { e.stopPropagation(); onMore(n, e.currentTarget.getBoundingClientRect()); }}
                   style={{
                     position: 'absolute', right: 8, top: 5, width: 18, height: 18, display: 'grid', placeItems: 'center',
-                    padding: 0, border: 0, borderRadius: 'var(--radius-sm, 3px)', background: 'transparent',
+                    padding: 0, border: 0, borderRadius: 'var(--radius-sm, 4px)', background: 'transparent',
                     color: solid ? 'var(--text-on-primary, #fff)' : 'var(--text-secondary, #5a6268)',
-                    cursor: 'pointer', fontSize: 'var(--font-size-sm, 13px)',
+                    cursor: 'pointer', fontSize: 'var(--font-size-sm, 14px)',
                   }}>
                   <i className="bi bi-three-dots" aria-hidden="true" style={{ color: 'currentColor' }} />
                 </button>

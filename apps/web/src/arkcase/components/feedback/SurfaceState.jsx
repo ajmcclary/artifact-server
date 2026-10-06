@@ -26,8 +26,8 @@ const W = [[88, 52], [72, 61], [95, 44], [66, 57], [82, 49], [77, 64]];
  * `titleLevel` makes the block title a real heading (an unknown route's h1); a
  * `secondaryAction` sits beside the action; `actionProps` reach the action's button.
  *
- * Workers' Compensation additions, all opt-in: `meta` (a footnote line such as
- * "Signed in as Examiner"), `failedTitle`/`failedBody` and `restricted.title`/`body` for a
+ * Product-copy additions, all opt-in: `meta` (a footnote line such as
+ * "Signed in as Case Manager"), `failedTitle`/`failedBody` and `restricted.title`/`body` for a
  * product's own copy, `loadingStyle="spinner"` with `loadingTitle`/`loadingBody` for a
  * generate-in-progress surface, and `tone="warning"` for the dashed box of a slot that is
  * waiting on the reader ("Not yet scheduled").
@@ -65,7 +65,7 @@ export function SurfaceState({
   } : null;
   const level = Math.min(6, Math.max(1, titleLevel | 0));
   const TitleTag = titleLevel ? 'h' + level : 'div';
-  const titleStyle = { margin: 0, fontFamily: 'var(--font-display, "Source Serif 4", Georgia, serif)', fontSize: 'var(--font-size-lg, 16px)', fontWeight: 600, color: dark ? 'var(--text-on-navy, #fff)' : 'var(--text-navy, #073652)', lineHeight: 1.25, textWrap: 'pretty' };
+  const titleStyle = { margin: 0, fontFamily: 'var(--font-display, "Source Serif 4", Georgia, serif)', fontSize: 'var(--font-size-lg, 20px)', fontWeight: 600, color: dark ? 'var(--text-on-navy, #fff)' : 'var(--text-navy, #073652)', lineHeight: 1.25, textWrap: 'pretty' };
   const bodyStyle = { fontSize: 'var(--font-size-dense, 13px)', lineHeight: 1.5, color: ink2, maxWidth: '26em', textWrap: 'pretty' };
   const metaNode = meta != null && meta !== '' && (
     <div data-surface-state-meta="" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-dense, 13px)', lineHeight: 1.5, color: ink2 }}>

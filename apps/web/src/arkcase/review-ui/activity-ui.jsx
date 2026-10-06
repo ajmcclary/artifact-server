@@ -44,9 +44,9 @@ export function createActivityUI(React, DS) {
 
   /* The title is a sentence of typed parts. The event id rides on it so a host or test can find
      an entry; spaces between parts keep the read-aloud text whole while the gap sets the measure. */
-  function Sentence({ entry, onOpen }) {
+  function Sentence({ entry, onOpen, compact = false }) {
     return <p data-event={entry.id} style={{ flex: '1 1 auto', minWidth: 0, margin: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline',
-      columnGap: 5, rowGap: 2, fontSize: '0.9375rem', lineHeight: 1.45 }}>
+      columnGap: 5, rowGap: 2, fontSize: compact ? 'var(--font-size-dense, 13px)' : '0.9375rem', lineHeight: 1.45 }}>
       {sentenceOf(entry).map((part, i) => <React.Fragment key={i}>
         {i > 0 ? ' ' : null}
         {part.kind === 'name'
@@ -68,7 +68,9 @@ export function createActivityUI(React, DS) {
   }
 
   function ActivityFeed({ events, now, hasMore, remaining, onShowOlder, expandedIds = [], onToggleReplies, openGroups = [], onToggleGroup, onOpen, onCompare,
-    onReply, onResolve, renderReplyComposer, onClearFilters, filtered, label = 'Activity', stickyTop = 0, renderThumbnail }) {
+    onReply, onResolve, renderReplyComposer, onClearFilters, filtered, label = 'Activity', stickyTop = 0, renderThumbnail, density = 'comfortable' }) {
+    const compact = density === 'compact';
+    const thumbnails = !compact && renderThumbnail;
     const rootRef = React.useRef(null);
     const [capHeight, setCapHeight] = React.useState(46);
     React.useLayoutEffect(() => {
@@ -86,14 +88,14 @@ export function createActivityUI(React, DS) {
     /* A host may hand over plain events: a lone conversation still gets its card. */
     const entries = events.map((e) => (!e.kind && THREAD_TYPES.includes(e.type) ? groupByArtifact([e])[0] : e));
     const openLink = (e, name = e.artifactName) => <Button variant="link" size="xs" icon="bi-box-arrow-up-right" aria-label={`Open ${name} in review`} onClick={() => onOpen(e)}>Open</Button>;
-    const metaRow = (children) => <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 6 }}>{children}</div>;
+    const metaRow = (children) => <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: compact ? 6 : 12, marginTop: compact ? 2 : 6 }}>{children}</div>;
     const project = (e) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-emphasis, #374151)' }}>{folder()}{e.projectName}</span>;
 
     function burstBody(e) {
       const open = openGroups.includes(e.id);
       const listId = 'activity-group-' + e.id.replace(/[^A-Za-z0-9_-]/g, '-');
       const noun = e.type === 'version' ? plural(e.count, 'version', 'versions') : plural(e.items.length, 'change', 'changes');
-      return <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+      return <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 4 : 8, marginTop: compact ? 4 : 8 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           {e.projects.map((p) => <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 500,
             color: 'var(--text-emphasis, #374151)', background: 'var(--surface-secondary, #f8f9fa)', border: STRONG_RULE, borderRadius: 4 }}>
@@ -144,9 +146,9 @@ export function createActivityUI(React, DS) {
               {e.needsYou && <StatusPill tone="warning" label="Your turn" />}
               {openLink(e)}
             </div>
-          : <div data-conversation-head="rest" style={{ display: 'grid', gridTemplateColumns: renderThumbnail ? '168px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto',
-              alignItems: 'center', columnGap: 16, padding: '12px 14px' }}>
-              {renderThumbnail && <ScreenThumbnail entry={e} page={renderThumbnail(e)} onOpen={onOpen} />}
+          : <div data-conversation-head="rest" style={{ display: 'grid', gridTemplateColumns: thumbnails ? '168px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto',
+              alignItems: 'center', columnGap: compact ? 8 : 16, padding: compact ? '6px 0' : '12px 14px' }}>
+              {thumbnails && <ScreenThumbnail entry={e} page={renderThumbnail(e)} onOpen={onOpen} />}
               <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-dense, 13px)', fontWeight: 500, color: 'var(--text-emphasis, #374151)' }}>{folder()}{e.projectName}</span>
                 <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)' }}>{where}</span>
@@ -156,7 +158,7 @@ export function createActivityUI(React, DS) {
             </div>}
       </ScrollDock>;
       const agent = e.agent;
-      return <div data-artifact-card={e.artifactId} style={{ marginTop: 10, border: STRONG_RULE, borderRadius: RADIUS, background: 'var(--surface-card, #fff)' }}>
+      return <div data-artifact-card={e.artifactId} style={{ marginTop: compact ? 4 : 10, border: compact ? 0 : STRONG_RULE, borderRadius: compact ? 0 : RADIUS, background: 'var(--surface-card, #fff)' }}>
         {head}
         <div style={{ padding: '4px 0' }}>
           <CommentThread comments={comments} density="compact" visibleReplies={2} expandedIds={expandedIds} onToggleReplies={onToggleReplies}
@@ -194,14 +196,14 @@ export function createActivityUI(React, DS) {
       return MARKERS[e.type] ? e.type : 'admin';
     };
     const timeOf = (e) => (e.kind === 'burst' ? timeRange(e.firstAt, e.at) : usTime(e.at));
-    const row = (e) => <li key={e.id} data-entry={e.id} style={{ display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr)', columnGap: 14, padding: '0 20px' }}>
-      <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14 }}>
-        <Marker kind={markerOf(e)} icon={e.type === 'admin' ? e.icon : undefined} />
+    const row = (e) => <li key={e.id} data-entry={e.id} style={{ display: 'grid', gridTemplateColumns: compact ? '22px minmax(0, 1fr)' : '32px minmax(0, 1fr)', columnGap: compact ? 8 : 14, padding: compact ? '0 12px' : '0 20px' }}>
+      <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: compact ? 8 : 14 }}>
+        <Marker size={compact ? 22 : 32} kind={markerOf(e)} icon={e.type === 'admin' ? e.icon : undefined} />
         <span style={{ flex: '1 1 auto', width: 2, minHeight: 12, marginTop: 4, background: 'var(--border-color-strong, #ced4da)' }} />
       </div>
-      <div style={{ minWidth: 0, padding: '16px 0 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <Sentence entry={e} onOpen={onOpen} />
+      <div style={{ minWidth: 0, padding: compact ? '8px 0 10px' : '16px 0 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: compact ? 6 : 12 }}>
+          <Sentence compact={compact} entry={e} onOpen={onOpen} />
           <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, paddingTop: 2 }}>
             {e.needsYou && <StatusPill tone="warning" label="Your turn" />}
             {!e.needsYou && e.archived && <StatusPill tone="neutral" label="Archived" />}
@@ -214,12 +216,12 @@ export function createActivityUI(React, DS) {
 
     /* Each day is one panel. Nothing here clips (no overflow), so the cap and the conversation
        heads stay sticky against the page's scroller. */
-    return <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 12 }} data-activity-feed={label}>
+    return <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: compact ? 8 : 20, paddingTop: compact ? 0 : 12 }} data-activity-feed={label} data-density={density}>
       {groupByDay(entries, now).map((g) => <section key={g.key} aria-label={[g.weekday, g.date].filter(Boolean).join(' ')} data-day={g.key}
-        style={{ background: 'var(--surface-card, #fff)', border: STRONG_RULE, borderRadius: RADIUS, boxShadow: 'var(--shadow-card, 0 1px 3px rgba(7, 54, 82, 0.10))' }}>
-        <div data-day-cap="" style={{ position: 'sticky', top: stickyTop, zIndex: 3, display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 20px',
-          borderRadius: `${RADIUS} ${RADIUS} 0 0`, background: 'var(--surface-secondary, #f8f9fa)', borderBottom: STRONG_RULE }}>
-          <h2 style={{ margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", serif)', fontSize: 18, fontWeight: 600, lineHeight: 1.2, color: 'var(--text-strong, #111827)' }}>{g.weekday}</h2>
+        style={{ background: 'var(--surface-card, #fff)', border: compact ? 0 : STRONG_RULE, borderRadius: compact ? 0 : RADIUS, boxShadow: compact ? 'none' : 'var(--shadow-card, 0 1px 3px rgba(7, 54, 82, 0.10))' }}>
+        <div data-day-cap="" style={{ position: 'sticky', top: stickyTop, zIndex: 3, display: 'flex', alignItems: 'baseline', gap: 10, padding: compact ? '7px 12px' : '12px 20px',
+          borderRadius: compact ? 0 : `${RADIUS} ${RADIUS} 0 0`, background: 'var(--surface-secondary, #f8f9fa)', borderBottom: STRONG_RULE }}>
+          <h2 style={{ margin: 0, fontFamily: 'var(--font-heading, "Source Serif 4", serif)', fontSize: compact ? 'var(--font-size-sm, 14px)' : 18, fontWeight: 600, lineHeight: 1.2, color: 'var(--text-strong, #111827)' }}>{g.weekday}</h2>
           {g.date && <span style={{ marginLeft: 'auto', ...DATA, fontSize: 'var(--font-size-xs, 12px)', fontWeight: 500, color: 'var(--text-data, #495057)', whiteSpace: 'nowrap' }}>{g.date}</span>}
         </div>
         <ul aria-label={`${label} · ${g.weekday}`} style={{ listStyle: 'none', margin: 0, padding: '6px 0 4px' }}>{g.events.map(row)}</ul>

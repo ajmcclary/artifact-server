@@ -23,7 +23,7 @@ function Spinner({ size = '1em' }) {
 /**
  * ArkCase Button — Bootstrap 5.3 `.btn` recreation.
  * Solid + outline variants across the brand palette, three sizes.
- * `touch` raises the control to a 44px phone target with a 15px label that may wrap.
+ * `touch` raises the control to a 44px phone target with a 16px (`--font-size-md`) label that may wrap.
  * `variant="navy"` with `outline` is the outline button for the navy app bar (Sign In).
  * `danger` turns a `link` or `ghost` action to the danger ink (Delete, Revoke); `flush`
  * drops a link's padding so it sits inline in running text or a table cell.
@@ -166,7 +166,7 @@ export function Button({
     whiteSpace: 'nowrap',
     // The phone measure: a 44px target whose label may wrap rather than overflow.
     ...(touch ? {
-      minHeight: 44, fontSize: '0.9375rem', lineHeight: 1.3, whiteSpace: 'normal',
+      minHeight: 44, fontSize: 'var(--font-size-md, 1rem)', lineHeight: 1.3, whiteSpace: 'normal',
       paddingTop: 9, paddingBottom: 9, boxSizing: 'border-box',
     } : {}),
     ...style,
