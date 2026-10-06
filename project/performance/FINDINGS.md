@@ -708,3 +708,34 @@ The warm prototype transferred 3.3 KiB, against 1.72 MiB before. The request cou
 - **The 2-second warm target is at the edge; cold opens are unchanged.** Cold prototype opens still take 10.8 s, as they must, since a first open has nothing cached. The remaining cold cost is per-request server latency on this host, recorded in the host-contention section above.
 - **The cold prototype counted 63 requests, against 81–88 before.** This run does not establish whether that difference comes from this change or from sampling.
 - **WebKit re-downloads the entry page on each reopen.** It fetches it through the application's `/file` route, even though that response is `private, max-age=31536000, immutable`. Lease-origin files are served from cache in every engine. This is pre-existing `/file` behavior, found while proving CNT-012 across engines, and is not addressed here.
+
+## October 2026 ExtractionKit deferred data tiers (Design)
+
+ExtractionKit now loads four data modules on demand instead of on every open. Measured October 6, 2026 with `pnpm perf:delivery` (Chromium 151, unthrottled, five samples per journey, Apple M1 Max). Both hosted runs used artifacts.backend.app on image `sha256:9a7d5033198515b7d4237afa5b51c47969e4ba3dcc4034adb2d40d67dc218772`, back to back between 22:31 and 22:35 UTC. Each run pinned one ExtractionKit version with the review route's `version` parameter:
+
+- version 15 (`ver_e5fbd0d2-fb1c-4475-b378-64c134916a1f`), the publication the original "before" run opened: `project/evidence/delivery-baseline-2026-10-06-hosted-before-ek-tiers-rerun.json`
+- version 16 (`ver_1ddddfb8-b68e-4a39-a707-d2bd1324e79a`), Design `ad2a321` with the code from `d40fe74` and `f3095c5`: `project/evidence/delivery-baseline-2026-10-06-hosted-after-ek-tiers.json`
+
+Version 16's entry page, `ek-data-design-record.js` and `ek-data-viewer.js` are byte-identical to Design at that commit. The after report records a dirty tree; the only uncommitted file was the rerun report written a minute earlier. The original before run, `project/evidence/delivery-baseline-2026-10-06-hosted-before-ek-tiers.json`, used image `sha256:82e98bd2993ef6f42b1da998575406b0308d47273ce9fb56b2b70af3ddc0e913` and opened the current version without pinning it. Three deploys separate the two images, so it is shown for context only.
+
+| Run | Cache | Ready | First paint | Transferred | Decoded | Requests |
+|---|---|---|---|---|---|---|
+| original before (older image) | cold | 6423 ms (4671 ms–9089 ms) | 1884 ms | 2.92 MiB | 17.55 MiB | 62 |
+| original before (older image) | warm | 1709 ms (1558 ms–2009 ms) | 300 ms | 8.8 KiB | 17.22 MiB | 62 |
+| before, rerun (version 15) | cold | 4645 ms (3176 ms–5762 ms) | 748 ms | 2.93 MiB | 17.59 MiB | 63 |
+| before, rerun (version 15) | warm | 1991 ms (1523 ms–2453 ms) | 244 ms | 12.9 KiB | 17.26 MiB | 63 |
+| after (version 16) | cold | 4463 ms (4115 ms–5507 ms) | 1084 ms | 1.55 MiB | 11.07 MiB | 58 |
+| after (version 16) | warm | 1475 ms (1343 ms–1609 ms) | 256 ms | 8.9 KiB | 10.75 MiB | 58 |
+
+Design moved four data modules out of the default open without changing their bytes: `ek-data-record.js` and `ek-data-runs.js` load when the Committed record dataset is selected, and `ek-data-viewer.js` and `ek-data-design-pages.js` load when a document surface first draws. Together they are 6,837,831 decoded bytes, which matches the 6.52 MiB fall in decoded bytes. The cold transfer nearly halved, from 2.93 MiB to 1.55 MiB. The private HAR captures confirm all four files are absent from every sample of the after run, cold and warm, and present in every sample of the rerun. The committed reports hold only route classes. Five fewer requests are counted: the four modules, plus one version-metadata call the review makes when the pinned version is not current. Before measuring, a hosted spot check of version 16 in Interactive preview confirmed four things:
+
+- The Runs list renders.
+- Committed record fetches the `record` tier once and shows 60 runs.
+- run-2026-0481's document draws.
+- Only then are the `viewer` tier's two files requested.
+
+Annotate mode could not be checked on either version: its `srcdoc` sandbox's content security policy blocks React from the public CDNs, so the prototype does not boot there. Versions 15 and 16 fail identically, and the review already shows a notice that external scripts are blocked in Annotate.
+
+The cold ready ranges overlap (3176–5762 ms against 4115–5507 ms), and so do the warm ones (1523–2453 ms against 1343–1609 ms), so this run shows no ready-time improvement, only the smaller transfer and decoded size.
+
+**Follow-up on `ek-data-design-record.js`.** The default open still decodes 11.07 MiB. The eager ExtractionKit data modules (`ek-data-library.js`, `ek-data-evaluation.js`, `ek-data-design-runs.js` and `ek-data-design-record.js`) account for 6,162,397 bytes of that. `ek-data-design-record.js` alone is 5,912,642 bytes, 96% of the eager data and 51% of everything the open decodes. Ready time no longer tracks decoded bytes: removing 37% of them moved the cold median by 182 ms inside overlapping ranges. In every after sample that file finished downloading before `ds-bundle.js` and `icons.css`, which start at the same moment. The moment content fetches begin varied from 1.4 s to 3.4 s across samples, more than any byte effect. Hand-splitting the file is not recommended on this evidence. A split would not shorten the measured ready, which ends when content requests have been quiet for 500 ms and so never includes script parse or evaluation time. If the warm drop (median 1991 to 1475 ms, ranges overlapping by 86 ms) suggests a parse cost worth chasing, the next step is to measure, with a main-thread profile, how long the first Runs render spends evaluating that file. Only that profile could justify the owner-approved, hand-authored restructuring in Design that a split of this frozen source would require.
