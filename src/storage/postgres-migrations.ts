@@ -10,6 +10,7 @@ import {
   actionRowChecks,
   activityDetailJsonMaxBytes,
 } from "./activity-log-schema.js";
+import {admissionMethodCheckSql} from "./invitation-schema.js";
 
 const initialSchema = Effect.gen(function*() {
   const sql = yield* SqlClient;
@@ -985,6 +986,54 @@ const addLoginAttemptInvite = Effect.gen(function*() {
   yield* sql.unsafe("ALTER TABLE IF EXISTS login_attempts ADD COLUMN IF NOT EXISTS invite_id TEXT");
 });
 
+const addInstallationInvites = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS installation_invites (
+      installation_id TEXT NOT NULL REFERENCES artifact_installations(id),
+      id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('person', 'link')),
+      email TEXT,
+      role TEXT NOT NULL CHECK (role IN ('administrator', 'member')),
+      max_uses INTEGER NOT NULL CHECK (max_uses BETWEEN 1 AND 100),
+      use_count INTEGER NOT NULL DEFAULT 0 CHECK (use_count >= 0 AND use_count <= max_uses),
+      secret_digest TEXT NOT NULL,
+      token_prefix TEXT NOT NULL,
+      opens_project_id TEXT,
+      opens_artifact_id TEXT,
+      opens_version_id TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by_principal_id TEXT NOT NULL,
+      revoked_at TEXT,
+      revoked_by_principal_id TEXT,
+      last_redeemed_member_id TEXT,
+      PRIMARY KEY (installation_id, id),
+      CHECK ((kind = 'person' AND email IS NOT NULL) OR (kind = 'link' AND email IS NULL)),
+      CHECK (kind = 'person' OR role = 'member'),
+      CHECK (kind = 'link' OR max_uses = 1),
+      CHECK (
+        (opens_project_id IS NULL AND opens_artifact_id IS NULL AND opens_version_id IS NULL)
+        OR (opens_project_id IS NOT NULL AND opens_artifact_id IS NOT NULL AND opens_version_id IS NOT NULL)
+      ),
+      CHECK ((revoked_at IS NULL) = (revoked_by_principal_id IS NULL))
+    )`,
+    `CREATE INDEX IF NOT EXISTS installation_invites_created
+      ON installation_invites (installation_id, created_at DESC, id DESC)`,
+    // Partial fixtures from earlier migration tests may lack these tables.
+    `ALTER TABLE IF EXISTS installation_members
+      DROP CONSTRAINT IF EXISTS installation_members_admission_method_check,
+      ADD CONSTRAINT installation_members_admission_method_check
+        CHECK (${admissionMethodCheckSql})`,
+    `ALTER TABLE IF EXISTS actions
+      DROP CONSTRAINT IF EXISTS actions_action_check,
+      ADD CONSTRAINT actions_action_check CHECK (${actionKindCheck}),
+      DROP CONSTRAINT IF EXISTS actions_scope_check,
+      ADD CONSTRAINT actions_scope_check CHECK (${scopeCheck})`,
+  ] as const;
+  for (const statement of statements) yield* sql.unsafe(statement);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1007,10 +1056,11 @@ const migrationLoader = Migrator.fromRecord({
   "0019_member_admission_and_activity": addMemberAdmissionAndActivity,
   "0020_content_variants": addContentVariants,
   "0021_login_attempt_invite": addLoginAttemptInvite,
+  "0022_installation_invites": addInstallationInvites,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 21;
+export const requiredPostgresSchemaVersion = 22;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1128,6 +1178,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 21,
     name: "login_attempt_invite",
+  }, {
+    migration_id: 22,
+    name: "installation_invites",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

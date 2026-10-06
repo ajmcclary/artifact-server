@@ -38,6 +38,35 @@ import {principalActivityThreshold} from "../core/principal-activity.js";
 import {attributedInsert} from "./action-insert.js";
 import {insertPostgresAction} from "./postgres-action-insert.js";
 import type {PostgresDatabase} from "./postgres-database.js";
+import type {
+  CreateInviteRecord,
+  InvitationRepository,
+  RedeemInviteRecord,
+  RedeemInviteResult,
+  RevokeInviteRecord,
+} from "../core/invitation-ports.js";
+import {
+  type Invite,
+  inviteStatus,
+  inviteStatuses,
+  type ListedInvite,
+  redemptionRefusal,
+  type StoredInvite,
+} from "../core/invitations.js";
+import {
+  inviteAdmitAction,
+  inviteCreateAction,
+  inviteInsertColumns,
+  inviteInsertValues,
+  inviteRedeemAction,
+  inviteRevokeAction,
+  inviteRowSchema,
+  inviteSelectColumns,
+  listedInviteFromRow,
+  listedInviteRowSchema,
+  storedInviteFromRow,
+  withoutInviteDigest,
+} from "./invitation-rows.js";
 
 const membershipRoleSchema = z.enum([
   membershipRoles.administrator,
@@ -74,6 +103,7 @@ const memberRowSchema = z.object({
 const listedMemberRowSchema = memberRowSchema.extend({
   admittedHow: z.enum([
     memberAdmissions.automatic,
+    memberAdmissions.invite,
     memberAdmissions.manual,
     memberAdmissions.owner,
   ]).nullable(),
@@ -129,7 +159,7 @@ const loginAttemptRowSchema = z.object({
 const countRowSchema = z.object({count: z.coerce.number().int().nonnegative()});
 
 /** Installation-scoped Postgres persistence for membership and credentials. */
-export class PostgresIdentityRepository implements BootstrapManagedApiKeyRepository {
+export class PostgresIdentityRepository implements BootstrapManagedApiKeyRepository, InvitationRepository {
   readonly #database: PostgresDatabase;
   readonly #installationId: string;
 
@@ -709,6 +739,142 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
         return attempt;
       }));
     }));
+  }
+
+  async createInvite(record: CreateInviteRecord): Promise<Invite> {
+    this.#assertInstallationScope(record.invite.installationId);
+    await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql.withTransaction(Effect.gen(function*() {
+        yield* sql.unsafe(
+          `INSERT INTO installation_invites (${inviteInsertColumns})
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+          [...inviteInsertValues(record.invite)],
+        );
+        yield* insertPostgresAction(
+          record.invite.installationId,
+          inviteCreateAction(record.invite, record.attribution),
+        );
+      }));
+    }));
+    return withoutInviteDigest(record.invite);
+  }
+
+  async findInvite(installationId: string, inviteId: string): Promise<StoredInvite | null> {
+    this.#assertInstallationScope(installationId);
+    return this.#database.run(this.#findInvite(installationId, inviteId, false));
+  }
+
+  #findInvite(
+    installationId: string,
+    inviteId: string,
+    lock: boolean,
+  ): Effect.Effect<StoredInvite | null, unknown, SqlClient> {
+    return Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT ${inviteSelectColumns("i")} FROM installation_invites AS i
+         WHERE i.installation_id = $1 AND i.id = $2 ${lock ? "FOR UPDATE" : ""}`,
+        [installationId, inviteId],
+      );
+      return rows[0] === undefined ? null : storedInviteFromRow(inviteRowSchema.parse(rows[0]));
+    });
+  }
+
+  async listInvites(installationId: string): Promise<readonly ListedInvite[]> {
+    this.#assertInstallationScope(installationId);
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT ${inviteSelectColumns("i")}, creator.display_name AS "createdByName"
+         FROM installation_invites AS i
+         LEFT JOIN installation_members AS creator
+           ON creator.installation_id = i.installation_id AND creator.id = i.created_by_principal_id
+         WHERE i.installation_id = $1
+         ORDER BY i.created_at DESC, i.id DESC
+         LIMIT 200`,
+        [installationId],
+      );
+      return rows.map((row) => listedInviteFromRow(listedInviteRowSchema.parse(row)));
+    }));
+  }
+
+  async revokeInvite(record: RevokeInviteRecord): Promise<Invite> {
+    this.#assertInstallationScope(record.installationId);
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        const existing = yield* this.#findInvite(record.installationId, record.inviteId, true);
+        if (existing === null) {
+          return yield* new IdentityNotFound({message: "The invite does not exist."});
+        }
+        if (inviteStatus(existing, new Date(record.revokedAt)) !== inviteStatuses.active) {
+          return yield* new IdentityConflict({message: "Only an active invite can be revoked."});
+        }
+        yield* sql`UPDATE installation_invites
+          SET revoked_at = ${record.revokedAt},
+              revoked_by_principal_id = ${record.attribution.principalId}
+          WHERE installation_id = ${record.installationId} AND id = ${record.inviteId}`;
+        yield* insertPostgresAction(
+          record.installationId,
+          inviteRevokeAction(existing, record.attribution, record.revokedAt),
+        );
+        const revoked = yield* this.#findInvite(record.installationId, record.inviteId, false);
+        if (revoked === null) return yield* Effect.die(new Error("The revoked invite was not persisted."));
+        return withoutInviteDigest(revoked);
+      }));
+    }));
+  }
+
+  async redeemInvite(record: RedeemInviteRecord): Promise<RedeemInviteResult> {
+    const {admission} = record;
+    this.#assertInstallationScope(admission.installationId);
+    try {
+      return await this.#database.run(Effect.gen({self: this}, function*() {
+        const sql = yield* SqlClient;
+        return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+          const invite = yield* this.#findInvite(admission.installationId, record.inviteId, true);
+          const refusal = redemptionRefusal(invite, record.email, record.redeemedAt);
+          if (invite === null || refusal !== null) {
+            const refused: RedeemInviteResult = {
+              kind: "refused",
+              outcome: refusal === null || refusal === "unverified" ? "invalid" : refusal,
+            };
+            return refused;
+          }
+          yield* sql`UPDATE installation_invites
+            SET use_count = use_count + 1, last_redeemed_member_id = ${admission.id}
+            WHERE installation_id = ${admission.installationId} AND id = ${record.inviteId}`;
+          yield* sql`INSERT INTO installation_members (
+            installation_id, id, email, display_name, role, status,
+            created_at, updated_at, admitted_by_principal_id, admission_method
+          ) VALUES (
+            ${admission.installationId}, ${admission.id}, ${admission.email},
+            ${admission.displayName}, ${admission.role}, ${memberStatuses.active},
+            ${admission.createdAt}, ${admission.createdAt},
+            ${admission.attribution.principalId}, ${admission.admittedHow}
+          )`;
+          yield* insertPostgresAction(admission.installationId, inviteAdmitAction(admission, invite.id));
+          yield* sql`INSERT INTO external_identities (
+            installation_id, provider, subject, member_id, email, bound_at
+          ) VALUES (
+            ${admission.installationId}, ${record.binding.provider}, ${record.binding.subject},
+            ${record.binding.memberId}, ${record.binding.email}, ${record.binding.boundAt}
+          )`;
+          yield* insertPostgresAction(
+            admission.installationId,
+            inviteRedeemAction(invite, admission, record.redeemedAt),
+          );
+          const member = yield* this.#findMember(admission.installationId, admission.id, false);
+          if (member === null) return yield* Effect.die(new Error("The admitted member was not persisted."));
+          const admitted: RedeemInviteResult = {kind: "admitted", member};
+          return admitted;
+        }));
+      }));
+    } catch (cause) {
+      if (isConstraintFailure(cause)) return {kind: "refused", outcome: "account_unavailable"};
+      throw cause;
+    }
   }
 
   #assertInstallationScope(installationId: string): void {
