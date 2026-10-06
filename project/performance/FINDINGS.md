@@ -589,3 +589,49 @@ The earlier hosted runs are in the CNT-010 section above: 14.3 s cold and 14.0 s
 - **The Library is unchanged and remains the slowest journey**, at about 20–26 s median with roughly 180 requests per open. Compression does not touch it; it needs the server-side catalog (PLAN.md step 1).
 - **Hosted timings vary widely between sessions.** The Library, which these changes do not affect, measured 33 s, 22 s, and 26 s cold across the three hosted runs. Read single comparisons with that in mind.
 - **Rollout and rollback.** Migration 20 runs in the pre-upgrade hook, so the old pods report "schema newer" and go not-ready until the new ones are ready; expect a brief readiness gap, as with migrations 18 and 19. Rolling back the image needs `DELETE FROM artifact_server_postgres_migrations WHERE migration_id = 20;` first. The table itself is harmless to an older image.
+
+## October 2026 server-side Library (DSN-006)
+
+The Library now loads from one authorized `GET /api/v1/library` request. The server reads each current version's preview index (cached per immutable version) and dates every page in SQL over full version and comment history, instead of the browser reading versions, manifests, indexes and comments for every gallery. Measured October 5–6, 2026 with `pnpm perf:delivery` (Chromium 151, unthrottled, five samples per journey, Apple M1 Max). The hosted run used artifacts.backend.app on image `sha256:76f074da9f251094dc956dbbee878a5798141a802faa48640aa71d4b9b499022` (main `ae29947`).
+
+### Local (one synthetic gallery)
+
+Before:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 137 ms (135 ms–148 ms) | 100 ms (100 ms–112 ms) | 16 (16–16) | 501.0 KiB (501.0 KiB–501.0 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 73 ms (70 ms–75 ms) | 60 ms (60 ms–64 ms) | 16 (16–16) | 3.1 KiB (3.1 KiB–3.1 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 |
+| prototype | cold | 845 ms (822 ms–856 ms) | 120 ms (120 ms–132 ms) | 31 (31–31) | 2.37 MiB (2.37 MiB–2.37 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 |
+| prototype | warm | 744 ms (720 ms–803 ms) | 84 ms (76 ms–92 ms) | 31 (31–31) | 1.72 MiB (1.72 MiB–1.72 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 |
+
+After:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 143 ms (141 ms–239 ms) | 112 ms (104 ms–124 ms) | 13 (13–13) | 498.6 KiB (498.6 KiB–498.6 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 |
+| library | warm | 78 ms (76 ms–81 ms) | 64 ms (60 ms–72 ms) | 13 (13–13) | 1.5 KiB (1.5 KiB–1.5 KiB) | 1.29 MiB (1.29 MiB–1.29 MiB) | identity | 0 |
+| prototype | cold | 857 ms (847 ms–939 ms) | 136 ms (124 ms–148 ms) | 31 (31–31) | 2.37 MiB (2.37 MiB–2.37 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 |
+| prototype | warm | 763 ms (729 ms–781 ms) | 96 ms (80 ms–96 ms) | 31 (31–31) | 1.72 MiB (1.72 MiB–1.72 MiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 |
+
+### Hosted (artifacts.backend.app, 11 artifacts)
+
+After:
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 5410 ms (4551 ms–11771 ms) | 2068 ms (1964 ms–6408 ms) | 12 (12–13) | 490.8 KiB (490.8 KiB–512.5 KiB) | 1.52 MiB (1.52 MiB–1.54 MiB) | identity | 0 |
+| library | warm | 7263 ms (5187 ms–15822 ms) | 3032 ms (1768 ms–8988 ms) | 15 (14–67) | 37.2 KiB (35.6 KiB–347.5 KiB) | 1.40 MiB (1.37 MiB–1.68 MiB) | identity | 0 |
+| prototype | cold | 14389 ms (9978 ms–19686 ms) | 2504 ms (1124 ms–2856 ms) | 86 (82–87) | 3.48 MiB (3.38 MiB–3.60 MiB) | 19.80 MiB (19.70 MiB–19.91 MiB) | br | 0 |
+| prototype | warm | 11180 ms (7089 ms–11833 ms) | 592 ms (356 ms–764 ms) | 81 (80–87) | 2.79 MiB (2.79 MiB–2.95 MiB) | 19.53 MiB (19.53 MiB–19.69 MiB) | br | 0 |
+
+Earlier hosted Library cold medians, in the CNT-010 and CNT-011 sections above: 33 s, 22 s, and 26 s, at about 180 requests per open.
+
+### What this shows and what it does not
+
+- **The Library got much faster but missed the 2-second target.** The hosted cold Library-ready median fell from 22–33 s to 5.4 s (4.6–11.8 s), and requests per open fell from about 180 to 12. The success criterion was under 2 seconds; it was not met.
+- **The Library endpoint itself takes 2.6–4.6 s on the server.** In the raw captures, `/api/v1/library` waited 2.56 s, 4.59 s, and 2.92 s for its first byte. The service reads each artifact's current version and full manifest one after another, and each pod's first request also reads the preview-index blobs. The fix is to read artifacts concurrently, or to fetch every current version's index entry in one query. The final review flagged both as scaling concerns; on production they are already the largest remaining cost.
+- **The application shell is slow before the Library starts.** Static scripts and stylesheets waited 1.3–4.5 s for their first byte in the same samples, so the page spends 2–5 s before it can ask for the Library. That is general server or cluster latency, not this change, and is worth investigating separately.
+- **Thumbnails still load per tile** through the media route, after the first tiles are visible, at 1–6 s each on this deployment.
+- **Dates are now exact.** They come from every version and every reply, not a 40-version window and the reply approximation. The equivalence test proves they match the client's former algorithm over random histories.
+- **Hosted timings vary widely between sessions.** Read single comparisons with that in mind.

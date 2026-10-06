@@ -1104,7 +1104,7 @@ requirements:
       failure: {id: DSN-006-F, description: "An artifact with a missing or invalid preview index is named as unreadable while the rest load; a caller without artifact read capability is refused and learns nothing; an unauthenticated request is rejected."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local server and Chromium evidence prove the behavior. Team-deployment conformance runs are unrecorded.
+    proof_gap: Local server and Chromium evidence prove the behavior. Team-deployment conformance runs are unrecorded; the hosted delivery observation (Library cold ready 22–33 s to 5.4 s, about 180 to 12 requests, 2-second target not met) is recorded in project/performance/FINDINGS.md.
     depends_on: [DSN-005]
     evidence:
       - deployment: local
