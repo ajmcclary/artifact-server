@@ -844,8 +844,8 @@ async function readBatchFrame(
     // eslint-disable-next-line no-await-in-loop -- one part at a time
     const headerBytes = await take(12);
     if (headerBytes === null) {
-      // Clean end of stream: no more complete parts.
-      return {parts, truncated: false};
+      // The stream ended. Leftover bytes are a header cut short, not a clean end.
+      return {parts, truncated: buffer.byteLength > 0};
     }
     if (parts.length >= maximumBatchParts) {
       throw new Error("The staged upload batch has too many parts.");

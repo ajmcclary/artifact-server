@@ -5,11 +5,13 @@ import path from "node:path";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
-import {maximumBatchParts} from "../../src/core/publishing-limits.js";
+import {maximumBatchParts, maximumBatchRequestBytes} from "../../src/core/publishing-limits.js";
 import {
   commitStagedUpload,
   createStagedUpload,
+  type CreateUploadResponse,
   type TestSiteFile,
+  uploadEveryStagedFile,
 } from "../support/publishing.js";
 import {
   apiHeaders,
@@ -95,12 +97,35 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
       );
       expect(new Uint8Array(await served.arrayBuffer())).toEqual(file.bytes);
     }));
+
+    // The frame is only a transport: the same files sent one PUT at a time
+    // commit the identical authoritative manifest.
+    const perFilePlan = await createStagedUpload(server, installation, "index.html", files);
+    const perFileUploads = await uploadEveryStagedFile(installation, perFilePlan.body, files);
+    expect(perFileUploads.map((response) => response.status)).toEqual(files.map(() => 200));
+    const perFile = await commitStagedUpload(
+      installation,
+      perFilePlan.body,
+      "pub-016-behavior-per-file",
+      {accessSetting: "account_required", kind: "new_artifact", name: "Per-file fixture"},
+    );
+    expect(published.body.version.manifestDigest).toBe(planned.body.manifestDigest);
+    expect(published.body.version.manifestDigest).toBe(perFile.body.version.manifestDigest);
   });
 
-  test("PUB-016-F: malformed, duplicate, invalid, and size-mismatched parts never verify a version", async () => {
+  test("PUB-016-F: malformed, duplicate, unknown, oversized, truncated, base64, and size- or hash-mismatched parts never verify a version", async () => {
     expect.hasAssertions();
-    const [indexFile, alphaFile] = fixtureFiles();
-    const planned = await createStagedUpload(server, installation, "index.html", fixtureFiles());
+    const [indexFile, alphaFile, betaFile] = fixtureFiles();
+    const operationKey = "pub-016-failure-plan";
+    const planned = await createStagedUpload(
+      server,
+      installation,
+      "index.html",
+      fixtureFiles(),
+      undefined,
+      "static",
+      operationKey,
+    );
 
     const duplicate = await postBatch(planned, [
       {bytes: alphaFile.bytes, orderIndex: orderIndexOf(planned, alphaFile.path)},
@@ -118,8 +143,66 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
     ]);
     expect(await codes(wrongSize)).toContain("size_mismatch");
 
-    const malformed = await postBatch(planned, []);
-    expect(batchResponseSchema.parse(await malformed.json()).accepted).toEqual([]);
+    const empty = await postBatch(planned, []);
+    expect(batchResponseSchema.parse(await empty.json()).accepted).toEqual([]);
+
+    // A header whose declared size is not a safe non-negative integer is malformed.
+    const malformedHeader = new Uint8Array(12 + betaFile.bytes.byteLength);
+    const malformedView = new DataView(malformedHeader.buffer);
+    malformedView.setUint32(0, orderIndexOf(planned, betaFile.path), true);
+    malformedView.setFloat64(4, Number.NaN, true);
+    malformedHeader.set(betaFile.bytes, 12);
+    expect(await errorCode(await postBatchRaw(planned, malformedHeader))).toBe("INVALID_INPUT");
+
+    // Same size, different bytes: the authoritative hash refuses the part.
+    const hashMismatch = await postBatch(planned, [
+      {bytes: utf8("BETA\n"), orderIndex: orderIndexOf(planned, betaFile.path)},
+    ]);
+    expect(await errorCode(hashMismatch)).toBe("INVALID_INPUT");
+
+    // A frame cut inside a part body reports truncation and verifies nothing.
+    const betaFrame = buildFrame([
+      {bytes: betaFile.bytes, orderIndex: orderIndexOf(planned, betaFile.path)},
+    ]);
+    const cutBody = batchResponseSchema.parse(
+      await (await postBatchRaw(planned, betaFrame.slice(0, betaFrame.byteLength - 2))).json(),
+    );
+    expect(cutBody).toMatchObject({accepted: [], truncated: true});
+    expect(cutBody.rejected.map((part) => part.code)).toEqual(["truncated"]);
+
+    // A frame cut inside a part header is truncated too, never a clean end.
+    const cutHeader = batchResponseSchema.parse(
+      await (await postBatchRaw(planned, betaFrame.slice(0, 5))).json(),
+    );
+    expect(cutHeader).toMatchObject({accepted: [], truncated: true});
+    expect(cutHeader.rejected.map((part) => part.code)).toEqual(["truncated"]);
+
+    // Base64 is not a framing: the text of a valid frame, or a JSON envelope of
+    // base64 parts, verifies nothing.
+    const base64Bodies = [
+      {
+        body: utf8(Buffer.from(betaFrame).toString("base64")),
+        contentType: "text/plain",
+      },
+      {
+        body: utf8(JSON.stringify({parts: [{
+          data: Buffer.from(betaFile.bytes).toString("base64"),
+          orderIndex: orderIndexOf(planned, betaFile.path),
+        }]})),
+        contentType: "application/json",
+      },
+    ];
+    const base64Codes = await Promise.all(base64Bodies.map(async ({body, contentType}) =>
+      errorCode(await postBatchRaw(planned, body, contentType))
+    ));
+    expect(base64Codes).toEqual(["INVALID_INPUT", "INVALID_INPUT"]);
+
+    // A frame over the request bound is refused before any part verifies.
+    const oversized = await postBatch(planned, [
+      {bytes: betaFile.bytes, orderIndex: orderIndexOf(planned, betaFile.path)},
+      {bytes: new Uint8Array(maximumBatchRequestBytes), orderIndex: orderIndexOf(planned, indexFile.path)},
+    ]);
+    expect(await errorCode(oversized)).toBe("INVALID_INPUT");
 
     const tooMany = await postBatch(planned, Array.from(
       {length: maximumBatchParts + 1},
@@ -131,7 +214,13 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
     }).loose().parse(await tooMany.json());
     expect(tooManyBody.error.code).toBe("INVALID_INPUT");
 
-    // Nothing was verified, so a commit cannot produce a version.
+    // Only the first copy of the duplicated part verified; every hostile part
+    // above left its slot unverified, so a commit cannot produce a version.
+    expect(await verifiedFlags(planned.body, operationKey)).toEqual({
+      "a.txt": true,
+      "b.txt": false,
+      "index.html": false,
+    });
     const incomplete = await fetch(planned.body.commitUrl, {
       body: JSON.stringify({target: {
         accessSetting: "account_required",
@@ -141,23 +230,42 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
       headers: apiHeaders(installation, "pub-016-failure-incomplete"),
       method: "POST",
     });
-    expect(incomplete.status).not.toBe(201);
-    expect(incomplete.status).not.toBe(200);
+    expect(incomplete.status).toBeGreaterThanOrEqual(400);
+    expect(await listedArtifactIds()).toEqual([]);
   });
 
   test("PUB-017-B: a truncated batch resumes with only the missing parts and commits one version", async () => {
     expect.hasAssertions();
     const [indexFile, alphaFile, betaFile] = fixtureFiles();
-    const planned = await createStagedUpload(server, installation, "index.html", fixtureFiles());
+    const operationKey = "pub-017-behavior-plan";
+    const planned = await createStagedUpload(
+      server,
+      installation,
+      "index.html",
+      fixtureFiles(),
+      undefined,
+      "static",
+      operationKey,
+    );
+    expect(planned.body.status).toBe("created");
 
-    // Frame part 0 complete, then a truncated tail so only part 0 verifies.
+    // Frame part 0 complete, then interrupt mid-frame inside part 1's body.
     const full = buildFrame([
       {bytes: indexFile.bytes, orderIndex: orderIndexOf(planned, indexFile.path)},
       {bytes: alphaFile.bytes, orderIndex: orderIndexOf(planned, alphaFile.path)},
     ]);
-    const interrupted = await postBatchRaw(planned, full.slice(0, 12 + indexFile.bytes.byteLength + 4));
+    const interrupted = await postBatchRaw(planned, full.slice(0, 12 + indexFile.bytes.byteLength + 12 + 2));
     const interruptedBody = batchResponseSchema.parse(await interrupted.json());
     expect(interruptedBody.accepted.map((part) => part.path)).toEqual(["index.html"]);
+    expect(interruptedBody.truncated).toBe(true);
+
+    // Retrying with the same operation key resumes the same upload and reports
+    // which parts are already verified.
+    expect(await verifiedFlags(planned.body, operationKey)).toEqual({
+      "a.txt": false,
+      "b.txt": false,
+      "index.html": true,
+    });
 
     // Resume sends only the parts that were not verified.
     const resume = await postBatch(planned, [
@@ -166,6 +274,11 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
     ]);
     expect(batchResponseSchema.parse(await resume.json()).accepted.map((part) => part.path).toSorted())
       .toEqual(["a.txt", "b.txt"]);
+    expect(await verifiedFlags(planned.body, operationKey)).toEqual({
+      "a.txt": true,
+      "b.txt": true,
+      "index.html": true,
+    });
 
     const published = await commitStagedUpload(
       installation,
@@ -182,6 +295,109 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
     expect(versionList.versions).toHaveLength(1);
   });
 
+  test("PUB-017-F: a truncated or partially accepted batch never yields a partial version or re-verifies a verified part", async () => {
+    expect.hasAssertions();
+    const [indexFile, alphaFile, betaFile] = fixtureFiles();
+    const operationKey = "pub-017-failure-plan";
+    const planned = await createStagedUpload(
+      server,
+      installation,
+      "index.html",
+      fixtureFiles(),
+      undefined,
+      "static",
+      operationKey,
+    );
+    const target = {accessSetting: "account_required", kind: "new_artifact", name: "Partial batch"} as const;
+
+    // Interrupted inside part 1's header: only part 0 verifies, and the frame
+    // reports the truncation instead of a clean end.
+    const full = buildFrame([
+      {bytes: indexFile.bytes, orderIndex: orderIndexOf(planned, indexFile.path)},
+      {bytes: alphaFile.bytes, orderIndex: orderIndexOf(planned, alphaFile.path)},
+    ]);
+    const interrupted = batchResponseSchema.parse(
+      await (await postBatchRaw(planned, full.slice(0, 12 + indexFile.bytes.byteLength + 4))).json(),
+    );
+    expect(interrupted.accepted.map((part) => part.path)).toEqual(["index.html"]);
+    expect(interrupted.truncated).toBe(true);
+
+    // A commit over the partially verified upload produces no version at all.
+    const partialCommit = await fetch(planned.body.commitUrl, {
+      body: JSON.stringify({target}),
+      headers: apiHeaders(installation, "pub-017-failure-partial-commit"),
+      method: "POST",
+    });
+    expect(partialCommit.status).toBeGreaterThanOrEqual(400);
+    expect(await listedArtifactIds()).toEqual([]);
+
+    // A hostile resume that re-sends the verified part with different bytes of
+    // the same size cannot replace what was verified.
+    const forged = await postBatch(planned, [
+      {bytes: utf8("INDEX BYTES\n"), orderIndex: orderIndexOf(planned, indexFile.path)},
+    ]);
+    expect(await errorCode(forged)).toBe("INVALID_INPUT");
+    expect(await verifiedFlags(planned.body, operationKey)).toEqual({
+      "a.txt": false,
+      "b.txt": false,
+      "index.html": true,
+    });
+
+    // Re-sending the verified part twice in one resume frame verifies it at most once.
+    const doubled = batchResponseSchema.parse(await (await postBatch(planned, [
+      {bytes: indexFile.bytes, orderIndex: orderIndexOf(planned, indexFile.path)},
+      {bytes: indexFile.bytes, orderIndex: orderIndexOf(planned, indexFile.path)},
+      {bytes: alphaFile.bytes, orderIndex: orderIndexOf(planned, alphaFile.path)},
+      {bytes: betaFile.bytes, orderIndex: orderIndexOf(planned, betaFile.path)},
+    ])).json());
+    expect(doubled.rejected).toEqual([{code: "duplicate_part", path: "index.html"}]);
+    expect(doubled.accepted.filter((part) => part.path === "index.html")).toHaveLength(1);
+
+    // The upload now commits exactly one version with the originally verified
+    // bytes, and a retried commit replays that version instead of adding one.
+    const committed = await commitStagedUpload(installation, planned.body, "pub-017-failure-commit", target);
+    expect(committed.response.status).toBe(201);
+    const replayed = await commitStagedUpload(installation, planned.body, "pub-017-failure-commit", target);
+    expect(replayed.body.version.id).toBe(committed.body.version.id);
+    expect(await listedArtifactIds()).toEqual([committed.body.artifact.id]);
+    const versions = await fetch(
+      `${server.baseUrl}/api/v1/artifacts/${committed.body.artifact.id}/versions`,
+      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+    );
+    expect(z.object({versions: z.array(z.unknown())}).parse(await versions.json()).versions).toHaveLength(1);
+    const served = await readVersionFile(committed.body.artifact.id, committed.body.version.id, indexFile.path);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(indexFile.bytes);
+  });
+
+  /** Re-issue the upload plan under its operation key and read each part's verified flag. */
+  async function verifiedFlags(
+    upload: CreateUploadResponse,
+    operationKey: string,
+  ): Promise<Record<string, boolean>> {
+    const resumed = await createStagedUpload(
+      server,
+      installation,
+      "index.html",
+      fixtureFiles(),
+      undefined,
+      "static",
+      operationKey,
+    );
+    expect(resumed.body.status).toBe("resumed");
+    expect(resumed.body.uploadId).toBe(upload.uploadId);
+    return Object.fromEntries(resumed.body.files.map((file) => [file.path, file.verified]));
+  }
+
+  async function listedArtifactIds(): Promise<string[]> {
+    const response = await fetch(
+      `${server.baseUrl}/api/v1/artifacts?projectId=prj_default`,
+      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+    );
+    expect(response.status).toBe(200);
+    return z.object({artifacts: z.array(z.object({artifact: z.object({id: z.string()})}))})
+      .parse(await response.json()).artifacts.map(({artifact}) => artifact.id);
+  }
+
   async function codes(response: Response): Promise<string[]> {
     return batchResponseSchema.parse(await response.json()).rejected.map((part) => part.code);
   }
@@ -196,6 +412,7 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
   async function postBatchRaw(
     planned: {body: {uploadId: string; files: readonly {uploadUrl: string}[]}},
     frame: Uint8Array,
+    contentType = "application/octet-stream",
   ): Promise<Response> {
     const fileUploadUrl = planned.body.files[0]?.uploadUrl;
     if (fileUploadUrl === undefined) {
@@ -207,7 +424,7 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
       body: copiedArrayBuffer(frame),
       headers: {
         Authorization: `Bearer ${installation.apiToken}`,
-        "Content-Type": "application/octet-stream",
+        "Content-Type": contentType,
       },
       method: "POST",
     });
@@ -226,6 +443,12 @@ describe("staged small-file batches stay an opt-in transport with per-part guard
     return response;
   }
 });
+
+async function errorCode(response: Response): Promise<string> {
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  return z.object({error: z.object({code: z.string()}).loose()}).loose()
+    .parse(await response.json()).error.code;
+}
 
 function copiedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
