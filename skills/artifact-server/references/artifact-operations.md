@@ -41,6 +41,7 @@ The CLI owns local file inspection, symlink policy, media types, SHA-256 hashing
 - `artifact_list`: list artifacts; use `projectId`, exact `tag`, cursor, and bounded limit when relevant.
 - `artifact_get`: obtain current metadata, manifest, current version ID, tags, access, `current.links.review` for exact full-screen Review, and `links.artifact` for moving latest in one call.
 - `artifact_open`: obtain `reviewUrl` for exact full-screen Review and `browserUrl` for raw immutable content for the current or an exact saved version. Prefer `reviewUrl` for human handoff. Never describe `browserUrl` as Review.
+- `artifact_manifest_page`: page one exact version's manifest, at most 100 path-ordered entries per call, when `artifact_get` with `projection: "compact"` reports only `entryCount`. Follow `nextCursor` until it is null.
 - `artifact_version_list`: list immutable versions newest first.
 - `artifact_diff`: compare two exact version IDs.
 

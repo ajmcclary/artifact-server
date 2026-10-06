@@ -123,13 +123,13 @@ function configureDoctorCommand(
       const requestedClient = clientName === undefined
         ? null
         : await runCliEffect(parseMcpClientId(clientName));
-      const [service, clients] = await Promise.all([
+      const [service, registrations] = await Promise.all([
         inspectManagedLocalService(dataDirectory),
         inspectMcpClientRegistrations(dataDirectory),
       ]);
       const selectedClients = requestedClient === null
-        ? clients
-        : clients.filter((client) => client.client === requestedClient);
+        ? registrations.clients
+        : registrations.clients.filter((client) => client.client === requestedClient);
       let discovery: {protocolRevision: string; status: "healthy"; tools: number}
         | {reason: string; status: "unhealthy"};
       if (!service.reachable || service.record === null) {
@@ -141,18 +141,38 @@ function configureDoctorCommand(
           options.productVersion,
         );
       }
+      const registrationsHealthy = registrations.record.state === "valid"
+        && selectedClients.every((client) =>
+          client.registration === "none" || client.registration === "matching"
+        );
       const clientHealthy = requestedClient === null
         || selectedClients.every((client) => client.installed && client.managed);
       const healthy = service.reachable
         && discovery.status === "healthy"
+        && registrationsHealthy
         && clientHealthy;
+      const registrationRemediation = [
+        ...(registrations.record.state === "invalid"
+          ? [registrations.record.remediation]
+          : []),
+        ...selectedClients.flatMap((client) => client.remediation ?? []),
+      ];
       console.log(JSON.stringify({
         clients: selectedClients,
         dataDirectory,
         discovery,
+        registrations: registrations.record.state === "valid"
+          ? {state: "valid"}
+          : {
+            path: registrations.record.path,
+            reason: registrations.record.reason,
+            state: "invalid",
+          },
         remediation: healthy
           ? []
-          : [`artifactserver connect${requestedClient === null ? "" : ` ${requestedClient}`}`],
+          : registrationRemediation.length > 0
+            ? registrationRemediation
+            : [`artifactserver connect${requestedClient === null ? "" : ` ${requestedClient}`}`],
         service: {
           processAlive: service.processAlive,
           reachable: service.reachable,
