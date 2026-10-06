@@ -72,8 +72,31 @@ describe("D1 invitations", () => {
       provider: "workos",
       subject: "subject-rae",
     });
+    await identity.createApplicationSession({
+      createdAt: "2026-10-06T09:30:00.000Z",
+      csrfDigest: "csrf-rae",
+      expiresAt: "2126-10-06T09:30:00.000Z",
+      id: "session_rae",
+      installationId: fixture.installationId,
+      memberId: "member_rae",
+      tokenDigest: "token-rae",
+    });
+    const actionsBefore = await binding.prepare("SELECT count(*) AS count FROM actions").first<{count: number}>();
+    const currentActionsSql = await binding.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'actions'",
+    ).first<{sql: string}>();
+    // Schema 17's actions CHECKs did not know the invite kinds.
+    const narrowActionsSql = (currentActionsSql?.sql ?? "")
+      .replaceAll("'invite_create', 'invite_redeem', 'invite_revoke', ", "")
+      .replace(/^CREATE TABLE "?actions"?/u, "CREATE TABLE actions");
+    expect(narrowActionsSql).not.toContain("invite_");
     await binding.batch([
       "PRAGMA defer_foreign_keys = ON",
+      "CREATE TABLE actions_snapshot AS SELECT * FROM actions",
+      "DROP TABLE actions",
+      narrowActionsSql,
+      "INSERT INTO actions SELECT * FROM actions_snapshot",
+      "DROP TABLE actions_snapshot",
       "CREATE TABLE members_snapshot AS SELECT * FROM installation_members",
       "DROP TABLE installation_members",
       `CREATE TABLE installation_members (
@@ -101,5 +124,13 @@ describe("D1 invitations", () => {
       "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'installation_members'",
     ).first<{sql: string}>();
     expect(tableSql?.sql).toContain("'invite'");
+    const widenedActions = await binding.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'actions'",
+    ).first<{sql: string}>();
+    expect(widenedActions?.sql).toContain("'invite_redeem'");
+    await expect(binding.prepare("SELECT count(*) AS count FROM actions").first<{count: number}>())
+      .resolves.toEqual(actionsBefore);
+    await expect(identity.findApplicationSession(fixture.installationId, "token-rae", "2026-10-06T10:00:00.000Z"))
+      .resolves.toMatchObject({id: "session_rae"});
   });
 });

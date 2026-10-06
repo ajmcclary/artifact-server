@@ -1,4 +1,5 @@
-import type {MembershipRole} from "./identity.js";
+import {membershipRoles, type MembershipRole} from "./identity.js";
+import {type InstallationMember, memberStatuses} from "./installation-identity.js";
 
 /** The two kinds of invite an administrator can issue. */
 export const inviteKinds = {
@@ -190,4 +191,10 @@ export function inviteActivitySubject(
     return `invite for ${invite.email ?? "one person"}`;
   }
   return `invite link (${invite.maxUses} ${invite.maxUses === 1 ? "use" : "uses"})`;
+}
+
+/** Whether a member may still stand behind the invites they issued. */
+export function isActiveAdministrator(member: InstallationMember | null): boolean {
+  return member !== null && member.status === memberStatuses.active &&
+    member.role === membershipRoles.administrator;
 }

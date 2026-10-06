@@ -34,6 +34,7 @@ import {
   inviteTokenFor,
   inviteTokenPrefix,
   inviteWelcomePath,
+  isActiveAdministrator,
   type ListedInvite,
   maskInviteEmail,
   maximumInviteUses,
@@ -162,8 +163,11 @@ function makeInvitationService(dependencies: InvitationDependencies): Invitation
       ? Effect.void
       : Effect.fail(new AuthorizationDenied({message: "An Artifact Server administrator is required."}));
 
-  const administered = (invite: ListedInvite): AdministeredInvite =>
-    Object.assign({}, invite, {status: inviteStatus(invite, dependencies.clock.now())});
+  const administered = (
+    invite: ListedInvite,
+    inviterIsAdministrator: boolean,
+  ): AdministeredInvite =>
+    Object.assign({}, invite, {status: effectiveInviteStatus(invite, inviterIsAdministrator, dependencies.clock.now())});
 
   const create = Effect.fn("InvitationService.create")(function*(command: CreateInviteCommand) {
     yield* requireEnabled;
@@ -229,14 +233,18 @@ function makeInvitationService(dependencies: InvitationDependencies): Invitation
       attribution: attributionOf(command.principal),
       invite: stored,
     });
-    return {invite: administered({...invite, createdByName: command.principal.displayName}), token};
+    return {invite: administered({...invite, createdByName: command.principal.displayName}, true), token};
   });
 
   const list = Effect.fn("InvitationService.list")(function*(principal: Principal) {
     yield* requireEnabled;
     yield* requireAdministrator(principal);
-    const invites = yield* dependencies.repository.listInvites(dependencies.installationId);
-    return invites.map(administered);
+    const [invites, members] = yield* Effect.all([
+      dependencies.repository.listInvites(dependencies.installationId),
+      dependencies.repository.listMembers(dependencies.installationId),
+    ]);
+    const administrators = new Set(members.filter(isActiveAdministrator).map((member) => member.id));
+    return invites.map((invite) => administered(invite, administrators.has(invite.createdByPrincipalId)));
   });
 
   const revoke = Effect.fn("InvitationService.revoke")(function*(principal: Principal, inviteId: string) {
@@ -252,7 +260,7 @@ function makeInvitationService(dependencies: InvitationDependencies): Invitation
       dependencies.installationId,
       invite.createdByPrincipalId,
     );
-    return administered({...invite, createdByName: creator?.displayName ?? null});
+    return administered({...invite, createdByName: creator?.displayName ?? null}, isActiveAdministrator(creator));
   });
 
   /** The stored invite a token names, only when its secret matches. */
@@ -277,7 +285,7 @@ function makeInvitationService(dependencies: InvitationDependencies): Invitation
       maskedEmail: stored.email === null ? null : maskInviteEmail(stored.email),
       opens,
       role: stored.role,
-      status: inviteStatus(stored, dependencies.clock.now()),
+      status: effectiveInviteStatus(stored, isActiveAdministrator(inviter), dependencies.clock.now()),
       usesLeft: Math.max(0, stored.maxUses - stored.useCount),
     };
     return preview;
@@ -313,4 +321,14 @@ function makeInvitationService(dependencies: InvitationDependencies): Invitation
   });
 
   return InvitationService.of({create, list, planLogin, preview, revoke});
+}
+
+/** An invite whose creator is no longer an active administrator counts as revoked. */
+function effectiveInviteStatus(
+  invite: Pick<Invite, "expiresAt" | "maxUses" | "revokedAt" | "useCount">,
+  inviterIsAdministrator: boolean,
+  now: Date,
+): InviteStatus {
+  const status = inviteStatus(invite, now);
+  return status === inviteStatuses.active && !inviterIsAdministrator ? inviteStatuses.revoked : status;
 }

@@ -30,6 +30,7 @@ import type {RedeemInviteRecord, RedeemInviteResult} from "../core/invitation-po
 import {
   type InviteOutcome,
   inviteOutcomeMessages,
+  isActiveAdministrator,
   inviteOutcomes,
   type StoredInvite,
 } from "../core/invitations.js";
@@ -547,6 +548,8 @@ function makeInstallationAccessService(
         dependencies.installationId,
         invite.createdByPrincipalId,
       );
+      // An invite is only as good as the administrator standing behind it.
+      if (!isActiveAdministrator(inviter)) return yield* rejectInvite(inviteOutcomes.revoked);
       const now = dependencies.clock.now().toISOString();
       const memberId = dependencies.ids.memberId();
       const result = yield* dependencies.repository.redeemInvite({

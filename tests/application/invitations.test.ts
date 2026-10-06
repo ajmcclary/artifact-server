@@ -2,6 +2,7 @@
 import type {Effect} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
+import {InstallationAccessService} from "../../src/application/installation-access.js";
 import {InvitationService} from "../../src/application/invitations.js";
 import type {Principal} from "../../src/core/identity.js";
 import {inviteIdFromToken} from "../../src/core/invitations.js";
@@ -74,5 +75,31 @@ describe("invitation service", () => {
       opens: {artifactId: "art_missing", projectId: "prj_default", versionId: "ver_missing"},
       principal: administrator,
     }))).rejects.toMatchObject({_tag: "VersionNotFound"});
+  });
+
+  test("an invite stops working once its creator is no longer an active administrator", async () => {
+    const issued = await invitations((service) => service.create({
+      email: "rae@acme.test",
+      expiresIn: "7d",
+      kind: "person",
+      principal: administrator,
+      role: "administrator",
+    }));
+    await context.runtime.runPromise(InstallationAccessService.use((access) => access.admitMember({
+      displayName: "Second Admin",
+      email: "second@acme.test",
+      principal: administrator,
+      role: "administrator",
+    })));
+    const second = await context.signIn({displayName: "Second Admin", email: "second@acme.test", subject: "second"});
+    await context.runtime.runPromise(InstallationAccessService.use((access) =>
+      access.deactivateMember(second, administrator.id)));
+
+    await expect(invitations((service) => service.preview(issued.token)))
+      .resolves.toMatchObject({status: "revoked"});
+    await expect(context.signIn(
+      {displayName: "Rae", email: "rae@acme.test", subject: "rae"},
+      inviteIdFromToken(issued.token),
+    )).rejects.toMatchObject({_tag: "InviteRejected", outcome: "revoked"});
   });
 });

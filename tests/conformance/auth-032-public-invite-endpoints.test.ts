@@ -61,6 +61,8 @@ describe("public invite endpoints", () => {
   });
 
   test("AUTH-032-F: cross-origin, malformed and repeated invalid requests are refused", async () => {
+    const administrator = await signInAs(context, bootstrapAdministrator);
+    const valid = await createInvite(context, administrator, {expiresIn: "7d", kind: "link", maxUses: 3});
     const crossOrigin = await fetch(`${context.server.baseUrl}/auth/invites/preview`, {
       body: JSON.stringify({token: "as_inv_x"}),
       headers: {"Content-Type": "application/json", Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site"},
@@ -91,5 +93,20 @@ describe("public invite endpoints", () => {
     const limited = attempts.find((response) => response.status === 429);
     expect(limited?.status).toBe(429);
     expect(Number(limited?.headers.get("retry-after"))).toBeGreaterThan(0);
+
+    // A full failure window never locks out a holder of a valid token.
+    const stillWorks = await fetch(`${context.server.baseUrl}/auth/invites/preview`, {
+      body: JSON.stringify({token: valid.token}),
+      headers: browserMutationHeaders(context.server.baseUrl, null),
+      method: "POST",
+    });
+    expect(stillWorks.status).toBe(200);
+    expect(await stillWorks.json()).toMatchObject({status: "active"});
+    const startStillWorks = await fetch(`${context.server.baseUrl}/auth/invites/start`, {
+      body: JSON.stringify({token: valid.token}),
+      headers: browserMutationHeaders(context.server.baseUrl, null),
+      method: "POST",
+    });
+    expect(startStillWorks.status).toBe(200);
   });
 });

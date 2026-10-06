@@ -1093,17 +1093,26 @@ export function createHttpApp(
     }, 429);
   };
 
+  // The limiter only ever answers lookups that failed, so a flood of junk tokens
+  // slows guessing without locking out anyone holding a valid link.
+  const refuseInvalidInvite = (context: Context<HttpEnvironment>): Response | null => {
+    const limited = inviteRetry(context);
+    inviteLimiter.noteFailure();
+    return limited;
+  };
+
   app.post("/auth/invites/preview", boundedJsonBody, async (context) => {
     requireApplicationOrigin(context, dependencies);
-    const limited = inviteRetry(context);
-    if (limited !== null) return limited;
     const body = inviteTokenBodySchema.parse(await context.req.json());
     const preview = await runHttpApplicationEffect(
       context,
       dependencies,
       InvitationService.use((invitations) => invitations.preview(body.token)),
     );
-    if (preview.status === "invalid") inviteLimiter.noteFailure();
+    if (preview.status === "invalid") {
+      const limited = refuseInvalidInvite(context);
+      if (limited !== null) return limited;
+    }
     context.header("Cache-Control", "private, no-store");
     context.header("Referrer-Policy", "no-referrer");
     return context.json(preview);
@@ -1111,8 +1120,6 @@ export function createHttpApp(
 
   app.post("/auth/invites/start", boundedJsonBody, async (context) => {
     requireApplicationOrigin(context, dependencies);
-    const limited = inviteRetry(context);
-    if (limited !== null) return limited;
     const body = inviteTokenBodySchema.parse(await context.req.json());
     const plan = await runHttpApplicationEffect(
       context,
@@ -1122,7 +1129,10 @@ export function createHttpApp(
     context.header("Cache-Control", "private, no-store");
     context.header("Referrer-Policy", "no-referrer");
     if (plan.kind === "unavailable") {
-      if (plan.preview.status === "invalid") inviteLimiter.noteFailure();
+      if (plan.preview.status === "invalid") {
+        const limited = refuseInvalidInvite(context);
+        if (limited !== null) return limited;
+      }
       return context.json(plan.preview);
     }
     const started = await runHttpApplicationEffect(
