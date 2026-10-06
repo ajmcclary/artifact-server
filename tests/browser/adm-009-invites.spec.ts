@@ -1,6 +1,7 @@
 import {expect, test, type Browser} from "@playwright/test";
 
 import {bootstrapAdministrator, createInvite, signInAs, startInviteServer, type InviteServer} from "../support/invites.js";
+import {publishNew} from "../support/publishing.js";
 
 async function freshPage(browser: Browser) {
   const context = await browser.newContext({viewport: {height: 1000, width: 1280}});
@@ -99,6 +100,87 @@ test.describe("Invites", () => {
       await page.getByRole("menuitem", {name: "Revoke"}).click();
       await page.getByRole("button", {name: "Revoke link"}).click();
       await expect(grid.getByText("Revoked")).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("ADM-009-B: an administrator creates a link invite from Share for the open version", async ({browser}) => {
+    const {context, page} = await freshPage(browser);
+    try {
+      const {body: {version: published}} = await publishNew(server.server, server.installation, {
+        accessSetting: "account_required",
+        content: "pricing",
+        idempotencyKey: "share-invite-destination",
+        name: "Q3 Pricing Review",
+      });
+      server.provider.identity = {
+        displayName: "Jordan Lee",
+        email: "jordan@acme.test",
+        emailVerificationAsserted: true,
+        emailVerified: true,
+        provider: "workos",
+        subject: "workos-jordan",
+      };
+      await page.goto(`${server.server.baseUrl}/auth/login?returnTo=${encodeURIComponent(`/review?project=${published.projectId}&artifact=${published.artifactId}`)}`);
+      await page.getByRole("button", {name: "Share this version"}).click();
+      await page.getByRole("button", {name: "Invite"}).click();
+      await page.getByRole("radio", {name: /Anyone with the link/u}).click();
+      await page.getByLabel("Uses").fill("5");
+      await page.getByRole("button", {name: "Create Invite Link"}).click();
+      const url = await page.getByRole("textbox", {name: "Invite link"}).inputValue();
+      expect(url).toMatch(/\/join#as_inv_/u);
+
+      const invitee = await freshPage(browser);
+      try {
+        server.provider.identity = {
+          displayName: "Sam Rivera",
+          email: "sam@acme.test",
+          emailVerificationAsserted: true,
+          emailVerified: true,
+          provider: "workos",
+          subject: "sam",
+        };
+        await invitee.page.goto(url);
+        await expect(invitee.page.getByText("Q3 Pricing Review · v1")).toBeVisible();
+        await invitee.page.getByRole("button", {name: "Continue to Sign In"}).click();
+        await invitee.page.getByRole("link", {name: "Continue"}).click();
+        await expect(invitee.page).toHaveURL(new RegExp(`artifact=${published.artifactId}`, "u"));
+      } finally {
+        await invitee.context.close();
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("ADM-009-F: a member sees no invite controls", async ({browser}) => {
+    const administrator = await signInAs(server, bootstrapAdministrator);
+    const link = await createInvite(server, administrator, {expiresIn: "7d", kind: "link", maxUses: 2});
+    const {body: {version: published}} = await publishNew(server.server, server.installation, {
+      accessSetting: "account_required",
+      content: "member view",
+      idempotencyKey: "member-share-destination",
+      name: "Member View",
+    });
+    const {context, page} = await freshPage(browser);
+    try {
+      server.provider.identity = {
+        displayName: "Sam Rivera",
+        email: "sam@acme.test",
+        emailVerificationAsserted: true,
+        emailVerified: true,
+        provider: "workos",
+        subject: "sam",
+      };
+      await page.goto(link.url);
+      await page.getByRole("button", {name: "Continue to Sign In"}).click();
+      await expect(page.getByRole("heading", {name: "Welcome to Artifact Server"})).toBeVisible();
+      await page.goto(`${server.server.baseUrl}/review?project=${published.projectId}&artifact=${published.artifactId}`);
+      await page.getByRole("button", {name: "Share this version"}).click();
+      await expect(page.getByRole("button", {name: "Invite"})).toHaveCount(0);
+      await page.goto(`${server.server.baseUrl}/review/settings/invites`);
+      await expect(page.getByText("Administrator permission required")).toBeVisible();
     } finally {
       await context.close();
     }

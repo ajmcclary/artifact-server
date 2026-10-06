@@ -70,7 +70,7 @@ import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
 import {ProjectsScreen} from "./projects/projects-screen.tsx";
 import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
-import {canonicalReviewRoute} from "./settings/settings-view.ts";
+import {canonicalReviewRoute, settingsAccess} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 
 const workspaceStyle = {
@@ -335,16 +335,23 @@ export function ReviewApp() {
       ) : route.kind === "library" ? (
         <DesignLibraryScreen projects={projects} />
       ) : (
-        <ArtifactReview projects={projects} session={session} />
+        <ArtifactReview
+          canInvite={accessContextRef.current?.accessMode === "private_team"
+            && settingsAccess(session.principal).administrator}
+          projects={projects}
+          session={session}
+        />
       )}
     </ReviewShell>
   );
 }
 
 function ArtifactReview({
+  canInvite,
   projects,
   session,
 }: {
+  readonly canInvite: boolean;
   readonly projects: readonly Project[];
   readonly session: Session;
 }) {
@@ -362,14 +369,24 @@ function ArtifactReview({
   }, []);
   // A project switch mounts a fresh workspace: the catalog, its search and
   // filters, the open record, and comments all belong to one project.
-  return <ProjectReview key={projectId} projectId={projectId} projects={projects} session={session} />;
+  return (
+    <ProjectReview
+      canInvite={canInvite}
+      key={projectId}
+      projectId={projectId}
+      projects={projects}
+      session={session}
+    />
+  );
 }
 
 function ProjectReview({
+  canInvite,
   projectId,
   projects,
   session,
 }: {
+  readonly canInvite: boolean;
   readonly projectId: string;
   readonly projects: readonly Project[];
   readonly session: Session;
@@ -1044,6 +1061,7 @@ function ProjectReview({
   const comparisonOpen = comparisonView !== null && details !== null;
   const sharePopover = (placement: "focus" | "toolbar") => (
     <SharePopover
+      canInvite={canInvite}
       chrome={placement === "focus" ? "navy" : "workspace"}
       details={details}
       key={`${placement}-share-${details?.artifact.id ?? "empty"}`}

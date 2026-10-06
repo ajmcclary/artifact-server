@@ -1,6 +1,6 @@
 import {useId, useState, type CSSProperties} from "react";
 
-import type {AccessSetting, ArtifactDetails, ArtifactVersion} from "@/api/client";
+import {api, type AccessSetting, type AdministeredInvite, type ArtifactDetails, type ArtifactVersion} from "@/api/client";
 import {
   Alert,
   Button,
@@ -26,13 +26,17 @@ import opencodeDarkLogoUrl from "../assets/agents/opencode-dark.svg";
 import opencodeLightLogoUrl from "../assets/agents/opencode-light.svg";
 import piLogoUrl from "../assets/agents/pi.svg";
 import piLightLogoUrl from "../assets/agents/pi-light.svg";
+import {InviteForm} from "../invites/invite-form.tsx";
+import {InviteLinkReady} from "../invites/invite-link-ready.tsx";
 import {focusButtonStyle} from "./focus-mode.tsx";
 import {accessChangeWarning, changeArtifactAccess} from "./artifact-access.ts";
 
-type ShareScreen = "access" | "agents" | "overview";
+type ShareScreen = "access" | "agents" | "invite" | "inviteReady" | "overview";
 type ShareTarget = "latest" | "version";
 
 export interface SharePopoverProps {
+  /** Administrators on a team installation can invite people. */
+  readonly canInvite: boolean;
   readonly chrome?: "navy" | "workspace";
   readonly details: ArtifactDetails | null;
   readonly onArtifactChanged: (artifact: ArtifactDetails["artifact"]) => void;
@@ -65,7 +69,8 @@ const accessLineStyle = {
 } satisfies CSSProperties;
 const accessIconStyle = {marginTop: 2} satisfies CSSProperties;
 const bandTitleStyle = {color: "var(--text-strong)", fontSize: 13, fontWeight: 600} satisfies CSSProperties;
-const bandTextStyle = {display: "flex", flexDirection: "column", gap: 2} satisfies CSSProperties;
+const bandTextStyle = {display: "flex", flex: "1 1 auto", flexDirection: "column", gap: 2, minWidth: 0} satisfies CSSProperties;
+const inviteRowStyle = {alignItems: "center", display: "flex", gap: 12} satisfies CSSProperties;
 const headerStyle = {alignItems: "flex-start", display: "flex", gap: 8} satisfies CSSProperties;
 const headerTextStyle = {flex: "1 1 auto", minWidth: 0} satisfies CSSProperties;
 const headingStyle = {fontSize: "var(--font-size-md, 16px)", margin: 0, overflowWrap: "anywhere"} satisfies CSSProperties;
@@ -89,6 +94,7 @@ const visuallyHiddenStyle = {
 
 /** Share one exact version from the review toolbar or the focus controls. */
 export function SharePopover({
+  canInvite,
   chrome = "workspace",
   details,
   onArtifactChanged,
@@ -105,6 +111,8 @@ export function SharePopover({
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [issued, setIssued] = useState<{readonly invite: AdministeredInvite; readonly url: string} | null>(null);
   const headingId = useId();
 
   const updateOpen = (next: boolean): void => {
@@ -113,6 +121,17 @@ export function SharePopover({
     if (next) {
       setScreen("overview");
       setFailure(null);
+      setIssued(null);
+      if (canInvite) void countMembers();
+    }
+  };
+
+  const countMembers = async (): Promise<void> => {
+    try {
+      const members = await api.members();
+      setMemberCount(members.filter((member) => member.status === "active").length);
+    } catch {
+      setMemberCount(null);
     }
   };
 
@@ -158,7 +177,10 @@ export function SharePopover({
   const mcpAddress = `${serverOrigin}/mcp`;
   const title = screen === "overview"
     ? details?.artifact.name ?? "Artifact"
-    : screen === "access" ? "Artifact access" : "Connect MCP";
+    : screen === "access" ? "Artifact access"
+    : screen === "invite" ? "Invite People"
+    : screen === "inviteReady" ? "Invite Link Ready"
+    : "Connect MCP";
   const subtitle = screen === "overview"
     ? `Exact version · Version ${selectedVersion?.version.number ?? "—"}`
     : details?.artifact.name ?? "No artifact selected";
@@ -261,6 +283,20 @@ export function SharePopover({
             {failure === null ? null : <Alert variant="danger">{failure}</Alert>}
             {notice === null ? null : <Alert variant="success">{notice}</Alert>}
           </PanelSection>
+          {canInvite ? (
+            <PanelSection gap={8} padding="12px 16px">
+              <div style={inviteRowStyle}>
+                <i aria-hidden="true" className="bi bi-people" />
+                <span style={bandTextStyle}>
+                  <span style={bandTitleStyle}>{memberCount === null ? "Members" : `${memberCount} members`}</span>
+                  <span style={subtleStyle}>Invite someone with a link they redeem by signing in.</span>
+                </span>
+                <Button icon="bi-person-plus" onClick={() => setScreen("invite")} outline size="sm" variant="primary">
+                  Invite
+                </Button>
+              </div>
+            </PanelSection>
+          ) : null}
           <PanelSection padding="12px 16px 16px" tone="band">
             <div style={bandTextStyle}>
               <span style={bandTitleStyle}>Review with an AI agent</span>
@@ -293,6 +329,27 @@ export function SharePopover({
             </div>
           </PanelSection>
         </>
+      ) : screen === "invite" ? (
+        <InviteForm
+          onCancel={() => setScreen("overview")}
+          onCreated={(created) => {
+            setIssued(created);
+            setScreen("inviteReady");
+          }}
+          opens={details === null || selectedVersion === null ? undefined : {
+            artifactId: details.artifact.id,
+            projectId: details.artifact.projectId,
+            versionId: selectedVersion.version.id,
+          }}
+        />
+      ) : screen === "inviteReady" && issued !== null ? (
+        <InviteLinkReady
+          allInvitesHref="/review/settings/invites"
+          invite={issued.invite}
+          onDone={() => updateOpen(false)}
+          onRevoked={() => setScreen("overview")}
+          url={issued.url}
+        />
       ) : screen === "agents" ? (
         <>
           <p style={subtleStyle}>Choose the connection that matches where Artifact Server is running.</p>
