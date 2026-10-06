@@ -151,12 +151,17 @@ Private responses are not stored in a shared CDN cache in the first release. The
 
 The embedded Review viewer does not rely on this top-level cookie. For a private
 or historical multi-file version, the authenticated application issues a
-short-lived preview lease bound to the exact project, artifact, version, and
-viewer. The opaque lease is carried in a dedicated content hostname and permits
-only read requests for paths in that immutable version. Review injects that
-origin as the document base, so relative assets load without exposing an
-application session or granting cross-version access. Raw links continue to use
-the bootstrap and content-cookie flow above.
+preview lease of at most 12 hours, bound to the exact project, artifact,
+version, and viewer and confirmed again before each reuse. The opaque lease is
+carried in a dedicated content hostname and permits only read requests for
+paths in that immutable version. Review injects that origin as the document
+base, so relative assets load without exposing an application session or
+granting cross-version access. Raw links continue to use the bootstrap and
+content-cookie flow above.
+
+Reusing one lease keeps the preview on one origin, so the browser can serve its
+files from cache until the lease expires. Logging out, deactivation, and key
+revocation end the viewer's leases and content sessions.
 
 Publishing a new current version or changing a public artifact back to account required stops new unauthenticated origin requests to the previous public version and purges supported CDN caches. It cannot revoke bytes that someone already downloaded or copied while the version was public. The interface must say this before making an artifact public.
 

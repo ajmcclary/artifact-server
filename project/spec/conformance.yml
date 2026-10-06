@@ -1428,6 +1428,25 @@ requirements:
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-05T22:24:32.912Z"
 
+  - id: CNT-012
+    kind: security
+    behavior: Reopening a private preview within its lease reuses the lease origin and the browser cache, and no reuse outlives the principal's access.
+    owner: content-delivery
+    source: {file: artifact-comments-spec.md, anchor: private-multi-file-review}
+    acceptance:
+      behavior: {id: CNT-012-B, description: "A reopen and a page switch within one version confirm and reuse one lease origin and read no already-loaded file from the server; lease-origin success responses are fresh for no longer than the lease's remaining lifetime."}
+      failure: {id: CNT-012-F, description: "After logout, member deactivation, or API-key revocation the lease hostname is rejected and the application does not render the cached preview; a foreign, cross-version, expired, or non-lease reuse yields a fresh lease; lease-origin errors are never stored."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local server and browser evidence prove the behavior; the critical cross-engine matrix (Chromium, Firefox, WebKit) passed on October 5, 2026, and the gate's recorded run is Chromium. Team-deployment conformance runs are unrecorded, and in local-owner mode the browser checks lease removal and hostname rejection after sign-out rather than a signed-out render, because the app signs the owner straight back in.
+    depends_on: [CMT-018, CNT-010]
+    evidence:
+      - deployment: local
+        tests: [CNT-012-B, CNT-012-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-10-06T03:21:51.853Z"
+
   - id: VER-001
     kind: behavior
     behavior: Each intentional publish creates a new immutable version, the stable artifact link opens the current version, and an exact version link never changes.
@@ -3061,7 +3080,7 @@ requirements:
 
   - id: CMT-018
     kind: security
-    behavior: The sandboxed Review viewer loads relative and root-relative files for a private or historical multi-file version through a short-lived read-only preview lease bound to that exact version, without receiving an application credential or weakening raw-content sessions.
+    behavior: The sandboxed Review viewer loads relative and root-relative files for a private or historical multi-file version through a read-only preview lease of at most 12 hours, bound to that exact version and confirmed by the application before each reuse, without receiving an application credential or weakening raw-content sessions.
     owner: artifact-comments
     source: {file: artifact-comments-spec.md, anchor: private-multi-file-review}
     acceptance:
