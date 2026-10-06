@@ -1,8 +1,11 @@
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {createHash} from "node:crypto";
+import {mkdtemp, rm} from "node:fs/promises";
+import {request as httpRequest} from "node:http";
+import {tmpdir} from "node:os";
 import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {Effect, Redacted} from "effect";
+import {Effect, ManagedRuntime, Redacted} from "effect";
 import {z} from "zod";
 
 import type {
@@ -10,6 +13,13 @@ import type {
   InteractiveIdentityProvider,
 } from "../../src/application/interactive-login.js";
 import type {BearerCredentialVerifier} from "../../src/application/authentication.js";
+import {InstallationAccessService} from "../../src/application/installation-access.js";
+import {SystemIdGenerator} from "../../src/core/system.js";
+import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
+import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
+import {LocalStagingStore} from "../../src/storage/local-staging-store.js";
+import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
+import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {
   AuthenticationRequired,
   IdentityProviderFailure,
@@ -72,7 +82,7 @@ describe("installation identity and access", () => {
     await removeTestInstallation(installation);
   });
 
-  test("AUTH-024-F AUTH-027-B AUTH-027-F AUTH-028-F: bootstrap membership and managed keys fail closed", async () => {
+  test("AUTH-027-B AUTH-027-F: bootstrap membership and managed keys fail closed", async () => {
     const rejected = await fetch(`${server.baseUrl}/auth/local`, {
       headers: {Authorization: `Bearer ${"x".repeat(43)}`},
       method: "POST",
@@ -413,6 +423,243 @@ describe("installation identity and access", () => {
       method: "POST",
     });
     expect(proxiedExchange.status).toBe(204);
+  });
+
+  test("AUTH-024-F: hostile, ambiguous, forwarded, proxied, and private-team requests never create a local-owner member or session", async () => {
+    const boundary = {
+      origin: server.baseUrl,
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-origin",
+    };
+    const loopbackHost = `127.0.0.1:${server.port}`;
+    const aliasRequests = [
+      "localtest.me",
+      "127.0.0.1.nip.io",
+      "localhost.",
+      "127.0.0.2",
+      "0.0.0.0",
+      "[::ffff:127.0.0.1]",
+      `${"c".repeat(32)}.localhost`,
+    ].map((alias) => {
+      const host = `${alias}:${server.port}`;
+      // Origin matches the claimed host, so only the host itself is refused.
+      return {
+        host,
+        origin: `http://${host}`,
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+      };
+    });
+    const deniedHeaderSets: Record<string, string | string[]>[] = [
+      ...aliasRequests,
+      {...boundary, host: loopbackHost, "sec-fetch-site": ["same-origin", "cross-site"]},
+      {...boundary, host: loopbackHost, "sec-fetch-mode": ["cors", "navigate"]},
+      {...boundary, host: loopbackHost, "sec-fetch-mode": "navigate"},
+      {...boundary, host: loopbackHost, "sec-fetch-mode": "no-cors"},
+      {host: loopbackHost, origin: server.baseUrl, "sec-fetch-mode": "cors"},
+      {host: loopbackHost, origin: server.baseUrl, "sec-fetch-site": "same-origin"},
+      {...boundary, host: loopbackHost, "sec-fetch-site": "same-site"},
+      {...boundary, host: loopbackHost, "sec-fetch-site": "none"},
+      {...boundary, host: loopbackHost, origin: "null"},
+      {...boundary, host: loopbackHost, origin: [server.baseUrl, "https://hostile.example"]},
+      {"sec-fetch-mode": "cors", "sec-fetch-site": "same-origin", host: loopbackHost},
+      {...boundary, forwarded: "for=127.0.0.1;host=localhost", host: loopbackHost},
+      {...boundary, host: loopbackHost, "x-forwarded-host": loopbackHost},
+      {...boundary, host: loopbackHost, "x-forwarded-proto": "http"},
+      {...boundary, host: loopbackHost, "x-real-ip": "127.0.0.1"},
+      {...boundary, host: loopbackHost, "x-artifact-server-development-proxy": "forged-proxy-credential"},
+    ];
+    const denied = await Promise.all(deniedHeaderSets.map((headers) =>
+      rawLocalOwnerExchange(server.port, headers)
+    ));
+    // An unparseable IPv4-mapped host is rejected as a bad request, and a
+    // content host has no local-owner route; every other refusal is the
+    // exchange's own 403.
+    expect(denied.map(({status}) => status)).toEqual(deniedHeaderSets.map((_, index) =>
+      index === 5 ? 400 : index === 6 ? 405 : 403
+    ));
+    expect(denied.flatMap(({setCookie}) => setCookie)).toEqual([]);
+
+    // Non-loopback binds never start a local-owner runtime.
+    await expect(startTestServer(installation, {clock, hostname: "0.0.0.0"}))
+      .rejects.toThrow("must bind to an exact loopback address");
+    await expect(startTestServer(installation, {clock, hostname: "::"}))
+      .rejects.toThrow("must bind to an exact loopback address");
+
+    // A credential from a previous development run is stale once the proxy
+    // restarts with a fresh one.
+    const priorRunCredential = "development-proxy-credential-from-the-prior-run";
+    const currentRunCredential = "development-proxy-credential-for-the-current-run";
+    await server.stop();
+    server = await startTestServer(installation, {
+      clock,
+      developmentProxyCredential: currentRunCredential,
+    });
+    const proxied = (credential: string) => rawLocalOwnerExchange(server.port, {
+      host: `127.0.0.1:${server.port}`,
+      origin: server.baseUrl,
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-origin",
+      "x-artifact-server-development-proxy": credential,
+    });
+    const stale = await proxied(priorRunCredential);
+    expect([stale.status, stale.setCookie]).toEqual([403, []]);
+    // Without a configured development proxy, any proxy credential is refused.
+    await server.stop();
+    server = await startTestServer(installation, {clock});
+    const unconfigured = await proxied(currentRunCredential);
+    expect([unconfigured.status, unconfigured.setCookie]).toEqual([403, []]);
+
+    // Private-team mode has no local-owner route at all.
+    await server.stop();
+    server = await startTestServer(installation, {
+      browserAccess: privateTeamBrowserAccess(browserLoginKinds.oidc),
+      clock,
+      interactiveIdentityProvider: new TestIdentityProvider({
+        displayName: "Team administrator",
+        email: "administrator@example.test",
+        emailVerified: true,
+        provider: "test-oidc",
+        subject: "team-administrator",
+      }),
+    });
+    const privateTeam = await proxied(currentRunCredential);
+    expect([privateTeam.status, privateTeam.setCookie]).toEqual([404, []]);
+    const privateTeamDirect = await rawLocalOwnerExchange(server.port, {
+      host: `127.0.0.1:${server.port}`,
+      origin: server.baseUrl,
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-origin",
+    });
+    expect([privateTeamDirect.status, privateTeamDirect.setCookie]).toEqual([404, []]);
+
+    // None of the refusals created a member: the first valid exchange finds
+    // only the stable local administrator.
+    await server.stop();
+    server = await startTestServer(installation, {clock});
+    const accepted = await rawLocalOwnerExchange(server.port, {
+      host: `127.0.0.1:${server.port}`,
+      origin: server.baseUrl,
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-origin",
+    });
+    expect(accepted.status).toBe(204);
+    const members = await fetch(`${server.baseUrl}/api/v1/members`, {
+      headers: {Cookie: applicationCookies(accepted.setCookie).header},
+    });
+    expect(members.status).toBe(200);
+    expect(z.object({members: z.array(z.object({role: z.string()}))}).parse(await members.json()).members)
+      .toEqual([expect.objectContaining({role: "administrator"})]);
+  });
+
+  test("AUTH-028-F: current-member, last-administrator, racing, and local-owner deactivations change no membership, session, or audit state", async () => {
+    await server.stop();
+    const provider = new TestIdentityProvider({
+      displayName: "First administrator",
+      email: "first@example.test",
+      emailVerified: true,
+      provider: "test-oidc",
+      subject: "first-administrator",
+    });
+    server = await startTestServer(installation, {
+      bootstrapAdministratorEmail: "first@example.test",
+      browserAccess: privateTeamBrowserAccess(browserLoginKinds.oidc),
+      clock,
+      interactiveIdentityProvider: provider,
+    });
+    const signIn = async (identity: {email: string; subject: string}) => {
+      provider.identity = {...provider.identity, ...identity};
+      const started = await fetch(`${server.baseUrl}/auth/login`, {redirect: "manual"});
+      const callbackUrl = new URL("/auth/callback", server.baseUrl);
+      callbackUrl.searchParams.set("code", provider.authorizationCode);
+      callbackUrl.searchParams.set("state", provider.authorization.state);
+      const completed = await fetch(callbackUrl, {
+        headers: {Cookie: loginHandshakeCookie(started)},
+        redirect: "manual",
+      });
+      expect(completed.status).toBe(303);
+      const cookies = applicationCookies(completed.headers.getSetCookie());
+      const session = await fetch(`${server.baseUrl}/api/v1/session`, {headers: {Cookie: cookies.header}});
+      return {cookies, id: sessionResponseSchema.parse(await session.json()).principal.id};
+    };
+    const admit = async (email: string, role: "administrator" | "member") => {
+      const response = await fetch(`${server.baseUrl}/api/v1/members`, {
+        body: JSON.stringify({displayName: email, email, role}),
+        headers: browserMutationHeaders(server.baseUrl, first.cookies),
+        method: "POST",
+      });
+      expect(response.status).toBe(201);
+    };
+    const deactivate = (actor: ApplicationCookies, memberId: string) => fetch(
+      `${server.baseUrl}/api/v1/members/${memberId}/deactivate`,
+      {headers: browserMutationHeaders(server.baseUrl, actor), method: "POST"},
+    );
+    const memberStatesSchema = z.object({
+      members: z.array(z.object({id: z.string(), role: z.string(), status: z.string()})),
+    });
+    const membership = async (actor: ApplicationCookies) => {
+      const response = await fetch(`${server.baseUrl}/api/v1/members`, {headers: {Cookie: actor.header}});
+      expect(response.status).toBe(200);
+      return memberStatesSchema.parse(await response.json()).members
+        .map(({id, role, status}) => `${id}:${role}:${status}`).toSorted();
+    };
+    const auditTotal = async (actor: ApplicationCookies) => {
+      const response = await fetch(`${server.baseUrl}/api/v1/activity/facets`, {headers: {Cookie: actor.header}});
+      expect(response.status).toBe(200);
+      return z.object({total: z.number().int()}).parse(await response.json()).total;
+    };
+    const sessionStatus = (actor: ApplicationCookies) => fetch(
+      `${server.baseUrl}/api/v1/session`,
+      {headers: {Cookie: actor.header}},
+    ).then((response) => response.status);
+
+    const first = await signIn({email: "first@example.test", subject: "first-administrator"});
+    await admit("second@example.test", "administrator");
+    const second = await signIn({email: "second@example.test", subject: "second-administrator"});
+
+    // Refusing the current member is its own rule: another administrator remains.
+    const membershipBefore = await membership(first.cookies);
+    const auditBefore = await auditTotal(first.cookies);
+    const self = await deactivate(first.cookies, first.id);
+    expect(self.status).toBe(409);
+    expect(await self.json()).toMatchObject({error: {code: "IDENTITY_CONFLICT"}});
+    expect(await membership(first.cookies)).toEqual(membershipBefore);
+    expect(await auditTotal(first.cookies)).toBe(auditBefore);
+    expect([await sessionStatus(first.cookies), await sessionStatus(second.cookies)]).toEqual([200, 200]);
+
+    // Two administrators deactivating each other at once cannot remove both:
+    // the later attempt meets the last-administrator rule.
+    const raced = await Promise.all([
+      deactivate(first.cookies, second.id),
+      deactivate(second.cookies, first.id),
+    ]);
+    const racedStatuses = raced.map((response) => response.status);
+    expect(racedStatuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(racedStatuses.filter((status) => status !== 200).every((status) => [401, 403, 409].includes(status)))
+      .toBe(true);
+    const survivor = racedStatuses[0] === 200 ? first : second;
+    const removed = survivor === first ? second : first;
+    const afterRace = await membership(survivor.cookies);
+    expect(afterRace.filter((entry) => entry.endsWith(":administrator:active")))
+      .toEqual([`${survivor.id}:administrator:active`]);
+    expect(await sessionStatus(survivor.cookies)).toBe(200);
+    expect(await sessionStatus(removed.cookies)).toBe(401);
+
+    // The survivor is now the last administrator and still cannot remove itself.
+    const auditAfterRace = await auditTotal(survivor.cookies);
+    expect((await deactivate(survivor.cookies, survivor.id)).status).toBe(409);
+    expect(await membership(survivor.cookies)).toEqual(afterRace);
+    expect(await auditTotal(survivor.cookies)).toBe(auditAfterRace);
+    expect(await sessionStatus(survivor.cookies)).toBe(200);
+
+    // A local-owner installation has no HTTP sign-in for a second
+    // administrator, so the stable local administrator's protection is
+    // driven through the real application service and SQLite store.
+    await expect(localOwnerDeactivationByAnotherAdministrator()).resolves.toEqual({
+      failure: "IdentityConflict: The local-owner administrator cannot be deactivated.",
+      localOwnerSessionStillValid: true,
+      membersUnchanged: true,
+    });
   });
 
   test("AUTH-025-B AUTH-025-F AUTH-026-F: private-team mode advertises its provider and has no local browser bootstrap route", async () => {
@@ -1124,6 +1371,106 @@ interface ApplicationCookies {
   readonly csrf: string;
   readonly header: string;
   readonly sessionAttributes: string;
+}
+
+/**
+ * In a local-owner application, let a second, directly signed-in administrator
+ * try to deactivate the stable local administrator.
+ */
+async function localOwnerDeactivationByAnotherAdministrator(): Promise<{
+  readonly failure: string;
+  readonly localOwnerSessionStillValid: boolean;
+  readonly membersUnchanged: boolean;
+}> {
+  const dataDirectory = await mkdtemp(path.join(tmpdir(), "artifact-local-owner-admin-"));
+  const databasePath = path.join(dataDirectory, "artifact-server.db");
+  const repository = new SqliteArtifactRepository(databasePath);
+  const identityRepository = new SqliteIdentityRepository(databasePath);
+  const runtime = ManagedRuntime.make(createLocalApplicationLayer({
+    apiToken: Redacted.make("local-owner-administrator-test-token"),
+    blobs: new LocalBlobStore(path.join(dataDirectory, "blobs")),
+    bootstrapAdministratorEmail: "local-owner@example.test",
+    clock: new MutableClock("2026-08-13T08:00:00.000Z"),
+    dispatches: repository,
+    externalApiBearerVerifier: null,
+    externalMcpBearerVerifier: null,
+    externalMcpOAuthVerifier: null,
+    ids: new SystemIdGenerator(),
+    identityRepository,
+    installationId: "local-owner-installation",
+    interactiveIdentityProvider: null,
+    localBootstrapCredential: null,
+    protectBootstrapAdministrator: true,
+    repository,
+    staging: new LocalStagingStore(path.join(dataDirectory, "staging")),
+  }));
+  try {
+    const run = <A, E>(effect: Effect.Effect<A, E, InstallationAccessService>) =>
+      runtime.runPromise(effect);
+    const principalOf = (token: string) => run(InstallationAccessService.use((access) =>
+      access.authenticateSession(Redacted.make(token))
+    )).then(({principal}) => principal);
+    const localOwnerSession = await run(InstallationAccessService.use((access) => access.loginAsLocalOwner()));
+    const localOwner = await principalOf(localOwnerSession.token);
+    await run(InstallationAccessService.use((access) => access.admitMember({
+      displayName: "Second administrator",
+      email: "second@example.test",
+      principal: localOwner,
+      role: "administrator",
+    })));
+    const secondSession = await run(InstallationAccessService.use((access) =>
+      access.completeExternalIdentity({
+        displayName: "Second administrator",
+        email: "second@example.test",
+        emailVerified: true,
+        provider: "test-oidc",
+        subject: "second-administrator",
+      })
+    ));
+    const second = await principalOf(secondSession.token);
+    const members = () => run(InstallationAccessService.use((access) => access.listMembers(second)))
+      .then((listed) => listed.map(({id, role, status}) => `${id}:${role}:${status}`).toSorted());
+    const before = await members();
+    const failure = await run(InstallationAccessService.use((access) =>
+      access.deactivateMember(second, localOwner.id)
+    ).pipe(
+      Effect.map(() => "deactivated"),
+      Effect.catch((error) => Effect.succeed(`${error._tag}: ${error.message}`)),
+    ));
+    const after = await members();
+    const localOwnerSessionStillValid = await principalOf(localOwnerSession.token)
+      .then((principal) => principal.id === localOwner.id, () => false);
+    return {failure, localOwnerSessionStillValid, membersUnchanged: JSON.stringify(after) === JSON.stringify(before)};
+  } finally {
+    await runtime.dispose();
+    identityRepository.close();
+    repository.close();
+    await rm(dataDirectory, {force: true, recursive: true});
+  }
+}
+
+/** POST the local-owner exchange with exact raw headers, including Host. */
+function rawLocalOwnerExchange(
+  port: number,
+  headers: Readonly<Record<string, string | string[]>>,
+): Promise<{readonly setCookie: string[]; readonly status: number}> {
+  return new Promise((resolve, reject) => {
+    const outgoing = httpRequest({
+      headers: {...headers, "content-length": "0"},
+      host: "127.0.0.1",
+      method: "POST",
+      path: "/auth/local-owner",
+      port,
+    }, (response) => {
+      response.resume();
+      response.on("end", () => resolve({
+        setCookie: response.headers["set-cookie"] ?? [],
+        status: response.statusCode ?? 0,
+      }));
+    });
+    outgoing.on("error", reject);
+    outgoing.end();
+  });
 }
 
 function applicationCookies(setCookieHeaders: readonly string[]): ApplicationCookies {
