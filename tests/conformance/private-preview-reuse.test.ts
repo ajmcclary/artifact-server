@@ -5,6 +5,7 @@ import type {Clock} from "../../src/core/ports.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
   createTestInstallation,
+  fetchVersion,
   removeTestInstallation,
   startTestServer,
   type RunningTestServer,
@@ -121,5 +122,47 @@ describe("reusable preview leases", () => {
     const expired = await requestLease(firstEndpoint, original.baseUrl);
     expect(expired.status).toBe(201);
     expect(expired.lease.baseUrl).not.toBe(original.baseUrl);
+  });
+
+  test("foundation: lease-origin responses are fresh only until the lease expires and errors are never stored", async () => {
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><link rel=\"stylesheet\" href=\"site.css\"><title>Fresh</title>",
+      idempotencyKey: "reuse-freshness-v1",
+      name: "Reuse freshness",
+    });
+    const endpoint = leaseEndpoint(published.body.artifact.id, published.body.version.id, published.body.artifact.projectId);
+    const {lease} = await requestLease(endpoint);
+    const expiresAt = Date.parse(lease.expiresAt);
+
+    const full = await fetchVersion(server, lease.baseUrl);
+    expect(full.status).toBe(200);
+    expect(full.headers.get("cache-control")).toBe(`private, max-age=${twelveHours / 1_000}, immutable`);
+
+    const ranged = await fetchVersion(server, lease.baseUrl, "GET", {Range: "bytes=0-3"});
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers.get("cache-control")).toMatch(/^private, max-age=\d+, immutable$/u);
+    const head = await fetchVersion(server, lease.baseUrl, "HEAD");
+    expect(head.headers.get("cache-control")).toMatch(/^private, max-age=\d+, immutable$/u);
+
+    const unsatisfiable = await fetchVersion(server, lease.baseUrl, "GET", {Range: "bytes=999999-"});
+    expect(unsatisfiable.status).toBe(416);
+    expect(unsatisfiable.headers.get("cache-control")).toBe("private, no-store");
+    const missing = await fetchVersion(server, new URL("missing.css", lease.baseUrl).toString());
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("cache-control")).toBe("private, no-store");
+    const write = await fetchVersion(server, lease.baseUrl, "POST");
+    expect(write.status).toBe(405);
+    expect(write.headers.get("cache-control")).toBe("private, no-store");
+
+    clock.advance(expiresAt - clock.now().getTime() - 10 * 60 * 1_000);
+    expect((await fetchVersion(server, lease.baseUrl)).headers.get("cache-control"))
+      .toBe("private, max-age=600, immutable");
+    clock.advance(10 * 60 * 1_000 - 500);
+    expect((await fetchVersion(server, lease.baseUrl)).headers.get("cache-control")).toBe("private, no-store");
+    clock.advance(500);
+    const expired = await fetchVersion(server, lease.baseUrl);
+    expect(expired.status).toBe(401);
+    expect(expired.headers.get("cache-control")).toBe("private, no-store");
   });
 });

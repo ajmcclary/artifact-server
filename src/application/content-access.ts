@@ -165,6 +165,13 @@ export interface IssuePreviewLeaseCommand {
   readonly versionId: string;
 }
 
+/** One authorized lease-origin read and how long a browser may keep it fresh. */
+export interface AuthorizedPreviewContent {
+  readonly content: VersionContent;
+  /** Whole seconds until the lease expires; responses must not be fresh past it. */
+  readonly freshSeconds: number;
+}
+
 /** Input for authorizing one manifest path through a Review lease hostname. */
 export interface AuthorizePreviewContentCommand {
   readonly fallback: VersionContentFallback;
@@ -185,7 +192,7 @@ export type ContentAccessFailure =
 interface ContentAccessOperations {
   readonly authorizePreviewContent: (
     command: AuthorizePreviewContentCommand,
-  ) => Effect.Effect<VersionContent | null, ContentAccessFailure>;
+  ) => Effect.Effect<AuthorizedPreviewContent | null, ContentAccessFailure>;
   readonly authorizeVersionContent: (
     command: AuthorizeVersionContentCommand,
   ) => Effect.Effect<VersionContent | null, ContentAccessFailure>;
@@ -425,7 +432,8 @@ function makeContentAccessService(
       || content.versionId !== lease.versionId
     ) return yield* sessionRequired();
     yield* Effect.annotateCurrentSpan({"artifact.project.id": content.projectId});
-    return content;
+    const remainingMilliseconds = Date.parse(lease.expiresAt) - Date.parse(now);
+    return {content, freshSeconds: Math.max(0, Math.floor(remainingMilliseconds / 1_000))};
   });
 
   const resolvePublicArtifact = Effect.fn(

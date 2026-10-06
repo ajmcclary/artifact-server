@@ -161,6 +161,7 @@ import {
   versionBrowserUrl,
   versionFileBrowserUrl,
 } from "./artifact-http-links.js";
+import {cacheablePreviewLeaseStatuses, previewLeaseCacheControl} from "./preview-lease-cache.js";
 import {artifactServerFailureResponse} from "./artifact-http-failure.js";
 import {attachmentContentDisposition} from "./content-disposition.js";
 import {observeHttpRequest} from "../observability/application-observability.js";
@@ -3772,12 +3773,26 @@ async function serveVersionContent(
     context,
     content,
     publiclyCacheable,
-    false,
+    null,
     dependencies,
   );
 }
 
 async function servePreviewLeaseContent(
+  context: Context<HttpEnvironment>,
+  requestUrl: URL,
+  leaseToken: string,
+  dependencies: HttpAppDependencies,
+): Promise<Response> {
+  const response = await previewLeaseResponse(context, requestUrl, leaseToken, dependencies);
+  // Only successful reads may be stored; an error must never be replayed from cache.
+  if (!cacheablePreviewLeaseStatuses.has(response.status)) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+  return response;
+}
+
+async function previewLeaseResponse(
   context: Context<HttpEnvironment>,
   requestUrl: URL,
   leaseToken: string,
@@ -3792,7 +3807,7 @@ async function servePreviewLeaseContent(
   }
   const requestedPath = manifestPathFromUrl(requestUrl.pathname);
   if (requestedPath === null) return versionNotFoundResponse();
-  const content = await runHttpApplicationEffect(
+  const authorized = await runHttpApplicationEffect(
     context,
     dependencies,
     ContentAccessService.use((contentAccess) =>
@@ -3805,15 +3820,21 @@ async function servePreviewLeaseContent(
       })
     ),
   );
-  if (content === null) return versionNotFoundResponse();
-  return serveStoredVersionContent(context, content, false, true, dependencies);
+  if (authorized === null) return versionNotFoundResponse();
+  return serveStoredVersionContent(
+    context,
+    authorized.content,
+    false,
+    previewLeaseCacheControl(authorized.freshSeconds),
+    dependencies,
+  );
 }
 
 async function serveStoredVersionContent(
   context: Context<HttpEnvironment>,
   content: VersionContent,
   publiclyCacheable: boolean,
-  previewLease: boolean,
+  previewLeaseCacheControlValue: string | null,
   dependencies: HttpAppDependencies,
 ): Promise<Response> {
   const headers = contentHeaders(
@@ -3821,9 +3842,9 @@ async function serveStoredVersionContent(
     content.entry.size,
     publiclyCacheable,
   );
-  if (previewLease) {
+  if (previewLeaseCacheControlValue !== null) {
     headers.set("Access-Control-Allow-Origin", "*");
-    headers.set("Cache-Control", "private, no-store");
+    headers.set("Cache-Control", previewLeaseCacheControlValue);
     headers.set("Cross-Origin-Resource-Policy", "cross-origin");
     headers.set("Referrer-Policy", "no-referrer");
   }

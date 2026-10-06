@@ -198,7 +198,7 @@ describe("content access lifecycle", () => {
         })
       ),
     );
-    expect(authorized?.versionId).toBe(published.version.id);
+    expect(authorized?.content.versionId).toBe(published.version.id);
     await expectFailure("ContentSessionRequired",
       ContentAccessService.use((contentAccess) =>
         contentAccess.authorizePreviewContent({
