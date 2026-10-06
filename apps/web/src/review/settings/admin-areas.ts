@@ -3,7 +3,7 @@ import {usDate, usDateTime} from "@/ui/activity-model";
 /** The administration menu's remembered pin and width, under the review panel store. */
 export const adminMenuPanelId = "admin-areas";
 
-export type AdminAreaId = "apiKeys" | "mcp" | "members" | "publicLinks";
+export type AdminAreaId = "apiKeys" | "invites" | "mcp" | "members" | "publicLinks";
 
 /** One administration area: its menu row, route, and one-line lede. */
 export interface AdminArea {
@@ -25,6 +25,15 @@ export const adminAreas: readonly AdminArea[] = [
     id: "members",
     label: "Members",
     lede: "Members can open every project in this installation.",
+  },
+  {
+    administratorOnly: true,
+    group: "People and access",
+    href: "/review/settings/invites",
+    icon: "bi-person-plus",
+    id: "invites",
+    label: "Invites",
+    lede: "Links that let someone join by signing in. Each link is shown once.",
   },
   {
     administratorOnly: true,

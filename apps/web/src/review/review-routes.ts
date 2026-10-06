@@ -9,6 +9,7 @@ export type SettingsRoute =
   | {readonly kind: "mcp"}
   | {readonly kind: "webmcp"}
   | {readonly kind: "members"}
+  | {readonly kind: "invites"}
   | {readonly kind: "apiKeys"}
   | {readonly kind: "publicLinks"}
   | {readonly kind: "notFound"};
@@ -63,6 +64,8 @@ export function parseSettingsRoute(pathname: string): SettingsRoute {
         return {kind: "webmcp"};
       case "members":
         return {kind: "members"};
+      case "invites":
+        return {kind: "invites"};
       case "api-keys":
         return {kind: "apiKeys"};
       case "public-links":

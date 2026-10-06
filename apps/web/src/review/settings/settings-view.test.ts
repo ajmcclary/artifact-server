@@ -50,9 +50,11 @@ describe("settings routing", () => {
 
   it("ADM-006-F: direct unauthorized settings routes resolve to forbidden states, not empty data", () => {
     const member = settingsAccess(principal({}));
-    for (const kind of ["members", "apiKeys", "publicLinks"] as const) {
+    for (const kind of ["members", "invites", "apiKeys", "publicLinks"] as const) {
       expect(resolveSettingsView({kind}, member)).toEqual({kind: "administratorPermission"});
     }
+    expect(resolveSettingsView({kind: "invites"}, settingsAccess(principal({membershipRole: "administrator"}))))
+      .toEqual({kind: "invites"});
     const delegated = settingsAccess(principal({
       authorizedByPrincipalId: "prn_owner",
       capabilities: ["project:manage"],

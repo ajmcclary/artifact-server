@@ -71,4 +71,36 @@ test.describe("Invites", () => {
       await context.close();
     }
   });
+
+  test("ADM-009-B: an administrator creates, copies once and revokes from the Invites area", async ({browser}) => {
+    const {context, page} = await freshPage(browser);
+    try {
+      server.provider.identity = {
+        displayName: "Jordan Lee",
+        email: "jordan@acme.test",
+        emailVerificationAsserted: true,
+        emailVerified: true,
+        provider: "workos",
+        subject: "workos-jordan",
+      };
+      await page.goto(`${server.server.baseUrl}/auth/login?returnTo=%2Freview%2Fsettings%2Finvites`);
+      await expect(page.getByRole("heading", {level: 1, name: "Invites"})).toBeVisible();
+      await page.getByRole("button", {name: "Create invite link"}).click();
+      const dialog = page.getByRole("dialog", {name: "Create invite link"});
+      await dialog.getByLabel("Email").fill("dana@acme.test");
+      await dialog.getByRole("button", {name: "Create Invite Link"}).click();
+      const link = page.getByRole("textbox", {name: "Invite link"});
+      await expect(link).toHaveValue(/\/join#as_inv_/u);
+      await page.getByRole("button", {name: "Done"}).click();
+      await expect(page.getByRole("textbox", {name: "Invite link"})).toHaveCount(0);
+      const grid = page.getByRole("grid", {name: "Invites"});
+      await expect(grid.getByText("dana@acme.test")).toBeVisible();
+      await grid.getByRole("button", {name: /Actions for/u}).first().click();
+      await page.getByRole("menuitem", {name: "Revoke"}).click();
+      await page.getByRole("button", {name: "Revoke link"}).click();
+      await expect(grid.getByText("Revoked")).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
 });

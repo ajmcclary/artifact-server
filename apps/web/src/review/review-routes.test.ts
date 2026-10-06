@@ -133,6 +133,8 @@ describe("parseReviewRoute", () => {
       .toEqual({kind: "settings", settings: {kind: "webmcp"}});
     expect(routeOf("/review/settings/members"))
       .toEqual({kind: "settings", settings: {kind: "members"}});
+    expect(routeOf("/review/settings/invites"))
+      .toEqual({kind: "settings", settings: {kind: "invites"}});
     expect(routeOf("/review/settings/api-keys"))
       .toEqual({kind: "settings", settings: {kind: "apiKeys"}});
     expect(routeOf("/review/settings/public-links"))

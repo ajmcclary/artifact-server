@@ -5,6 +5,7 @@ import {PageScaffold, SurfaceState} from "@/arkcase";
 import {navigateReview, type SettingsRoute} from "../review-routes.ts";
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
+import {InvitesScreen} from "./invites-screen.tsx";
 import {MembersScreen} from "./members-screen.tsx";
 import {PublicLinksScreen} from "./public-links-screen.tsx";
 import {resolveSettingsView, settingsAccess} from "./settings-view.ts";
@@ -32,6 +33,8 @@ export function SettingsScreen({route, session}: SettingsScreenProps) {
       );
     case "members":
       return <MembersScreen />;
+    case "invites":
+      return <InvitesScreen />;
     case "apiKeys":
       return <ApiKeysScreen />;
     case "publicLinks":

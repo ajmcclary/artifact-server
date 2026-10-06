@@ -13,6 +13,7 @@ export type SettingsView =
   | {readonly kind: "apiKeys"}
   | {readonly kind: "mcp"; readonly administrator: boolean}
   | {readonly kind: "members"}
+  | {readonly kind: "invites"}
   | {readonly kind: "notFound"}
   | {readonly kind: "publicLinks"}
   | {readonly kind: "redirect"; readonly href: string};
@@ -59,6 +60,8 @@ export function resolveSettingsView(route: SettingsRoute, access: SettingsAccess
       return {administrator: access.administrator, kind: "mcp"};
     case "members":
       return access.administrator ? {kind: "members"} : {kind: "administratorPermission"};
+    case "invites":
+      return access.administrator ? {kind: "invites"} : {kind: "administratorPermission"};
     case "apiKeys":
       return access.administrator ? {kind: "apiKeys"} : {kind: "administratorPermission"};
     case "publicLinks":

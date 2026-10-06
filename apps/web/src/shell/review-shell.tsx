@@ -303,6 +303,7 @@ function useScreenChange(title: string, announce: (message: string) => void, rou
 
 const settingsTitles = {
   apiKeys: "API keys",
+  invites: "Invites",
   mcp: "MCP & WebMCP",
   members: "Members",
   notFound: "Page not found",
