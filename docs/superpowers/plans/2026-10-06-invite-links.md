@@ -1689,9 +1689,9 @@ describe("SQLite invitations", () => {
     await rm(dataDirectory, {force: true, recursive: true});
   });
 
-  for (const repositoryCase of invitationRepositoryCases) {
-    test(repositoryCase.name, () => repositoryCase.run(fixture));
-  }
+  test.for(invitationRepositoryCases)("$name", async ({run}) => {
+    await expect(run(fixture)).resolves.toBeUndefined();
+  });
 
   test("the database refuses rule-breaking rows written directly", () => {
     const database = new DatabaseSync(databasePath);
@@ -2496,9 +2496,9 @@ describe("Postgres invitations", () => {
     await maintenance.close();
   });
 
-  for (const repositoryCase of invitationRepositoryCases) {
-    test(repositoryCase.name, () => repositoryCase.run(fixture));
-  }
+  test.for(invitationRepositoryCases)("$name", async ({run}) => {
+    await expect(run(fixture)).resolves.toBeUndefined();
+  });
 
   test("the database refuses an administrator link invite written directly", async () => {
     await expect(database.run(Effect.gen(function*() {
@@ -2800,9 +2800,9 @@ describe("D1 invitations", () => {
     await proxy.dispose();
   });
 
-  for (const repositoryCase of invitationRepositoryCases) {
-    it(repositoryCase.name, () => repositoryCase.run(fixture));
-  }
+  it.for(invitationRepositoryCases)("$name", async ({run}) => {
+    await expect(run(fixture)).resolves.toBeUndefined();
+  });
 
   it("an existing schema-17 database gains invites without losing members or identities", async () => {
     const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;

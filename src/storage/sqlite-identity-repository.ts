@@ -7,6 +7,42 @@ import {
   IdentityNotFound,
   LoginAttemptRejected,
 } from "../core/errors.js";
+import type {
+  CreateInviteRecord,
+  InvitationRepository,
+  RedeemInviteRecord,
+  RedeemInviteResult,
+  RevokeInviteRecord,
+} from "../core/invitation-ports.js";
+import {
+  type Invite,
+  inviteStatus,
+  inviteStatuses,
+  type ListedInvite,
+  redemptionRefusal,
+  type StoredInvite,
+} from "../core/invitations.js";
+import {
+  inviteAdmitAction,
+  inviteCreateAction,
+  inviteInsertColumns,
+  inviteInsertValues,
+  inviteRedeemAction,
+  inviteRevokeAction,
+  inviteRowSchema,
+  inviteSelectColumns,
+  listedInviteFromRow,
+  listedInviteRowSchema,
+  storedInviteFromRow,
+  withoutInviteDigest,
+} from "./invitation-rows.js";
+import {
+  admissionMethodCheckSql,
+  membersAcceptInviteAdmission,
+  sqliteInvitesIndexSql,
+  sqliteInvitesTableSql,
+  sqliteMemberAdmissionWidenStatements,
+} from "./invitation-schema.js";
 import {
   type ApplicationSession,
   type InstallationMember,
@@ -77,6 +113,7 @@ const memberRowSchema = z.object({
 const listedMemberRowSchema = memberRowSchema.extend({
   admittedHow: z.enum([
     memberAdmissions.automatic,
+    memberAdmissions.invite,
     memberAdmissions.manual,
     memberAdmissions.owner,
   ]).nullable(),
@@ -133,7 +170,7 @@ const presenceRowSchema = z.object({present: z.union([z.literal(0), z.literal(1)
 const countRowSchema = z.object({count: z.number().int().nonnegative()});
 
 /** SQLite persistence for installation membership, sessions, and API keys. */
-export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepository {
+export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepository, InvitationRepository {
   readonly #database: DatabaseSync;
 
   constructor(databasePath: string) {
@@ -164,23 +201,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
   async admitMember(command: AdmitMemberRecord): Promise<InstallationMember> {
     try {
       this.#inTransaction(() => {
-        this.#database.prepare(`
-          INSERT INTO installation_members (
-            id, installation_id, email, display_name, role, status,
-            created_at, updated_at, admitted_by_principal_id, admission_method
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          command.id,
-          command.installationId,
-          command.email,
-          command.displayName,
-          command.role,
-          memberStatuses.active,
-          command.createdAt,
-          command.createdAt,
-          command.attribution.principalId,
-          command.admittedHow,
-        );
+        this.#insertMember(command);
         this.#insertAction(attributedInsert(command.attribution, {
           action: "member_admit",
           createdAt: command.createdAt,
@@ -201,6 +222,131 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     const member = await this.findMember(command.installationId, command.id);
     if (member === null) throw new Error("The admitted member was not persisted.");
     return member;
+  }
+
+  #insertMember(command: AdmitMemberRecord): void {
+    this.#database.prepare(`
+      INSERT INTO installation_members (
+        id, installation_id, email, display_name, role, status,
+        created_at, updated_at, admitted_by_principal_id, admission_method
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      command.id,
+      command.installationId,
+      command.email,
+      command.displayName,
+      command.role,
+      memberStatuses.active,
+      command.createdAt,
+      command.createdAt,
+      command.attribution.principalId,
+      command.admittedHow,
+    );
+  }
+
+  async createInvite(record: CreateInviteRecord): Promise<Invite> {
+    this.#inTransaction(() => {
+      this.#database.prepare(`
+        INSERT INTO installation_invites (${inviteInsertColumns})
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(...inviteInsertValues(record.invite));
+      this.#insertAction(inviteCreateAction(record.invite, record.attribution));
+    });
+    return withoutInviteDigest(record.invite);
+  }
+
+  async findInvite(installationId: string, inviteId: string): Promise<StoredInvite | null> {
+    return this.#findInvite(installationId, inviteId);
+  }
+
+  #findInvite(installationId: string, inviteId: string): StoredInvite | null {
+    const row = this.#database.prepare(`
+      SELECT ${inviteSelectColumns("i")}
+      FROM installation_invites AS i
+      WHERE i.installation_id = ? AND i.id = ?
+    `).get(installationId, inviteId);
+    return row === undefined ? null : storedInviteFromRow(inviteRowSchema.parse(row));
+  }
+
+  async listInvites(installationId: string): Promise<readonly ListedInvite[]> {
+    const rows = this.#database.prepare(`
+      SELECT ${inviteSelectColumns("i")}, creator.display_name AS "createdByName"
+      FROM installation_invites AS i
+      LEFT JOIN installation_members AS creator
+        ON creator.installation_id = i.installation_id AND creator.id = i.created_by_principal_id
+      WHERE i.installation_id = ?
+      ORDER BY i.created_at DESC, i.id DESC
+      LIMIT 200
+    `).all(installationId);
+    return rows.map((row) => listedInviteFromRow(listedInviteRowSchema.parse(row)));
+  }
+
+  async revokeInvite(record: RevokeInviteRecord): Promise<Invite> {
+    return this.#inTransaction(() => {
+      const existing = this.#findInvite(record.installationId, record.inviteId);
+      if (existing === null) {
+        throw new IdentityNotFound({message: "The invite does not exist."});
+      }
+      if (inviteStatus(existing, new Date(record.revokedAt)) !== inviteStatuses.active) {
+        throw new IdentityConflict({message: "Only an active invite can be revoked."});
+      }
+      this.#database.prepare(`
+        UPDATE installation_invites
+        SET revoked_at = ?, revoked_by_principal_id = ?
+        WHERE installation_id = ? AND id = ? AND revoked_at IS NULL
+      `).run(
+        record.revokedAt,
+        record.attribution.principalId,
+        record.installationId,
+        record.inviteId,
+      );
+      this.#insertAction(inviteRevokeAction(existing, record.attribution, record.revokedAt));
+      const revoked = this.#findInvite(record.installationId, record.inviteId);
+      if (revoked === null) throw new Error("The revoked invite was not persisted.");
+      return withoutInviteDigest(revoked);
+    });
+  }
+
+  async redeemInvite(record: RedeemInviteRecord): Promise<RedeemInviteResult> {
+    const {admission} = record;
+    try {
+      return this.#inTransaction((): RedeemInviteResult => {
+        const invite = this.#findInvite(admission.installationId, record.inviteId);
+        const refusal = redemptionRefusal(invite, record.email, record.redeemedAt);
+        if (invite === null || refusal !== null) {
+          return {
+            kind: "refused",
+            outcome: refusal === null || refusal === "unverified" ? "invalid" : refusal,
+          };
+        }
+        const updated = this.#database.prepare(`
+          UPDATE installation_invites
+          SET use_count = use_count + 1, last_redeemed_member_id = ?
+          WHERE installation_id = ? AND id = ? AND revoked_at IS NULL
+            AND expires_at > ? AND use_count < max_uses
+        `).run(admission.id, admission.installationId, record.inviteId, record.redeemedAt);
+        if (updated.changes !== 1) return {kind: "refused", outcome: "used"};
+        this.#insertMember(admission);
+        this.#insertAction(inviteAdmitAction(admission, invite.id));
+        this.#database.prepare(`
+          INSERT INTO external_identities (provider, subject, member_id, email, bound_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          record.binding.provider,
+          record.binding.subject,
+          record.binding.memberId,
+          record.binding.email,
+          record.binding.boundAt,
+        );
+        this.#insertAction(inviteRedeemAction(invite, admission, record.redeemedAt));
+        const member = this.#findMember(admission.installationId, admission.id);
+        if (member === null) throw new Error("The admitted member was not persisted.");
+        return {kind: "admitted", member};
+      });
+    } catch (cause) {
+      if (isSqliteConstraint(cause)) return {kind: "refused", outcome: "account_unavailable"};
+      throw cause;
+    }
   }
 
   #insertAction(insert: ActionInsert): void {
@@ -834,8 +980,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
         updated_at TEXT NOT NULL,
         last_active_at TEXT,
         admitted_by_principal_id TEXT,
-        admission_method TEXT
-          CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner')),
+        admission_method TEXT CHECK (${admissionMethodCheckSql}),
         UNIQUE (installation_id, email)
       );
 
@@ -912,12 +1057,35 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     this.#addLoginAttemptNonceIfMissing();
     this.#addLoginAttemptInviteIfMissing();
     this.#addAdmissionAndActivityColumnsIfMissing();
+    this.#database.exec(sqliteInvitesTableSql);
+    this.#database.exec(sqliteInvitesIndexSql);
+    this.#widenMemberAdmissionIfNeeded();
     this.#database.exec(`PRAGMA user_version = ${requiredSqliteSchemaVersion};`);
   }
 
   #addLoginAttemptNonceIfMissing(): void {
     if (this.#tableColumns("login_attempts").includes("nonce")) return;
     this.#database.exec("ALTER TABLE login_attempts ADD COLUMN nonce TEXT");
+  }
+
+  #widenMemberAdmissionIfNeeded(): void {
+    const tableSql = z.object({sql: z.string()}).parse(this.#database
+      .prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'installation_members'")
+      .get()).sql;
+    if (membersAcceptInviteAdmission(tableSql)) return;
+    this.#database.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      this.#inTransaction(() => {
+        for (const statement of sqliteMemberAdmissionWidenStatements) {
+          this.#database.exec(statement);
+        }
+      });
+    } finally {
+      this.#database.exec("PRAGMA foreign_keys = ON;");
+    }
+    if (this.#database.prepare("PRAGMA foreign_key_check").all().length > 0) {
+      throw new Error("SQLite member admission migration produced invalid foreign keys.");
+    }
   }
 
   #addLoginAttemptInviteIfMissing(): void {

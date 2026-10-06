@@ -95,19 +95,8 @@ export const actionRowChecks = [
 const legacyColumns = `id, project_id, artifact_id, version_id, action, principal_id,
   authorized_by_principal_id, idempotency_key, created_at`;
 
-/**
- * Copy `actions` into the activity-log shape inside the caller's transaction
- * (SQLite) or batch (D1). The copy-check table's CHECK aborts the whole
- * transaction unless both tables hold exactly the same legacy rows.
- */
-export function sqliteActionsRebuildStatements(
-  options: {readonly strict: boolean},
-): readonly string[] {
-  const strict = options.strict ? " STRICT" : "";
-  return [
-    "DROP TABLE IF EXISTS actions_next",
-    "DROP TABLE IF EXISTS actions_copy_check",
-    `CREATE TABLE actions_next (
+function actionsTableSql(name: string, strict: boolean): string {
+  return `CREATE TABLE ${name} (
       id TEXT PRIMARY KEY,
       project_id TEXT REFERENCES projects(id),
       artifact_id TEXT REFERENCES artifacts(id),
@@ -130,7 +119,37 @@ export function sqliteActionsRebuildStatements(
         json_valid(detail_json)
         AND length(CAST(detail_json AS BLOB)) <= ${activityDetailJsonMaxBytes}
       ))
-    )${strict}`,
+    )${strict ? " STRICT" : ""}`;
+}
+
+const actionsIndexStatements = [
+  `CREATE INDEX IF NOT EXISTS actions_artifact_created
+    ON actions (project_id, artifact_id, created_at DESC, id DESC)`,
+  "CREATE INDEX IF NOT EXISTS actions_created ON actions (created_at DESC, id DESC)",
+  `CREATE INDEX IF NOT EXISTS actions_project_created
+    ON actions (project_id, created_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS actions_thread
+    ON actions (thread_id) WHERE thread_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS actions_installation_idempotency
+    ON actions (idempotency_key) WHERE project_id IS NULL`,
+] as const;
+
+const actionsSubjectIndexStatement = `CREATE INDEX IF NOT EXISTS actions_subject
+    ON actions (subject_id, created_at DESC, id DESC)
+    WHERE subject_id IS NOT NULL`;
+
+/**
+ * Copy `actions` into the activity-log shape inside the caller's transaction
+ * (SQLite) or batch (D1). The copy-check table's CHECK aborts the whole
+ * transaction unless both tables hold exactly the same legacy rows.
+ */
+export function sqliteActionsRebuildStatements(
+  options: {readonly strict: boolean},
+): readonly string[] {
+  return [
+    "DROP TABLE IF EXISTS actions_next",
+    "DROP TABLE IF EXISTS actions_copy_check",
+    actionsTableSql("actions_next", options.strict),
     `INSERT INTO actions_next (${legacyColumns})
       SELECT ${legacyColumns} FROM actions`,
     // The migrated column refuses a table a concurrent migrator already rebuilt: copying only the legacy
@@ -156,15 +175,45 @@ export function sqliteActionsRebuildStatements(
     "DROP TABLE actions_copy_check",
     "DROP TABLE actions",
     "ALTER TABLE actions_next RENAME TO actions",
-    `CREATE INDEX IF NOT EXISTS actions_artifact_created
-      ON actions (project_id, artifact_id, created_at DESC, id DESC)`,
-    "CREATE INDEX IF NOT EXISTS actions_created ON actions (created_at DESC, id DESC)",
-    `CREATE INDEX IF NOT EXISTS actions_project_created
-      ON actions (project_id, created_at DESC, id DESC)`,
-    `CREATE INDEX IF NOT EXISTS actions_thread
-      ON actions (thread_id) WHERE thread_id IS NOT NULL`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS actions_installation_idempotency
-      ON actions (idempotency_key) WHERE project_id IS NULL`,
+    ...actionsIndexStatements,
+  ];
+}
+
+const activityColumns = `id, project_id, artifact_id, version_id, action, principal_id,
+  authorized_by_principal_id, idempotency_key, created_at, thread_id, reply_id,
+  subject_id, access_from, access_to, actor_name, actor_kind, detail_json`;
+
+/** Whether the stored actions CREATE statement accepts every current kind. */
+export function sqliteActionsTableAcceptsEveryKind(tableSql: string): boolean {
+  return [...Object.values(artifactActionKinds), ...Object.values(installationActionKinds)]
+    .every((kind) => tableSql.includes(`'${kind}'`));
+}
+
+/**
+ * Rebuild an activity-log-shaped `actions` table so its CHECKs accept every
+ * current kind. Run inside the caller's transaction (SQLite) or batch (D1);
+ * the copy check aborts unless every row arrived.
+ */
+export function sqliteActionsWidenStatements(
+  options: {readonly strict: boolean},
+): readonly string[] {
+  return [
+    "DROP TABLE IF EXISTS actions_next",
+    "DROP TABLE IF EXISTS actions_copy_check",
+    actionsTableSql("actions_next", options.strict),
+    `INSERT INTO actions_next (${activityColumns}) SELECT ${activityColumns} FROM actions`,
+    `CREATE TABLE actions_copy_check (
+      expected INTEGER NOT NULL,
+      copied INTEGER NOT NULL,
+      CHECK (expected = copied)
+    )`,
+    `INSERT INTO actions_copy_check (expected, copied)
+      SELECT (SELECT count(*) FROM actions), (SELECT count(*) FROM actions_next)`,
+    "DROP TABLE actions_copy_check",
+    "DROP TABLE actions",
+    "ALTER TABLE actions_next RENAME TO actions",
+    ...actionsIndexStatements,
+    actionsSubjectIndexStatement,
   ];
 }
 

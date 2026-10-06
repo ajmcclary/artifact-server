@@ -154,6 +154,8 @@ import {
 import {
   artifactHistoryActionKindSql,
   sqliteActionsRebuildStatements,
+  sqliteActionsTableAcceptsEveryKind,
+  sqliteActionsWidenStatements,
   sqliteActivityRecoveryStatements,
 } from "./activity-log-schema.js";
 import {
@@ -5845,6 +5847,7 @@ export class SqliteArtifactRepository implements
         ON projects (archived_at, created_at, id);
     `);
     this.#addInstallationActivityLogIfMissing();
+    this.#widenActionKindsIfNeeded();
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS actions_subject
         ON actions (subject_id, created_at DESC, id DESC)
@@ -6507,6 +6510,29 @@ export class SqliteArtifactRepository implements
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause);
       throw new Error(`SQLite migration installation_activity_log failed: ${detail}`, {cause});
+    }
+  }
+
+  /** Rebuild `actions` when a newer build added action kinds its CHECK refuses. */
+  #widenActionKindsIfNeeded(): void {
+    const tableSql = (): string => z.object({sql: z.string()}).parse(this.#database
+      .prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'actions'")
+      .get()).sql;
+    if (sqliteActionsTableAcceptsEveryKind(tableSql())) return;
+    try {
+      this.#transaction(() => {
+        // Another process on this file may have widened between the check above and this lock.
+        if (sqliteActionsTableAcceptsEveryKind(tableSql())) return;
+        for (const statement of [
+          ...sqliteActionsWidenStatements({strict: true}),
+          ...sqliteActionTriggerStatements,
+        ]) {
+          this.#database.exec(statement);
+        }
+      });
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`SQLite migration widen_action_kinds failed: ${detail}`, {cause});
     }
   }
 
