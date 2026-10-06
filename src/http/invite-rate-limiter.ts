@@ -1,4 +1,4 @@
-/** Failed invite lookups allowed per window before every invite request waits. */
+/** Failed invite lookups allowed per window before further invalid lookups are refused. */
 export interface InviteRateLimitPolicy {
   readonly limit: number;
   readonly windowMilliseconds: number;

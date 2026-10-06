@@ -2366,9 +2366,15 @@ requirements:
       behavior: {id: AUTH-030-B, description: "Redeem a one-person invite and a link invite through external login; each admits with the invite's role, admission method invite, the inviter as admitter, member_admit and invite_redeem activity, and returns to the invite's destination."}
       failure: {id: AUTH-030-F, description: "Refuse a wrong email, an unverified or unasserted email, an expired, revoked or used-up invite, a deactivated member's identity and a tampered token without admitting or consuming; admit exactly one of two concurrent redemptions of a last use; an active member consumes nothing; preview never consumes."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-030-B/F prove invite redemption, refusals and the contended last use through the loopback identity provider on a local SQLite private-team installation, with repository cases on SQLite, Postgres and D1. Live WorkOS AuthKit sign-up, its maxAge=0 account switch and hosted team deployments are not exercised."
     depends_on: [AUTH-019, AUTH-025, AUTH-029, ACT-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-030-B, AUTH-030-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-06T21:13:33.038Z"
 
   - id: AUTH-031
     kind: security
@@ -2379,9 +2385,15 @@ requirements:
       behavior: {id: AUTH-031-B, description: "As a human administrator create a one-person and a link invite, receive each token once, list them with status and creator, and revoke one."}
       failure: {id: AUTH-031-F, description: "Refuse members, API keys and service principals; a link invite for an administrator; out-of-range uses or lifetime; an email that already belongs to any member; local-owner mode; and reject rule-breaking rows written directly to the database."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-031-B/F prove issuance, listing, revocation, digest-only storage and every refusal on a local SQLite private-team installation and local-owner mode. The Postgres external-storage runtime, Cloudflare D1 HTTP path and hosted deployments are exercised only through their repository cases."
     depends_on: [AUTH-030, AUTH-009]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-031-B, AUTH-031-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-06T21:13:33.038Z"
 
   - id: AUTH-032
     kind: security
@@ -2392,9 +2404,15 @@ requirements:
       behavior: {id: AUTH-032-B, description: "Preview an active invite and start its sign-in from the application origin; the join link carries the token only in its fragment."}
       failure: {id: AUTH-032-F, description: "Refuse a cross-origin request and a malformed or oversized body, and answer 429 with Retry-After after repeated invalid tokens."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-032-B/F prove the public preview and start endpoints, the fragment-only link, origin and size refusals and the invalid-lookup rate limit in one local process. The limiter is per process, so a multi-replica deployment answers 429 per replica rather than globally; hosted deployments are not exercised."
     depends_on: [AUTH-030]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-032-B, AUTH-032-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-06T21:13:33.038Z"
 
   - id: SEC-001
     kind: security
@@ -3625,9 +3643,15 @@ requirements:
       behavior: {id: ADM-009-B, description: "Create a link invite from Share and a one-person invite from the Invites area, copy each once, revoke one, and as the invitee open the link, sign in and reach the welcome screen and the artifact."}
       failure: {id: ADM-009-F, description: "A member sees no invite controls, and wrong-account, expired and invalid invites each render their join page rather than JSON."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "ADM-009-B/F prove the Share invite, the Invites area, copy-once, revocation, the invitee join walk and readable refusal pages in Chromium against a local installation with the loopback identity provider. Live WorkOS AuthKit screens and hosted deployments are not exercised."
     depends_on: [AUTH-030, AUTH-031, AUTH-032, ADM-008]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [ADM-009-B, ADM-009-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-10-06T21:46:26.289Z"
   - id: ACT-007
     kind: behavior
     behavior: Administrators see when each member was last active and when each API key was last used, advanced at most once per principal every five minutes, without failing or holding the request that used the credential.
