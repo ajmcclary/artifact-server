@@ -1,5 +1,5 @@
 import {spawn, type ChildProcessWithoutNullStreams} from "node:child_process";
-import {createHash} from "node:crypto";
+import {createHash, randomBytes} from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -21,12 +21,27 @@ import {tmpdir} from "node:os";
 import path from "node:path";
 
 import {afterEach, describe, expect, test} from "vitest";
-import {Effect} from "effect";
+import {Effect, Redacted} from "effect";
 import {z} from "zod";
 
+import type {BearerCredentialVerifier} from
+  "../../src/application/authentication.js";
 import {revokeCliOAuthCredential} from "../../src/cli/cli-oauth-client.js";
 import {oauthCredential} from "../../src/cli/cli-profile-credential.js";
+import {AuthenticationRequired} from "../../src/core/errors.js";
+import {
+  membershipRoles,
+  principalCapabilities,
+  principalKinds,
+  type Principal,
+} from "../../src/core/identity.js";
 import {fetchLoopbackContent} from "../support/fetch-loopback-content.js";
+import {
+  createTestInstallation,
+  removeTestInstallation,
+  reserveLoopbackPort,
+  startTestServer,
+} from "../support/runtime-harness.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const cliExecutable = path.join(repositoryRoot, "node_modules/.bin/tsx");
@@ -555,6 +570,539 @@ describe("authenticated CLI profiles and remote publication", () => {
       await Promise.all([issuer.stop(), alternate.stop()]);
     }
   });
+
+  test("CLI-001-B: keeps exact-origin account profiles through browser login, renewal, switching, and logout, and authenticates local and CI use without a profile", async () => {
+    const temporaryDirectory = await mkdtemp(
+      path.join(tmpdir(), "artifact-server-cli-001-behavior-"),
+    );
+    const profileData = path.join(temporaryDirectory, "profiles");
+    const helperState = path.join(temporaryDirectory, "credential-helper.json");
+    const helper = path.join(temporaryDirectory, "credential-helper.mjs");
+    const browser = path.join(temporaryDirectory, "browser.mjs");
+    const project = path.join(temporaryDirectory, "project");
+    const fixture = path.join(project, "report.txt");
+    const labData = path.join(temporaryDirectory, "lab-server");
+    const localData = path.join(temporaryDirectory, "local-data");
+    const installation = await createTestInstallation();
+    const environment = await credentialHelperEnvironment(helper, helperState);
+    await writeBrowserHelper(browser);
+    environment["ARTIFACT_SERVER_BROWSER_COMMAND"] = browser;
+    await mkdir(project);
+    await writeFile(fixture, "exact-origin profile publication\n");
+    // A remembered source stays bound to the principal that first published
+    // it, so each account and origin publishes its own source file.
+    const bobFixture = path.join(project, "bob.txt");
+    const labFixture = path.join(project, "lab.txt");
+    await writeFile(bobFixture, "second account publication\n");
+    await writeFile(labFixture, "second origin publication\n");
+    const authorization = await startArtifactServerAuthorization([
+      {displayName: "Alice Example", id: "usr_cli001_alice"},
+      {displayName: "Bob Example", id: "usr_cli001_bob"},
+    ]);
+    const teamPort = await reserveLoopbackPort();
+    const teamOrigin = `http://127.0.0.1:${teamPort}`;
+    const team = await startTestServer(installation, {
+      apiOAuthResource: {
+        authorizationServers: [authorization.origin],
+        resource: `${teamOrigin}/api`,
+      },
+      externalApiBearerVerifier: authorization.verifier,
+      port: teamPort,
+    });
+    const labPort = await availablePort();
+    const labOrigin = `http://127.0.0.1:${labPort}`;
+    const lab = startServer(labData, labPort);
+    let managedServicePid: number | undefined;
+    try {
+      await waitForReady(lab, labPort);
+      const labKey = (await readFile(path.join(labData, "local-api-token"), "utf8"))
+        .trim();
+
+      authorization.signInAs("usr_cli001_alice");
+      const aliceLogin = await runCli([
+        "auth", "login", teamOrigin, "--name", "alice-team",
+        "--profile-data", profileData,
+      ], environment);
+      expect({exitCode: aliceLogin.exitCode, stderr: aliceLogin.stderr})
+        .toEqual({exitCode: 0, stderr: ""});
+      expect(profileOutputSchema.parse(JSON.parse(aliceLogin.stdout))).toEqual({
+        accountId: "usr_cli001_alice",
+        authentication: "oauth",
+        installationId: "local",
+        name: "alice-team",
+        origin: teamOrigin,
+        status: "authenticated",
+      });
+      expect(authorization.observations.authorizationCount).toBe(1);
+      expect(authorization.observations.pkceResults).toEqual([true]);
+      expect(authorization.observations.acceptedAccounts.at(-1))
+        .toBe("usr_cli001_alice");
+
+      authorization.signInAs("usr_cli001_bob");
+      const bobLogin = await runCli([
+        "auth", "login", teamOrigin, "--name", "bob-team",
+        "--profile-data", profileData,
+      ], environment);
+      expect(bobLogin.exitCode).toBe(0);
+      expect(profileOutputSchema.parse(JSON.parse(bobLogin.stdout))).toMatchObject({
+        accountId: "usr_cli001_bob",
+        authentication: "oauth",
+        origin: teamOrigin,
+      });
+
+      const labLogin = await runCli([
+        "auth", "login", labOrigin, "--api-key-stdin", "--name", "lab",
+        "--profile-data", profileData,
+      ], environment, `${labKey}\n`);
+      expect(labLogin.exitCode).toBe(0);
+      expect(profileOutputSchema.parse(JSON.parse(labLogin.stdout))).toMatchObject({
+        authentication: "api_key",
+        origin: labOrigin,
+      });
+
+      const everyProfile = await runCli(
+        ["auth", "status", "--profile-data", profileData],
+        environment,
+      );
+      expect(everyProfile.exitCode).toBe(0);
+      expect(z.object({profiles: z.array(profileOutputSchema)})
+        .parse(JSON.parse(everyProfile.stdout)).profiles
+        .map(({name, origin, status}) => ({name, origin, status})))
+        .toEqual([
+          {name: "alice-team", origin: teamOrigin, status: "authenticated"},
+          {name: "bob-team", origin: teamOrigin, status: "authenticated"},
+          {name: "lab", origin: labOrigin, status: "authenticated"},
+        ]);
+
+      // One origin with two accounts never guesses which account to use.
+      const ambiguousOrigin = await runCli(
+        ["auth", "status", "--server", teamOrigin, "--profile-data", profileData],
+        environment,
+      );
+      expect(ambiguousOrigin.exitCode).not.toBe(0);
+      expect(ambiguousOrigin.stderr).toContain("More than one account is saved");
+      const labByOrigin = await runCli(
+        ["auth", "status", "--server", labOrigin, "--profile-data", profileData],
+        environment,
+      );
+      expect(labByOrigin.exitCode).toBe(0);
+      expect(JSON.parse(labByOrigin.stdout)).toMatchObject({
+        profiles: [{name: "lab", origin: labOrigin, status: "authenticated"}],
+      });
+
+      // The real server stops accepting the access token; status renews the
+      // grant without a browser and the server accepts the renewed token.
+      const aliceRefreshBefore = authorization.currentRefreshToken("usr_cli001_alice");
+      authorization.expireAccessTokens();
+      const authorizationsBeforeRenewal = authorization.observations.authorizationCount;
+      const renewed = await runCli(
+        ["auth", "status", "alice-team", "--profile-data", profileData],
+        environment,
+      );
+      expect(renewed.exitCode).toBe(0);
+      expect(authorization.observations.refreshCount).toBe(1);
+      expect(authorization.observations.authorizationCount)
+        .toBe(authorizationsBeforeRenewal);
+      expect(authorization.observations.acceptedAccounts.at(-1))
+        .toBe("usr_cli001_alice");
+      const aliceRefreshAfter = authorization.currentRefreshToken("usr_cli001_alice");
+      expect(aliceRefreshAfter).not.toBe(aliceRefreshBefore);
+      const helperAfterRenewal = await readFile(helperState, "utf8");
+      expect(helperAfterRenewal).toContain(aliceRefreshAfter);
+      expect(helperAfterRenewal).not.toContain(aliceRefreshBefore);
+
+      // Switch accounts and origins by profile name and by exact origin.
+      const asAlice = await runCli([
+        "publish", fixture, "--profile", "alice-team", "--profile-data", profileData,
+      ], environment, "", project);
+      expect({exitCode: asAlice.exitCode, stderr: asAlice.stderr})
+        .toEqual({exitCode: 0, stderr: ""});
+      expect(authorization.observations.acceptedAccounts.at(-1))
+        .toBe("usr_cli001_alice");
+      const aliceArtifact = publicationSchema.parse(JSON.parse(asAlice.stdout));
+      expect(new URL(aliceArtifact.links.version).port).toBe(String(teamPort));
+
+      const asBob = await runCli([
+        "publish", bobFixture, "--profile", "bob-team", "--profile-data", profileData,
+      ], environment, "", project);
+      expect({exitCode: asBob.exitCode, stderr: asBob.stderr}).toEqual({exitCode: 0, stderr: ""});
+      expect(authorization.observations.acceptedAccounts.at(-1))
+        .toBe("usr_cli001_bob");
+      expect(publicationSchema.parse(JSON.parse(asBob.stdout)).artifact.id)
+        .not.toBe(aliceArtifact.artifact.id);
+
+      const toLab = await runCli([
+        "publish", labFixture, "--server", labOrigin, "--profile-data", profileData,
+      ], environment, "", project);
+      expect(toLab.exitCode).toBe(0);
+      expect(new URL(publicationSchema.parse(JSON.parse(toLab.stdout)).links.version).port)
+        .toBe(String(labPort));
+      expect(await artifactCount(labOrigin, labKey)).toBe(1);
+      expect(await artifactCount(teamOrigin, installation.apiToken)).toBe(2);
+
+      const aliceLogout = await runCli(
+        ["auth", "logout", "alice-team", "--profile-data", profileData],
+        environment,
+      );
+      expect(aliceLogout.exitCode).toBe(0);
+      expect(JSON.parse(aliceLogout.stdout)).toMatchObject({
+        accountId: "usr_cli001_alice",
+        remoteRevocation: "confirmed",
+        status: "logged_out",
+      });
+      expect(authorization.observations.revokedTokens).toEqual([aliceRefreshAfter]);
+      expect(await readFile(helperState, "utf8")).not.toContain(aliceRefreshAfter);
+      const afterLogout = await runCli(
+        ["auth", "status", "--profile-data", profileData],
+        environment,
+      );
+      expect(afterLogout.exitCode).toBe(0);
+      expect(z.object({profiles: z.array(profileOutputSchema)})
+        .parse(JSON.parse(afterLogout.stdout)).profiles.map(({name}) => name))
+        .toEqual(["bob-team", "lab"]);
+      const teamByOrigin = await runCli(
+        ["auth", "status", "--server", teamOrigin, "--profile-data", profileData],
+        environment,
+      );
+      expect(teamByOrigin.exitCode).toBe(0);
+      expect(JSON.parse(teamByOrigin.stdout)).toMatchObject({
+        profiles: [{accountId: "usr_cli001_bob", name: "bob-team"}],
+      });
+
+      // CI: a scoped service credential from the secret manager, by
+      // environment or by file, publishes without creating any profile.
+      const ciProfileData = path.join(temporaryDirectory, "ci-profiles");
+      const ciEnvironment = await credentialHelperEnvironment(
+        helper,
+        path.join(temporaryDirectory, "ci-helper.json"),
+      );
+      const ciByEnvironment = await runCli([
+        "publish", fixture, "--name", "CI environment", "--profile-data", ciProfileData,
+      ], {
+        ...ciEnvironment,
+        ARTIFACT_SERVER_API_TOKEN: labKey,
+        ARTIFACT_SERVER_URL: labOrigin,
+      }, "", project);
+      expect(ciByEnvironment.exitCode).toBe(0);
+      const secretDirectory = path.join(temporaryDirectory, "secret-manager");
+      await mkdir(secretDirectory, {mode: 0o700});
+      const tokenFile = path.join(secretDirectory, "artifact-server-token");
+      await writeFile(tokenFile, `${labKey}\n`, {mode: 0o600});
+      const ciByFile = await runCli([
+        "publish", fixture, "--name", "CI file", "--new-artifact",
+        "--server", labOrigin, "--token-file", tokenFile,
+        "--profile-data", ciProfileData,
+      ], ciEnvironment, "", project);
+      expect(ciByFile.exitCode).toBe(0);
+      expect(await artifactCount(labOrigin, labKey)).toBe(3);
+      await expect(readFile(path.join(ciProfileData, "cli-profiles.json"), "utf8"))
+        .rejects.toMatchObject({code: "ENOENT"});
+      await expect(readFile(path.join(temporaryDirectory, "ci-helper.json"), "utf8"))
+        .rejects.toMatchObject({code: "ENOENT"});
+
+      // Local: the managed service authenticates automatically from private
+      // user-only state; no login, profile, browser grant, or visible secret.
+      const capturedUrl = path.join(temporaryDirectory, "opened-url");
+      const capture = path.join(temporaryDirectory, "capture-browser");
+      await writeFile(capture, '#!/bin/sh\nprintf "%s" "$1" > "$CLI001_OPENED_URL"\n', {
+        mode: 0o700,
+      });
+      const localProfileData = path.join(temporaryDirectory, "local-profiles");
+      const localEnvironment = {
+        ...ciEnvironment,
+        ARTIFACT_SERVER_BROWSER_COMMAND: capture,
+        CLI001_OPENED_URL: capturedUrl,
+      };
+      const opened = await runCli(
+        ["open", "--data", localData],
+        localEnvironment,
+        "",
+        project,
+      );
+      expect(opened.exitCode).toBe(0);
+      const serviceRecord = z.object({origin: z.url(), pid: z.number().int().positive()})
+        .parse(JSON.parse(await readFile(path.join(localData, "local-service.json"), "utf8")));
+      managedServicePid = serviceRecord.pid;
+      const localToken = (await readFile(path.join(localData, "local-api-token"), "utf8"))
+        .trim();
+      expect((await stat(localData)).mode & 0o777).toBe(0o700);
+      expect((await stat(path.join(localData, "local-api-token"))).mode & 0o777)
+        .toBe(0o600);
+      const localPublication = await runCli([
+        "publish", fixture, "--data", localData, "--profile-data", localProfileData,
+      ], localEnvironment, "", project);
+      expect({exitCode: localPublication.exitCode, stderr: localPublication.stderr})
+        .toEqual({exitCode: 0, stderr: ""});
+      expect(new URL(publicationSchema.parse(JSON.parse(localPublication.stdout)).links.version).port)
+        .toBe(new URL(serviceRecord.origin).port);
+      expect(`${opened.stdout}${opened.stderr}${localPublication.stdout}`)
+        .not.toContain(localToken);
+      expect(new URL(await readFile(capturedUrl, "utf8")).search).toBe("");
+      await expect(readFile(path.join(localProfileData, "cli-profiles.json"), "utf8"))
+        .rejects.toMatchObject({code: "ENOENT"});
+      expect((await readdir(project)).toSorted()).toEqual(["bob.txt", "lab.txt", "report.txt"]);
+    } finally {
+      if (managedServicePid !== undefined) {
+        try {
+          process.kill(managedServicePid, "SIGTERM");
+        } catch {
+          // The managed local service already stopped.
+        }
+      }
+      await stopProcess(lab);
+      await team.stop();
+      await authorization.stop();
+      await removeTestInstallation(installation);
+      await rm(temporaryDirectory, {force: true, recursive: true});
+    }
+  }, 180_000);
+
+  test("CLI-001-F: credentials stay out of output, arguments, project files, profiles, and server logs, never reach another origin, and fail closed when revoked or mismatched", async () => {
+    const temporaryDirectory = await mkdtemp(
+      path.join(tmpdir(), "artifact-server-cli-001-failure-"),
+    );
+    const profileData = path.join(temporaryDirectory, "profiles");
+    const ciProfileData = path.join(temporaryDirectory, "ci-profiles");
+    const helperState = path.join(temporaryDirectory, "credential-helper.json");
+    const helper = path.join(temporaryDirectory, "credential-helper.mjs");
+    const browser = path.join(temporaryDirectory, "browser.mjs");
+    const argvLog = path.join(temporaryDirectory, "child-arguments.log");
+    const project = path.join(temporaryDirectory, "project");
+    const fixture = path.join(project, "report.txt");
+    const labData = path.join(temporaryDirectory, "lab-server");
+    const installation = await createTestInstallation();
+    const environment = await credentialHelperEnvironment(helper, helperState);
+    await writeBrowserHelper(browser);
+    environment["ARTIFACT_SERVER_BROWSER_COMMAND"] = browser;
+    environment["ARTIFACT_SERVER_TEST_ARGV_LOG"] = argvLog;
+    await mkdir(project);
+    await writeFile(fixture, "credential boundary publication\n");
+    const authorization = await startArtifactServerAuthorization([
+      {displayName: "Alice Example", id: "usr_cli001_alice"},
+      {displayName: "Bob Example", id: "usr_cli001_bob"},
+    ]);
+    const teamPort = await reserveLoopbackPort();
+    const teamOrigin = `http://127.0.0.1:${teamPort}`;
+    const team = await startTestServer(installation, {
+      apiOAuthResource: {
+        authorizationServers: [authorization.origin],
+        resource: `${teamOrigin}/api`,
+      },
+      externalApiBearerVerifier: authorization.verifier,
+      port: teamPort,
+    });
+    const trap = await startRequestTrap();
+    const labPort = await availablePort();
+    const labOrigin = `http://127.0.0.1:${labPort}`;
+    const lab = startServer(labData, labPort);
+    const labOutput: string[] = [];
+    lab.stdout.on("data", (chunk: Buffer) => labOutput.push(chunk.toString("utf8")));
+    lab.stderr.on("data", (chunk: Buffer) => labOutput.push(chunk.toString("utf8")));
+    const cliTranscript: string[] = [];
+    const cli = async (
+      argumentsToPass: readonly string[],
+      processEnvironment: NodeJS.ProcessEnv = environment,
+      standardInput = "",
+    ): Promise<ProcessResult> => {
+      const result = await runCli(argumentsToPass, processEnvironment, standardInput, project);
+      cliTranscript.push(JSON.stringify(argumentsToPass), result.stdout, result.stderr);
+      return result;
+    };
+    try {
+      await waitForReady(lab, labPort);
+      const labLocalToken = (await readFile(path.join(labData, "local-api-token"), "utf8"))
+        .trim();
+      const labAdministration = await administerLocalServer(
+        `http://localhost:${labPort}`,
+        labData,
+      );
+      const issuedKey = await labAdministration.issueKey("CLI-001 laptop key");
+
+      authorization.signInAs("usr_cli001_alice");
+      expect((await cli([
+        "auth", "login", teamOrigin, "--name", "alpha", "--profile-data", profileData,
+      ])).exitCode).toBe(0);
+      authorization.signInAs("usr_cli001_bob");
+      expect((await cli([
+        "auth", "login", teamOrigin, "--name", "bravo", "--profile-data", profileData,
+      ])).exitCode).toBe(0);
+      expect((await cli([
+        "auth", "login", labOrigin, "--api-key-stdin", "--name", "lab",
+        "--profile-data", profileData,
+      ], environment, `${issuedKey.token}\n`)).exitCode).toBe(0);
+      authorization.expireAccessTokens();
+      expect((await cli(["auth", "status", "--profile-data", profileData])).exitCode)
+        .toBe(0);
+      expect((await cli([
+        "publish", fixture, "--profile", "alpha", "--profile-data", profileData,
+      ])).exitCode).toBe(0);
+      expect((await cli([
+        "publish", fixture, "--profile", "lab", "--profile-data", profileData,
+      ])).exitCode).toBe(0);
+      expect((await cli([
+        "publish", fixture, "--name", "CI", "--profile-data", ciProfileData,
+      ], {
+        ...environment,
+        ARTIFACT_SERVER_API_TOKEN: labLocalToken,
+        ARTIFACT_SERVER_URL: labOrigin,
+      })).exitCode).toBe(0);
+
+      // A saved profile is never sent to a different origin, whether named
+      // explicitly or selected by origin, and the default is not substituted.
+      const trapAttempts = [
+        await cli([
+          "auth", "status", "alpha", "--server", trap.origin,
+          "--profile-data", profileData,
+        ]),
+        await cli([
+          "publish", fixture, "--profile", "lab", "--server", trap.origin,
+          "--profile-data", profileData,
+        ]),
+        await cli([
+          "publish", fixture, "--server", trap.origin, "--profile-data", profileData,
+        ]),
+        await cli(["auth", "logout", "--server", trap.origin, "--profile-data", profileData]),
+      ];
+      for (const attempt of trapAttempts) {
+        expect(attempt.exitCode).not.toBe(0);
+        expect(attempt.stderr).toContain("CliProfileError");
+      }
+      expect(trap.requests).toEqual([]);
+
+      // A credential that verifies as another account fails closed for the
+      // profile that claims it.
+      const profileIndex = z.object({
+        profiles: z.array(z.object({credentialId: z.string(), name: z.string()}).loose()),
+      }).loose().parse(JSON.parse(await readFile(path.join(profileData, "cli-profiles.json"), "utf8")));
+      const credentialFor = (name: string): string => {
+        const match = profileIndex.profiles.find((profile) => profile.name === name);
+        if (match === undefined) throw new Error(`Missing profile ${name}.`);
+        return match.credentialId;
+      };
+      const storedSecrets = z.record(z.string(), z.string())
+        .parse(JSON.parse(await readFile(helperState, "utf8")));
+      const alphaSecret = storedSecrets[credentialFor("alpha")];
+      const bravoSecret = storedSecrets[credentialFor("bravo")];
+      if (alphaSecret === undefined || bravoSecret === undefined) {
+        throw new Error("The credential helper did not hold both browser grants.");
+      }
+      await writeFile(helperState, JSON.stringify({
+        ...storedSecrets,
+        [credentialFor("alpha")]: bravoSecret,
+      }));
+      const teamArtifactsBefore = await artifactCount(teamOrigin, installation.apiToken);
+      const mismatchedStatus = await cli([
+        "auth", "status", "alpha", "--profile-data", profileData,
+      ]);
+      expect(mismatchedStatus.exitCode).toBe(2);
+      expect(JSON.parse(mismatchedStatus.stdout)).toMatchObject({
+        profiles: [{name: "alpha", status: "invalid"}],
+      });
+      const mismatchedPublish = await cli([
+        "publish", fixture, "--name", "Mismatched", "--new-artifact",
+        "--profile", "alpha", "--profile-data", profileData,
+      ]);
+      expect(mismatchedPublish.exitCode).not.toBe(0);
+      expect(mismatchedPublish.stderr)
+        .toContain("belongs to a different Artifact Server account");
+      expect(await artifactCount(teamOrigin, installation.apiToken))
+        .toBe(teamArtifactsBefore);
+      await writeFile(helperState, JSON.stringify({
+        ...storedSecrets,
+        [credentialFor("alpha")]: alphaSecret,
+      }));
+
+      // A grant revoked at the identity provider and a key revoked on the
+      // server both fail closed instead of falling back to another credential.
+      authorization.revokeAccount("usr_cli001_alice");
+      const revokedGrant = await cli(["auth", "status", "alpha", "--profile-data", profileData]);
+      expect(revokedGrant.exitCode).toBe(2);
+      expect(JSON.parse(revokedGrant.stdout)).toMatchObject({
+        profiles: [{name: "alpha", status: "invalid"}],
+      });
+      const revokedGrantPublish = await cli([
+        "publish", fixture, "--name", "Revoked grant", "--new-artifact",
+        "--profile", "alpha", "--profile-data", profileData,
+      ]);
+      expect(revokedGrantPublish.exitCode).not.toBe(0);
+      expect(await artifactCount(teamOrigin, installation.apiToken))
+        .toBe(teamArtifactsBefore);
+
+      const labArtifactsBefore = await artifactCount(labOrigin, labLocalToken);
+      await labAdministration.revokeKey(issuedKey.id);
+      const revokedKey = await cli(["auth", "status", "lab", "--profile-data", profileData]);
+      expect(revokedKey.exitCode).toBe(2);
+      expect(JSON.parse(revokedKey.stdout)).toMatchObject({
+        profiles: [{name: "lab", status: "invalid"}],
+      });
+      const revokedKeyPublish = await cli([
+        "publish", fixture, "--name", "Revoked key", "--new-artifact",
+        "--profile", "lab", "--profile-data", profileData,
+      ]);
+      expect(revokedKeyPublish.exitCode).not.toBe(0);
+      const revokedCiPublish = await cli([
+        "publish", fixture, "--name", "Revoked CI", "--new-artifact",
+        "--profile-data", ciProfileData,
+      ], {
+        ...environment,
+        ARTIFACT_SERVER_API_TOKEN: issuedKey.token,
+        ARTIFACT_SERVER_URL: labOrigin,
+      });
+      expect(revokedCiPublish.exitCode).not.toBe(0);
+      const malformedCiToken = "not a credential; contains spaces and is too short";
+      const malformedCi = await cli([
+        "publish", fixture, "--profile-data", ciProfileData,
+      ], {
+        ...environment,
+        ARTIFACT_SERVER_API_TOKEN: malformedCiToken,
+        ARTIFACT_SERVER_URL: labOrigin,
+      });
+      expect(malformedCi.exitCode).not.toBe(0);
+      expect(malformedCi.stderr).toContain("ARTIFACT_SERVER_API_TOKEN is invalid.");
+      expect(malformedCi.stderr).not.toContain(malformedCiToken);
+      expect(await artifactCount(labOrigin, labLocalToken)).toBe(labArtifactsBefore);
+
+      expect((await cli(["auth", "logout", "bravo", "--profile-data", profileData])).exitCode)
+        .toBe(0);
+
+      const secrets = [
+        labLocalToken,
+        issuedKey.token,
+        installation.apiToken,
+        ...authorization.issuedSecrets(),
+      ];
+      expect(authorization.issuedSecrets().length).toBeGreaterThanOrEqual(6);
+      // The credential store and browser really ran; secrets reached them
+      // only on standard input or through the authorization redirect.
+      const childArguments = await readFile(argvLog, "utf8");
+      expect(childArguments).toContain('["write"]');
+      expect(childArguments).toContain(`${authorization.origin}/authorize?`);
+      expect(labOutput.join("")).toContain("Artifact Server:");
+      const surfaces: ReadonlyArray<readonly [string, string]> = [
+        ["CLI arguments and output", cliTranscript.join("\n")],
+        ["credential-helper and browser arguments", childArguments],
+        ["Artifact Server process log", labOutput.join("")],
+        ...await readTextTree(profileData),
+        ...await readTextTree(ciProfileData),
+        ...await readTextTree(project),
+      ];
+      expect(surfaces.length).toBeGreaterThan(5);
+      for (const [surface, text] of surfaces) {
+        for (const secret of secrets) {
+          expect({surface, leaked: text.includes(secret)})
+            .toEqual({surface, leaked: false});
+        }
+      }
+      expect(await readdir(project)).toEqual(["report.txt"]);
+    } finally {
+      await stopProcess(lab);
+      await trap.stop();
+      await team.stop();
+      await authorization.stop();
+      await removeTestInstallation(installation);
+      await rm(temporaryDirectory, {force: true, recursive: true});
+    }
+  }, 180_000);
 });
 
 interface ProcessResult {
@@ -656,10 +1204,11 @@ function runCli(
   argumentsToPass: readonly string[],
   environment: NodeJS.ProcessEnv,
   standardInput = "",
+  workingDirectory = repositoryRoot,
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(cliExecutable, [cliEntrypoint, ...argumentsToPass], {
-      cwd: repositoryRoot,
+      cwd: workingDirectory,
       env: environment,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -741,7 +1290,9 @@ async function credentialHelperEnvironment(
   statePath: string,
 ): Promise<NodeJS.ProcessEnv> {
   await writeFile(helper, `#!/usr/bin/env node
-import {existsSync, readFileSync, writeFileSync} from "node:fs";
+import {appendFileSync, existsSync, readFileSync, writeFileSync} from "node:fs";
+const argvLog = process.env.ARTIFACT_SERVER_TEST_ARGV_LOG;
+if (argvLog !== undefined) appendFileSync(argvLog, JSON.stringify(process.argv.slice(2)) + "\\n");
 const input = JSON.parse(readFileSync(0, "utf8"));
 const statePath = process.env.CREDENTIAL_HELPER_STATE;
 if (statePath === undefined) process.exit(3);
@@ -776,6 +1327,9 @@ if (operation === "read") {
 
 async function writeBrowserHelper(target: string): Promise<void> {
   await writeFile(target, `#!/usr/bin/env node
+import {appendFileSync} from "node:fs";
+const argvLog = process.env.ARTIFACT_SERVER_TEST_ARGV_LOG;
+if (argvLog !== undefined) appendFileSync(argvLog, JSON.stringify(process.argv.slice(2)) + "\\n");
 const target = process.argv[2];
 if (target === undefined) process.exit(2);
 const response = await fetch(target, {redirect: "follow"});
@@ -1046,4 +1600,361 @@ function availablePort(): Promise<number> {
       });
     });
   });
+}
+
+interface AuthorizationAccount {
+  readonly displayName: string;
+  readonly id: string;
+}
+
+interface AuthorizationGrant {
+  readonly accessToken: string;
+  accessValid: boolean;
+  readonly accountId: string;
+  readonly refreshToken: string;
+  refreshValid: boolean;
+}
+
+interface ArtifactServerAuthorizationObservations {
+  readonly acceptedAccounts: string[];
+  authorizationCount: number;
+  readonly pkceResults: boolean[];
+  refreshCount: number;
+  readonly revokedTokens: string[];
+}
+
+interface ArtifactServerAuthorization {
+  readonly observations: ArtifactServerAuthorizationObservations;
+  readonly origin: string;
+  /** The real Artifact Server's external API bearer port, backed by this issuer. */
+  readonly verifier: BearerCredentialVerifier;
+  currentRefreshToken(accountId: string): string;
+  expireAccessTokens(): void;
+  issuedSecrets(): readonly string[];
+  revokeAccount(accountId: string): void;
+  signInAs(accountId: string): void;
+  stop(): Promise<void>;
+}
+
+/**
+ * Stand-in for the deployment's identity provider: dynamic client
+ * registration, S256 PKCE authorization, rotating refresh, and revocation.
+ * Artifact Server itself is real and verifies the issued access tokens
+ * through its external API bearer port.
+ */
+async function startArtifactServerAuthorization(
+  accounts: readonly AuthorizationAccount[],
+): Promise<ArtifactServerAuthorization> {
+  const observations: ArtifactServerAuthorizationObservations = {
+    acceptedAccounts: [],
+    authorizationCount: 0,
+    pkceResults: [],
+    refreshCount: 0,
+    revokedTokens: [],
+  };
+  const grants: AuthorizationGrant[] = [];
+  const codes = new Map<string, {
+    readonly accountId: string;
+    readonly challenge: string;
+    readonly redirectUri: string;
+  }>();
+  let signedInAccount: string | null = null;
+  let origin = "";
+  const issueGrant = (accountId: string): AuthorizationGrant => {
+    const grant: AuthorizationGrant = {
+      accessToken: randomBytes(32).toString("base64url"),
+      accessValid: true,
+      accountId,
+      refreshToken: randomBytes(32).toString("base64url"),
+      refreshValid: true,
+    };
+    grants.push(grant);
+    return grant;
+  };
+  const server = createHttpServer(async (request, response) => {
+    const target = new URL(request.url ?? "/", origin);
+    if (
+      target.pathname === "/.well-known/oauth-authorization-server"
+      || target.pathname === "/.well-known/openid-configuration"
+    ) {
+      sendJson(response, 200, {
+        authorization_endpoint: `${origin}/authorize`,
+        code_challenge_methods_supported: ["S256"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        issuer: origin,
+        jwks_uri: `${origin}/jwks`,
+        registration_endpoint: `${origin}/register`,
+        response_types_supported: ["code"],
+        revocation_endpoint: `${origin}/revoke`,
+        token_endpoint: `${origin}/token`,
+        token_endpoint_auth_methods_supported: ["none"],
+      });
+      return;
+    }
+    if (target.pathname === "/register" && request.method === "POST") {
+      const registration = z.object({redirect_uris: z.array(z.url()).min(1)})
+        .loose().parse(JSON.parse(await readTextBody(request)));
+      sendJson(response, 201, {
+        client_id: `client-${randomBytes(8).toString("hex")}`,
+        redirect_uris: registration.redirect_uris,
+        token_endpoint_auth_method: "none",
+      });
+      return;
+    }
+    if (target.pathname === "/authorize" && request.method === "GET") {
+      observations.authorizationCount += 1;
+      const challenge = target.searchParams.get("code_challenge");
+      const redirectUri = target.searchParams.get("redirect_uri");
+      const state = target.searchParams.get("state");
+      if (
+        signedInAccount === null
+        || challenge === null
+        || target.searchParams.get("code_challenge_method") !== "S256"
+        || redirectUri === null
+        || state === null
+      ) {
+        response.writeHead(400).end();
+        return;
+      }
+      const code = randomBytes(16).toString("base64url");
+      codes.set(code, {accountId: signedInAccount, challenge, redirectUri});
+      const redirect = new URL(redirectUri);
+      redirect.searchParams.set("code", code);
+      redirect.searchParams.set("iss", origin);
+      redirect.searchParams.set("state", state);
+      response.writeHead(302, {Location: redirect.toString()}).end();
+      return;
+    }
+    if (target.pathname === "/token" && request.method === "POST") {
+      const body = new URLSearchParams(await readTextBody(request));
+      if (body.get("grant_type") === "authorization_code") {
+        const code = codes.get(body.get("code") ?? "");
+        codes.delete(body.get("code") ?? "");
+        const verifier = body.get("code_verifier");
+        const verified = code !== undefined
+          && verifier !== null
+          && code.challenge === createHash("sha256").update(verifier).digest("base64url")
+          && body.get("redirect_uri") === code.redirectUri;
+        observations.pkceResults.push(verified);
+        if (!verified) {
+          sendJson(response, 400, {error: "invalid_grant"});
+          return;
+        }
+        sendJson(response, 200, tokenResponse(issueGrant(code.accountId)));
+        return;
+      }
+      if (body.get("grant_type") === "refresh_token") {
+        observations.refreshCount += 1;
+        const grant = grants.find((candidate) =>
+          candidate.refreshValid && candidate.refreshToken === body.get("refresh_token")
+        );
+        if (grant === undefined) {
+          sendJson(response, 400, {error: "invalid_grant"});
+          return;
+        }
+        grant.accessValid = false;
+        grant.refreshValid = false;
+        sendJson(response, 200, tokenResponse(issueGrant(grant.accountId)));
+        return;
+      }
+      sendJson(response, 400, {error: "unsupported_grant_type"});
+      return;
+    }
+    if (target.pathname === "/revoke" && request.method === "POST") {
+      const token = new URLSearchParams(await readTextBody(request)).get("token") ?? "";
+      observations.revokedTokens.push(token);
+      for (const grant of grants) {
+        if (grant.refreshToken !== token && grant.accessToken !== token) continue;
+        grant.accessValid = false;
+        grant.refreshValid = false;
+      }
+      response.writeHead(200).end();
+      return;
+    }
+    if (target.pathname === "/jwks") {
+      sendJson(response, 200, {keys: []});
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await listenHttp(server);
+  origin = `http://127.0.0.1:${assignedAddressSchema.parse(server.address()).port}`;
+  const verifier: BearerCredentialVerifier = {
+    verify: (credential) => {
+      const grant = grants.find((candidate) =>
+        candidate.accessValid && candidate.accessToken === Redacted.value(credential)
+      );
+      const account = accounts.find((candidate) => candidate.id === grant?.accountId);
+      if (grant === undefined || account === undefined) {
+        return Effect.fail(new AuthenticationRequired({
+          message: "The identity provider access token is not active.",
+        }));
+      }
+      observations.acceptedAccounts.push(account.id);
+      const principal: Principal = {
+        authorizedByPrincipalId: null,
+        capabilities: [
+          principalCapabilities.createArtifact,
+          principalCapabilities.publishAnyArtifact,
+          principalCapabilities.readArtifacts,
+        ],
+        displayName: account.displayName,
+        id: account.id,
+        installationId: "local",
+        kind: principalKinds.human,
+        membershipRole: membershipRoles.member,
+      };
+      return Effect.succeed(principal);
+    },
+  };
+  return {
+    currentRefreshToken: (accountId) => {
+      const grant = grants.findLast((candidate) =>
+        candidate.accountId === accountId && candidate.refreshValid
+      );
+      if (grant === undefined) throw new Error(`No active grant for ${accountId}.`);
+      return grant.refreshToken;
+    },
+    expireAccessTokens: () => {
+      for (const grant of grants) grant.accessValid = false;
+    },
+    issuedSecrets: () => grants.flatMap((grant) => [grant.accessToken, grant.refreshToken]),
+    observations,
+    origin,
+    revokeAccount: (accountId) => {
+      for (const grant of grants) {
+        if (grant.accountId !== accountId) continue;
+        grant.accessValid = false;
+        grant.refreshValid = false;
+      }
+    },
+    signInAs: (accountId) => {
+      signedInAccount = accountId;
+    },
+    stop: () => closeHttp(server),
+    verifier,
+  };
+}
+
+function tokenResponse(grant: AuthorizationGrant): JsonValue {
+  return {
+    access_token: grant.accessToken,
+    expires_in: 3_600,
+    refresh_token: grant.refreshToken,
+    scope: "artifactserver offline_access",
+    token_type: "Bearer",
+  };
+}
+
+interface RequestTrap {
+  readonly origin: string;
+  readonly requests: string[];
+  stop(): Promise<void>;
+}
+
+/** An unrelated origin that records every request a misdirected CLI would send. */
+async function startRequestTrap(): Promise<RequestTrap> {
+  const requests: string[] = [];
+  const server = createHttpServer((request, response) => {
+    requests.push(`${request.method ?? "GET"} ${request.url ?? "/"} ${request.headers.authorization ?? ""}`);
+    response.writeHead(404).end();
+  });
+  await listenHttp(server);
+  return {
+    origin: `http://127.0.0.1:${assignedAddressSchema.parse(server.address()).port}`,
+    requests,
+    stop: () => closeHttp(server),
+  };
+}
+
+interface LocalServerAdministration {
+  issueKey(name: string): Promise<{readonly id: string; readonly token: string}>;
+  revokeKey(keyId: string): Promise<void>;
+}
+
+/** Sign in as the local owner through the browser path and manage API keys. */
+async function administerLocalServer(
+  applicationOrigin: string,
+  dataDirectory: string,
+): Promise<LocalServerAdministration> {
+  const bootstrap = (await readFile(
+    path.join(dataDirectory, "local-browser-token"),
+    "utf8",
+  )).trim();
+  const issued = await fetch(new URL("/auth/local", applicationOrigin), {
+    headers: {Authorization: `Bearer ${bootstrap}`},
+    method: "POST",
+  });
+  expect(issued.status).toBe(201);
+  const loginToken = z.object({token: z.string()}).loose()
+    .parse(await issued.json()).token;
+  const login = await fetch(
+    new URL(`/auth/local?token=${encodeURIComponent(loginToken)}`, applicationOrigin),
+    {redirect: "manual"},
+  );
+  expect(login.status).toBe(303);
+  const cookies = login.headers.getSetCookie().map((value) => value.split(";", 1)[0] ?? "");
+  const csrf = cookies.find((value) => value.startsWith("artifact_csrf="))
+    ?.slice("artifact_csrf=".length);
+  if (csrf === undefined) throw new Error("The local owner login issued no CSRF cookie.");
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Cookie: cookies.join("; "),
+    Origin: applicationOrigin,
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "X-CSRF-Token": csrf,
+  });
+  return {
+    issueKey: async (name) => {
+      const response = await fetch(new URL("/api/v1/api-keys", applicationOrigin), {
+        body: JSON.stringify({
+          capabilities: [
+            principalCapabilities.createArtifact,
+            principalCapabilities.publishAnyArtifact,
+            principalCapabilities.readArtifacts,
+          ],
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          name,
+        }),
+        headers,
+        method: "POST",
+      });
+      expect(response.status).toBe(201);
+      const key = z.object({
+        apiKey: z.object({id: z.string()}).loose(),
+        token: z.string().startsWith("as_key_"),
+      }).loose().parse(await response.json());
+      return {id: key.apiKey.id, token: key.token};
+    },
+    revokeKey: async (keyId) => {
+      const response = await fetch(
+        new URL(`/api/v1/api-keys/${encodeURIComponent(keyId)}/revoke`, applicationOrigin),
+        {headers, method: "POST"},
+      );
+      expect(response.status).toBe(200);
+    },
+  };
+}
+
+async function artifactCount(origin: string, token: string): Promise<number> {
+  const response = await fetch(`${origin}/api/v1/artifacts?limit=100`, {
+    headers: {Authorization: `Bearer ${token}`},
+  });
+  expect(response.status).toBe(200);
+  return z.object({artifacts: z.array(z.unknown())}).loose()
+    .parse(await response.json()).artifacts.length;
+}
+
+/** Every regular file below a directory as [relative path, text]. */
+async function readTextTree(
+  directory: string,
+): Promise<ReadonlyArray<readonly [string, string]>> {
+  const entries = await readdir(directory, {recursive: true, withFileTypes: true});
+  return Promise.all(entries
+    .filter((entry) => entry.isFile())
+    .map(async (entry) => {
+      const file = path.join(entry.parentPath, entry.name);
+      return [path.relative(path.dirname(directory), file), await readFile(file, "utf8")] as const;
+    }));
 }
