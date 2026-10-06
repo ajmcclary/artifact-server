@@ -4,15 +4,24 @@ import {
 } from "../../../src/core/model.js";
 import {
   sqliteActionsRebuildStatements,
+  sqliteActionsTableAcceptsEveryKind,
+  sqliteActionsWidenStatements,
   sqliteActivityRecoveryStatements,
 } from "../../../src/storage/activity-log-schema.js";
+import {
+  admissionMethodCheckSql,
+  d1MemberAdmissionWidenStatements,
+  membersAcceptInviteAdmission,
+  sqliteInvitesIndexSql,
+  sqliteInvitesTableSql,
+} from "../../../src/storage/invitation-schema.js";
 import {normalizeArtifactSearchText} from
   "../../../src/application/artifact-tags.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 17;
+export const requiredD1SchemaVersion = 18;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -189,8 +198,7 @@ const schemaSql = `
     updated_at TEXT NOT NULL,
     last_active_at TEXT,
     admitted_by_principal_id TEXT,
-    admission_method TEXT
-      CHECK (admission_method IS NULL OR admission_method IN ('manual', 'automatic', 'owner')),
+    admission_method TEXT CHECK (${admissionMethodCheckSql}),
     UNIQUE (installation_id, email)
   );
 
@@ -661,6 +669,9 @@ export async function migrateD1(
   await addInstallationActivityLogIfMissing(database);
   await addAdmissionAndActivityColumnsIfMissing(database);
   await addLoginAttemptInviteIfMissing(database);
+  await addInstallationInvitesIfMissing(database);
+  await widenMemberAdmissionIfNeeded(database);
+  await widenActionKindsIfNeeded(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -915,6 +926,40 @@ async function addCommentThreadDispatchMarkerIfMissing(
     CREATE INDEX IF NOT EXISTS comment_threads_dispatch
       ON comment_threads(dispatch_id)
   `).run();
+}
+
+async function addInstallationInvitesIfMissing(database: D1Database): Promise<void> {
+  await database.batch([
+    database.prepare(sqliteInvitesTableSql),
+    database.prepare(sqliteInvitesIndexSql),
+  ]);
+}
+
+async function tableSql(database: D1Database, name: string): Promise<string> {
+  const row = await database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+  ).bind(name).first<{sql: string}>();
+  if (row === null) throw new Error(`D1 table ${name} is missing.`);
+  return row.sql;
+}
+
+/** Accept the invite admission method; SQLite cannot alter a CHECK in place. */
+async function widenMemberAdmissionIfNeeded(database: D1Database): Promise<void> {
+  if (membersAcceptInviteAdmission(await tableSql(database, "installation_members"))) return;
+  await database.batch(d1MemberAdmissionWidenStatements.map((statement) => database.prepare(statement)));
+}
+
+/** Rebuild `actions` when this build added action kinds its CHECK refuses. */
+async function widenActionKindsIfNeeded(database: D1Database): Promise<void> {
+  if (sqliteActionsTableAcceptsEveryKind(await tableSql(database, "actions"))) return;
+  try {
+    await database.batch(sqliteActionsWidenStatements({strict: false})
+      .map((statement) => database.prepare(statement)));
+  } catch (cause) {
+    // A concurrent isolate widened first; its table already accepts every kind.
+    if (sqliteActionsTableAcceptsEveryKind(await tableSql(database, "actions"))) return;
+    throw cause;
+  }
 }
 
 async function addLoginAttemptInviteIfMissing(database: D1Database): Promise<void> {

@@ -1,5 +1,33 @@
 import {z} from "zod";
 
+import type {
+  CreateInviteRecord,
+  InvitationRepository,
+  RedeemInviteRecord,
+  RedeemInviteResult,
+  RevokeInviteRecord,
+} from "../../../src/core/invitation-ports.js";
+import {
+  inviteStatus,
+  inviteStatuses,
+  redemptionRefusal,
+  type StoredInvite,
+} from "../../../src/core/invitations.js";
+import {
+  inviteAdmitAction,
+  inviteCreateAction,
+  inviteInsertColumns,
+  inviteInsertValues,
+  inviteRedeemAction,
+  inviteRevokeAction,
+  inviteRowSchema,
+  inviteSelectColumns,
+  listedInviteFromRow,
+  listedInviteRowSchema,
+  storedInviteFromRow,
+  withoutInviteDigest,
+} from "../../../src/storage/invitation-rows.js";
+
 import type {ActionAttribution} from "../../../src/core/action-attribution.js";
 import {memberAdmissions} from "../../../src/core/identity-ports.js";
 import {principalActivityThreshold} from "../../../src/core/principal-activity.js";
@@ -73,6 +101,7 @@ const memberRowSchema = z.object({
 const listedMemberRowSchema = memberRowSchema.extend({
   admittedHow: z.enum([
     memberAdmissions.automatic,
+    memberAdmissions.invite,
     memberAdmissions.manual,
     memberAdmissions.owner,
   ]).nullable(),
@@ -164,7 +193,7 @@ const keyIssueAction = (
 
 export function createD1IdentityRepository(
   database: D1Database,
-): IdentityRepository {
+): IdentityRepository & InvitationRepository {
   const findMember = async (
     installationId: string,
     memberId: string,
@@ -220,7 +249,117 @@ export function createD1IdentityRepository(
     database.prepare(positionalActionInsertWhereSql(condition))
       .bind(...positionalActionValues(insert), ...bindings);
 
+  const findInvite = async (installationId: string, inviteId: string): Promise<StoredInvite | null> => {
+    const row = await database.prepare(`SELECT ${inviteSelectColumns("i")}
+      FROM installation_invites AS i WHERE i.installation_id = ? AND i.id = ?`)
+      .bind(installationId, inviteId).first();
+    return row === null ? null : storedInviteFromRow(inviteRowSchema.parse(row));
+  };
+
   return {
+    createInvite: async (record: CreateInviteRecord) => {
+      await database.batch([
+        database.prepare(`INSERT INTO installation_invites (${inviteInsertColumns})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(...inviteInsertValues(record.invite)),
+        actionStatement(inviteCreateAction(record.invite, record.attribution)),
+      ]);
+      return withoutInviteDigest(record.invite);
+    },
+
+    findInvite: async (installationId: string, inviteId: string) => findInvite(installationId, inviteId),
+
+    listInvites: async (installationId: string) => {
+      const rows = await database.prepare(`
+        SELECT ${inviteSelectColumns("i")}, creator.display_name AS "createdByName"
+        FROM installation_invites AS i
+        LEFT JOIN installation_members AS creator
+          ON creator.installation_id = i.installation_id AND creator.id = i.created_by_principal_id
+        WHERE i.installation_id = ?
+        ORDER BY i.created_at DESC, i.id DESC
+        LIMIT 200
+      `).bind(installationId).all();
+      return rows.results.map((row) => listedInviteFromRow(listedInviteRowSchema.parse(row)));
+    },
+
+    revokeInvite: async (record: RevokeInviteRecord) => {
+      const existing = await findInvite(record.installationId, record.inviteId);
+      if (existing === null) throw new IdentityNotFound({message: "The invite does not exist."});
+      if (inviteStatus(existing, new Date(record.revokedAt)) !== inviteStatuses.active) {
+        throw new IdentityConflict({message: "Only an active invite can be revoked."});
+      }
+      const [updated] = await database.batch([
+        database.prepare(`UPDATE installation_invites
+          SET revoked_at = ?, revoked_by_principal_id = ?
+          WHERE installation_id = ? AND id = ? AND revoked_at IS NULL`)
+          .bind(record.revokedAt, record.attribution.principalId, record.installationId, record.inviteId),
+        actionWhenStatement(
+          inviteRevokeAction(existing, record.attribution, record.revokedAt),
+          "EXISTS (SELECT 1 FROM installation_invites WHERE installation_id = ? AND id = ? AND revoked_at = ?)",
+          [record.installationId, record.inviteId, record.revokedAt],
+        ),
+      ]);
+      if (updated?.meta.changes !== 1) {
+        throw new IdentityConflict({message: "Only an active invite can be revoked."});
+      }
+      const revoked = await findInvite(record.installationId, record.inviteId);
+      if (revoked === null) throw new Error("The revoked invite was not persisted.");
+      return withoutInviteDigest(revoked);
+    },
+
+    redeemInvite: async (record: RedeemInviteRecord): Promise<RedeemInviteResult> => {
+      const {admission} = record;
+      const invite = await findInvite(admission.installationId, record.inviteId);
+      const refusal = redemptionRefusal(invite, record.email, record.redeemedAt);
+      if (invite === null || refusal !== null) {
+        return {kind: "refused", outcome: refusal === null || refusal === "unverified" ? "invalid" : refusal};
+      }
+      // D1 batches cannot branch: every later statement runs only if this
+      // batch's guarded UPDATE recorded the new member as the latest redeemer.
+      const redeemed = "EXISTS (SELECT 1 FROM installation_invites WHERE installation_id = ? AND id = ? AND last_redeemed_member_id = ?)";
+      const redeemedBindings = [admission.installationId, record.inviteId, admission.id];
+      try {
+        const [updated] = await database.batch([
+          database.prepare(`UPDATE installation_invites
+            SET use_count = use_count + 1, last_redeemed_member_id = ?
+            WHERE installation_id = ? AND id = ? AND revoked_at IS NULL
+              AND expires_at > ? AND use_count < max_uses
+              AND (kind = 'link' OR email = ?)`)
+            .bind(admission.id, admission.installationId, record.inviteId, record.redeemedAt, record.email),
+          database.prepare(`INSERT INTO installation_members (
+              id, installation_id, email, display_name, role, status,
+              created_at, updated_at, admitted_by_principal_id, admission_method
+            ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${redeemed}`)
+            .bind(
+              admission.id, admission.installationId, admission.email, admission.displayName,
+              admission.role, memberStatuses.active, admission.createdAt, admission.createdAt,
+              admission.attribution.principalId, admission.admittedHow, ...redeemedBindings,
+            ),
+          actionWhenStatement(inviteAdmitAction(admission, invite.id), redeemed, redeemedBindings),
+          database.prepare(`INSERT INTO external_identities (provider, subject, member_id, email, bound_at)
+            SELECT ?, ?, ?, ?, ? WHERE ${redeemed}`)
+            .bind(
+              record.binding.provider, record.binding.subject, record.binding.memberId,
+              record.binding.email, record.binding.boundAt, ...redeemedBindings,
+            ),
+          actionWhenStatement(inviteRedeemAction(invite, admission, record.redeemedAt), redeemed, redeemedBindings),
+        ]);
+        if (updated?.meta.changes !== 1) {
+          const current = await findInvite(admission.installationId, record.inviteId);
+          const outcome = redemptionRefusal(current, record.email, record.redeemedAt);
+          return {kind: "refused", outcome: outcome === null || outcome === "unverified" ? "used" : outcome};
+        }
+      } catch (cause) {
+        if (cause instanceof Error && isD1Constraint(cause)) {
+          return {kind: "refused", outcome: "account_unavailable"};
+        }
+        throw cause;
+      }
+      const member = await findMember(admission.installationId, admission.id);
+      if (member === null) throw new Error("The admitted member was not persisted.");
+      return {kind: "admitted", member};
+    },
+
     admitMember: async (command: AdmitMemberRecord) => {
       try {
         await database.batch([
