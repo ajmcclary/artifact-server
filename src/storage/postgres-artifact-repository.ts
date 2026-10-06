@@ -2628,6 +2628,20 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  async revokeContentSessions(principalIds: readonly string[]): Promise<void> {
+    if (principalIds.length === 0) return;
+    const installationId = this.#installationId;
+    await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql.unsafe(
+        `DELETE FROM content_sessions
+        WHERE installation_id = $1
+          AND principal_id IN (SELECT jsonb_array_elements_text($2::jsonb))`,
+        [installationId, JSON.stringify(principalIds)],
+      );
+    }));
+  }
+
   async createStagedUpload(command: CreateStagedUpload): Promise<StagedUpload> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {

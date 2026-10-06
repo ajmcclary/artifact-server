@@ -2,6 +2,7 @@ import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
 import type {Clock} from "../../src/core/ports.js";
+import {signInAdministrator} from "../support/agent-dispatch.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
 import {
   createTestInstallation,
@@ -14,6 +15,17 @@ import {
 
 const leaseSchema = z.object({baseUrl: z.url(), expiresAt: z.string(), versionId: z.string()});
 const twelveHours = 12 * 60 * 60 * 1_000;
+
+type AdminBody = Readonly<Record<string, string | readonly string[]>>;
+
+async function bearerLease(endpoint: string, token: string, reuse?: string): Promise<Response> {
+  const init: RequestInit = {
+    headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
+    method: "POST",
+  };
+  if (reuse !== undefined) init.body = JSON.stringify({reuse});
+  return fetch(endpoint, init);
+}
 
 class MutableTestClock implements Clock {
   #now: Date;
@@ -164,5 +176,80 @@ describe("reusable preview leases", () => {
     const expired = await fetchVersion(server, lease.baseUrl);
     expect(expired.status).toBe(401);
     expect(expired.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  async function adminFetch(
+    cookies: {readonly csrf: string; readonly header: string},
+    pathname: string,
+    method: string,
+    body?: AdminBody,
+  ): Promise<Response> {
+    const init: RequestInit = {
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookies.header,
+        Origin: server.baseUrl,
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "X-CSRF-Token": cookies.csrf,
+      },
+      method,
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    return fetch(`${server.baseUrl}${pathname}`, init);
+  }
+
+  const issuedKeySchema = z.object({apiKey: z.object({id: z.string()}), token: z.string()});
+  const leaseReaderCapabilities = ["artifact:read", "content-session:issue"];
+
+  test("foundation: logout, member deactivation, and key revocation end lease access, and another principal's lease is never reused", async () => {
+    const published = await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>Revocation</title>",
+      idempotencyKey: "reuse-revocation-v1",
+      name: "Reuse revocation",
+    });
+    const endpoint = leaseEndpoint(published.body.artifact.id, published.body.version.id, published.body.artifact.projectId);
+    const endpointPath = `${new URL(endpoint).pathname}${new URL(endpoint).search}`;
+    const cookies = await signInAdministrator(server, installation);
+
+    const adminLease = leaseSchema.parse(await (await adminFetch(cookies, endpointPath, "POST")).json());
+    expect((await fetchVersion(server, adminLease.baseUrl)).status).toBe(200);
+
+    const serviceKey = issuedKeySchema.parse(await (await adminFetch(cookies, "/api/v1/api-keys", "POST", {
+      capabilities: leaseReaderCapabilities,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      name: "Lease reader",
+    })).json());
+    const foreign = await bearerLease(endpoint, serviceKey.token, adminLease.baseUrl);
+    expect(foreign.status).toBe(201);
+    expect(leaseSchema.parse(await foreign.json()).baseUrl).not.toBe(adminLease.baseUrl);
+
+    expect((await adminFetch(cookies, "/api/v1/session/logout", "POST")).status).toBe(204);
+    expect((await fetchVersion(server, adminLease.baseUrl)).status).toBe(401);
+
+    const admin = await signInAdministrator(server, installation);
+    const keyLease = leaseSchema.parse(await (await bearerLease(endpoint, serviceKey.token)).json());
+    expect((await fetchVersion(server, keyLease.baseUrl)).status).toBe(200);
+    expect((await adminFetch(admin, `/api/v1/api-keys/${serviceKey.apiKey.id}/revoke`, "POST")).status).toBe(200);
+    expect((await fetchVersion(server, keyLease.baseUrl)).status).toBe(401);
+    expect((await adminFetch(admin, `/api/v1/api-keys/${serviceKey.apiKey.id}/revoke`, "POST")).status).toBe(200);
+
+    const member = z.object({member: z.object({id: z.string()})}).parse(await (await adminFetch(admin, "/api/v1/members", "POST", {
+      displayName: "Lease Member",
+      email: "lease-member@example.test",
+    })).json()).member;
+    const memberKey = issuedKeySchema.parse(await (await adminFetch(admin, "/api/v1/api-keys", "POST", {
+      capabilities: leaseReaderCapabilities,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      memberId: member.id,
+      name: "Member reader",
+    })).json());
+    const memberLease = leaseSchema.parse(await (await bearerLease(endpoint, memberKey.token)).json());
+    expect((await fetchVersion(server, memberLease.baseUrl)).status).toBe(200);
+    expect((await adminFetch(admin, `/api/v1/members/${member.id}/deactivate`, "POST")).status).toBe(200);
+    expect((await fetchVersion(server, memberLease.baseUrl)).status).toBe(401);
+    expect((await adminFetch(admin, `/api/v1/members/${member.id}/deactivate`, "POST")).status).toBe(200);
+    expect((await bearerLease(endpoint, memberKey.token, memberLease.baseUrl)).status).toBe(401);
   });
 });

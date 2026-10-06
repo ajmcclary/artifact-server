@@ -3843,6 +3843,12 @@ export function createD1ArtifactRepository(
         .first<z.input<typeof contentRecordSchema>>();
       return row === null ? null : contentRecordSchema.parse(row);
     },
+    revokeContentSessions: async (principalIds) => {
+      if (principalIds.length === 0) return;
+      await database.prepare(
+        "DELETE FROM content_sessions WHERE principal_id IN (SELECT value FROM json_each(?))",
+      ).bind(JSON.stringify(principalIds)).run();
+    },
     createThread: async (
       command: CreateCommentThread,
     ): Promise<CommentThreadCreation> => {

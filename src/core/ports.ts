@@ -897,6 +897,8 @@ export interface ContentSessionRepository {
     tokenDigest: string,
     requestTime: string,
   ): Promise<ContentSessionRecord | null>;
+  /** End every preview lease and content session held by these principals. */
+  revokeContentSessions(principalIds: readonly string[]): Promise<void>;
 }
 
 export interface UploadPreparationClaim {

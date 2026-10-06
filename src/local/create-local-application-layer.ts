@@ -950,6 +950,13 @@ export function createApplicationLayer(
   });
   const identityLayer = InstallationAccessService.layer({
     autoAdmitEmailDomains: adapters.autoAdmitEmailDomains,
+    contentAccessRevocation: {
+      revokeForPrincipals: (principalIds) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.revokeContentSessions(principalIds),
+          catch: (cause) => repositoryFailure("revokeContentSessions", cause),
+        }),
+    },
     bootstrapAdministratorEmail: adapters.bootstrapAdministratorEmail,
     clock: adapters.clock,
     ids: {

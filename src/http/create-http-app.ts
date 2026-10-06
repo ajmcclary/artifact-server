@@ -1097,6 +1097,7 @@ export function createHttpApp(
         InstallationAccessService.use((access) =>
           access.revokeSession(
             Redacted.make(sessionToken, {label: "application-session"}),
+            context.get("principal").id,
           )
         ),
       );

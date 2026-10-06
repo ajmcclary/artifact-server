@@ -26,6 +26,7 @@ import {
   IdentityNotFound,
 } from "../core/errors.js";
 import type {
+  ArtifactRepositoryFailure,
   IdentityRepositoryFailure,
   LoginAttemptRejected,
 } from "../core/errors.js";
@@ -180,7 +181,16 @@ export interface IdentityIdProvider {
   readonly sessionId: () => string;
 }
 
+/** Ends browser content access (preview leases and content sessions) for principals whose access ended. */
+export interface ContentAccessRevocation {
+  readonly revokeForPrincipals: (
+    principalIds: readonly string[],
+  ) => Effect.Effect<void, ArtifactRepositoryFailure>;
+}
+
 export interface InstallationAccessDependencies {
+  /** Revokes content access when logout, deactivation, or key revocation ends a principal's access. */
+  readonly contentAccessRevocation: ContentAccessRevocation;
   /** Records successful credential use; absent, nothing is recorded. */
   readonly principalActivity?: Pick<PrincipalActivityOperations, "note">;
   /**
@@ -271,7 +281,11 @@ export interface InstallationAccessOperations {
     memberId: string,
   ) => Effect.Effect<
     InstallationMember,
-    AuthorizationDenied | IdentityConflict | IdentityNotFound | IdentityRepositoryFailure
+    | ArtifactRepositoryFailure
+    | AuthorizationDenied
+    | IdentityConflict
+    | IdentityNotFound
+    | IdentityRepositoryFailure
   >;
   readonly issueApiKey: (
     command: IssueApiKeyCommand,
@@ -313,11 +327,12 @@ export interface InstallationAccessOperations {
     keyId: string,
   ) => Effect.Effect<
     ManagedApiKey,
-    AuthorizationDenied | IdentityNotFound | IdentityRepositoryFailure
+    ArtifactRepositoryFailure | AuthorizationDenied | IdentityNotFound | IdentityRepositoryFailure
   >;
   readonly revokeSession: (
     credential: Redacted.Redacted,
-  ) => Effect.Effect<void, IdentityRepositoryFailure>;
+    principalId: string,
+  ) => Effect.Effect<void, ArtifactRepositoryFailure | IdentityRepositoryFailure>;
   readonly rotateApiKey: (
     principal: Principal,
     keyId: string,
@@ -704,6 +719,9 @@ function makeInstallationAccessService(
     // administrative mutation clears the whole cache instead of indexing it.
     sessionCache?.clear();
     apiKeyCache?.clear();
+    // The identity change stands even if this fails; a retry re-runs revocation.
+    // A member's API keys act as the member's own principal, so this covers their leases too.
+    yield* dependencies.contentAccessRevocation.revokeForPrincipals([memberId]);
     return member;
   });
 
@@ -772,6 +790,7 @@ function makeInstallationAccessService(
     // Key entries are keyed by presented-credential digest, not key id, so
     // this rare administrative mutation clears the cache instead of indexing.
     apiKeyCache?.clear();
+    yield* dependencies.contentAccessRevocation.revokeForPrincipals([revoked.principalId]);
     return revoked;
   });
 
@@ -819,7 +838,7 @@ function makeInstallationAccessService(
 
   const revokeSession = Effect.fn(
     "InstallationAccessService.revokeSession",
-  )(function*(credential: Redacted.Redacted) {
+  )(function*(credential: Redacted.Redacted, principalId: string) {
     const tokenDigest = dependencies.secrets.digest(Redacted.value(credential));
     yield* dependencies.repository.revokeApplicationSession(
       dependencies.installationId,
@@ -827,6 +846,7 @@ function makeInstallationAccessService(
       dependencies.clock.now().toISOString(),
     );
     sessionCache?.evict(cacheKey(tokenDigest));
+    yield* dependencies.contentAccessRevocation.revokeForPrincipals([principalId]);
   });
 
   return InstallationAccessService.of({

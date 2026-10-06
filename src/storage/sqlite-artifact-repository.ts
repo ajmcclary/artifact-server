@@ -2783,6 +2783,14 @@ export class SqliteArtifactRepository implements
     });
   }
 
+  async revokeContentSessions(principalIds: readonly string[]): Promise<void> {
+    await Promise.resolve();
+    if (principalIds.length === 0) return;
+    this.#database.prepare(
+      "DELETE FROM content_sessions WHERE principal_id IN (SELECT value FROM json_each(?))",
+    ).run(JSON.stringify(principalIds));
+  }
+
   createStagedUpload(command: CreateStagedUpload): Promise<StagedUpload> {
     return Promise.resolve().then(() =>
       this.#transaction(() => {
