@@ -167,6 +167,7 @@ const manifestEntrySchema = z.object({
 });
 
 const libraryResponseSchema = z.object({
+  examined: z.number().int().nonnegative(),
   galleries: z.array(z.object({
     artifactId: z.string(),
     artifactName: z.string(),

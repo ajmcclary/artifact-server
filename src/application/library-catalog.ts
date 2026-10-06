@@ -188,6 +188,7 @@ function makeLibraryCatalogService(
     })));
     const datesByPage = new Map(dates.map((row) => [`${row.artifactId}\u001f${row.path}`, row]));
     return {
+      examined,
       galleries: galleries
         .toSorted((left, right) =>
           left.project.name.localeCompare(right.project.name)

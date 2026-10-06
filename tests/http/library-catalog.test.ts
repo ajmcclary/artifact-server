@@ -43,6 +43,7 @@ const librarySchema = z.object({
     projectName: z.string(),
     versionId: z.string(),
   })),
+  examined: z.number(),
   generatedAt: z.string(),
   truncated: z.boolean(),
   unreadable: z.array(z.string()),
@@ -118,6 +119,8 @@ describe("server-side Library", () => {
     const library = await readLibrary(owner);
     expect(library.unreadable).toEqual([]);
     expect(library.truncated).toBe(false);
+    // Every artifact examined counts, including the plain site without a gallery.
+    expect(library.examined).toBe(3);
     expect(library.galleries.map((gallery) => [gallery.projectName, gallery.artifactName])).toEqual([
       ["Default", "Claims Workspace"],
       ["Portal project", "Claimant Portal"],

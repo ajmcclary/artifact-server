@@ -42,7 +42,7 @@ async function loadLibrary(wanted: () => boolean): Promise<LoadedLibrary | null>
   return {
     failures: response.unreadable,
     loadedAt: new Date(),
-    scanned: response.galleries.length,
+    scanned: response.examined,
     sources: response.galleries.map((gallery): LibrarySource => ({
       artifactId: gallery.artifactId,
       artifactName: gallery.artifactName,

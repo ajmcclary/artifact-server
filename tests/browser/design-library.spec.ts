@@ -226,16 +226,22 @@ test("DSN-005-B: the Library gathers every current gallery across all projects, 
 
 test("DSN-005: an installation with no galleries explains how they appear", async ({browser}) => {
   const fixture = await startBrowserFixture(browser);
+  const directory = await mkdtemp(path.join(tmpdir(), "design-library-empty-"));
   try {
+    // One plain artifact: the empty state counts the artifacts it examined, not galleries.
+    await writeFile(path.join(directory, "index.html"), "<!doctype html><h1>Plain page</h1>");
+    await publish(fixture, directory, named("Plain page"));
     await localLogin(fixture);
     await fixture.page.goto(`${fixture.server.baseUrl}/review/library`);
     await expect(fixture.page).toHaveURL(/\/review\/library$/u);
     await expect(fixture.page.getByRole("heading", {name: "No design galleries yet"})).toBeVisible();
+    await expect(fixture.page.getByText("None of the 1 artifacts has a design gallery.")).toBeVisible();
     // A pre-rollup project link still opens the one library.
     await fixture.page.goto(`${fixture.server.baseUrl}/review/library?project=prj_default`);
     await expect(fixture.page.getByRole("heading", {name: "No design galleries yet"})).toBeVisible();
   } finally {
     await stopBrowserFixture(fixture);
+    await rm(directory, {force: true, recursive: true});
   }
 });
 

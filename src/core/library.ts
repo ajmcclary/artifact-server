@@ -46,6 +46,8 @@ export interface LibraryGallery {
 
 /** Every readable gallery across the caller's projects. */
 export interface LibraryResponse {
+  /** Artifacts examined, with or without a gallery; the screen's empty and truncation counts. */
+  readonly examined: number;
   readonly galleries: readonly LibraryGallery[];
   readonly generatedAt: string;
   /** True when the artifact cap was reached; the Library shows a partial view. */
