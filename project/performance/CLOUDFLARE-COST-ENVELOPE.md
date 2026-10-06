@@ -372,3 +372,27 @@ local iteration gate passed. See the
 [retry preflight](../evidence/cloudflare-mcp-retry-preflight-2026-09-28.json)
 and [gate summary](../evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json).
 The metered retry still needs its own authorization.
+
+## Cloudflare Artifacts Node/Postgres qualification, October 6, 2026
+
+Account `ee625e5e88a18eea4402075704d78f9f`, namespace
+`artifact-server-test-qualification`. Before the run, the qualification token
+(Artifacts Read/Write only) verified `active` with expiry 2026-10-12T23:59:59Z
+and the namespace listed zero repositories. Published pricing on that date: Artifacts
+billing begins October 14, 2026 and requires Workers Paid. It includes 10,000
+operations and 1 GB-month per month, then $0.15 per 1,000 operations and $0.50 per
+GB-month. Create, push, pull and clone count as operations. Published limits:
+1 GB per repository, 32 MB per blob, and 2,000 control-plane requests per 10 seconds
+per namespace. The Artifacts-only token cannot read billing, so dashboard usage
+and remaining allowance were **not** read for this run. Every run happened before
+the billing start date.
+
+The run had a fixed shape with code-enforced caps of at most 4 repositories and
+16 mirrored versions. The passing attempt mirrored 15 versions in 4 repositories
+and made 4 clones, roughly 80 provider operations by the suite's
+per-version estimate. The two earlier attempts used fewer: one made no provider
+call, and one mirrored 15 versions. Fixture bytes were under 2 KB per
+repository. Every repository was deleted. The namespace held zero repositories
+before and after each attempt, so storage remained effectively zero. Even if
+billed at overage rates, three such runs would cost well under $0.10. This is
+a bounded estimate, not a provider billing measurement.

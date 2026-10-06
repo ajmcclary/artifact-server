@@ -342,6 +342,34 @@ gate.
   Postgres and local D1 Git fixtures remain opt-in and outside canonical
   timing gates. The single paired SQLite before/after run does not establish
   a controlled speed claim.
+- **Live-provider progress, October 6:** the bounded Node/Postgres product
+  suite (`pnpm qualify:cloudflare-artifacts:product`,
+  [test](./tests/integration/cloudflare-artifacts-product.live.test.ts))
+  passed 9/9 at `2b25347` against `artifact-server-test-qualification` on
+  account `ee625e5e88a18eea4402075704d78f9f`, using compiled
+  external-storage server processes on disposable pinned Postgres and MinIO.
+  It proves, against the real provider: estimate without remote effects;
+  oldest-first backfill and follow-on mirroring; an exact read-only CLI clone
+  (one tag per version, linear parent chain, copied bytes, pointer metadata,
+  push and anonymous ls-remote refused, sub-minute token TTL refused); a
+  rejected provider credential that never blocks publication and resumes on
+  recovery; a worker SIGKILLed while its job for version 2 was claimed, whose
+  successor converged to one commit per version with no unfinished jobs; two
+  processes racing across two artifacts converging to one ordered chain each;
+  disablement withdrawing clone access while keeping repositories, then
+  resuming; and the operator purge refusing while history is enabled, then
+  deleting exactly this installation's four repositories. Fifteen versions
+  were mirrored; the namespace held zero repositories before and after. See
+  the [passing report](./project/evidence/cloudflare-artifacts-node-postgres-qualification-2026-10-06T1419Z.json).
+  Two earlier attempts are retained as failures: one never reached the
+  provider (unmigrated schema), and one failed only its purge leg because the
+  suite purged while history was still enabled, after which the exact-name
+  safety net removed its repositories. A compatibility check against the
+  current REST API found that Cloudflare now refuses repository tokens under
+  60 seconds; HTTP and MCP now refuse those requests as invalid input
+  (`935d93f`). Still open: live D1 multi-worker proof on a deployed Worker,
+  controlled repeated live backlog measurements, the Workers-binding path on
+  this account, and deployment-specific production evidence.
 - **Do:** introduce durable bounded reconciliation progress and semantic
   predecessor ordering. Serialize ownership per artifact across processes; prove
   lease renewal/fencing and remote predecessor/ref comparison. Keep optional Git

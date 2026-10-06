@@ -139,7 +139,14 @@ The repository includes bounded live suites for both supported Cloudflare contro
 ```sh
 ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_LIVE=1 pnpm qualify:cloudflare-artifacts
 ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_LIVE=1 pnpm qualify:cloudflare-artifacts:binding
+ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_LIVE=1 \
+  ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_ACCOUNT_ID=<account-id> \
+  pnpm qualify:cloudflare-artifacts:product
 ```
+
+The product suite needs Docker. It runs compiled external-storage server processes on disposable Postgres and MinIO, reads the qualification token from `~/.config/artifact-server/cloudflare-artifacts/qualification.token` unless `ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_API_TOKEN_FILE` names another file, and writes a timestamped report under `project/evidence/`. Its repositories belong to a fresh installation and are removed with `artifactserver history purge`, then checked by exact name. The [October 6, 2026 report](../project/evidence/cloudflare-artifacts-node-postgres-qualification-2026-10-06T1419Z.json) records a passing run covering backfill, an exact read-only clone, provider-credential failure, a worker killed mid-push, two racing processes, disable/resume, and purge.
+
+Repository tokens must live at least 60 seconds. Clone-token requests below that are refused as invalid input.
 
 Every repository receives a generated `artifact-server-test-<run>-` prefix. Cleanup uses only the run manifest or exact run prefix; it never deletes a namespace or sweeps an account. The checked-in [qualification evidence](../project/evidence/cloudflare-artifacts-live-qualification.json) records successful REST and Workers-binding checks. It also records a bounded August 27, 2026 product run through availability, estimate, project enablement, backfill, a second mirrored version, read-only clone, disablement, artifact deletion, and exact cleanup.
 
