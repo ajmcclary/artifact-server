@@ -41,6 +41,7 @@ import {
   defaultGitCloneCredentialTtlSeconds,
   GitHistoryAccessService,
   maximumGitCloneCredentialTtlSeconds,
+  minimumGitCloneCredentialTtlSeconds,
 } from "../application/git-history-access.js";
 import {
   type CreateStagedUploadCommand,
@@ -848,7 +849,7 @@ export function createArtifactMcpServer(
       inputSchema: z.object({
         artifactId: artifactIdSchema,
         projectId: projectIdSchema,
-        ttlSeconds: z.number().int().min(1)
+        ttlSeconds: z.number().int().min(minimumGitCloneCredentialTtlSeconds)
           .max(maximumGitCloneCredentialTtlSeconds)
           .default(defaultGitCloneCredentialTtlSeconds),
       }).strict(),

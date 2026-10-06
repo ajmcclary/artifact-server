@@ -24,6 +24,8 @@ import {
 import type {StoredProjectGitHistorySetting} from "./project-git-history.js";
 
 export const defaultGitCloneCredentialTtlSeconds = 15 * 60;
+/** Cloudflare Artifacts refuses repository tokens shorter than one minute. */
+export const minimumGitCloneCredentialTtlSeconds = 60;
 export const maximumGitCloneCredentialTtlSeconds = 60 * 60;
 
 export interface GitHistoryCloneAccess {

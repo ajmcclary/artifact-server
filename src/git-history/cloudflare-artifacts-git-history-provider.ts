@@ -150,7 +150,7 @@ export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider
     scope: "read" | "write",
     ttlSeconds: number,
   ): Promise<GitCloneCredential> {
-    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 3_600) {
+    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 3_600) {
       throw new Error("invalid_repository_token_ttl");
     }
     const response = await this.#request("tokens", {

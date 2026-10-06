@@ -37,6 +37,7 @@ import {
   defaultGitCloneCredentialTtlSeconds,
   GitHistoryAccessService,
   maximumGitCloneCredentialTtlSeconds,
+  minimumGitCloneCredentialTtlSeconds,
 } from "../application/git-history-access.js";
 import {
   AgentDispatchService,
@@ -427,7 +428,8 @@ const makePublicLinkPrivateItemSchema = z.object({
   projectId: projectIdSchema,
 }).strict();
 const issueGitCloneCredentialSchema = z.object({
-  ttlSeconds: z.number().int().min(1).max(maximumGitCloneCredentialTtlSeconds)
+  ttlSeconds: z.number().int().min(minimumGitCloneCredentialTtlSeconds)
+    .max(maximumGitCloneCredentialTtlSeconds)
     .default(defaultGitCloneCredentialTtlSeconds),
 }).strict();
 const makePublicLinksPrivateSchema = z.object({

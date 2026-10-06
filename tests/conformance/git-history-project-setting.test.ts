@@ -830,6 +830,14 @@ describe("simple per-project Git history setting", () => {
       method: "POST",
     });
     expect(unauthenticated.status).toBe(401);
+    // Cloudflare Artifacts refuses repository tokens shorter than one minute,
+    // so a shorter request is a client error rather than a provider failure.
+    const tooShort = await fetch(cloneUrl, {
+      body: JSON.stringify({ttlSeconds: 59}),
+      headers: apiHeaders(installation),
+      method: "POST",
+    });
+    expect(tooShort.status).toBe(422);
     const clone = await fetch(cloneUrl, {
       body: JSON.stringify({ttlSeconds: 60}),
       headers: apiHeaders(installation),
