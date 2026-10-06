@@ -19,6 +19,7 @@ import {
   type ArtifactVersion,
   type Project,
   type Session,
+  setPreviewLeasePrincipal,
 } from "@/api/client";
 import type {ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
@@ -205,6 +206,7 @@ export function ReviewApp() {
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
     setDraftPrincipal(session?.principal.id ?? null);
+    setPreviewLeasePrincipal(session?.principal.id ?? null);
   }, [session]);
   const accessContextRef = useRef<AccessContext | null>(null);
   const bootstrapInFlightRef = useRef(false);

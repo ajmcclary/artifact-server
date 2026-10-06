@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import {readBoundedReviewHtml} from "./bounded-text";
 import {previewKinds} from "../review/workspace/preview-index.ts";
+import {createPreviewLeaseStore} from "../review/preview-lease-store.ts";
+import {browserStorage} from "../ui/density-model.ts";
 import {
   activityPageSchema,
   type ActivityListParams,
@@ -840,6 +842,13 @@ async function parseFailure(response: Response): Promise<ApiError> {
   );
 }
 
+const previewLeases = createPreviewLeaseStore(browserStorage(), Date.now);
+
+/** The signed-in principal whose preview leases may be reused; null forgets none and reuses none. */
+export function setPreviewLeasePrincipal(principalId: string | null): void {
+  previewLeases.setPrincipal(principalId);
+}
+
 function mutationHeaders(idempotencyKey?: string): Headers {
   const headers = new Headers({
     "Content-Type": "application/json",
@@ -959,6 +968,7 @@ export const api = {
       headers: mutationHeaders(),
       method: "POST",
     });
+    previewLeases.forgetPrincipal();
     // Drafts and other departing-principal state listen for this.
     window.dispatchEvent(new Event("artifact-session-logout"));
   },
@@ -1206,19 +1216,27 @@ export const api = {
       { headers: mutationHeaders(), method: "POST" },
     );
   },
-  previewLease: (
+  previewLease: async (
     projectId: string,
     artifactId: string,
     versionId: string,
-  ) => request(
-    z.object({
-      baseUrl: z.url(),
-      expiresAt: z.string(),
-      versionId: z.string(),
-    }),
-    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/preview-leases?${projectQuery(projectId)}`,
-    {headers: mutationHeaders(), method: "POST"},
-  ),
+  ) => {
+    // Confirming a remembered lease keeps the preview on one origin, so the browser cache serves it.
+    const reuse = previewLeases.reusableBaseUrl(versionId);
+    const lease = await request(
+      z.object({
+        baseUrl: z.url(),
+        expiresAt: z.string(),
+        versionId: z.string(),
+      }),
+      `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/preview-leases?${projectQuery(projectId)}`,
+      reuse === null
+        ? {headers: mutationHeaders(), method: "POST"}
+        : {body: JSON.stringify({reuse}), headers: mutationHeaders(), method: "POST"},
+    );
+    if (lease.versionId === versionId) previewLeases.remember(lease);
+    return lease;
+  },
   versionFile: (
     projectId: string,
     artifactId: string,
