@@ -679,3 +679,32 @@ First hosted run with the canary, October 6, 2026, same image as above (`project
 - **The host was still contended.** Its own database round trip had a median of 16–161 ms across samples where it should be under 1 ms.
 - **The Library is now 2.2 s cold** with every pod's contribution cache warm, against 5.4 s and 10.5 s in the two earlier runs. Read that difference together with the Host DB column, not as a clean before/after.
 - **Warm Library opens counted 41 requests** (33–63), against 14 in the previous run. The extra requests are thumbnail `/media` requests captured within the sample; why more of them landed inside the window this time is not established. The Library data itself was still one request.
+
+## October 2026 private preview caching (CNT-012)
+
+Private previews now reuse one 12-hour lease per person and version, confirmed by the application before each reuse. Lease-origin responses are `private, max-age=<seconds until the lease expires>, immutable`, so a reopen or a page switch reuses the same origin and the browser cache. Logout, member deactivation, key revocation and key rotation end a person's leases, and a second sweep follows once cached credentials expire. Measured October 6, 2026 with `pnpm perf:delivery` (Chromium 151, unthrottled, five samples per journey, Apple M1 Max). The hosted run used artifacts.backend.app on image `sha256:82e98bd2993ef6f42b1da998575406b0308d47273ce9fb56b2b70af3ddc0e913` (main `091eaaa`); evidence is `project/evidence/delivery-baseline-2026-10-06-hosted-after-preview-cache.json`.
+
+### Local (synthetic fixture)
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts | Host DB |
+|---|---|---|---|---|---|---|---|---|---|
+| library | cold | 142 ms (138 ms–148 ms) | 108 ms (104 ms–112 ms) | 13 (13–13) | 499.1 KiB (499.1 KiB–499.1 KiB) | 1.46 MiB (1.46 MiB–1.46 MiB) | identity | 0 | n/a |
+| library | warm | 77 ms (71 ms–82 ms) | 64 ms (60 ms–68 ms) | 13 (13–13) | 1.5 KiB (1.5 KiB–1.5 KiB) | 1.30 MiB (1.30 MiB–1.30 MiB) | identity | 0 | n/a |
+| prototype | cold | 843 ms (836 ms–850 ms) | 124 ms (120 ms–136 ms) | 31 (31–31) | 2.38 MiB (2.38 MiB–2.38 MiB) | 17.45 MiB (17.45 MiB–17.45 MiB) | br | 0 | n/a |
+| prototype | warm | 744 ms (728 ms–755 ms) | 84 ms (76 ms–88 ms) | 31 (31–31) | 3.3 KiB (3.3 KiB–3.3 KiB) | 17.29 MiB (17.29 MiB–17.29 MiB) | br | 0 | n/a |
+
+The warm prototype transferred 3.3 KiB, against 1.72 MiB before. The request count is unchanged because the harness counts responses served from cache.
+
+### Hosted (artifacts.backend.app)
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts | Host DB |
+|---|---|---|---|---|---|---|---|---|---|
+| library | cold | 4658 ms (1799 ms–11736 ms) | 1432 ms (1052 ms–2924 ms) | 12 (12–13) | 491.3 KiB (491.2 KiB–512.8 KiB) | 1.52 MiB (1.52 MiB–1.54 MiB) | identity | 0 | 32.1 ms (12.0 ms–63.6 ms) |
+| library | warm | 2606 ms (1947 ms–5582 ms) | 1368 ms (448 ms–1616 ms) | 68 (33–68) | 14.3 KiB (14.3 KiB–72.6 KiB) | 2.02 MiB (1.60 MiB–2.02 MiB) | identity | 0 | 111.9 ms (58.2 ms–168.8 ms) |
+| prototype | cold | 10757 ms (9280 ms–15336 ms) | 2228 ms (1060 ms–2424 ms) | 63 (50–63) | 2.92 MiB (1.19 MiB–2.92 MiB) | 17.55 MiB (12.12 MiB–17.55 MiB) | br | 0 | 37.7 ms (10.7 ms–56.2 ms) |
+| prototype | warm | 2147 ms (1570 ms–5343 ms) | 460 ms (252 ms–1504 ms) | 62 (62–62) | 8.7 KiB (8.7 KiB–1.73 MiB) | 17.22 MiB (17.22 MiB–17.36 MiB) | br | 0 | 40.4 ms (11.9 ms–98.7 ms) |
+
+- **Warm prototype opens are about four times faster.** The warm ExtractionKit open was ready in 2.1 s (1.6–5.3 s), against 8.2 s and 11.5 s in the two previous hosted runs, and transferred 8.7 KiB against 2.8 MiB. Host contention was comparable: Host DB had a median of 40 ms here, against 45 ms in the canary run. One warm sample transferred 1.73 MiB, so not every reopen hit the cache; this run does not establish why.
+- **The 2-second warm target is at the edge; cold opens are unchanged.** Cold prototype opens still take 10.8 s, as they must, since a first open has nothing cached. The remaining cold cost is per-request server latency on this host, recorded in the host-contention section above.
+- **The cold prototype counted 63 requests, against 81–88 before.** This run does not establish whether that difference comes from this change or from sampling.
+- **WebKit re-downloads the entry page on each reopen.** It fetches it through the application's `/file` route, even though that response is `private, max-age=31536000, immutable`. Lease-origin files are served from cache in every engine. This is pre-existing `/file` behavior, found while proving CNT-012 across engines, and is not addressed here.
