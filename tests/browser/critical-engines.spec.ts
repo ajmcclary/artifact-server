@@ -11,13 +11,21 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {publishPath} from "../../src/client/file-publication-client.js";
 import {writePreviewSourceFixture} from "../support/claude-design-fixture.js";
 
-import {publishNew, publishVersion} from "../support/publishing.js";
+import {
+  commitStagedUpload,
+  createStagedUpload,
+  publishNew,
+  publishVersion,
+  type TestSiteFile,
+  uploadEveryStagedFile,
+} from "../support/publishing.js";
 import {
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
+import {fetchVersion} from "../support/runtime-harness.js";
 import {isolatedReviewFrame, openInspectorTab, openReview, returnToGallery, reviewHref} from "./review-helpers.js";
 import {
   createThreadOverApi,
@@ -114,6 +122,80 @@ test.describe("critical engine review paths @critical", () => {
         .toBeVisible();
       expect(new URL(fixture.page.url()).searchParams.get("version"))
         .toBe(historical.body.version.id);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("CNT-012-B CNT-012-F: a reopen and a page switch reuse one lease origin from cache, and logout ends it @critical", async ({browser}) => {
+    let bytesRead = 0;
+    const fixture = await startBrowserFixture(browser, {serverOptions: {
+      blobReadObserver: {
+        bytesRead: (byteLength) => {
+          bytesRead += byteLength;
+        },
+        streamClosed: () => undefined,
+      },
+      contentVariantBuilds: "manual",
+    }});
+    try {
+      const encoder = new TextEncoder();
+      const files: readonly TestSiteFile[] = [
+        {bytes: encoder.encode("<!doctype html><html lang=\"en\"><link rel=\"stylesheet\" href=\"shared.css\"><h1>Lease page one</h1></html>"), mediaType: "text/html; charset=utf-8", path: "index.html"},
+        {bytes: encoder.encode("<!doctype html><html lang=\"en\"><link rel=\"stylesheet\" href=\"shared.css\"><h1>Lease page two</h1></html>"), mediaType: "text/html; charset=utf-8", path: "two.html"},
+        // Larger than both pages together, so any server read of it shows in the byte count.
+        {bytes: encoder.encode(`h1 { color: rgb(1, 2, 3); }\n/*${"x".repeat(8_192)}*/`), mediaType: "text/css; charset=utf-8", path: "shared.css"},
+      ];
+      const stylesheetBytes = files[2]?.bytes.byteLength ?? 0;
+      const upload = await createStagedUpload(fixture.server, fixture.installation, "index.html", files);
+      await uploadEveryStagedFile(fixture.installation, upload.body, files);
+      const published = (await commitStagedUpload(fixture.installation, upload.body, "critical-lease-reuse", {
+        accessSetting: "account_required",
+        kind: "new_artifact",
+        name: "Critical lease reuse",
+        tags: [],
+      })).body;
+      const target = {artifactId: published.artifact.id, versionId: published.version.id};
+      const leaseHosts = new Set<string>();
+      const leaseStatuses: number[] = [];
+      fixture.page.on("response", (response) => {
+        const url = new URL(response.url());
+        if (url.hostname.startsWith("review-")) leaseHosts.add(url.hostname);
+        if (url.pathname.endsWith("/preview-leases")) leaseStatuses.push(response.status());
+      });
+
+      await localLogin(fixture);
+      await fixture.page.goto(reviewHref(fixture.server.baseUrl, target));
+      const preview = isolatedReviewFrame(fixture.page).frameLocator("iframe");
+      await expect(preview.getByRole("heading", {name: "Lease page one"})).toBeVisible();
+      await expect.poll(() => leaseHosts.size).toBe(1);
+
+      const beforeReopen = bytesRead;
+      // A reopen is a new navigation to the same review, as a person returning to it makes.
+      await fixture.page.goto("about:blank");
+      await fixture.page.goto(reviewHref(fixture.server.baseUrl, target));
+      await expect(preview.getByRole("heading", {name: "Lease page one"})).toBeVisible();
+      expect(leaseStatuses.at(-1), "the reopen confirmed the stored lease").toBe(200);
+      expect(leaseHosts.size, "the reopen used the same lease origin").toBe(1);
+      // An engine may refetch the entry page through /file; the shared stylesheet must come from cache.
+      expect(bytesRead - beforeReopen, "the reopen served the stylesheet from cache").toBeLessThan(stylesheetBytes);
+
+      const beforeSwitch = bytesRead;
+      await fixture.page.goto(reviewHref(fixture.server.baseUrl, {...target, path: "two.html"}));
+      await expect(preview.getByRole("heading", {name: "Lease page two"})).toBeVisible();
+      expect(leaseHosts.size, "the page switch used the same lease origin").toBe(1);
+      expect(bytesRead - beforeSwitch, "the page switch served the shared stylesheet from cache").toBeLessThan(stylesheetBytes);
+
+      const [leaseHost] = leaseHosts;
+      expect(await fixture.page.evaluate(() => localStorage.getItem("artifact-server.preview-leases")))
+        .toContain(leaseHost);
+      await fixture.page.getByRole("button", {name: /^Account menu: /u}).click();
+      await fixture.page.getByRole("menuitem", {name: "Sign out"}).click();
+      // Sign-out forgets the stored lease and the server rejects its hostname from then on.
+      await expect.poll(() => fixture.page.evaluate(
+        () => localStorage.getItem("artifact-server.preview-leases"),
+      ).catch(() => "navigating")).toBeNull();
+      expect((await fetchVersion(fixture.server, `http://${leaseHost ?? ""}/index.html`)).status).toBe(401);
     } finally {
       await stopBrowserFixture(fixture);
     }

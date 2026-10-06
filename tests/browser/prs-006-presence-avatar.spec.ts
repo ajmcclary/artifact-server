@@ -277,7 +277,8 @@ test.describe("PRS-006 presence avatar", () => {
 
       expect(await browserStorage(page)).toEqual({
         indexedDatabaseNames: [],
-        localStorageKeys: [expect.stringMatching(/^dispatch-default:/u)],
+        // The preview lease document (CNT-012) is the only other key Review keeps.
+        localStorageKeys: ["artifact-server.preview-leases", expect.stringMatching(/^dispatch-default:/u)],
         sessionStorageKeys: [],
       });
     } finally {

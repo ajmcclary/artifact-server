@@ -1,4 +1,4 @@
-import {expect, type Browser, type BrowserContext, type Page} from "@playwright/test";
+import {expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page} from "@playwright/test";
 
 import {
   createTestInstallation,
@@ -26,11 +26,16 @@ export const workspaceViewport = {height: 1000, width: 1680} as const;
 
 export async function startBrowserFixture(
   browser: Browser,
-  options: {readonly timezoneId?: string} = {},
+  options: {
+    readonly serverOptions?: Parameters<typeof startTestServer>[1];
+    readonly timezoneId?: string;
+  } = {},
 ): Promise<BrowserFixture> {
   const installation = await createTestInstallation();
-  const server = await startTestServer(installation);
-  const context = await browser.newContext({viewport: workspaceViewport, ...options});
+  const server = await startTestServer(installation, options.serverOptions);
+  const contextOptions: BrowserContextOptions = {viewport: workspaceViewport};
+  if (options.timezoneId !== undefined) contextOptions.timezoneId = options.timezoneId;
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   return {context, installation, page, server};
 }
@@ -73,7 +78,8 @@ export async function browserStorage(page: Page): Promise<{
     indexedDatabaseNames: (await indexedDB.databases())
       .map((database) => database.name)
       .filter((name): name is string => name !== undefined),
-    localStorageKeys: Object.keys(localStorage),
-    sessionStorageKeys: Object.keys(sessionStorage),
+    // Key order follows write timing and carries no meaning, so callers compare a sorted list.
+    localStorageKeys: Object.keys(localStorage).toSorted(),
+    sessionStorageKeys: Object.keys(sessionStorage).toSorted(),
   }));
 }
