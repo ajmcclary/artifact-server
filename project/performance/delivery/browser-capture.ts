@@ -98,6 +98,8 @@ export class ContentNetworkMonitor {
 }
 
 export interface SampleRequest {
+  /** Measures host contention just before the sample, outside the browser's capture. */
+  readonly hostProbe: () => Promise<number | null>;
   readonly index: number;
   readonly journey: JourneyName;
   readonly measureLocalCpu: boolean;
@@ -144,6 +146,7 @@ export async function measureSample(
   monitor: ContentNetworkMonitor,
   request: SampleRequest,
 ): Promise<SampleObservation> {
+  const hostDatabaseMilliseconds = await request.hostProbe();
   await recorder.drain();
   monitor.reset();
   const cpuBefore = process.cpuUsage();
@@ -159,6 +162,7 @@ export async function measureSample(
   return {
     exchanges: await recorder.drain(),
     firstContentfulPaintMilliseconds: await firstContentfulPaint(page),
+    hostDatabaseMilliseconds,
     index: request.index,
     localProcessCpuMilliseconds: request.measureLocalCpu ? (cpu.user + cpu.system) / 1_000 : null,
     readyMilliseconds,

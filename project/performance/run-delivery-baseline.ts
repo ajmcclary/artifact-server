@@ -42,6 +42,7 @@ import {
   restrictPrivateTree,
   writePrivateFile,
 } from "./delivery/private-output.js";
+import {probeHostDatabaseLatency} from "./delivery/host-probe.js";
 import {writeSyntheticPrototype} from "./delivery/synthetic-prototype.js";
 import {captureMeasurementContext} from "./measurement-context.js";
 
@@ -277,10 +278,12 @@ async function measureJourney(
       // eslint-disable-next-line no-await-in-loop -- one page per sample context
       const page = await context.newPage();
       const measureLocalCpu = target.kind === "local";
+      const hostProbe = () => probeHostDatabaseLatency(target.origins.applicationOrigin);
       // eslint-disable-next-line no-await-in-loop -- the cold open must finish before the warm one
-      const coldObservation = await measureSample(page, recorder, monitor, {index, journey, measureLocalCpu, navigation: "goto", url});
+      const coldObservation = await measureSample(page, recorder, monitor, {hostProbe, index, journey, measureLocalCpu, navigation: "goto", url});
       // eslint-disable-next-line no-await-in-loop -- the warm open reuses the cold open's cache
       const warmObservation = await measureSample(page, recorder, monitor, {
+        hostProbe,
         index,
         journey,
         measureLocalCpu,

@@ -74,6 +74,7 @@ function observation(index: number, readyMilliseconds: number | null): SampleObs
   return {
     exchanges: hostileExchanges,
     firstContentfulPaintMilliseconds: readyMilliseconds === null ? null : 100,
+    hostDatabaseMilliseconds: 2.25,
     index,
     localProcessCpuMilliseconds: null,
     readyMilliseconds,
@@ -165,6 +166,8 @@ describe("delivery report", () => {
     expect(journey.aggregate.readyMilliseconds).toEqual({maximum: 900, median: 900, minimum: 900});
     expect(journey.aggregate.transferBytes).toEqual({maximum: 4096, median: 4096, minimum: 4096});
     expect(journey.aggregate.requests?.median).toBe(4);
+    expect(ready.hostDatabaseMilliseconds).toBe(2.3);
+    expect(journey.aggregate.hostDatabaseMilliseconds).toEqual({maximum: 2.3, median: 2.3, minimum: 2.3});
   });
 
   test("foundation: a journey whose samples all time out still produces a report", () => {
@@ -184,6 +187,7 @@ describe("delivery report", () => {
         exchange("blob:https://artifacts.example.test/secret-blob-id", {}),
       ],
       firstContentfulPaintMilliseconds: null,
+      hostDatabaseMilliseconds: null,
       index: 0,
       localProcessCpuMilliseconds: null,
       readyMilliseconds: 10,
@@ -205,7 +209,7 @@ describe("delivery report", () => {
       webBuild: null,
     });
     const table = formatJourneyTable(report).split("\n");
-    expect(table[0]).toBe("| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |");
-    expect(table[2]).toBe("| prototype | cold | 900 ms (900 ms–900 ms) | 100 ms (100 ms–100 ms) | 4 (4–4) | 4.0 KiB (4.0 KiB–4.0 KiB) | 16.0 KiB (16.0 KiB–16.0 KiB) | br | 0 |");
+    expect(table[0]).toBe("| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts | Host DB |");
+    expect(table[2]).toBe("| prototype | cold | 900 ms (900 ms–900 ms) | 100 ms (100 ms–100 ms) | 4 (4–4) | 4.0 KiB (4.0 KiB–4.0 KiB) | 16.0 KiB (16.0 KiB–16.0 KiB) | br | 0 | 2.3 ms (2.3 ms–2.3 ms) |");
   });
 });

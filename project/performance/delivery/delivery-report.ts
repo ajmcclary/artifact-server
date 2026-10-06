@@ -36,6 +36,8 @@ export interface CapturedExchange {
 export interface SampleObservation {
   readonly exchanges: readonly CapturedExchange[];
   readonly firstContentfulPaintMilliseconds: number | null;
+  /** The server's own database round trip just before the sample; null when not exposed. */
+  readonly hostDatabaseMilliseconds: number | null;
   readonly index: number;
   readonly localProcessCpuMilliseconds: number | null;
   /** Null when the journey's ready signal did not arrive before its deadline. */
@@ -58,6 +60,7 @@ export interface RouteSummary {
 
 export interface SampleSummary {
   readonly firstContentfulPaintMilliseconds: number | null;
+  readonly hostDatabaseMilliseconds: number | null;
   readonly index: number;
   readonly localProcessCpuMilliseconds: number | null;
   readonly outcome: "ready" | "timeout";
@@ -74,6 +77,7 @@ export interface Statistics {
 export interface JourneyAggregate {
   readonly decodedBytes: Statistics | null;
   readonly firstContentfulPaintMilliseconds: Statistics | null;
+  readonly hostDatabaseMilliseconds: Statistics | null;
   readonly localProcessCpuMilliseconds: Statistics | null;
   readonly readyMilliseconds: Statistics | null;
   readonly requests: Statistics | null;
@@ -262,6 +266,7 @@ export function summarizeSample(observation: SampleObservation, origins: Deliver
   }
   return {
     firstContentfulPaintMilliseconds: roundMilliseconds(observation.firstContentfulPaintMilliseconds),
+    hostDatabaseMilliseconds: roundMilliseconds(observation.hostDatabaseMilliseconds),
     index: observation.index,
     localProcessCpuMilliseconds: roundMilliseconds(observation.localProcessCpuMilliseconds),
     outcome: observation.readyMilliseconds === null ? "timeout" : "ready",
@@ -313,6 +318,7 @@ export function summarizeJourney(
     aggregate: {
       decodedBytes: statistics(samples.map((sample) => sampleTotal(sample, "decodedBytes"))),
       firstContentfulPaintMilliseconds: statistics(present(samples.map((sample) => sample.firstContentfulPaintMilliseconds))),
+      hostDatabaseMilliseconds: statistics(present(samples.map((sample) => sample.hostDatabaseMilliseconds))),
       localProcessCpuMilliseconds: statistics(present(samples.map((sample) => sample.localProcessCpuMilliseconds))),
       readyMilliseconds: statistics(present(samples.map((sample) => sample.readyMilliseconds))),
       requests: statistics(samples.map((sample) => sampleTotal(sample, "requests"))),
@@ -402,10 +408,11 @@ export function buildDeliveryReport(input: DeliveryReportInput): DeliveryReport 
   };
 }
 
-type StatisticUnit = "bytes" | "count" | "milliseconds";
+type StatisticUnit = "bytes" | "count" | "fine-milliseconds" | "milliseconds";
 
 function formatValue(value: number, unit: StatisticUnit): string {
   if (unit === "milliseconds") return `${Math.round(value)} ms`;
+  if (unit === "fine-milliseconds") return `${value.toFixed(1)} ms`;
   if (unit === "count") return String(Math.round(value));
   return value >= 1_048_576 ? `${(value / 1_048_576).toFixed(2)} MiB` : `${(value / 1_024).toFixed(1)} KiB`;
 }
@@ -415,7 +422,10 @@ function formatStatistics(value: Statistics | null, unit: StatisticUnit): string
   return `${formatValue(value.median, unit)} (${formatValue(value.minimum, unit)}–${formatValue(value.maximum, unit)})`;
 }
 
-/** A Markdown table for FINDINGS.md: medians with ranges, and the lease encodings seen. */
+/**
+ * A Markdown table for FINDINGS.md: medians with ranges, the lease encodings seen,
+ * and the host's own database round trip so contended runs are recognizable.
+ */
 export function formatJourneyTable(report: DeliveryReport): string {
   const rows = report.journeys.map((journey) => {
     const encodings = new Set(journey.samples
@@ -433,11 +443,12 @@ export function formatJourneyTable(report: DeliveryReport): string {
       formatStatistics(aggregate.decodedBytes, "bytes"),
       encodings.size === 0 ? "identity" : sorted(encodings).join(", "),
       String(journey.timeouts),
+      formatStatistics(aggregate.hostDatabaseMilliseconds, "fine-milliseconds"),
     ].join(" | ");
   });
   return [
-    "| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |",
-    "|---|---|---|---|---|---|---|---|---|",
+    "| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts | Host DB |",
+    "|---|---|---|---|---|---|---|---|---|---|",
     ...rows.map((row) => `| ${row} |`),
   ].join("\n");
 }
