@@ -1465,11 +1465,14 @@ export function createHttpApp(
   });
 
   app.get("/api/v1/library", async (context) => {
+    const started = performance.now();
     const library = await runHttpApplicationEffect(
       context,
       dependencies,
       LibraryCatalogService.use((catalog) => catalog.read(context.get("principal"))),
     );
+    // Server time lets delivery measurements separate assembly from transfer.
+    context.header("Server-Timing", `library;dur=${(performance.now() - started).toFixed(1)}`);
     return context.json(library);
   });
 

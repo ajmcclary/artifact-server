@@ -215,6 +215,48 @@ describe("server-side Library", () => {
     }
   }, 120_000);
 
+  test("foundation: repeated Library reads follow new and restored current versions and report server time", async () => {
+    const owner = new ApiClient(server, installation.apiToken);
+    const site = path.join(directory, "repeat");
+    const writeVersion = async (pages: readonly string[], label: string) => {
+      await rm(site, {force: true, recursive: true});
+      await mkdir(site, {recursive: true});
+      await Promise.all(pages.map((page) => writeFile(path.join(site, page), `<!doctype html><h1>${page} ${label}</h1>`)));
+      await writeFile(path.join(site, "artifactserver.previews.json"), JSON.stringify({
+        format: "artifact-server.preview-source",
+        items: pages.map((page) => ({kind: "prototype", path: page, section: "Pages", title: page})),
+        title: "Repeat",
+        version: 2,
+      }));
+    };
+    await writeVersion(["a.html"], "one");
+    const first = await publish(site, named("Repeat"));
+    const firstResponse = await owner.fetch("/api/v1/library");
+    expect(firstResponse.headers.get("server-timing")).toMatch(/^library;dur=\d+(\.\d+)?$/u);
+    const firstRead = librarySchema.parse(await firstResponse.json());
+    expect(firstRead.galleries[0]?.versionId).toBe(first.version.id);
+    expect(await readLibrary(owner)).toEqual({...firstRead, generatedAt: expect.any(String)});
+
+    await writeVersion(["a.html", "b.html"], "two");
+    const second = await publish(site, {artifactId: first.artifact.id, expectedCurrentVersionId: first.version.id, kind: "new_version"});
+    const afterPublish = (await readLibrary(owner)).galleries[0];
+    expect(afterPublish?.versionId).toBe(second.version.id);
+    expect(afterPublish?.items.map((item) => item.path)).toEqual(["a.html", "b.html"]);
+    const changed = afterPublish?.items.find((item) => item.path === "a.html");
+    expect(changed?.activityAt).not.toBe(changed?.createdAt);
+
+    const restored = await owner.fetch(`/api/v1/artifacts/${first.artifact.id}/restore`, {
+      body: JSON.stringify({expectedCurrentVersionId: second.version.id, versionId: first.version.id}),
+      idempotencyKey: "library-repeat-restore-first",
+      method: "POST",
+    });
+    expect(restored.status).toBe(200);
+    const afterRestore = (await readLibrary(owner)).galleries[0];
+    expect(afterRestore?.versionId).toBe(first.version.id);
+    expect(afterRestore?.items.map((item) => item.path)).toEqual(["a.html"]);
+    expect(afterRestore?.items[0]?.activityAt).toBe(afterRestore?.items[0]?.createdAt);
+  });
+
   test("DSN-006-F: unreadable galleries are named, capability-less callers learn nothing, and anonymous callers are refused", async () => {
     const owner = new ApiClient(server, installation.apiToken);
     const claims = path.join(directory, "claims");

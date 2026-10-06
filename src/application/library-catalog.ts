@@ -34,8 +34,10 @@ import {AuthorizationService, type AuthorizationOperations} from "./authorizatio
 /** The Library examines at most this many artifacts, matching the client's former 20 pages of 100. */
 export const maximumLibraryArtifacts = 2_000;
 const artifactPageSize = 100;
-/** Parsed indexes per immutable version; a cached entry can never go stale. */
-const maximumCachedIndexes = 1_000;
+/** What each immutable version contributes; a cached entry can never go stale. */
+const maximumCachedVersions = 1_000;
+/** Cache misses read concurrently, leaving headroom in each process's database pool. */
+const missReadConcurrency = 6;
 
 /** Reads the Library needs, as the application consumes them. */
 export interface LibraryCatalogDependencies {
@@ -77,11 +79,31 @@ export class LibraryCatalogService extends Context.Service<
     );
 }
 
+type ReadyReading = Extract<PreviewIndexReading, {readonly status: "ready"}>;
+
+/** What one exact version contributes to the Library; immutable, so cacheable by version id. */
+type VersionContribution =
+  | {
+    readonly kind: "gallery";
+    readonly reading: ReadyReading;
+    readonly versionCreatedAt: string;
+    readonly versionId: string;
+    readonly versionNumber: number;
+  }
+  | {readonly kind: "invalid"}
+  | {readonly kind: "none"};
+
+type GalleryContribution = Extract<VersionContribution, {readonly kind: "gallery"}>;
+
 interface ReadableGallery {
   readonly artifact: ArtifactListItem;
+  readonly contribution: GalleryContribution;
   readonly project: ProjectRecord;
-  readonly reading: Extract<PreviewIndexReading, {readonly status: "ready"}>;
-  readonly version: ArtifactVersion;
+}
+
+interface ListedArtifact {
+  readonly artifact: ArtifactListItem;
+  readonly project: ProjectRecord;
 }
 
 function laterOf(left: string, right: string | null): string {
@@ -89,12 +111,12 @@ function laterOf(left: string, right: string | null): string {
 }
 
 function assembleGallery(gallery: ReadableGallery, dates: ReadonlyMap<string, LibraryPageDates>): LibraryGallery {
-  const fallback = gallery.version.version.createdAt;
+  const fallback = gallery.contribution.versionCreatedAt;
   return {
     artifactId: gallery.artifact.id,
     artifactName: gallery.artifact.name,
-    indexTitle: gallery.reading.title,
-    items: gallery.reading.items.map((item): LibraryGalleryItem => {
+    indexTitle: gallery.contribution.reading.title,
+    items: gallery.contribution.reading.items.map((item): LibraryGalleryItem => {
       const dated = dates.get(`${gallery.artifact.id}\u001f${item.path}`);
       return {
         activityAt: dated === undefined ? fallback : laterOf(dated.changedAt, dated.commentedAt),
@@ -111,7 +133,7 @@ function assembleGallery(gallery: ReadableGallery, dates: ReadonlyMap<string, Li
     }),
     projectId: gallery.project.id,
     projectName: gallery.project.name,
-    versionId: gallery.version.version.id,
+    versionId: gallery.contribution.versionId,
   };
 }
 
@@ -119,36 +141,49 @@ function makeLibraryCatalogService(
   dependencies: LibraryCatalogDependencies,
   authorization: AuthorizationOperations,
 ): LibraryCatalogOperations {
-  const indexes = new Map<string, PreviewIndexReading>();
+  // Least recently used first; a hit moves its entry to the end.
+  const contributions = new Map<string, VersionContribution>();
 
-  const readIndex = Effect.fn("LibraryCatalogService.readIndex")(function*(
-    version: ArtifactVersion,
-    indexEntry: ManifestEntry,
-  ) {
-    const cached = indexes.get(version.version.id);
-    if (cached !== undefined) return cached;
-    if (indexEntry.size > maximumPreviewIndexBytes) {
-      return {reason: "The preview index is too large.", status: "invalid"} satisfies PreviewIndexReading;
+  const remember = (versionId: string, contribution: VersionContribution): VersionContribution => {
+    contributions.delete(versionId);
+    contributions.set(versionId, contribution);
+    if (contributions.size > maximumCachedVersions) {
+      const oldest = contributions.keys().next().value;
+      if (oldest !== undefined) contributions.delete(oldest);
     }
+    return contribution;
+  };
+
+  const contributionOf = Effect.fn("LibraryCatalogService.contributionOf")(function*(listed: ListedArtifact) {
+    const versionId = listed.artifact.currentVersionId;
+    const cached = contributions.get(versionId);
+    if (cached !== undefined) return remember(versionId, cached);
+    const version = yield* dependencies.findVersionRecord(listed.project.id, listed.artifact.id, versionId);
+    // A current version that cannot be found is not cached: the next read looks again.
+    if (version === null) return {kind: "none"} satisfies VersionContribution;
+    const indexEntry = version.manifest.entries.find((entry) => entry.path === previewIndexPath);
+    if (indexEntry === undefined) return remember(versionId, {kind: "none"});
+    if (indexEntry.size > maximumPreviewIndexBytes) return remember(versionId, {kind: "invalid"});
     // A failed read marks only this gallery unreadable and is not cached: it may be transient.
     const text = yield* dependencies.readBlobText(indexEntry).pipe(Effect.orElseSucceed(() => null));
-    if (text === null) return {reason: "The preview index could not be read.", status: "invalid"} satisfies PreviewIndexReading;
+    if (text === null) return {kind: "invalid"} satisfies VersionContribution;
     const reading = readPreviewIndex(text, version.manifest.entries);
-    indexes.set(version.version.id, reading);
-    if (indexes.size > maximumCachedIndexes) {
-      const oldest = indexes.keys().next().value;
-      if (oldest !== undefined) indexes.delete(oldest);
-    }
-    return reading;
+    return remember(versionId, reading.status === "ready"
+      ? {
+        kind: "gallery",
+        reading,
+        versionCreatedAt: version.version.createdAt,
+        versionId,
+        versionNumber: version.version.number,
+      }
+      : {kind: "invalid"});
   });
 
   const read = Effect.fn("LibraryCatalogService.read")(function*(principal: Principal) {
     yield* authorization.requireArtifactListing(principal);
     const projects = (yield* dependencies.listProjects())
       .toSorted((left, right) => left.name.localeCompare(right.name));
-    const galleries: ReadableGallery[] = [];
-    const unreadable: string[] = [];
-    let examined = 0;
+    const listed: ListedArtifact[] = [];
     let truncated = false;
     for (const project of projects) {
       let cursor: PageCursor | null = null;
@@ -162,33 +197,35 @@ function makeLibraryCatalogService(
           tags: [],
         });
         for (const artifact of page.items) {
-          if (examined >= maximumLibraryArtifacts) {
+          if (listed.length >= maximumLibraryArtifacts) {
             truncated = true;
             break;
           }
-          examined += 1;
-          const version = yield* dependencies.findVersionRecord(project.id, artifact.id, artifact.currentVersionId);
-          const indexEntry = version?.manifest.entries.find((entry) => entry.path === previewIndexPath);
-          if (version === null || indexEntry === undefined) continue;
-          const reading = yield* readIndex(version, indexEntry);
-          if (reading.status === "invalid") {
-            unreadable.push(artifact.name);
-            continue;
-          }
-          galleries.push({artifact, project, reading, version});
+          listed.push({artifact, project});
         }
         cursor = truncated ? null : page.nextCursor;
       } while (cursor !== null);
       if (truncated) break;
     }
+    const contributed = yield* Effect.forEach(
+      listed,
+      (entry) => contributionOf(entry).pipe(Effect.map((contribution) => ({artifact: entry.artifact, contribution, project: entry.project}))),
+      {concurrency: missReadConcurrency},
+    );
+    const galleries: ReadableGallery[] = [];
+    const unreadable: string[] = [];
+    for (const {artifact, contribution, project} of contributed) {
+      if (contribution.kind === "gallery") galleries.push({artifact, contribution, project});
+      else if (contribution.kind === "invalid") unreadable.push(artifact.name);
+    }
     const dates = yield* dependencies.pageDates(galleries.map((gallery) => ({
       artifactId: gallery.artifact.id,
-      currentVersionNumber: gallery.version.version.number,
-      paths: gallery.reading.items.map((item) => item.path),
+      currentVersionNumber: gallery.contribution.versionNumber,
+      paths: gallery.contribution.reading.items.map((item) => item.path),
     })));
     const datesByPage = new Map(dates.map((row) => [`${row.artifactId}\u001f${row.path}`, row]));
     return {
-      examined,
+      examined: listed.length,
       galleries: galleries
         .toSorted((left, right) =>
           left.project.name.localeCompare(right.project.name)
