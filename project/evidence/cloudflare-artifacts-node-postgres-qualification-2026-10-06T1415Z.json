@@ -1,0 +1,46 @@
+{
+  "accountId": "ee625e5e88a18eea4402075704d78f9f",
+  "checks": {
+    "providerAvailability": "pass",
+    "estimateWithoutRemoteEffects": "pass",
+    "backfillAndFollowOn": "pass",
+    "readOnlyExactClone": "pass",
+    "outageIsolationAndRecovery": "pass",
+    "crashDuringPushRecovery": "pass",
+    "twoProcessConvergence": "pass",
+    "disableAndResume": "pass"
+  },
+  "cleanup": {
+    "outcome": "not-run",
+    "crashMappedVersionsAtKill": 1,
+    "namespaceRepositoriesAtEnd": 0,
+    "namespaceRepositoriesAtStart": 0,
+    "remainingAfterPurge": 4,
+    "removedBySafetyNet": [
+      "art_d46a5fcc-2197-49f7-9eb2-f865d04c17ad",
+      "art_3b2bcad9-ad84-42b0-bd36-597658b976d7",
+      "art_bef54769-164c-459b-849f-a4e1aa509bc1",
+      "art_5344f513-4c5c-41ec-be04-dc28b615fcae"
+    ]
+  },
+  "completedAt": "2026-10-06T14:19:18.201Z",
+  "costPosture": {
+    "clones": 4,
+    "estimatedProviderOperations": "about 4 per mirrored version plus 2 per repository and 1 per clone",
+    "loadOrQuotaTesting": false,
+    "versionsMirrored": "15"
+  },
+  "deployment": "single_server",
+  "installationId": "cfa-qualification-muwrgre8-f4789d49",
+  "limits": {
+    "fileCopyLimitBytes": 256,
+    "maximumMirroredVersions": 16,
+    "maximumRepositories": 4
+  },
+  "namespace": "artifact-server-test-qualification",
+  "nodeVersion": "v24.15.0",
+  "runId": "muwrgre8-f4789d49",
+  "runtime": "compiled Node external-storage server, disposable pinned Postgres and MinIO",
+  "schemaVersion": 1,
+  "sourceCommit": "b2116b72b8adab128de2dc84358f7e0aaf3436d6"
+}

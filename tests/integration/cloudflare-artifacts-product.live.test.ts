@@ -400,8 +400,17 @@ describe.skipIf(!live)("Cloudflare Artifacts Node/Postgres product qualification
       "--confirm-installation", `${installationId}-other`,
     ]);
     expect(wrong.exitCode).not.toBe(0);
+    const whileEnabled = await runCli([
+      "history", "purge", "--mode", "external-storage", "--apply",
+      "--confirm-installation", installationId,
+    ]);
+    expect(whileEnabled.exitCode).toBe(1);
+    expect(whileEnabled.output).toContain("Disable Git history for every project");
     expect(await Promise.all(repositories.map(remoteRepositoryStatus)))
       .toEqual(repositories.map(() => 200));
+    const server = await startServer();
+    await setProjectGitHistory(server.baseUrl, false);
+    await stopProcess(server.child, "SIGTERM");
     const applied = await runCli([
       "history", "purge", "--mode", "external-storage", "--apply",
       "--confirm-installation", installationId, "--page-size", "1",
