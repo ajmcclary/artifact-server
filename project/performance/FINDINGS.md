@@ -635,3 +635,18 @@ Earlier hosted Library cold medians, in the CNT-010 and CNT-011 sections above: 
 - **Thumbnails still load per tile** through the media route, after the first tiles are visible, at 1–6 s each on this deployment.
 - **Dates are now exact.** They come from every version and every reply, not a 40-version window and the reply approximation. The equivalence test proves they match the client's former algorithm over random histories.
 - **Hosted timings vary widely between sessions.** Read single comparisons with that in mind.
+
+### Contribution cache and concurrent reads (main `4c7cad2`)
+
+The service now caches what each immutable version contributes to the Library (gallery, no gallery, or invalid index) by version id, so a warm request skips the version, manifest, and index reads. It reads cache misses six at a time and reports `Server-Timing: library;dur=<ms>`. The hosted run used image `sha256:f26abb7f22adff970c47006c75f4f76815f9675da7c9d394c13146814c40be18` on October 6, 2026; evidence is `project/evidence/delivery-baseline-2026-10-06-hosted-after-library-cache.json`.
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts |
+|---|---|---|---|---|---|---|---|---|
+| library | cold | 10489 ms (5446 ms–11455 ms) | 4448 ms (2624 ms–5212 ms) | 13 (12–13) | 512.4 KiB (490.8 KiB–512.5 KiB) | 1.54 MiB (1.52 MiB–1.54 MiB) | identity | 0 |
+| library | warm | 6475 ms (4136 ms–11468 ms) | 1760 ms (1168 ms–5584 ms) | 14 (13–24) | 35.6 KiB (14.0 KiB–92.1 KiB) | 1.37 MiB (1.37 MiB–1.46 MiB) | identity | 0 |
+| prototype | cold | 13050 ms (8144 ms–18401 ms) | 1688 ms (1116 ms–5168 ms) | 81 (80–88) | 3.38 MiB (3.38 MiB–3.64 MiB) | 19.70 MiB (19.70 MiB–19.96 MiB) | br | 0 |
+| prototype | warm | 8211 ms (6734 ms–8923 ms) | 340 ms (284 ms–528 ms) | 81 (80–86) | 2.79 MiB (2.79 MiB–3.01 MiB) | 19.53 MiB (19.53 MiB–19.75 MiB) | br | 0 |
+
+- **The 1-second server target was not met, and this run is slower end to end than the previous one.** `Server-Timing` across the ten Library samples was 363 ms to 6,280 ms. The first request to each of the four pods misses the per-process cache (about 4.3–6.3 s); later hits took 0.36–3.6 s, so even a request that skips every version read spends seconds in the remaining project, artifact, and page-date queries.
+- **The deployment is slow below the application.** Pod request logs from the same window show `/ready` at a 1.5 s median, static files at 1.46 s, `/api/v1/projects` at 2.1 s, and media at 2.2 s. Inside the Postgres pod, `select 1` over the local socket took 1–14 ms and a `pg_stat_activity` count 110 ms, where both should take well under a millisecond. Single-thread CPU in a server pod was about half the speed of the measuring laptop and varied ±40% between identical runs. The node reported no CPU steal, 0.4% I/O wait, and 80% idle, while load average sat near 10.8 on 12 cores and Kubernetes workloads used about 1.5 cores. No pod has a CPU limit and the cgroup recorded no throttling.
+- **So the next Library gain is not in this service.** The cache removes the per-artifact reads it was designed to remove (locally the endpoint is unchanged at 13 requests and sub-150 ms), but on this host every database round trip and every request costs milliseconds to seconds. That latency needs investigation at the VPS and hypervisor level before further application work can be measured reliably.
