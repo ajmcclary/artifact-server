@@ -662,3 +662,20 @@ Investigated October 6, 2026 with read-only commands on the single k3s node (SSD
 - **Guest-side cost is secondary.** `k3s-server` averages about 85% of one vCPU over 82 days. That is worth reducing, but it cannot account for a fourfold slowdown of unrelated work on an otherwise idle 12-vCPU guest.
 
 Hosted timings on this VPS should be read as an upper bound shaped by provider contention, not as application regressions, until the host has dedicated CPU or measurements record a host-speed canary alongside each sample.
+
+### Host-speed canary in the delivery harness
+
+`pnpm perf:delivery` now asks `/ready` five times before every sample and records the median database round trip the server measured itself (`hostDatabaseMilliseconds` per sample, and a Host DB column in the journey table). The check is a trivial query that takes well under a millisecond on an uncontended host, so it shows how contended the host was when each sample ran, independent of the client network. The local SQLite runtime exposes no such measurement and reports n/a.
+
+First hosted run with the canary, October 6, 2026, same image as above (`project/evidence/delivery-baseline-2026-10-06-hosted-host-probe.json`):
+
+| Journey | Cache | Ready | First paint | Requests | Transferred | Decoded | Lease encoding | Timeouts | Host DB |
+|---|---|---|---|---|---|---|---|---|---|
+| library | cold | 2217 ms (2125 ms–4617 ms) | 1332 ms (916 ms–1904 ms) | 13 (12–17) | 512.4 KiB (490.8 KiB–572.3 KiB) | 1.54 MiB (1.52 MiB–1.59 MiB) | identity | 0 | 35.5 ms (16.5 ms–37.7 ms) |
+| library | warm | 2755 ms (2109 ms–3589 ms) | 1176 ms (828 ms–1524 ms) | 41 (33–63) | 33.2 KiB (14.3 KiB–44.9 KiB) | 1.73 MiB (1.62 MiB–1.97 MiB) | identity | 0 | 83.8 ms (15.6 ms–160.9 ms) |
+| prototype | cold | 12235 ms (9705 ms–14839 ms) | 1200 ms (904 ms–1572 ms) | 85 (81–88) | 3.48 MiB (3.38 MiB–3.64 MiB) | 19.80 MiB (19.70 MiB–19.96 MiB) | br | 0 | 49.2 ms (25.9 ms–88.9 ms) |
+| prototype | warm | 11466 ms (8181 ms–12669 ms) | 536 ms (408 ms–1012 ms) | 81 (80–85) | 2.79 MiB (2.63 MiB–2.89 MiB) | 19.53 MiB (18.58 MiB–19.63 MiB) | br | 0 | 45.2 ms (22.0 ms–75.8 ms) |
+
+- **The host was still contended.** Its own database round trip had a median of 16–161 ms across samples where it should be under 1 ms.
+- **The Library is now 2.2 s cold** with every pod's contribution cache warm, against 5.4 s and 10.5 s in the two earlier runs. Read that difference together with the Host DB column, not as a clean before/after.
+- **Warm Library opens counted 41 requests** (33–63), against 14 in the previous run. The extra requests are thumbnail `/media` requests captured within the sample; why more of them landed inside the window this time is not established. The Library data itself was still one request.
