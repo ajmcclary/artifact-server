@@ -1,0 +1,1850 @@
+{
+  "browser": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  },
+  "context": {
+    "arch": "arm64",
+    "availableParallelism": 10,
+    "capturedAt": "2026-10-06T00:20:34.554Z",
+    "commit": "aa18a20a26d8661d4eea2d0c8e2051300e5da5ba",
+    "cpu": "Apple M1 Max",
+    "details": {
+      "label": "after-library",
+      "target": "local"
+    },
+    "lockfileDigest": "8aff5a0b504e23ea2ae0b5959f7c382533402e54c616640b937f77edd2c91ec4",
+    "node": "v24.15.0",
+    "operatingSystem": "darwin 27.2.0",
+    "platform": "darwin",
+    "temporaryFilesystem": "apfs",
+    "workingTreeDirty": true
+  },
+  "deploymentRevision": null,
+  "format": "artifact-server.delivery-baseline",
+  "formatVersion": 1,
+  "journeys": [
+    {
+      "aggregate": {
+        "decodedBytes": {
+          "maximum": 1527848,
+          "median": 1527848,
+          "minimum": 1527848
+        },
+        "firstContentfulPaintMilliseconds": {
+          "maximum": 124,
+          "median": 112,
+          "minimum": 104
+        },
+        "localProcessCpuMilliseconds": {
+          "maximum": 124.6,
+          "median": 83.4,
+          "minimum": 73
+        },
+        "readyMilliseconds": {
+          "maximum": 239.1,
+          "median": 143.1,
+          "minimum": 140.7
+        },
+        "requests": {
+          "maximum": 13,
+          "median": 13,
+          "minimum": 13
+        },
+        "transferBytes": {
+          "maximum": 510550,
+          "median": 510550,
+          "minimum": 510550
+        }
+      },
+      "cache": "cold",
+      "journey": "library",
+      "samples": [
+        {
+          "firstContentfulPaintMilliseconds": 124,
+          "index": 0,
+          "localProcessCpuMilliseconds": 124.6,
+          "outcome": "ready",
+          "readyMilliseconds": 239.1,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1526365,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 509067,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 112,
+          "index": 1,
+          "localProcessCpuMilliseconds": 83.4,
+          "outcome": "ready",
+          "readyMilliseconds": 142.3,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1526365,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 509067,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 112,
+          "index": 2,
+          "localProcessCpuMilliseconds": 85.3,
+          "outcome": "ready",
+          "readyMilliseconds": 148.3,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1526365,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 509067,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 108,
+          "index": 3,
+          "localProcessCpuMilliseconds": 73.6,
+          "outcome": "ready",
+          "readyMilliseconds": 143.1,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1526365,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 509067,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 104,
+          "index": 4,
+          "localProcessCpuMilliseconds": 73,
+          "outcome": "ready",
+          "readyMilliseconds": 140.7,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1526365,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 509067,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        }
+      ],
+      "timeouts": 0
+    },
+    {
+      "aggregate": {
+        "decodedBytes": {
+          "maximum": 1356612,
+          "median": 1356612,
+          "minimum": 1356612
+        },
+        "firstContentfulPaintMilliseconds": {
+          "maximum": 72,
+          "median": 64,
+          "minimum": 60
+        },
+        "localProcessCpuMilliseconds": {
+          "maximum": 50.8,
+          "median": 41.9,
+          "minimum": 32.6
+        },
+        "readyMilliseconds": {
+          "maximum": 81.2,
+          "median": 78,
+          "minimum": 76
+        },
+        "requests": {
+          "maximum": 13,
+          "median": 13,
+          "minimum": 13
+        },
+        "transferBytes": {
+          "maximum": 1542,
+          "median": 1542,
+          "minimum": 1542
+        }
+      },
+      "cache": "warm",
+      "journey": "library",
+      "samples": [
+        {
+          "firstContentfulPaintMilliseconds": 60,
+          "index": 0,
+          "localProcessCpuMilliseconds": 44.3,
+          "outcome": "ready",
+          "readyMilliseconds": 81.2,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1355129,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 72,
+          "index": 1,
+          "localProcessCpuMilliseconds": 50.8,
+          "outcome": "ready",
+          "readyMilliseconds": 80.7,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1355129,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 64,
+          "index": 2,
+          "localProcessCpuMilliseconds": 40.7,
+          "outcome": "ready",
+          "readyMilliseconds": 78,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1355129,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 64,
+          "index": 3,
+          "localProcessCpuMilliseconds": 41.9,
+          "outcome": "ready",
+          "readyMilliseconds": 76.7,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1355129,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 64,
+          "index": 4,
+          "localProcessCpuMilliseconds": 32.6,
+          "outcome": "ready",
+          "readyMilliseconds": 76,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 1355129,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review/library"
+              ],
+              "requests": 9,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [],
+              "contentEncoding": [],
+              "decodedBytes": 1483,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/:segment",
+                "/api/v1/activity/summary",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 4,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1483,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        }
+      ],
+      "timeouts": 0
+    },
+    {
+      "aggregate": {
+        "decodedBytes": {
+          "maximum": 18298579,
+          "median": 18298579,
+          "minimum": 18298579
+        },
+        "firstContentfulPaintMilliseconds": {
+          "maximum": 148,
+          "median": 136,
+          "minimum": 124
+        },
+        "localProcessCpuMilliseconds": {
+          "maximum": 443.2,
+          "median": 361.2,
+          "minimum": 354
+        },
+        "readyMilliseconds": {
+          "maximum": 939,
+          "median": 857.3,
+          "minimum": 846.7
+        },
+        "requests": {
+          "maximum": 31,
+          "median": 31,
+          "minimum": 31
+        },
+        "transferBytes": {
+          "maximum": 2489946,
+          "median": 2489946,
+          "minimum": 2489946
+        }
+      },
+      "cache": "cold",
+      "journey": "prototype",
+      "samples": [
+        {
+          "firstContentfulPaintMilliseconds": 124,
+          "index": 0,
+          "localProcessCpuMilliseconds": 361.2,
+          "outcome": "ready",
+          "readyMilliseconds": 850.5,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2512012,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 688039,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 4325,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 136,
+          "index": 1,
+          "localProcessCpuMilliseconds": 359.3,
+          "outcome": "ready",
+          "readyMilliseconds": 846.7,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2512012,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 688039,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 4325,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 140,
+          "index": 2,
+          "localProcessCpuMilliseconds": 443.2,
+          "outcome": "ready",
+          "readyMilliseconds": 927,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2512012,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 688039,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 4325,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 148,
+          "index": 3,
+          "localProcessCpuMilliseconds": 386.5,
+          "outcome": "ready",
+          "readyMilliseconds": 939,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2512012,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 688039,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 4325,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 128,
+          "index": 4,
+          "localProcessCpuMilliseconds": 354,
+          "outcome": "ready",
+          "readyMilliseconds": 857.3,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2512012,
+              "decodedBytesUnavailable": 3,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 688039,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 4325,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        }
+      ],
+      "timeouts": 0
+    },
+    {
+      "aggregate": {
+        "decodedBytes": {
+          "maximum": 18127343,
+          "median": 18127343,
+          "minimum": 18127343
+        },
+        "firstContentfulPaintMilliseconds": {
+          "maximum": 96,
+          "median": 96,
+          "minimum": 80
+        },
+        "localProcessCpuMilliseconds": {
+          "maximum": 316.7,
+          "median": 292.9,
+          "minimum": 207.8
+        },
+        "readyMilliseconds": {
+          "maximum": 780.9,
+          "median": 763.4,
+          "minimum": 728.7
+        },
+        "requests": {
+          "maximum": 31,
+          "median": 31,
+          "minimum": 31
+        },
+        "transferBytes": {
+          "maximum": 1801022,
+          "median": 1801022,
+          "minimum": 1801022
+        }
+      },
+      "cache": "warm",
+      "journey": "prototype",
+      "samples": [
+        {
+          "firstContentfulPaintMilliseconds": 96,
+          "index": 0,
+          "localProcessCpuMilliseconds": 316.7,
+          "outcome": "ready",
+          "readyMilliseconds": 742.3,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2340776,
+              "decodedBytesUnavailable": 6,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 3381,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 96,
+          "index": 1,
+          "localProcessCpuMilliseconds": 287.2,
+          "outcome": "ready",
+          "readyMilliseconds": 769.6,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2340776,
+              "decodedBytesUnavailable": 6,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 3381,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 84,
+          "index": 2,
+          "localProcessCpuMilliseconds": 207.8,
+          "outcome": "ready",
+          "readyMilliseconds": 763.4,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2340776,
+              "decodedBytesUnavailable": 6,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 3381,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 80,
+          "index": 3,
+          "localProcessCpuMilliseconds": 292.9,
+          "outcome": "ready",
+          "readyMilliseconds": 780.9,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2340776,
+              "decodedBytesUnavailable": 6,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 3381,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        },
+        {
+          "firstContentfulPaintMilliseconds": 96,
+          "index": 4,
+          "localProcessCpuMilliseconds": 293.1,
+          "outcome": "ready",
+          "readyMilliseconds": 728.7,
+          "routes": [
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "must-revalidate",
+                "no-cache",
+                "no-store",
+                "private",
+                "public"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 2340776,
+              "decodedBytesUnavailable": 6,
+              "pathTemplates": [
+                "/assets/:file.css",
+                "/assets/:file.js",
+                "/assets/:file.woff2",
+                "/auth/context",
+                "/review",
+                "/review-frame"
+              ],
+              "requests": 16,
+              "routeClass": "app-shell",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 59,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "immutable",
+                "max-age=31536000",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 6139,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/api/v1/activity/summary",
+                "/api/v1/artifacts",
+                "/api/v1/artifacts/:segment",
+                "/api/v1/artifacts/:segment/comments",
+                "/api/v1/artifacts/:segment/versions",
+                "/api/v1/artifacts/:segment/versions/:segment/file",
+                "/api/v1/artifacts/:segment/versions/:segment/preview-leases",
+                "/api/v1/projects",
+                "/api/v1/session"
+              ],
+              "requests": 10,
+              "routeClass": "api",
+              "serverTiming": [],
+              "statuses": [
+                200,
+                201
+              ],
+              "transferBytes": 3381,
+              "vary": [
+                "accept-encoding"
+              ]
+            },
+            {
+              "cacheControl": [
+                "no-store",
+                "private"
+              ],
+              "contentEncoding": [
+                "br"
+              ],
+              "decodedBytes": 15780428,
+              "decodedBytesUnavailable": 0,
+              "pathTemplates": [
+                "/:path.css",
+                "/:path.js"
+              ],
+              "requests": 5,
+              "routeClass": "preview-lease",
+              "serverTiming": [],
+              "statuses": [
+                200
+              ],
+              "transferBytes": 1797582,
+              "vary": [
+                "accept-encoding"
+              ]
+            }
+          ]
+        }
+      ],
+      "timeouts": 0
+    }
+  ],
+  "label": "after-library",
+  "network": "unthrottled",
+  "representativeCompression": false,
+  "samplesPerJourney": 5,
+  "target": "local",
+  "webBuild": "review-BZqa3aPX.js"
+}
