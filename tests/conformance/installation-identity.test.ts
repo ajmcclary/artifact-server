@@ -333,11 +333,23 @@ describe("installation identity and access", () => {
     expect(firstExchange.headers.get("cache-control")).toBe("private, no-store");
     expect(firstExchange.headers.get("referrer-policy")).toBe("no-referrer");
     const firstCookies = applicationCookies(firstExchange.headers.getSetCookie());
+    // The session travels only in HttpOnly cookies: no body, no redirect URL,
+    // and no session response echoes either secret.
+    expect(firstExchange.headers.get("location")).toBeNull();
+    expect(await firstExchange.text()).toBe("");
+    expect(firstCookies.sessionAttributes).toContain("HttpOnly");
     const firstSessionResponse = await fetch(`${server.baseUrl}/api/v1/session`, {
       headers: {Cookie: firstCookies.header},
     });
+    const firstSessionBody = await firstSessionResponse.text();
+    const sessionSecret = firstCookies.header.slice(
+      firstCookies.header.indexOf("=") + 1,
+      firstCookies.header.indexOf(";"),
+    );
+    expect(firstSessionBody).not.toContain(sessionSecret);
+    expect(firstSessionBody).not.toContain(firstCookies.csrf);
     const firstPrincipal = sessionResponseSchema.parse(
-      await firstSessionResponse.json(),
+      JSON.parse(firstSessionBody),
     ).principal;
 
     const secondExchange = await exchange();
