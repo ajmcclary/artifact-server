@@ -1,7 +1,7 @@
 # Invite links — design
 
 Date: 2026-10-06
-Status: approved in conversation; awaiting written-spec review
+Status: approved (written spec reviewed 2026-10-06)
 Source: the Share & Invite mockups (claude.ai artifact "Share & Invite Redesign", rows 2 and 3) and the brainstorming conversation of 2026-10-06.
 
 ## Intent
