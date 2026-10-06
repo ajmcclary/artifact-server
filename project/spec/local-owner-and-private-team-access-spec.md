@@ -71,8 +71,9 @@ prove an install-to-use team workflow behind real TLS and wildcard routing.
 - SCIM, directory sync, group-to-role mapping, and automatic member creation;
 - self-service personal API-key issuance by non-administrator members;
 - MCP OAuth for a generic browser-only OIDC provider;
-- public sign-up, invitations sent by Artifact Server, and an organization
-  switcher;
+- public sign-up, invitation email sent by Artifact Server, and an
+  organization switcher (administrator-issued invite links are in scope; see
+  ADR 0032);
 - automatic DNS changes or general certificate issuance for every DNS
   provider;
 - a public Funnel deployment or a claim that VPN reachability is identity.
@@ -383,9 +384,10 @@ leave must first admit another administrator and have that administrator
 perform the deactivation. Local-owner mode never permits deactivation of its
 stable local administrator.
 
-The first-release administration surface remains email-based admission. It
-does not send an invitation email. The administrator communicates the server
-URL through the team's normal channel.
+Administration supports email-based admission and administrator-issued invite
+links (ADR 0032). Artifact Server never sends an invitation email: the
+administrator shares the server URL or the invite link through the team's
+normal channel.
 
 ### CLI, MCP, and automation
 

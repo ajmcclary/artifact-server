@@ -70,6 +70,9 @@ switcher in the baseline. The first administrator admits teammates to the
 installation. The identity provider proves who a person is; Artifact Server
 decides whether that identity is admitted and what it can do.
 
+ADR 0032 later added administrator-issued invite links as an admission path;
+this decision's closed-admission rule otherwise stands.
+
 Browser login must not be reused as API authority. CLI and MCP clients use a
 compatible OAuth flow where the configured provider supports the required
 contract. Otherwise they use administrator-issued, scoped user or service

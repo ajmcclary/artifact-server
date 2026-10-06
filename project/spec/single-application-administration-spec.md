@@ -145,7 +145,8 @@ and no administration entry in navigation or the account menu.
 
 ### Members
 
-This page uses the product's closed admission model. It does not claim to send
+This page uses the product's closed admission model. Administrators may also
+issue invite links from the Invites area (ADR 0032). No screen claims to send
 an invitation email.
 
 An administrator can:

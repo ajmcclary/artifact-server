@@ -430,7 +430,7 @@ directory hashing, upload progress, or browser retry orchestration.
 - For administrators, list, admit, and deactivate members.
 - For administrators, list, issue, rotate, and revoke managed API keys.
 - Require a name, future expiration, and explicit capabilities for a key.
-- Do not build organizations, invitations, public sign-up, project membership,
+- Do not build organizations, invitation email, public sign-up, project membership,
   ownership transfer, billing, or Plannotator connection screens.
 
 ## Interaction and content rules

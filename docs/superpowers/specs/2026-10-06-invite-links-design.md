@@ -248,3 +248,17 @@ No module mocks: tests use the real application services, temporary SQLite datab
 - Reactivating deactivated members.
 - Resending, editing or extending an invite.
 - Per-client-address rate limiting and trusted-proxy configuration.
+
+## Adjustments during planning
+
+Recorded by the implementation plan (`docs/superpowers/plans/2026-10-06-invite-links.md`):
+
+1. `installation_invites` gains `last_redeemed_member_id`; D1 conditions the member insert on it.
+2. Postgres uses `0021_login_attempt_invite` and `0022_installation_invites`.
+3. `/join` is a 308 redirect to `/review/join`; the fragment survives the redirect.
+4. Invites is its own administration area under People and access.
+5. Refusal outcome `account_unavailable` covers a deactivated member's email or identity.
+6. Preview carries `usesLeft`.
+7. The invitation screen offers "Use a Different Account" (WorkOS `maxAge: 0`, OIDC `prompt=login`); the wrong-account screen asks the person to reopen the link.
+8. A successful invite login returns to `/review/join?next=<destination>`.
+9. The startup notice is printed by the Node CLI start commands; Cloudflare documents it in its README.
