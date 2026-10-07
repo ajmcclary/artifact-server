@@ -934,6 +934,20 @@ requirements:
         run: project/evidence/cloudflare-runtime.json
         recorded_at: "2026-09-28T14:21:43.151Z"
 
+  - id: PUB-021
+    kind: behavior
+    behavior: The HTTP server lets one staged file or batch write stream for the application's whole staged write deadline instead of cutting it at a shorter transport default, and a request body that stops before it is complete is recorded as a resumable upload interruption, never as a server storage failure, with a bounded, secret-free cause in the operator log.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: architecture}
+    acceptance:
+      behavior: {id: PUB-021-B, description: "Stream a staged file slowly but inside the server request deadline, verify it, and commit one version; the production request deadline is derived from the staged write deadline rather than Node's 300-second default."}
+      failure: {id: PUB-021-F, description: "A body slower than the server request deadline or cut off mid-stream leaves its slot unverified, is logged as UploadInterrupted with its transport cause and never as StagingStorageFailure, puts no storage token or credential in the log, and the same publish resumes and commits one version."}
+    deployments: *all
+    status: implementing
+    proof_gap: "Local Node HTTP tests shorten the server request deadline to prove a slow body inside it verifies and a slower one is refused and resumes; the ten-minute production deadline is proved by derivation, not by a live run longer than 300 seconds. The external-storage runtime, a reverse proxy in front of the server, and the Cloudflare Worker are not exercised. Exported trace spans still record the raw provider error of a storage failure, including its staging path, so only the log line is redacted."
+    depends_on: [PUB-001, PUB-003, PUB-015]
+    evidence: []
+
   - id: CLI-001
     kind: security
     behavior: The Artifact Server CLI keeps profiles by exact server origin and account; remote interactive login uses browser authorization and operating-system credential storage, local mode uses private user-only state without visible secrets, and CI uses scoped service credentials from its secret manager.

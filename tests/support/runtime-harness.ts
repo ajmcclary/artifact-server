@@ -116,6 +116,7 @@ export async function startTestServer(
     readonly observability?: boolean;
     readonly port?: number;
     readonly publicationPreparationConfig?: PublicationPreparationConfig;
+    readonly requestTimeoutMilliseconds?: number;
     readonly webAssetsRoot?: string;
   } = {},
 ): Promise<RunningTestServer> {
@@ -207,6 +208,12 @@ export async function startTestServer(
   }
   if (options.publicationPreparationConfig !== undefined) {
     config = {...config, publicationPreparationConfig: options.publicationPreparationConfig};
+  }
+  if (options.requestTimeoutMilliseconds !== undefined) {
+    config = {
+      ...config,
+      requestTimeoutMilliseconds: options.requestTimeoutMilliseconds,
+    };
   }
   if (options.webAssetsRoot !== undefined) {
     config = {...config, webAssetsRoot: options.webAssetsRoot};

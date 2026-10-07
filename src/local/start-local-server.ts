@@ -1,5 +1,4 @@
 import {once} from "node:events";
-import {createServer} from "node:http";
 
 import {getRequestListener} from "@hono/node-server";
 import {z} from "zod";
@@ -10,6 +9,7 @@ import {createGracefulHttpShutdown} from
   "../lifecycle/graceful-http-shutdown.js";
 import {withNodeResponseCompression} from
   "../http/node-response-compression.js";
+import {createArtifactHttpServer} from "../http/node-http-server.js";
 import {createRuntimeLifecycle} from "../lifecycle/runtime-readiness.js";
 import {browserAccessModes} from "../core/browser-access.js";
 
@@ -23,6 +23,11 @@ export interface LocalServerConfig extends LocalRuntimeConfig {
   readonly hostname?: string;
   readonly port: number;
   readonly readinessWithdrawalMilliseconds?: number;
+  /**
+   * Node's deadline for receiving one whole request. Defaults to the staged
+   * write deadline plus answer headroom; tests shorten it.
+   */
+  readonly requestTimeoutMilliseconds?: number;
   readonly shutdownDeadlineMilliseconds?: number;
 }
 
@@ -70,10 +75,11 @@ export async function startLocalServer(
     observability: config.observability ?? true,
     runtimeLifecycle: lifecycle,
   });
-  const server = createServer(
+  const server = createArtifactHttpServer(
     getRequestListener(withNodeResponseCompression(runtime.app.fetch), {
       hostname,
     }),
+    config.requestTimeoutMilliseconds,
   );
   const listening = once(server, "listening");
   try {

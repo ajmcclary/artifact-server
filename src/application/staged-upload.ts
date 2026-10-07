@@ -17,6 +17,7 @@ import type { Principal } from "../core/identity.js";
 import {
   maximumBatchParts,
   maximumBatchRequestBytes,
+  stagedWriteDeadlineMilliseconds,
 } from "../core/publishing-limits.js";
 import {
   uploadStatuses,
@@ -59,7 +60,6 @@ import {
 } from "./publication-preparation.js";
 
 const uploadLifetimeMilliseconds = 60 * 60 * 1_000;
-const singleWriteDeadlineMilliseconds = 10 * 60 * 1_000;
 
 /** Input for creating a principal-bound staged upload. */
 export interface CreateStagedUploadCommand {
@@ -488,9 +488,9 @@ function makeStagedUploadService(
       const file = slot.file;
 
       // An upload stays open for an hour, but one write must not hold a
-      // connection that long.
+      // connection that long (see stagedWriteDeadlineMilliseconds).
       const writeDeadline = DateTime.formatIso(
-        DateTime.addDuration(uploadStartedAt, singleWriteDeadlineMilliseconds),
+        DateTime.addDuration(uploadStartedAt, stagedWriteDeadlineMilliseconds),
       );
       const signal = abortSignalUntil(
         writeDeadline < slot.expiresAt ? writeDeadline : slot.expiresAt,
@@ -535,7 +535,7 @@ function makeStagedUploadService(
       const batchStartedAt = yield* dependencies.clock.now;
       yield* ensureUploadAcceptsFiles(upload, batchStartedAt);
       const writeDeadline = DateTime.formatIso(
-        DateTime.addDuration(batchStartedAt, singleWriteDeadlineMilliseconds),
+        DateTime.addDuration(batchStartedAt, stagedWriteDeadlineMilliseconds),
       );
       const signal = abortSignalUntil(
         writeDeadline < upload.expiresAt ? writeDeadline : upload.expiresAt,

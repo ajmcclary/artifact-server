@@ -10,6 +10,14 @@ export const maximumBatchRequestBytes = 8 * 1_024 * 1_024;
 /** Maximum number of parts accepted in one batched staged-upload frame. */
 export const maximumBatchParts = 256;
 
+/**
+ * Longest one staged file or batch write may stream before the server stops
+ * it. An upload stays open for an hour, but one write must not hold a
+ * connection that long. The HTTP servers derive their own request deadline
+ * from this value so Node never cuts a write the application still allows.
+ */
+export const stagedWriteDeadlineMilliseconds = 10 * 60 * 1_000;
+
 /** Maximum characters accepted in one comment thread or reply body. */
 export const maximumCommentBodyCharacters = 8_192;
 
