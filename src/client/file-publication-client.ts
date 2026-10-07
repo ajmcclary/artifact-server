@@ -440,11 +440,17 @@ const transportCodeDescriptions: ReadonlyMap<string, string> = new Map([
 /**
  * Transport codes worth another attempt: a connection that broke or never
  * opened. A failure without one of these codes, such as a refused redirect
- * or a certificate error, is never repeated.
+ * or a certificate error, is never repeated, and neither is a response
+ * timeout, which already waited longer than the server's write deadline.
  */
 const transientTransportCodes: ReadonlySet<string> = new Set([
   ...unreachableTransportCodes,
-  ...transportCodeDescriptions.keys(),
+  "ECONNABORTED",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "UND_ERR_CLOSED",
+  "UND_ERR_SOCKET",
 ]);
 const transportCodePattern = /^[A-Z][A-Z0-9_]{1,63}$/u;
 const maximumTransportCauseDepth = 5;
