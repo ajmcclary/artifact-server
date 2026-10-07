@@ -145,4 +145,14 @@ describe("version document reader", () => {
     await documents.views(saved);
     expect(opens()).toBe(3);
   });
+
+  test("evicts by stored document bytes, not only by count", async () => {
+    const {open, opens, saved} = fixture({"artifactserver.views.json": utf8(viewsText), "index.html": utf8("<p>x</p>")});
+    const other = versionWith(saved.manifest.entries, "ver_other");
+    const documents = createVersionDocuments({blobs: {open}, maximumCachedBytes: viewsText.length + 1});
+    await documents.views(saved);
+    await documents.views(other);
+    await documents.views(saved);
+    expect(opens()).toBe(3);
+  });
 });

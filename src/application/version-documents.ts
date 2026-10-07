@@ -23,11 +23,14 @@ export interface VersionDocuments {
 
 export interface VersionDocumentsDependencies {
   readonly blobs: Pick<BlobStore, "open">;
-  /** Outcomes kept per process; versions are immutable, so only memory bounds this. */
+  /** Outcomes kept per process and kind; versions are immutable, so only memory bounds this. */
   readonly maximumCachedOutcomes?: number;
+  /** Stored document bytes whose outcomes one kind may keep; parsed outcomes grow with them. */
+  readonly maximumCachedBytes?: number;
 }
 
 const defaultMaximumCachedOutcomes = 1_024;
+const defaultMaximumCachedBytes = 32 * 1_048_576;
 
 type DocumentText =
   | {readonly kind: "absent"}
@@ -42,31 +45,43 @@ type DocumentText =
  * forgotten and the next read retries.
  */
 class OutcomeCache<Outcome> {
-  readonly #entries = new Map<string, Promise<Outcome>>();
+  readonly #entries = new Map<string, {readonly outcome: Promise<Outcome>; readonly weight: number}>();
   readonly #limit: number;
+  readonly #maximumWeight: number;
+  #weight = 0;
 
-  constructor(limit: number) {
+  constructor(limit: number, maximumWeight: number) {
     this.#limit = limit;
+    this.#maximumWeight = maximumWeight;
   }
 
-  read(key: string, load: () => Promise<Outcome>): Promise<Outcome> {
+  /** `weight` is the stored size of the document the outcome is parsed from. */
+  read(key: string, weight: number, load: () => Promise<Outcome>): Promise<Outcome> {
     const existing = this.#entries.get(key);
     if (existing !== undefined) {
       this.#entries.delete(key);
       this.#entries.set(key, existing);
-      return existing;
+      return existing.outcome;
     }
     const loading = load();
-    this.#entries.set(key, loading);
+    this.#entries.set(key, {outcome: loading, weight});
+    this.#weight += weight;
     loading.catch(() => {
-      if (this.#entries.get(key) === loading) this.#entries.delete(key);
+      if (this.#entries.get(key)?.outcome === loading) this.#forget(key);
     });
-    while (this.#entries.size > this.#limit) {
+    while (this.#entries.size > this.#limit || (this.#weight > this.#maximumWeight && this.#entries.size > 1)) {
       const oldest = this.#entries.keys().next();
       if (oldest.done === true) break;
-      this.#entries.delete(oldest.value);
+      this.#forget(oldest.value);
     }
     return loading;
+  }
+
+  #forget(key: string): void {
+    const entry = this.#entries.get(key);
+    if (entry === undefined) return;
+    this.#entries.delete(key);
+    this.#weight -= entry.weight;
   }
 }
 
@@ -75,8 +90,9 @@ export function createVersionDocuments(
   dependencies: VersionDocumentsDependencies,
 ): VersionDocuments {
   const limit = dependencies.maximumCachedOutcomes ?? defaultMaximumCachedOutcomes;
-  const viewsCache = new OutcomeCache<ViewsOutcome>(limit);
-  const provenanceCache = new OutcomeCache<ProvenanceOutcome>(limit);
+  const cacheBytes = dependencies.maximumCachedBytes ?? defaultMaximumCachedBytes;
+  const viewsCache = new OutcomeCache<ViewsOutcome>(limit, cacheBytes);
+  const provenanceCache = new OutcomeCache<ProvenanceOutcome>(limit, cacheBytes);
 
   async function documentText(
     saved: ArtifactVersion,
@@ -109,9 +125,22 @@ export function createVersionDocuments(
   }
 
   return {
-    provenance: (saved) => provenanceCache.read(saved.version.id, () => loadProvenance(saved)),
-    views: (saved) => viewsCache.read(saved.version.id, () => loadViews(saved)),
+    provenance: (saved) => provenanceCache.read(
+      saved.version.id,
+      storedSize(saved, provenanceRecordPath),
+      () => loadProvenance(saved),
+    ),
+    views: (saved) => viewsCache.read(
+      saved.version.id,
+      storedSize(saved, viewsDocumentPath),
+      () => loadViews(saved),
+    ),
   };
+}
+
+/** The stored size of one producer document, or 0 when the version has none. */
+function storedSize(saved: ArtifactVersion, path: string): number {
+  return saved.manifest.entries.find((entry) => entry.path === path)?.size ?? 0;
 }
 
 async function readEntryBytes(
