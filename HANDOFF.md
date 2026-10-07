@@ -18,6 +18,8 @@ The owner's rule: no screen ever starts in Annotate, because the annotation surf
 
 The trade-off the owner chose: turning Annotate on reloads the page into the sandbox, so state reached by clicking around is lost unless it is a designed scenario the page can restore.
 
+**Annotate reopens the scenario reached on the live page (owner approved relaxing CMT-022's no-bridge rule).** Review listens, read-only, to the Interactive preview frame: an unprompted `as-page-state` naming a scenario its views declare, from that frame's own content origin, becomes the requested scenario (`liveScenarioFrom` in `scenario-model.ts`, the listener in `preview-canvas.tsx`). The picker and URL follow the live page, and Annotate restores that scenario. Review never posts to the live page, so a scenario link still opens the live page at its default; turning Annotate on restores the linked scenario. Leaving Annotate clears what the sandbox had confirmed (`clearOnScreen`). Forms' adapter already posts to `window.parent` with `"*"`; Design was asked to keep that.
+
 ## What closed since the October 7 morning deploy
 
 Both changes are deployed: all four server pods run the new digest, Argo reports Synced and Healthy at `7a5fc6c`, and the served `protocol` chunk accepts `high-contrast`.

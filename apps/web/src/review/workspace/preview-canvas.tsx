@@ -29,12 +29,14 @@ import {
   type ReviewAnnotation,
   type UnanchoredReason,
 } from "@/review-frame/protocol";
+import {pageMessageSchema} from "@/review-frame/page-protocol";
 import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 
 import {mediaTypeEssence} from "./page-inventory.ts";
 import {
   annotationsForScenario,
   captureProps,
+  liveScenarioFrom,
   restorePropsFor,
   viewAnchorFrom,
 } from "./scenario-model.ts";
@@ -551,6 +553,7 @@ function HtmlPreview({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const liveFrameRef = useRef<HTMLIFrameElement | null>(null);
   const initialisedRef = useRef(false);
   const [themeRevision, setThemeRevision] = useState(0);
   useEffect(() => onThemeChange(() => setThemeRevision((revision) => revision + 1)), []);
@@ -622,11 +625,32 @@ function HtmlPreview({
   // scripts, so it is shown only while the reviewer has turned Annotate on.
   const mode = annotateModeActive ? "annotate" : "interactive";
 
+  const {clearOnScreen, requestScenario} = scenario;
   useEffect(() => {
     if (mode !== "interactive") return;
     initialisedRef.current = false;
     setFrameReady(false);
-  }, [mode]);
+    // Nothing the annotation surface confirmed is on screen while the page is live.
+    clearOnScreen();
+  }, [clearOnScreen, mode]);
+
+  // The live page is never asked anything, but a designed page announces the
+  // scenario it moves to. Recording it as the requested scenario keeps the
+  // picker and URL with the page, and Annotate reopens exactly what was reached.
+  const liveOrigin = previewDocument === null ? null : new URL(previewDocument.interactiveUrl).origin;
+  const liveView = mode === "interactive" ? scenario.view : null;
+  useEffect(() => {
+    if (liveView === null || liveOrigin === null) return undefined;
+    const onLiveMessage = (event: MessageEvent<unknown>): void => {
+      if (event.source !== liveFrameRef.current?.contentWindow || event.origin !== liveOrigin) return;
+      const parsed = pageMessageSchema.safeParse(event.data);
+      if (!parsed.success) return;
+      const live = liveScenarioFrom(liveView, parsed.data);
+      if (live !== null) requestScenario(live.scenarioId, live.parameters);
+    };
+    window.addEventListener("message", onLiveMessage);
+    return () => window.removeEventListener("message", onLiveMessage);
+  }, [liveOrigin, liveView, requestScenario]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -821,6 +845,7 @@ function HtmlPreview({
         {mode === "interactive" && previewDocument !== null ? (
           <iframe
             key="interactive"
+            ref={liveFrameRef}
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin"
             src={previewDocument.interactiveUrl}

@@ -22,6 +22,8 @@ export interface ScenarioRequestState {
 
 export interface ScenarioSession {
   readonly beginRequest: (requestId: string) => void;
+  /** The annotation surface closed: nothing it confirmed is on screen any more. */
+  readonly clearOnScreen: () => void;
   /** False until the version's views outcome is known; the preview waits for it before init. */
   readonly loaded: boolean;
   readonly onScreen: ScenarioStatus;
@@ -36,6 +38,7 @@ const idle: ScenarioStatus = {reason: null, requestId: null, scenarioId: null, s
 
 const noScenarios: ScenarioSession = {
   beginRequest: () => undefined,
+  clearOnScreen: () => undefined,
   loaded: true,
   onScreen: idle,
   outcome: null,
@@ -114,6 +117,7 @@ export function ScenarioSessionProvider({
   const beginRequest = useCallback((requestId: string) => {
     setOnScreen((current) => ({...current, reason: null, requestId, status: "restoring"}));
   }, []);
+  const clearOnScreen = useCallback(() => setOnScreen(idle), []);
   const report = useCallback((message: ViewStateMessage) => {
     if (view === null) return;
     setOnScreen((current) => reduceViewState(current, message, view));
@@ -122,6 +126,7 @@ export function ScenarioSessionProvider({
   const loadedState = artifactId === null || versionId === null || outcome !== null;
   const value = useMemo<ScenarioSession>(() => ({
     beginRequest,
+    clearOnScreen,
     loaded: loadedState,
     onScreen,
     outcome,
@@ -129,6 +134,6 @@ export function ScenarioSessionProvider({
     requestScenario,
     requested,
     view,
-  }), [beginRequest, loadedState, onScreen, outcome, report, requestScenario, requested, view]);
+  }), [beginRequest, clearOnScreen, loadedState, onScreen, outcome, report, requestScenario, requested, view]);
   return <ScenarioSessionContext.Provider value={value}>{children}</ScenarioSessionContext.Provider>;
 }

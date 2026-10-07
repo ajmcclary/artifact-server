@@ -177,3 +177,35 @@ test("DSN-008-B: an adapter that says hello after the window still receives the 
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
 });
+
+test("DSN-008-B CMT-022-F: a scenario reached on the live page reopens when Annotate turns on, and nothing else can move it", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-b-live");
+  const {page} = fixture;
+  await page.goto(scenarioUrl(published, "honest.html"));
+  const picker = page.getByRole("combobox", {name: "Designed scenario"});
+  const live = interactiveFrame(page);
+  await expect(live.getByRole("heading", {name: "Library"})).toBeVisible();
+
+  // Another document claiming a scenario is not the live page: the application ignores it.
+  await page.evaluate(() => {
+    window.postMessage({requestId: null, state: {direction: "ltr", locale: "en", pageVersion: 1, props: {scenario: "5"}, scenarioId: "5", theme: "light", viewport: {height: 900, width: 1440}}, type: "as-page-state"}, "*");
+  });
+  // Nor does the live page move the review to a scenario its views do not declare.
+  await live.locator("body").evaluate(() => {
+    parent.postMessage({requestId: null, state: {direction: "ltr", locale: "en", pageVersion: 1, props: {scenario: "9"}, scenarioId: "9", theme: "light", viewport: {height: 900, width: 1440}}, type: "as-page-state"}, "*");
+  });
+  await page.waitForTimeout(300);
+  await expect(page).not.toHaveURL(/[?&]scenario=(?:5|9)(?:&|$)/u);
+
+  // The reviewer moves the live page; the picker and URL follow it.
+  await live.getByRole("button", {name: "Open Logic"}).click();
+  await expect(live.getByRole("heading", {name: "Logic"})).toBeVisible();
+  await expect(picker).toHaveValue("6");
+  await expect(page).toHaveURL(/[?&]scenario=6(?:&|$)/u);
+  await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+
+  // Annotate reopens exactly the scenario reached, not the page's default.
+  await startAnnotating(page);
+  await expect(previewFrame(page).getByRole("heading", {name: "Logic"})).toBeVisible();
+  await expect(picker).toHaveValue("6");
+});

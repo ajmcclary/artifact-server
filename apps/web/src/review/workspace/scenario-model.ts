@@ -1,5 +1,5 @@
 import type {ReviewView, ViewsOutcome} from "../../api/views.ts";
-import type {PageProps, PageRegion, PageState} from "../../review-frame/page-protocol.ts";
+import type {PageMessage, PageProps, PageRegion, PageState} from "../../review-frame/page-protocol.ts";
 import type {
   ReviewAnchor,
   ReviewAnnotation,
@@ -60,6 +60,24 @@ export function parametersFromProps(view: ReviewView, props: PageProps) {
     const option = parameter.values.find((candidate) => candidate.propValue === props[parameter.prop]);
     return option === undefined ? [] : [[parameter.name, option.value] as const];
   }));
+}
+
+/** A scenario the live page says it moved to, as the review would request it. */
+export interface LiveScenario {
+  readonly parameters: Readonly<Record<string, ParameterValue>>;
+  readonly scenarioId: string;
+}
+
+/**
+ * The scenario a live page reports it moved to, if its view declares it.
+ * Only an unprompted state change counts: the live page is never asked
+ * anything, so a reply-shaped message or an undeclared scenario is ignored.
+ */
+export function liveScenarioFrom(view: ReviewView, message: PageMessage): LiveScenario | null {
+  if (message.type !== "as-page-state" || message.requestId !== null) return null;
+  const {scenarioId} = message.state;
+  if (scenarioId === null || !view.scenarios.some((scenario) => scenario.scenarioId === scenarioId)) return null;
+  return {parameters: parametersFromProps(view, message.state.props), scenarioId};
 }
 
 /** Strip control, format (bidi and zero-width) characters, collapse spaces and bound. */

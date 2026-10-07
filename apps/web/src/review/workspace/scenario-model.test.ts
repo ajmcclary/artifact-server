@@ -6,6 +6,7 @@ import {
   annotationsForScenario,
   capturedThemeText,
   captureProps,
+  liveScenarioFrom,
   parametersFromProps,
   reduceViewState,
   restorePropsFor,
@@ -68,6 +69,16 @@ describe("scenario model", () => {
     expect(viewAnchorFrom(view, {region: null, state: state("42")})).toBeUndefined();
     expect(viewAnchorFrom(view, {region: null, state: null})).toBeUndefined();
     expect(viewAnchorFrom(view, undefined)).toBeUndefined();
+  });
+
+  test("takes a live page's own scenario change only for a declared scenario", () => {
+    expect(liveScenarioFrom(view, {requestId: null, state: state("5", true), type: "as-page-state"}))
+      .toEqual({parameters: {direction: "rtl"}, scenarioId: "5"});
+    // The live page is never asked anything, so a reply-shaped state is not its own move.
+    expect(liveScenarioFrom(view, {requestId: "req-1", state: state("5"), type: "as-page-state"})).toBeNull();
+    expect(liveScenarioFrom(view, {requestId: null, state: state("99"), type: "as-page-state"})).toBeNull();
+    expect(liveScenarioFrom(view, {requestId: null, state: state(null), type: "as-page-state"})).toBeNull();
+    expect(liveScenarioFrom(view, {capabilities: ["restore"], pageVersion: 1, type: "as-page-hello"})).toBeNull();
   });
 
   test("sanitizes and bounds labels", () => {
