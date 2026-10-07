@@ -199,7 +199,11 @@ function compareWithManifest(
     else if (published !== output.sha256) mismatches.push({path: output.path, reason: "digest"});
   }
   const coverage: ProvenanceCoverage = {
-    declaredOutputs: record.outputs.length,
+    // Coverage counts what the record actually accounts for: published files
+    // other than the record itself. Missing outputs are mismatches, not coverage.
+    declaredOutputs: record.outputs.filter((output) =>
+      output.path !== provenanceRecordPath && digests.has(output.path)
+    ).length,
     dependencyEdges: record.coverage.dependencyEdges,
     externalVariability: record.coverage.externalVariability,
     // The record cannot declare its own digest, so it never counts against coverage.

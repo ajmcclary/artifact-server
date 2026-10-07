@@ -100,7 +100,7 @@ describe("source provenance validation", () => {
       {path: "project/removed.js", reason: "missing"},
     ]);
     expect(outcome.mismatchCount).toBe(2);
-    expect(outcome.coverage.declaredOutputs).toBe(3);
+    expect(outcome.coverage.declaredOutputs).toBe(2);
   });
 
   test("reports a dirty build as recorded", () => {
@@ -140,5 +140,22 @@ describe("source provenance validation", () => {
     expect.hasAssertions();
     const outputs = Array.from({length: 5_001}, (_, index) => ({path: `f${index}.js`, sha256: digest("a"), sources: []}));
     expectInvalid(readProvenanceRecord(text(record({outputs})), entries), /outputs/u);
+  });
+});
+
+describe("provenance coverage", () => {
+  test("counts only declared outputs present in the manifest, never the record itself", () => {
+    const outcome = readProvenanceRecord(text(record({
+      outputs: [
+        {path: "artifactserver.provenance.json", sha256: digest("d"), sources: []},
+        {path: "project/Prototype - Form Builder.dc.html", sha256: digest("a"), sources: []},
+        {path: "project/support.js", sha256: digest("b"), sources: []},
+        {path: "project/removed.js", sha256: digest("e"), sources: []},
+      ],
+    })), entries);
+    expect(outcome.status).toBe("mismatch");
+    if (outcome.status !== "mismatch") return;
+    expect(outcome.coverage.declaredOutputs).toBe(2);
+    expect(outcome.coverage.manifestFiles).toBe(3);
   });
 });
