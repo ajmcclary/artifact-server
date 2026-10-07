@@ -1,10 +1,20 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026. Artifact Server `main` is deployed to artifacts.backend.app on image `sha256:20712096d76b091eac0e36979c1a7dd8117a8f90659dd9c8f067f0faa2179476`. Design (`~/Dev/Design`) was at `2113960`. Recheck both before relying on anything below.
+Written October 7, 2026 (updated after Design's `1632239` handoff). artifacts.backend.app runs image `sha256:20712096d76b091eac0e36979c1a7dd8117a8f90659dd9c8f067f0faa2179476`, which predates the two changes under "What closed since the deploy". Design (`~/Dev/Design`) is at `1632239`. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
-## What closed
+## What closed since the deploy
+
+Neither change is deployed yet. Deploying needs the owner's approval (see "Deploying").
+
+**Exported trace spans no longer carry the staging path (PUB-021).** Effect's OTLP tracer renders a failed span's whole `cause` chain into its `exception.stacktrace`, so a staging failure exported the raw provider error, including the staged file's path, which contains the upload's storage token (a write key). Staging and blob storage failures and interrupted uploads are now built from `redactedFailureCause` (`src/observability/failure-cause-summary.ts`): each level's name, code and redacted message, three levels deep, with no stack frames or other properties. In `tests/http/staged-upload-transport.test.ts`, the PUB-021-F test (an interrupted body) and the genuine-storage-failure test read every signal a loopback OTLP collector receives and prove that no exported log, span or metric carries the storage token; the storage-failure test also checks the upload ID and the data directory. The PUB-021 proof gap is updated. Repository failures (`ArtifactRepositoryFailure`, `IdentityRepositoryFailure`) still export their raw driver error in spans; the same helper would close that.
+
+**`high-contrast` is a page theme (contract amendment 7).** `state.theme` accepts `light`, `dark` or `high-contrast` in page messages and in a stored anchor's `view.state`: `apps/web/src/review-frame/page-protocol.ts` (`pageThemeSchema`, reused by `protocol.ts`), `src/mcp/dispatch-bundle-message.ts`, and the `@plannotator/agent-bridge` patch. It stays additive under `pageVersion 1`. The pinned JSON schemas (`views.v1`, `source-provenance.v1`) have no theme field and are unchanged, so Design does not re-pin. **Design must not send `high-contrast` until artifacts.backend.app runs a build with this change:** the deployed frame drops a page state carrying it, so a restore in high contrast would read as "didn't confirm it in time".
+
+**Reported by Design (`1632239`), live from Forms v14.** `support.js` sends `reason: "superseded"` for a replaced restore (amendment 1), and Design's runtime no longer fetches `location.href` on `about:` pages, so the `about:srcdoc` CSP violation on Forms is gone. Forms is v15 (`art_743d037f-dba7-4051-ad8f-4eda916a9661`). `arkcase` republished without retries: the stuck upload completed as v17, and it is now v19. All eleven Design targets are published from Design `202d647`, including a new `arkcase-training` artifact (`art_521dc055-c674-48c3-a3b4-00ad578b3f00`).
+
+## What closed earlier on October 7
 
 **Forms review pilot hosted proof (DSN-007 … DSN-010).** `pnpm qualify:hosted:design-review` (`tests/hosted/`) drives the deployed server with the operator's existing CLI profile. It publishes one disposable artifact, deletes it with its comments afterwards, and registers no agent. Its evidence, `project/evidence/hosted-design-review-2026-10-07T1544Z.json`, is attached to DSN-007 … DSN-010 as `kubernetes` behavior and failure proof. The four requirements stay `behavior_verified`: single_server, cloudflare, aws and gcp have no evidence, and each proof gap names what is left.
 
@@ -17,7 +27,7 @@ Now:
 - An interrupted body is `UPLOAD_INTERRUPTED` (408, resumable), with a redacted cause in the log.
 - The CLI retries transient PUT and batch failures 4 times with jittered backoff, and names the file, the elapsed time and the transport code.
 
-Design's `publish-all.sh` uses this repository's `dist/` CLI, so its next run gets the retries. **`arkcase` has not been republished yet.**
+Design's `publish-all.sh` uses this repository's `dist/` CLI, so its runs get the retries. `arkcase` has since been republished (see above).
 
 **Scenario restore reliability (DSN-008).**
 - The hello window now opens at the sandbox's `load`, as the contract always said, with a 20 s cap.
@@ -34,14 +44,11 @@ These are recorded in the contract spec's "Amendments after the hosted pilot".
 
 ## Still open
 
-1. **DSN-011 hosted bundle delivery.** A principal has exactly one mailbox, so the operator's key cannot exercise it without renaming that mailbox. It needs a dedicated agent principal or a live native bridge reading a hosted Forms comment.
-2. **Forms itself is not driven by an automated run.** DSN-008/009 hosted proof uses the fixture adapter. Design's Forms adapter is covered only by Design's manual Safari checks on v13.
-3. **Republish `arkcase`** with `./publish-all.sh` from Design. If it still fails, the server log now says `UploadInterrupted` with a cause code, and the CLI prints the file and the transport error.
-4. **For Design**, in its next `support.js` sync:
-   - send `reason: "superseded"` for a replaced restore;
-   - report `high-contrast` themes honestly, once the protocol has a value for them;
-   - investigate Forms fetching relative to `about:srcdoc`, which the annotate CSP blocks (seen in the console on v13).
-5. **Exported trace spans** still carry the raw provider error of a staging failure, including the staging path (PUB-021 proof gap).
+1. **Deploy the two changes above**, with the owner's approval, before Design ships `high-contrast` in `support.js`.
+2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal and a live native bridge. The MCP mailbox's connection key is derived from the principal, so the operator's key can hold only one mailbox; a native bridge registers under its own key (a hash of hostname and working directory) and would not rename it. Options, costs and a recommendation: [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md).
+3. **Forms itself is not driven by an automated run.** DSN-008/009 hosted proof uses the fixture adapter, and Design's Forms adapter is covered only by Design's manual Safari checks. The same plan copies a pinned Forms version into the suite's disposable artifact; nothing hosted has run.
+4. **Repository failures export their raw driver error in trace spans** (see PUB-021 above).
+5. **For Design**, in its next `support.js` sync, after item 1: report `high-contrast` from `data-theme="high-contrast"` instead of folding it into `light`.
 6. **Open owner decisions** carried from the October 6 handoff: the browser `auth login` 404, the batch upload owner query parameter, not-found vs denied, CLI renewal errors, and Cloudflare Artifacts Gate 3. They are unchanged by this work.
 
 ## Decided
