@@ -1,5 +1,6 @@
 import {expect, test} from "@playwright/test";
 
+import {createThreadOverApi} from "./comment-api.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
 import {annotationFrame, previewFrame, reviewHref} from "./review-helpers.js";
 import {publishScenarioFixture} from "./scenario-fixture.js";
@@ -58,4 +59,22 @@ test("DSN-008-F: a page without an adapter, a silent page and a lying page never
 
   await page.goto(scenarioUrl(published, "liar.html", "5"));
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5 (scenario-mismatch)"})).toBeVisible({timeout: 10_000});
+});
+
+test("a page with views but no adapter behaves as before, with no scenario controls", async () => {
+  const published = await publishScenarioFixture(fixture, "no-adapter-plain-open");
+  const {page} = fixture;
+  await createThreadOverApi(fixture, {
+    anchor: {htmlAnchor: {selector: "#root", tagName: "main"}, originalText: ""},
+    artifactId: published.artifact.id,
+    body: "A comment from before views.",
+    idempotencyKey: "thread-no-adapter-legacy",
+    path: "no-adapter.html",
+    versionId: published.version.id,
+  });
+  await page.goto(scenarioUrl(published, "no-adapter.html"));
+  // Comments are placed once the adapter wait ends, so the outcome is settled here.
+  await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1, {timeout: 10_000});
+  await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveCount(0);
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
 });

@@ -267,25 +267,32 @@ export function ReviewToolbar({
     />
   );
 
+  // A page without an adapter is reviewed exactly as before: no scenario controls.
+  const noAdapter = scenario.onScreen.status === "unsupported" && scenario.onScreen.reason === "no-adapter";
+  const requestedScenario = scenario.requested?.scenarioId ?? null;
+  const scenarioFailure = requestedScenario !== null
+    && (scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported")
+    ? `Couldn't open scenario ${requestedScenario} (${scenario.onScreen.reason ?? "unknown"})`
+    : null;
   const scenarioPicker = scenario.view === null ? null : (
     <>
-      <Select
-        aria-label="Designed scenario"
-        fit="selected"
-        onChange={(event) => scenario.requestScenario(event.currentTarget.value)}
-        options={scenario.view.scenarios.map((option) => ({
-          label: `${option.scenarioId} · ${option.label}`,
-          value: option.scenarioId,
-        }))}
-        placeholder="Scenario"
-        size="viewer"
-        value={scenario.onScreen.scenarioId ?? scenario.requested?.scenarioId ?? ""}
-      />
-      {scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported" ? (
-        <span role="status" style={scenarioStatusStyle}>
-          {`Couldn't open scenario ${scenario.requested?.scenarioId ?? ""} (${scenario.onScreen.reason ?? "unknown"})`}
-        </span>
-      ) : null}
+      {noAdapter ? null : (
+        <Select
+          aria-label="Designed scenario"
+          fit="selected"
+          onChange={(event) => scenario.requestScenario(event.currentTarget.value)}
+          options={scenario.view.scenarios.map((option) => ({
+            label: `${option.scenarioId} · ${option.label}`,
+            value: option.scenarioId,
+          }))}
+          placeholder="Scenario"
+          size="viewer"
+          value={scenario.onScreen.scenarioId ?? requestedScenario ?? ""}
+        />
+      )}
+      {scenarioFailure === null ? null : (
+        <span role="status" style={scenarioStatusStyle}>{scenarioFailure}</span>
+      )}
     </>
   );
 
