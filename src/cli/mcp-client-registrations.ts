@@ -1085,7 +1085,9 @@ function runClientCommand(
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.once("error", reject);
-    child.once("exit", (code) => resolve({
+    // "close" waits for stdout and stderr to drain; "exit" can fire before
+    // the last chunk arrives and truncate the client's answer.
+    child.once("close", (code) => resolve({
       exitCode: code ?? 1,
       stderr: Buffer.concat(stderr).toString("utf8").slice(0, 8_192),
       stdout: Buffer.concat(stdout).toString("utf8"),
