@@ -1168,6 +1168,71 @@ requirements:
         run: project/evidence/browser.json
         recorded_at: "2026-10-05T23:58:35.138Z"
 
+  - id: DSN-007
+    kind: behavior
+    behavior: A version's producer views document is validated against that version's own manifest on read, kept per immutable version, and served with its outcome, while an absent, unsupported or invalid document leaves the version reviewable as before.
+    owner: http-api
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-007-B, description: "Publish a views document naming a published HTML page with designed scenarios and parameters; read it over HTTP and MCP as valid with every view, scenario and parameter; repeated reads return the same outcome; a version without the file reports absent."}
+      failure: {id: DSN-007-F, description: "Report malformed JSON, non-UTF-8 bytes, oversized files, unknown fields, unsupported versions, malformed or duplicate ids, non-HTML, missing, escaping or case-mismatched paths, two views on one path, out-of-range sizes, control characters, non-primitive props, unknown default scenarios and parameter props reused by scenarios as invalid or unsupported-version, without failing the version's other reads; never cache a storage failure."}
+    deployments: *all
+    status: specified
+    depends_on: [MAN-001]
+    evidence: []
+
+  - id: DSN-008
+    kind: behavior
+    behavior: Review restores a designed scenario through the annotation frame and a cooperating page adapter, waits for the page to confirm it before placing comments, and reports restored, failed or unsupported without changing the page silently.
+    owner: web-application
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-008-B, description: "Open a designed scenario from the scenario picker and from a scenario link; the page confirms it; capture returns scenario, props, viewport, theme, locale and direction; comment markers are placed after restoration and follow a scenario changed from inside the page."}
+      failure: {id: DSN-008-F, description: "Report a page without an adapter as unsupported, a page that never confirms as timed out, and a page confirming another scenario as failed; ignore page messages from other windows, oversized or malformed messages and scenarios outside the views document; keep the page as it was after any failure."}
+    deployments: *all
+    status: specified
+    depends_on: [DSN-007, CMT-014, CMT-018, CMT-022]
+    evidence: []
+
+  - id: DSN-009
+    kind: behavior
+    behavior: A comment anchor made on a page with views records its view, scenario, scenario label, source reference and, when the page marks one uniquely, its region; reopening restores that state or says the location is unavailable, and anchors without views behave as before.
+    owner: web-application
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-009-B, description: "Annotate a marked field in a designed scenario and reopen it to that scenario with its marker on that field; list a comment from another scenario with an Open action; place an anchor without a view block exactly as before."}
+      failure: {id: DSN-009-F, description: "Show location unavailable with its reason, and place no marker, after a failed restore and for a missing or duplicated region; treat an invalid view block as absent; preserve unknown anchor fields through web and MCP anchor replacement; store region labels stripped of bidirectional and zero-width characters."}
+    deployments: *all
+    status: specified
+    depends_on: [DSN-008, CMT-003, CMT-016]
+    evidence: []
+
+  - id: DSN-010
+    kind: behavior
+    behavior: A version's source-provenance record is validated against that version's manifest digests on read, kept per immutable version, and reported with its coverage while authored commit, mirror commit and Artifact Server version stay distinct, and its absence never affects review.
+    owner: http-api
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-010-B, description: "Publish a record whose outputs match the manifest and read it over HTTP and MCP as verified with declared-file coverage, the dependency-edge claim and external variability; report dirty builds and partial edges as such; a version without a record reports not-recorded."}
+      failure: {id: DSN-010-F, description: "Report changed and missing outputs as mismatch with their paths; report malformed, escaping, over-limit, duplicate-output and credential-bearing records as invalid and unknown versions as unsupported-version; none of these affects the version's other reads."}
+    deployments: *all
+    status: specified
+    depends_on: [MAN-001]
+    evidence: []
+
+  - id: DSN-011
+    kind: behavior
+    behavior: Agents receive each comment's view location in its dispatch bundle, rendered identically by the native bridge and the mailbox, and read a version's views and provenance outcomes through MCP.
+    owner: agent-dispatch
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-011-B, description: "A bundle for a comment anchored in a designed scenario carries its location line in both the native and mailbox renders, byte for byte; artifact_version_context returns the version's views and provenance outcomes."}
+      failure: {id: DSN-011-F, description: "Hostile scenario labels, region labels and source paths reach the agent sanitized; a comment without a valid view block renders exactly as before."}
+    deployments: *all
+    status: specified
+    depends_on: [DSN-009, DSN-010, DSP-011, BRP-002]
+    evidence: []
+
   - id: AUD-001
     kind: security
     behavior: Every publish, restore, access change, connection change, and deletion records the responsible effective principal and human authorizer when present.
