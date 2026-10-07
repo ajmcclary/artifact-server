@@ -49,7 +49,7 @@ const bundleViewBlockSchema = z.object({
     direction: z.enum(["ltr", "rtl"]),
     locale: z.string().max(64).nullable(),
     parameters: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u), bundleParameterValueSchema),
-    theme: z.enum(["light", "dark"]),
+    theme: z.enum(["light", "dark", "high-contrast"]),
     viewport: z.object({
       height: z.number().int().min(0).max(100_000),
       width: z.number().int().min(0).max(100_000),

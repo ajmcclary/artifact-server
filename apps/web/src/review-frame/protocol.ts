@@ -9,6 +9,7 @@ import {
   pagePropsSchema,
   pageRegionSchema,
   pageStateSchema,
+  pageThemeSchema,
   propNameSchema,
   regionIdSchema,
   scenarioIdSchema,
@@ -62,7 +63,7 @@ export const viewAnchorSchema = z.object({
     direction: z.enum(["ltr", "rtl"]),
     locale: z.string().max(64).nullable(),
     parameters: z.record(propNameSchema, parameterValueSchema),
-    theme: z.enum(["light", "dark"]),
+    theme: pageThemeSchema,
     viewport: z.object({
       height: z.number().int().min(0).max(100_000),
       width: z.number().int().min(0).max(100_000),

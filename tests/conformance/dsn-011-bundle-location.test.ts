@@ -151,6 +151,16 @@ describe("DSN-011 bundle location", () => {
     expect(claim.claimed?.message).toContain(`\n   ${expectedLine}\n`);
   });
 
+  test("a view captured in high contrast names the same location in both renderers", () => {
+    const anchor = {
+      htmlAnchor: null,
+      originalText: "",
+      view: view({state: {direction: "ltr", locale: "en", parameters: {}, theme: "high-contrast", viewport: {height: 900, width: 1440}}}),
+    };
+    expect(serverLocation(anchor)).toBe(expectedLine);
+    expect(packageLocation(anchor)).toBe(expectedLine);
+  });
+
   test("DSN-011-F: hostile location text is sanitized and anchors without views render as before", () => {
     const hostile = {
       htmlAnchor: null,
@@ -186,6 +196,7 @@ describe("DSN-011 bundle location", () => {
       withoutState,
       view({sourceRef: {extra: true, path: "a.html"}}),
       view({unknownField: "x"}),
+      view({state: {direction: "ltr", locale: "en", parameters: {}, theme: "sepia", viewport: {height: 900, width: 1440}}}),
     ];
     for (const candidate of unreadable) {
       const anchor = {htmlAnchor: null, originalText: "x", view: candidate};

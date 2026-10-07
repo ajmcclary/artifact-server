@@ -13,6 +13,14 @@ export const propNameSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u)
 const requestIdSchema = z.string().min(1).max(64);
 const propValueSchema = z.union([z.string().max(256), z.number().finite(), z.boolean()]);
 
+/**
+ * The page's colour theme as an adapter reports it. "high-contrast" is
+ * additive under pageVersion 1, so a review frame built before it drops a
+ * state that carries it; an adapter should send it only to a server that
+ * accepts it.
+ */
+export const pageThemeSchema = z.enum(["light", "dark", "high-contrast"]);
+
 export const pagePropsSchema = z.record(propNameSchema, propValueSchema)
   .refine((props) => Object.keys(props).length <= 16, "At most 16 props.");
 export type PageProps = z.infer<typeof pagePropsSchema>;
@@ -23,7 +31,7 @@ export const pageStateSchema = z.object({
   pageVersion: z.number().int().min(1).max(1_000),
   props: pagePropsSchema,
   scenarioId: scenarioIdSchema.nullable(),
-  theme: z.enum(["light", "dark"]),
+  theme: pageThemeSchema,
   viewport: z.object({
     height: z.number().int().min(0).max(100_000),
     width: z.number().int().min(0).max(100_000),

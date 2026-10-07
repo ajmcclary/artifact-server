@@ -151,7 +151,7 @@ The review frame cannot read the page's document: the page runs in an opaque-ori
 
 - `scenarioId` is read from `data-review-scenario`, or is `null` when the marker is missing.
 - `props` holds the current values of the requested prop names.
-- `theme` is `light` or `dark`.
+- `theme` is `light`, `dark` or `high-contrast` (the last added after the hosted pilot, amendment 7).
 - `locale` is the document's `lang`, or `null`.
 - `direction` is the root element's computed direction.
 
@@ -374,3 +374,4 @@ Recorded on 2026-10-07 after Design's hosted acceptance run on Forms v13. Each k
 4. **Failures are told in words.** The toolbar says, for example, "Couldn't open scenario 5: the page didn't confirm it in time." instead of the raw reason code.
 5. **Back and forward follow `scenario=`.** Returning to a history entry that names another scenario restores it.
 6. **Bundles read the view block exactly as the review client does.** A view block the client would treat as absent renders no location line, and control characters in labels and source paths are replaced before the line reaches an agent, in both the mailbox and the patched native bridge.
+7. **A page in high contrast says so.** `state.theme` may be `high-contrast`, in page messages and in a stored anchor's `view.state`, alongside `light` and `dark`. An adapter reports the theme it actually renders and never folds high contrast into `light`. The review frame, the server's bundle renderer and the patched native bridge accept it in the same release. A frame built before this amendment drops a page state carrying `high-contrast`, so a restore in high contrast would read as a timeout there; an adapter sends the value only once the server it is reviewed on runs a build that accepts it. A reader built before it treats such an anchor's `view` block as absent, the existing fail-closed outcome.

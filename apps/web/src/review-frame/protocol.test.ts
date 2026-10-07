@@ -85,6 +85,19 @@ describe("page messages", () => {
       .toEqual(messages.map((message) => [message.type, true]));
   });
 
+  test("accepts each page theme under pageVersion 1 and rejects an unknown one", () => {
+    for (const theme of ["light", "dark", "high-contrast"]) {
+      expect(pageMessageSchema.safeParse({requestId: null, state: {...state, theme}, type: "as-page-state"}).success)
+        .toBe(true);
+      const anchor = reviewAnchorSchema.parse({htmlAnchor: null, originalText: "x", view: {...view, state: {...view.state, theme}}});
+      expect(anchor.view?.state.theme).toBe(theme);
+    }
+    expect(pageMessageSchema.safeParse({requestId: null, state: {...state, theme: "sepia"}, type: "as-page-state"}).success)
+      .toBe(false);
+    expect(reviewAnchorSchema.parse({htmlAnchor: null, originalText: "x", view: {...view, state: {...view.state, theme: "sepia"}}}).view)
+      .toBeUndefined();
+  });
+
   test.each([
     ["an oversized label", {region: {label: "x".repeat(257), regionId: "a", tagName: "div"}, requestId: "r", type: "as-page-region"}],
     ["a malformed region id", {region: {label: "x", regionId: "A B", tagName: "div"}, requestId: "r", type: "as-page-region"}],
