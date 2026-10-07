@@ -1,7 +1,7 @@
 # Forms review pilot contract — design
 
 Date: 2026-10-06
-Status: draft, awaiting the owner's review of the written spec
+Status: approved (written spec reviewed 2026-10-06)
 Source: [HANDOFF.md](../../../HANDOFF.md) Task 2, [PLAN.md](../../../PLAN.md) steps 2–4, [NEXT.md](../../../NEXT.md) "Second milestone: Forms review prerequisites", and the brainstorming conversation of 2026-10-06.
 
 ## Intent
