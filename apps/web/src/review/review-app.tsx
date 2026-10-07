@@ -73,6 +73,7 @@ import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute, settingsAccess} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
 import {ScenarioSessionProvider, useScenarioSession} from "./workspace/scenario-session.tsx";
+import type {ProvenanceOutcome} from "@/api/views";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -565,6 +566,23 @@ function ProjectReview({
 
 
 
+
+  const [provenance, setProvenance] = useState<{readonly outcome: ProvenanceOutcome; readonly versionId: string} | null>(null);
+  useEffect(() => {
+    if (selectedArtifactId === null || selectedVersionId === null) return undefined;
+    let current = true;
+    void (async () => {
+      try {
+        const outcome = await api.versionProvenance(projectId, selectedArtifactId, selectedVersionId);
+        if (current) setProvenance({outcome, versionId: selectedVersionId});
+      } catch {
+        // Details keeps showing "not recorded" when the outcome cannot be read.
+      }
+    })();
+    return () => {
+      current = false;
+    };
+  }, [projectId, selectedArtifactId, selectedVersionId]);
 
   useEffect(() => {
     // Comparison and history belong to one artifact.
@@ -1133,6 +1151,7 @@ function ProjectReview({
       onDelete={tombstoneArtifact}
       onOpenLive={openLinkedArtifact}
       onTagsChange={changeTags}
+      provenance={provenance?.versionId === selectedVersionId ? provenance.outcome : null}
       reviewLink={exactReviewLink(selectedVersion, selectedPath)}
       version={selectedVersion}
       versionCount={versions.length}

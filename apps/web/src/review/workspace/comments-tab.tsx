@@ -37,6 +37,9 @@ import {
   loadConversations,
   type ReviewCommentSession,
 } from "../review-comments.tsx";
+import {reviewAnchorSchema, type UnanchoredReason} from "@/review-frame/protocol";
+import {threadPlacement} from "./scenario-model.ts";
+import {useScenarioSession} from "./scenario-session.tsx";
 
 type CommentView = "all" | "open" | "resolved" | "sent";
 
@@ -268,6 +271,7 @@ export function CommentsTab({
             selected={session.selectedThreadId === thread.id}
             thread={thread}
             unanchored={view !== "sent" && unanchored.has(thread.id)}
+            unanchoredReason={view === "sent" ? null : session.unanchoredReasons.get(thread.id) ?? null}
           />
         ),
         time: formatTimestamp(thread.createdAt),
@@ -396,10 +400,11 @@ interface ThreadBodyProps {
   readonly selected: boolean;
   readonly thread: ReviewThread;
   readonly unanchored: boolean;
+  readonly unanchoredReason: UnanchoredReason | null;
 }
 
 /** A thread's body and its record line; marks the thread the page selected. */
-function ThreadBody({dispatch, replyCount, selected, thread, unanchored}: ThreadBodyProps) {
+function ThreadBody({dispatch, replyCount, selected, thread, unanchored, unanchoredReason}: ThreadBodyProps) {
   return (
     <div aria-current={selected ? "true" : undefined} data-state={thread.state} style={selected ? selectedBodyStyle : bodyStyle}>
       <p style={threadTextStyle}>{thread.body}</p>
@@ -414,10 +419,47 @@ function ThreadBody({dispatch, replyCount, selected, thread, unanchored}: Thread
           </>
         )}
       </p>
-      {unanchored ? <p style={metaStyle}>Location unavailable in this version</p> : null}
+      <ThreadLocation thread={thread} unanchored={unanchored} unanchoredReason={unanchoredReason} />
       {dispatch === null ? null : <DispatchStateChip state={dispatch.state} />}
     </div>
   );
+}
+
+/** Where a thread is on the page now: placed, in another scenario, or unavailable. */
+function ThreadLocation({thread, unanchored, unanchoredReason}: {
+  readonly thread: ReviewThread;
+  readonly unanchored: boolean;
+  readonly unanchoredReason: UnanchoredReason | null;
+}) {
+  const scenario = useScenarioSession();
+  const parsed = reviewAnchorSchema.safeParse(thread.anchor);
+  const anchor = parsed.success ? parsed.data : null;
+  const placement = threadPlacement(anchor, scenario.view, scenario.onScreen.scenarioId);
+  const wanted = anchor?.view?.scenarioId ?? null;
+  if (
+    wanted !== null &&
+    scenario.requested?.scenarioId === wanted &&
+    (scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported")
+  ) {
+    return <p style={metaStyle}>{`Location unavailable: scenario ${wanted} couldn't be opened`}</p>;
+  }
+  if (placement.kind === "other-scenario") {
+    return (
+      <p style={metaStyle}>
+        {`In scenario ${placement.scenarioId} · ${placement.scenarioLabel}`}{" "}
+        <Button
+          onClick={() => scenario.requestScenario(placement.scenarioId, anchor?.view?.state.parameters ?? {})}
+          outline
+          size="xs"
+          variant="secondary"
+        >
+          Open
+        </Button>
+      </p>
+    );
+  }
+  if (unanchoredReason !== null) return <p style={metaStyle}>Location unavailable: the region isn't on the page</p>;
+  return unanchored ? <p style={metaStyle}>Location unavailable in this version</p> : null;
 }
 
 /** A thread's leading mark: a pin for a place on the page, layers for the whole page or version. */

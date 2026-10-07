@@ -9,6 +9,7 @@ import {
   Menu,
   type MenuItem,
   type PreviewPreset,
+  Select,
   StatusPill,
   Toolbar,
   ToolbarSeparator,
@@ -19,6 +20,7 @@ import {sourceDriftDescription} from "@/lib/presentation";
 import {ArtifactBreadcrumb, PageMenu, VersionMenu} from "@/ui/review-ui";
 
 import {htmlPages} from "./page-inventory.ts";
+import {useScenarioSession} from "./scenario-session.tsx";
 import {versionMenuEntries} from "./version-entries.ts";
 import type {VersionListItem} from "./workspace-types.ts";
 
@@ -92,6 +94,7 @@ const toolbarStyle = {
 } satisfies CSSProperties;
 const phoneToolbarStyle = {...toolbarStyle, padding: "7px 8px"} satisfies CSSProperties;
 const inlineStyle = {display: "inline-flex", flex: "none"} satisfies CSSProperties;
+const scenarioStatusStyle = {color: "var(--pill-danger-fg)", fontSize: "var(--font-size-xs, 12px)", whiteSpace: "nowrap"} satisfies CSSProperties;
 const anchorStyle = {display: "inline-flex", flex: "none", position: "relative"} satisfies CSSProperties;
 const separatorStyle = {height: 20, margin: "0 2px"} satisfies CSSProperties;
 const pickersStyle = {alignItems: "center", display: "flex", flex: "0 1 auto", gap: 2, minWidth: 0} satisfies CSSProperties;
@@ -140,6 +143,7 @@ export function ReviewToolbar({
   showName,
   versions,
 }: ReviewToolbarProps) {
+  const scenario = useScenarioSession();
   const [versionOpen, setVersionOpen] = useState(false);
   const [versionQuery, setVersionQuery] = useState("");
   const [pageOpen, setPageOpen] = useState(false);
@@ -263,6 +267,28 @@ export function ReviewToolbar({
     />
   );
 
+  const scenarioPicker = scenario.view === null ? null : (
+    <>
+      <Select
+        aria-label="Designed scenario"
+        fit="selected"
+        onChange={(event) => scenario.requestScenario(event.currentTarget.value)}
+        options={scenario.view.scenarios.map((option) => ({
+          label: `${option.scenarioId} · ${option.label}`,
+          value: option.scenarioId,
+        }))}
+        placeholder="Scenario"
+        size="viewer"
+        value={scenario.onScreen.scenarioId ?? scenario.requested?.scenarioId ?? ""}
+      />
+      {scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported" ? (
+        <span role="status" style={scenarioStatusStyle}>
+          {`Couldn't open scenario ${scenario.requested?.scenarioId ?? ""} (${scenario.onScreen.reason ?? "unknown"})`}
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <>
       <Toolbar gap={phone ? 2 : 6} label="Artifact" style={phone ? phoneToolbarStyle : toolbarStyle} wrap={phone}>
@@ -331,6 +357,7 @@ export function ReviewToolbar({
             size="sm"
           />
         ) : null}
+        {scenarioPicker}
         <ToolbarSpacer />
         <span style={inlineStyle}>{share}</span>
         <IconButton

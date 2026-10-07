@@ -1,6 +1,7 @@
 import {useEffect, useState, type CSSProperties} from "react";
 
 import type {AccessSetting, ArtifactDetails, ArtifactVersion} from "@/api/client";
+import type {ProvenanceOutcome} from "@/api/views";
 import {
   Alert,
   Button,
@@ -35,6 +36,8 @@ export interface DetailsTabProps {
   readonly onDelete: () => Promise<boolean>;
   readonly onOpenLive: () => Promise<void>;
   readonly onTagsChange: (tags: readonly string[]) => Promise<void>;
+  /** The version's source-provenance outcome, or null while it loads. */
+  readonly provenance: ProvenanceOutcome | null;
   /** The exact Review link of the version and page shown. */
   readonly reviewLink: string;
   readonly version: ArtifactVersion;
@@ -65,6 +68,7 @@ export function DetailsTab({
   onDelete,
   onOpenLive,
   onTagsChange,
+  provenance,
   reviewLink,
   version,
   versionCount,
@@ -154,6 +158,7 @@ export function DetailsTab({
           </div>
         </PanelSection>
       )}
+      <SourceSection provenance={provenance} version={version} />
       <PanelSection title="Identifiers">
         <FieldGrid
           fields={[
@@ -324,6 +329,64 @@ function TagsEditor({artifact, onChange}: TagsEditorProps) {
           {artifact.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
         </div>
       )}
+    </PanelSection>
+  );
+}
+
+/** The authored source behind this version, kept apart from its manifest identity. */
+function SourceSection({provenance, version}: {
+  readonly provenance: ProvenanceOutcome | null;
+  readonly version: ArtifactVersion;
+}) {
+  if (provenance === null || provenance.status === "not-recorded") {
+    return (
+      <PanelSection title="Source">
+        <p style={noteStyle}>Source not recorded. Agents can inspect this version but not edit its source.</p>
+      </PanelSection>
+    );
+  }
+  if (provenance.status === "invalid" || provenance.status === "unsupported-version") {
+    return (
+      <PanelSection title="Source">
+        <p style={noteStyle}>
+          {provenance.status === "invalid"
+            ? `The source record is invalid: ${provenance.diagnostic}`
+            : `The source record uses unsupported version ${provenance.version}.`}
+        </p>
+      </PanelSection>
+    );
+  }
+  const {coverage, record} = provenance;
+  return (
+    <PanelSection title="Source">
+      <FieldGrid
+        fields={[
+          {
+            label: "Check",
+            value: provenance.status === "verified"
+              ? <StatusPill label="Verified" tone="success" />
+              : <StatusPill label={`Mismatch · ${provenance.mismatchCount}`} tone="danger" />,
+          },
+          {label: "Repository", mono: true, value: record.source.repository},
+          {
+            label: "Authored commit",
+            mono: true,
+            note: record.source.dirty ? "Built from uncommitted changes." : undefined,
+            noteTone: "warning",
+            value: record.source.commit,
+          },
+          {label: "Manifest", mono: true, value: version.manifest.digest},
+          {
+            label: "Coverage",
+            value: `${coverage.declaredOutputs} of ${coverage.manifestFiles} files declared · dependency edges ${coverage.dependencyEdges}`,
+          },
+        ]}
+        labelWidth={labelWidth}
+        layout="inline"
+      />
+      {provenance.status === "mismatch" ? (
+        <p style={noteStyle}>{`Differs from the record: ${provenance.mismatches.slice(0, 5).map((item) => item.path).join(", ")}`}</p>
+      ) : null}
     </PanelSection>
   );
 }
