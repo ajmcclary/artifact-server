@@ -133,3 +133,13 @@ test("a failed save repaints only the comments of the scenario on screen", async
   await expect(markers).toHaveCount(1);
 });
 
+
+test("a link to a comment reopens the comment's designed scenario", async () => {
+  const published = await publishScenarioFixture(fixture, "thread-link-reopen");
+  const {page} = fixture;
+  const ids = {artifactId: published.artifact.id, versionId: published.version.id};
+  const thread = await createThreadOverApi(fixture, {...ids, anchor: regionAnchor("5", "Inspector · Validation", "inspector.validation.min-length"), body: "Linked comment.", idempotencyKey: "thread-link-reopen-five", path: "honest.html"});
+  await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"})}&thread=${thread.id}`);
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
+});

@@ -17,11 +17,12 @@ import {
   type ArtifactDetails,
   type ArtifactPage,
   type ArtifactVersion,
+  type CommentThread,
   type Project,
   type Session,
   setPreviewLeasePrincipal,
 } from "@/api/client";
-import type {ReviewAnchor} from "@/review-frame/protocol";
+import {reviewAnchorSchema, type ReviewAnchor} from "@/review-frame/protocol";
 import {usePalette} from "@/shell/command-palette";
 import {ReviewShell} from "@/shell/review-shell";
 import {Button, dismissInnermost, IconButton, previewPresets, SurfaceState, useElementSize} from "@/arkcase";
@@ -995,6 +996,8 @@ function ProjectReview({
     if (requested === null || !comments.threads.some((thread) => thread.id === requested)) return;
     requestedThreadRef.current = null;
     selectAnnotation(requested);
+    // A linked conversation is focused like "Show in the artifact": its place, and its scenario.
+    setThreadFocusRevision((revision) => revision + 1);
     writeReviewHistory(workspaceHref({...currentReviewLocation(), threadId: null}), "replace");
   });
   const submitAnnotation = async (
@@ -1189,6 +1192,11 @@ function ProjectReview({
       projectId={projectId}
       versionId={selectedVersionId}
     >
+      <ThreadScenarioFollower
+        revision={threadFocusRevision}
+        selectedThreadId={comments.selectedThreadId}
+        threads={comments.threads}
+      />
       <ScenarioUrlSync
         artifactId={selectedArtifactId}
         focusMode={focusMode}
@@ -1402,6 +1410,31 @@ function ProjectReview({
       </div>
     </ScenarioSessionProvider>
   );
+}
+
+/**
+ * Focusing a conversation (a link to it, or "Show in the artifact") restores
+ * the designed scenario its anchor was made in, once the page's views are known.
+ */
+function ThreadScenarioFollower({revision, selectedThreadId, threads}: {
+  readonly revision: number;
+  readonly selectedThreadId: string | null;
+  readonly threads: readonly CommentThread[];
+}) {
+  const scenario = useScenarioSession();
+  const handledRef = useRef(0);
+  useEffect(() => {
+    const view = scenario.view;
+    if (revision === handledRef.current || view === null || selectedThreadId === null) return;
+    handledRef.current = revision;
+    const thread = threads.find((candidate) => candidate.id === selectedThreadId);
+    const parsed = reviewAnchorSchema.safeParse(thread?.anchor);
+    const located = parsed.success ? parsed.data.view : undefined;
+    if (located === undefined || located.viewId !== view.viewId) return;
+    if (located.scenarioId === scenario.onScreen.scenarioId) return;
+    scenario.requestScenario(located.scenarioId, located.state.parameters);
+  }, [revision, scenario, selectedThreadId, threads]);
+  return null;
 }
 
 /** Keeps `scenario=` in the review URL in step with the scenario on screen. */
