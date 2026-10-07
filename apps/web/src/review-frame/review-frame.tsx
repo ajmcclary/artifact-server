@@ -6,6 +6,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { withBaseHref } from "./base-href.ts";
+import { createPageChannel, type PageChannel } from "./page-channel.ts";
+import { pageMessageSchema } from "./page-protocol.ts";
 import {
   hostMessageSchema,
   reviewAnchorFrom,
@@ -14,6 +16,7 @@ import {
   type ReviewAnnotation,
   type ReviewInit,
   type ReviewTheme,
+  type UnanchoredReason,
 } from "./protocol.ts";
 
 interface ReviewSession {
@@ -66,6 +69,27 @@ function applyTheme(theme: ReviewInit | ReviewTheme): void {
   root.classList.toggle("light", theme.isLight);
 }
 
+/** The sandboxed artifact document's window, which only Plannotator creates. */
+function pageWindow(): Window | null {
+  return document.querySelector<HTMLIFrameElement>("iframe[srcdoc]")?.contentWindow ?? null;
+}
+
+/** A thread anchored to a region is placed by that region's own identity selector. */
+function regionAnnotation(
+  annotation: Annotation,
+  regionId: string,
+  tagName: string,
+): Annotation {
+  const point = annotation.htmlAnchor?.point;
+  const selector = `${tagName}[data-review-region="${regionId}"]`;
+  const placed: Annotation = {
+    ...annotation,
+    htmlAnchor: point === undefined ? {selector, tagName} : {point, selector, tagName},
+  };
+  delete placed.htmlAdditionalTargets;
+  return placed;
+}
+
 /**
  * The review frame: a same-origin document whose only job is to host
  * `@plannotator/ui`'s sandboxed HTML annotation surface and relay its events
@@ -77,10 +101,86 @@ export function ReviewFrame(): React.ReactNode {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const viewerRef = useRef<ViewerHandle | null>(null);
   const paintedIdsRef = useRef<ReadonlySet<string>>(new Set<string>());
+  const channelRef = useRef<PageChannel | null>(null);
+  const capturePropsRef = useRef<readonly string[]>([]);
+  const viewerUnanchoredRef = useRef<readonly string[]>([]);
+  const regionFailuresRef = useRef<ReadonlyMap<string, UnanchoredReason>>(new Map());
+  const annotationGenerationRef = useRef(0);
 
   const send = useCallback((message: FrameMessage): void => {
     window.parent.postMessage(message, window.location.origin);
   }, []);
+
+  const reportUnanchored = useCallback((): void => {
+    const failures = regionFailuresRef.current;
+    const threadIds = [...new Set([...viewerUnanchoredRef.current, ...failures.keys()])];
+    send(failures.size === 0
+      ? {threadIds, type: "as-review-unanchored", v: reviewProtocolVersion}
+      : {reasons: Object.fromEntries(failures), threadIds, type: "as-review-unanchored", v: reviewProtocolVersion});
+  }, [send]);
+
+  // Region anchors are placed only where the page reports exactly one element
+  // carrying the region id; anything else is reported, never guessed.
+  const applyAnnotations = useCallback(async (reviews: readonly ReviewAnnotation[]): Promise<Annotation[] | null> => {
+    annotationGenerationRef.current += 1;
+    const generation = annotationGenerationRef.current;
+    const regionIds = [...new Set(reviews.flatMap((review) => review.anchor?.view?.regionId ?? []))];
+    if (regionIds.length === 0) {
+      regionFailuresRef.current = new Map();
+      reportUnanchored();
+      return reviews.map(toAnnotation);
+    }
+    const counts = await channelRef.current?.findRegions(regionIds.slice(0, 64)) ?? null;
+    if (generation !== annotationGenerationRef.current) return null;
+    const failures = new Map<string, UnanchoredReason>();
+    const placed = reviews.flatMap((review) => {
+      const regionId = review.anchor?.view?.regionId;
+      const annotation = toAnnotation(review);
+      if (regionId === undefined) return [annotation];
+      const found = counts?.get(regionId);
+      if (found !== undefined && found.count === 1 && found.tagName !== null) {
+        return [regionAnnotation(annotation, regionId, found.tagName)];
+      }
+      failures.set(review.threadId, (found?.count ?? 0) > 1 ? "region-ambiguous" : "region-missing");
+      return [];
+    });
+    regionFailuresRef.current = failures;
+    reportUnanchored();
+    return placed;
+  }, [reportUnanchored]);
+
+  const showAnnotations = useCallback((reviews: readonly ReviewAnnotation[]): void => {
+    void (async () => {
+      const annotations = await applyAnnotations(reviews);
+      if (annotations === null) return;
+      setSession((current) => current === null ? current : {...current, annotations});
+    })();
+  }, [applyAnnotations]);
+
+  useEffect(() => {
+    const channel = createPageChannel({
+      onUnpromptedState: (state) => {
+        send({outcome: "restored", requestId: null, state, type: "as-review-view-state", v: reviewProtocolVersion});
+      },
+      post: (message) => {
+        // The sandbox's origin is opaque ("null"), so no narrower target exists.
+        pageWindow()?.postMessage(message, "*");
+      },
+    });
+    channelRef.current = channel;
+    const onPageMessage = (event: MessageEvent<unknown>): void => {
+      const page = pageWindow();
+      if (page === null || event.source !== page || event.origin !== "null") return;
+      const parsed = pageMessageSchema.safeParse(event.data);
+      if (parsed.success) channel.receive(parsed.data);
+    };
+    window.addEventListener("message", onPageMessage);
+    return () => {
+      window.removeEventListener("message", onPageMessage);
+      channel.reset();
+      channelRef.current = null;
+    };
+  }, [send]);
 
   useEffect(() => {
     // Framed by the application shell or nothing: a top-level review frame has
@@ -94,10 +194,20 @@ export function ReviewFrame(): React.ReactNode {
       const message = parsed.data;
       if (message.type === "as-review-init") {
         applyTheme(message);
-        paintedIdsRef.current = new Set(
-          message.annotations.map((annotation) => annotation.threadId),
-        );
-        setSession(sessionFrom(message));
+        channelRef.current?.reset();
+        regionFailuresRef.current = new Map();
+        viewerUnanchoredRef.current = [];
+        const hasRegions = message.annotations.some((annotation) => annotation.anchor?.view?.regionId !== undefined);
+        if (!hasRegions) {
+          paintedIdsRef.current = new Set(
+            message.annotations.map((annotation) => annotation.threadId),
+          );
+          setSession(sessionFrom(message));
+          return;
+        }
+        paintedIdsRef.current = new Set();
+        setSession({...sessionFrom(message), annotations: []});
+        showAnnotations(message.annotations);
         return;
       }
       if (message.type === "as-review-theme") {
@@ -105,10 +215,7 @@ export function ReviewFrame(): React.ReactNode {
         return;
       }
       if (message.type === "as-review-annotations") {
-        const annotations = message.annotations.map(toAnnotation);
-        setSession((current) =>
-          current === null ? current : {...current, annotations}
-        );
+        showAnnotations(message.annotations);
         return;
       }
       if (message.type === "as-review-annotate-mode") {
@@ -119,7 +226,32 @@ export function ReviewFrame(): React.ReactNode {
         );
         return;
       }
-      if (message.type !== "as-review-focus") return;
+      if (message.type === "as-review-restore") {
+        capturePropsRef.current = Object.keys(message.props);
+        const channel = channelRef.current;
+        void (async () => {
+          const result = channel === null
+            ? {outcome: "unsupported", reason: "no-adapter"} as const
+            : await channel.restore(message.props, message.scenarioId);
+          send(result.outcome === "restored"
+            ? {outcome: "restored", requestId: message.requestId, state: result.state, type: "as-review-view-state", v: reviewProtocolVersion}
+            : result.outcome === "failed"
+              ? {outcome: "failed", reason: result.reason, requestId: message.requestId, state: result.state, type: "as-review-view-state", v: reviewProtocolVersion}
+              : {outcome: "unsupported", reason: "no-adapter", requestId: message.requestId, state: null, type: "as-review-view-state", v: reviewProtocolVersion});
+        })();
+        return;
+      }
+      if (message.type === "as-review-capture") {
+        capturePropsRef.current = message.props;
+        const channel = channelRef.current;
+        void (async () => {
+          const state = channel === null ? null : await channel.capture(message.props);
+          send(state === null
+            ? {outcome: "unsupported", reason: "no-adapter", requestId: message.requestId, state: null, type: "as-review-view-state", v: reviewProtocolVersion}
+            : {outcome: "restored", requestId: message.requestId, state, type: "as-review-view-state", v: reviewProtocolVersion});
+        })();
+        return;
+      }
       setSelectedThreadId(message.threadId);
     };
     if (framed) {
@@ -129,7 +261,7 @@ export function ReviewFrame(): React.ReactNode {
     return () => {
       window.removeEventListener("message", onMessage);
     };
-  }, [send]);
+  }, [send, showAnnotations]);
 
   // The viewer paints marks for its initial prop set when the bridge reports
   // ready; every later arrival or removal is reconciled by id so a replaced
@@ -156,17 +288,33 @@ export function ReviewFrame(): React.ReactNode {
         ? current
         : {...current, annotations: [...current.annotations, annotation]}
     );
-    send({
-      anchor: reviewAnchorFrom(
-        annotation.originalText,
-        annotation.htmlAnchor,
-        annotation.htmlAdditionalTargets,
-      ),
-      body: annotation.text ?? "",
-      originalText: annotation.originalText,
-      type: "as-review-submit",
-      v: reviewProtocolVersion,
-    });
+    const anchor = reviewAnchorFrom(
+      annotation.originalText,
+      annotation.htmlAnchor,
+      annotation.htmlAdditionalTargets,
+    );
+    const channel = channelRef.current;
+    const selector = annotation.htmlAnchor?.selector;
+    void (async () => {
+      const body = annotation.text ?? "";
+      if (channel === null || channel.supports() !== true) {
+        send({anchor, body, originalText: annotation.originalText, type: "as-review-submit", v: reviewProtocolVersion});
+        return;
+      }
+      // Page context is evidence for the host, which decides what to store.
+      const [state, answer] = await Promise.all([
+        channel.capture(capturePropsRef.current),
+        selector === undefined ? null : channel.regionAt(selector),
+      ]);
+      send({
+        anchor,
+        body,
+        capture: {region: answer?.region ?? null, state},
+        originalText: annotation.originalText,
+        type: "as-review-submit",
+        v: reviewProtocolVersion,
+      });
+    })();
   }, [send]);
 
   const handleSelect = useCallback((threadId: string | null): void => {
@@ -175,8 +323,9 @@ export function ReviewFrame(): React.ReactNode {
   }, [send]);
 
   const handleUnanchored = useCallback((threadIds: string[]): void => {
-    send({threadIds, type: "as-review-unanchored", v: reviewProtocolVersion});
-  }, [send]);
+    viewerUnanchoredRef.current = threadIds;
+    reportUnanchored();
+  }, [reportUnanchored]);
 
   const requestAnnotateMode = useCallback((active: boolean): void => {
     send({
