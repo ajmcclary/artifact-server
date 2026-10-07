@@ -1,14 +1,14 @@
 {
   "arch": "arm64",
   "availableParallelism": 10,
-  "capturedAt": "2026-10-06T21:29:28.475Z",
-  "commit": "2e97644720b067cfd6fb1f9cb77c020f0d31c233",
+  "capturedAt": "2026-10-07T02:22:59.863Z",
+  "commit": "dcfdb887df745f4816e611dc0203597547f004ba",
   "cpu": "Apple M1 Max",
   "details": {
     "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
     "postgresImageDigest": "sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94"
   },
-  "lockfileDigest": "b3c7834649b527c307980e75bb9aa6d01e887d625e292d2773643f6f8f82eac5",
+  "lockfileDigest": "18d08db852ae084da1545582e28bc84097985f6b784f0ae4672ccda94d70a6fc",
   "node": "v24.15.0",
   "operatingSystem": "darwin 27.2.0",
   "platform": "darwin",
