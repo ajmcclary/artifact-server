@@ -675,9 +675,10 @@ function HtmlPreview({
           ? message.anchor
           : {...message.anchor, view: located};
         const saved = await onSubmitAnnotation(message.body, anchor, entry.path);
-        if (!saved) {
+        // Drop the unsaved draft by repainting exactly what the scenario on screen shows.
+        if (!saved && !holdAnnotations) {
           postToFrame({
-            annotations: [...annotations],
+            annotations: placed,
             type: "as-review-annotations",
             v: reviewProtocolVersion,
           });
@@ -687,12 +688,13 @@ function HtmlPreview({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [
-    annotations,
     entry.path,
+    holdAnnotations,
     onAnnotateModeChange,
     onSelectAnnotation,
     onSubmitAnnotation,
     onUnanchoredChange,
+    placed,
     postToFrame,
     scenario,
   ]);

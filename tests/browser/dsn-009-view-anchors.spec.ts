@@ -107,3 +107,29 @@ test("DSN-009-F: a failed restore and a missing or duplicated region say the loc
   await openInspectorTab(page, "Comments");
   await expect(page.getByRole("article").filter({hasText: "Liar comment."}).getByText("Location unavailable: scenario 5 couldn't be opened")).toBeVisible({timeout: 10_000});
 });
+
+test("a failed save repaints only the comments of the scenario on screen", async () => {
+  const published = await publishScenarioFixture(fixture, "failed-save-repaint");
+  const {page} = fixture;
+  const ids = {artifactId: published.artifact.id, versionId: published.version.id};
+  await createThreadOverApi(fixture, {...ids, anchor: regionAnchor("5", "Inspector · Validation", "inspector.validation.min-length"), body: "Scenario five comment.", idempotencyKey: "thread-failed-save-five", path: "honest.html"});
+  await createThreadOverApi(fixture, {...ids, anchor: regionAnchor("1", "Library", "inspector.validation"), body: "Scenario one comment.", idempotencyKey: "thread-failed-save-one", path: "honest.html"});
+  await page.route("**/api/v1/artifacts/*/versions/*/comments**", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({body: JSON.stringify({error: {code: "INTERNAL", message: "Injected failure."}}), contentType: "application/json", status: 500});
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"})}&scenario=5`);
+  const markers = previewFrame(page).locator("[data-plannotator-marker]");
+  await expect(markers).toHaveCount(1);
+  await page.getByRole("button", {name: /^Interact mode:/u}).click();
+  await previewFrame(page).getByText("First note").click();
+  await annotationFrame(page).getByPlaceholder("Add a comment...").fill("This save fails.");
+  await annotationFrame(page).getByRole("button", {name: "Save"}).click();
+  // The repaint after the failure holds only scenario 5's comment, never scenario 1's.
+  await expect(markers).toHaveCount(1);
+});
+
