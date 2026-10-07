@@ -1,6 +1,6 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026, and updated after Design's `1632239` handoff and the afternoon deploy. artifacts.backend.app runs image `sha256:e5b19d0e160bec5fc311c73f9d905d66cb83dbca688d718643fc32571383f47a` (Artifact Server `7a5fc6c`, Workspace `543140cf3`), which includes the two changes under "What closed since the October 7 morning deploy". Design (`~/Dev/Design`) is at `1632239`. Recheck both before relying on anything below.
+Written October 7, 2026, and updated after Design's `bda4eba` report and the evening deploy. artifacts.backend.app runs image `sha256:2d6b37dc74eb749bd47322448215e2475896b76775a7730441017593564dc994` (Artifact Server `2404da6`, Workspace `9f431d7e2`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-CNgbPxaT.js` carries "Made in high contrast". Design (`~/Dev/Design`) is at `9ef257a`. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
@@ -42,7 +42,7 @@ These are recorded in the contract spec's "Amendments after the hosted pilot".
 
 **Deferred minor findings.** All five listed on the Artifact Server side are fixed. The bundle's view-block check now matches the web's, and control characters no longer reach agents. The `runClientCommand` exit-vs-close race is fixed too.
 
-## Since Design's `bda4eba` report (October 7 evening, not committed or deployed yet)
+## Since Design's `bda4eba` report (October 7 evening, deployed from `2404da6`)
 
 **A restore sets the scenario, not the theme (contract amendment 8).** The page protocol is unchanged, and the review frame never posts Design's `arkcase:theme`. Theme, viewport, locale and direction in a stored `view.state` describe the reviewer's surroundings: a reviewer's theme can be an accessibility setting. So that a reopened comment never shows another theme silently, a thread whose view block (for the view on screen) stored `dark` or `high-contrast` now says "Made in the dark theme" or "Made in high contrast" (`capturedThemeText` in `apps/web/src/review/workspace/scenario-model.ts`, shown by `ThreadLocation` in `comments-tab.tsx`). The scenario fixture now reports `high-contrast` while the browser prefers more contrast, and a DSN-009-B journey captures in high contrast and reopens without it. A `theme` field on `as-page-restore` would stay additive if owners later want restores to apply it.
 
@@ -54,7 +54,7 @@ These are recorded in the contract spec's "Amendments after the hosted pilot".
 - a region comment captured in high contrast (through `emulateMedia({contrast: "more"})`, the reviewer's own route) that stores `view.state.theme: "high-contrast"` and reopens in its scenario saying "Made in high contrast";
 - no content security policy violation in any frame except Forms' deliberate `eval` probe. The check reads `securitypolicyviolation` events, so it names the document and directive. An injected inline `<style>` was confirmed to fail it.
 
-The hostile cases stay on the fixture. A local rehearsal (the same spec against a local server, with Forms read from hosted) passed 7/7 in both engines. **Nothing hosted has run.** The reopen assertion needs the theme note deployed first.
+The hostile cases stay on the fixture. A local rehearsal (the same spec against a local server, with Forms read from hosted) passed 7/7 in both engines. **Nothing hosted has run.**
 
 **Forms' ScenarioBar does nothing in an opaque-origin sandbox.** Previous, Next and the menu run their React handlers, but the scenario never changes, while `window.__fb.go()` works. It reproduces in Design's own sandbox harness, with or without a CSP, and works on an ordinary origin, so it is a Forms runtime defect, not Artifact Server's. The suite's ScenarioBar test is marked `test.fail` with that reason, so it reports once a re-pinned Forms fixes it.
 
@@ -62,7 +62,7 @@ The hostile cases stay on the fixture. A local rehearsal (the same spec against 
 
 ## Still open
 
-1. **Hosted run of the Forms suite.** It needs the owner's approval, and the deployed image must include the theme note first. Run `ARTIFACT_SERVER_HOSTED_REVISION=<digest> pnpm qualify:hosted:design-review`, then attach the evidence to DSN-007 … DSN-010 and update DSN-009's proof gap, which still says Forms is covered only by Design's manual check.
+1. **Hosted run of the Forms suite.** The theme note is deployed; the run itself needs the owner's approval. Run `ARTIFACT_SERVER_HOSTED_REVISION=<digest> pnpm qualify:hosted:design-review`, then attach the evidence to DSN-007 … DSN-010 and update DSN-009's proof gap, which still says Forms is covered only by Design's manual check.
 2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
 3. **Repository failures export their raw driver error in trace spans** (see PUB-021 above).
 4. **Open owner decisions from October 6, rechecked against the code on October 7 and unchanged:**
