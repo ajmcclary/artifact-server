@@ -88,6 +88,9 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
       return {code: errorCodes.uploadFileNotFound, message: failure.message, status: 404};
     case "UploadIncomplete":
       return {code: errorCodes.uploadIncomplete, message: failure.message, status: 409};
+    case "UploadInterrupted":
+      // The server never received the complete request message.
+      return {code: errorCodes.uploadInterrupted, message: failure.message, status: 408};
     case "UploadNotFound":
       return {code: errorCodes.uploadNotFound, message: failure.message, status: 404};
     case "VersionNotFound":

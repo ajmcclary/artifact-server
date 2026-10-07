@@ -10,6 +10,7 @@ import {
   UploadExpired,
   type UploadFileNotFound,
   UploadIncomplete,
+  UploadInterrupted,
   UploadNotFound,
   UploadedFileMismatch,
 } from "../core/errors.js";
@@ -58,6 +59,13 @@ import {
   PublicationPreparationService,
   type PublicationPreparationFailure,
 } from "./publication-preparation.js";
+import {
+  type ObservedUploadBody,
+  observeUploadBody,
+} from "./upload-body-source.js";
+
+const uploadInterruptedMessage =
+  "The upload body was interrupted before it was complete. Re-run the same publish to resume; files already verified are not sent again.";
 
 const uploadLifetimeMilliseconds = 60 * 60 * 1_000;
 
@@ -228,6 +236,7 @@ export type StagedUploadFailure =
   | UploadExpired
   | UploadFileNotFound
   | UploadIncomplete
+  | UploadInterrupted
   | UploadedFileMismatch
   | ArtifactRepositoryFailure
   | StagingStorageFailure
@@ -496,16 +505,17 @@ function makeStagedUploadService(
         writeDeadline < slot.expiresAt ? writeDeadline : slot.expiresAt,
         uploadStartedAt,
       );
+      const source = observeUploadBody(command.body);
       yield* dependencies.staging.put({
-        body: command.body,
+        body: source.body,
         sha256: file.entry.sha256,
         signal,
         size: file.entry.size,
         storageToken: file.storageToken,
         uploadId: command.uploadId,
-      }).pipe(Effect.catch((error) => Effect.fail(signal.aborted
-        ? new UploadExpired({message: "The staged upload has expired."})
-        : error)));
+      }).pipe(Effect.catch((error) =>
+        Effect.fail(stagedWriteFailure(error, signal, source))
+      ));
       const uploadedAt = DateTime.formatIso(yield* dependencies.clock.now);
       yield* dependencies.uploads.markStagedFileUploaded(
         command.projectId,
@@ -541,12 +551,20 @@ function makeStagedUploadService(
         writeDeadline < upload.expiresAt ? writeDeadline : upload.expiresAt,
         batchStartedAt,
       );
+      const source = observeUploadBody(command.body);
       const frame = yield* Effect.tryPromise({
-        try: () => readBatchFrame(command.body, maximumBatchRequestBytes),
-        catch: () =>
-          new UploadedFileMismatch({
-            message: "The staged upload batch frame is malformed.",
-          }),
+        try: () => readBatchFrame(source.body, maximumBatchRequestBytes),
+        catch: () => {
+          const interrupted = source.sourceFailure();
+          return interrupted === undefined
+            ? new UploadedFileMismatch({
+              message: "The staged upload batch frame is malformed.",
+            })
+            : new UploadInterrupted({
+              cause: interrupted.cause,
+              message: uploadInterruptedMessage,
+            });
+        },
       });
       const accepted: StagedUploadBatchResult["accepted"][number][] = [];
       const rejected: StagedUploadBatchResult["rejected"][number][] = [];
@@ -762,6 +780,27 @@ function abortSignalUntil(expiresAt: string, now: DateTime.Utc): AbortSignal {
     Date.parse(expiresAt) - DateTime.toEpochMillis(now),
   );
   return AbortSignal.timeout(remainingMilliseconds);
+}
+
+/**
+ * Classify one failed staged write: the write deadline passing, the caller's
+ * body stopping early, or the provider's own failure, in that order.
+ */
+function stagedWriteFailure<E>(
+  error: E,
+  signal: AbortSignal,
+  source: ObservedUploadBody,
+): E | UploadExpired | UploadInterrupted {
+  if (signal.aborted) {
+    return new UploadExpired({message: "The staged upload has expired."});
+  }
+  const interrupted = source.sourceFailure();
+  return interrupted === undefined
+    ? error
+    : new UploadInterrupted({
+      cause: interrupted.cause,
+      message: uploadInterruptedMessage,
+    });
 }
 
 function expirePublicationAtDeadline<A, E>(

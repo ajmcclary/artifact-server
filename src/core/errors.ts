@@ -45,6 +45,7 @@ export const errorCodes = {
   uploadExpired: "UPLOAD_EXPIRED",
   uploadFileNotFound: "UPLOAD_FILE_NOT_FOUND",
   uploadIncomplete: "UPLOAD_INCOMPLETE",
+  uploadInterrupted: "UPLOAD_INTERRUPTED",
   uploadNotFound: "UPLOAD_NOT_FOUND",
   versionNotFound: "VERSION_NOT_FOUND",
 } as const;
@@ -329,6 +330,19 @@ export class UploadIncomplete extends Schema.TaggedError<UploadIncomplete>()(
   messageField,
 ) {}
 
+/**
+ * The caller's upload body stopped before every declared byte arrived: the
+ * client went away, a proxy dropped the connection, or the HTTP server's own
+ * request deadline cut it. Nothing was verified, so the same publish resumes.
+ */
+export class UploadInterrupted extends Schema.TaggedError<UploadInterrupted>()(
+  "UploadInterrupted",
+  {
+    cause: Schema.Defect(),
+    message: Schema.String,
+  },
+) {}
+
 /** The requested staged upload does not exist for the principal. */
 export class UploadNotFound extends Schema.TaggedError<UploadNotFound>()(
   "UploadNotFound",
@@ -584,6 +598,7 @@ const artifactServerFailureSchema = Schema.Union([
   UploadExpired,
   UploadFileNotFound,
   UploadIncomplete,
+  UploadInterrupted,
   UploadNotFound,
   VersionNotFound,
   ContentNotPublic,

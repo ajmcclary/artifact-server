@@ -173,6 +173,7 @@ import {cacheablePreviewLeaseStatuses, previewLeaseCacheControl} from "./preview
 import {artifactServerFailureResponse} from "./artifact-http-failure.js";
 import {attachmentContentDisposition} from "./content-disposition.js";
 import {observeHttpRequest} from "../observability/application-observability.js";
+import {summarizeFailureCause} from "../observability/failure-cause-summary.js";
 import {
   createVersionArchive,
   versionArchiveFilename,
@@ -2875,6 +2876,13 @@ export function createHttpApp(
           context.get("requestId"),
           error._tag,
           "request",
+          error,
+        );
+      } else if (error._tag === "UploadInterrupted") {
+        await logUploadInterrupted(
+          dependencies.applicationRuntime,
+          context.get("requestId"),
+          error.cause,
         );
       }
       const headers = new Headers();
@@ -2922,6 +2930,7 @@ export function createHttpApp(
       context.get("requestId"),
       "UnhandledError",
       error.name,
+      error,
     );
     return context.json(
       {error: {code: "INTERNAL_ERROR", message: "The server could not complete the request."}},
@@ -3252,17 +3261,42 @@ function logAdapterFailure(
   requestId: string,
   failureTag: string,
   operation: string,
+  failure: Error,
 ): Promise<void> {
   return runApplicationEffect(
     runtime,
     Effect.logError("http.request.failed").pipe(
       Effect.annotateLogs({
+        failure_cause: summarizeFailureCause(failure),
         failure_tag: failureTag,
         operation,
         request_id: requestId,
       }),
     ),
     {requestId, spanName: "http.request.failure"},
+  );
+}
+
+/**
+ * A request body that stopped early is the caller's to retry, not a server
+ * fault, but its cause is what an operator needs to tell a client that went
+ * away from a proxy or deadline that cut the connection.
+ */
+function logUploadInterrupted(
+  runtime: ApplicationRuntime,
+  requestId: string,
+  cause: unknown,
+): Promise<void> {
+  return runApplicationEffect(
+    runtime,
+    Effect.logWarning("http.request.interrupted").pipe(
+      Effect.annotateLogs({
+        failure_cause: summarizeFailureCause(cause),
+        failure_tag: "UploadInterrupted",
+        request_id: requestId,
+      }),
+    ),
+    {requestId, spanName: "http.request.interruption"},
   );
 }
 

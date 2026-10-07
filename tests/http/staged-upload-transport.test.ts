@@ -1,7 +1,9 @@
 import {randomBytes} from "node:crypto";
+import {chmod, mkdir} from "node:fs/promises";
 import {request} from "node:http";
+import path from "node:path";
 
-import {afterEach, beforeEach, describe, expect, test} from "vitest";
+import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, test} from "vitest";
 
 import {
   createTestInstallation,
@@ -15,12 +17,18 @@ import {
   createStagedUpload,
   type CreateUploadResponse,
   testSiteFile,
+  uploadStagedFile,
 } from "../support/publishing.js";
+import {
+  type OtlpLogCollector,
+  startOtlpLogCollector,
+} from "../support/otlp-log-collector.js";
 import {stagedWriteDeadlineMilliseconds} from "../../src/core/publishing-limits.js";
 import {
   defaultHttpRequestTimeoutMilliseconds,
   nodeHttpServerTimeouts,
 } from "../../src/http/node-http-server.js";
+import {summarizeFailureCause} from "../../src/observability/failure-cause-summary.js";
 
 type StreamOutcome =
   | {readonly kind: "closed"; readonly code: string}
@@ -29,14 +37,27 @@ type StreamOutcome =
 describe("staged upload transport", () => {
   let installation: TestInstallation;
   let server: RunningTestServer | null = null;
+  let collector: OtlpLogCollector;
+
+  beforeAll(async () => {
+    collector = await startOtlpLogCollector();
+  });
+
+  afterAll(async () => {
+    await collector.stop();
+  });
 
   beforeEach(async () => {
     installation = await createTestInstallation();
+    collector.reset();
   });
 
   afterEach(async () => {
+    // Stopping the server flushes its exporter before the next reset.
     if (server !== null) await server.stop();
     server = null;
+    await chmod(path.join(installation.dataDirectory, "staging"), 0o700)
+      .catch(() => undefined);
     await removeTestInstallation(installation);
   });
 
@@ -78,6 +99,210 @@ describe("staged upload transport", () => {
     );
     expect(committed.response.status).toBe(201);
   });
+
+  test("PUB-021-F: a body slower than the server request deadline is recorded as an interrupted upload, not a storage failure, and resumes", async () => {
+    server = await startTestServer(installation, {
+      completedRequestLogSampleRate: 1,
+      observability: true,
+      requestTimeoutMilliseconds: 1_000,
+    });
+    const file = slowFixture("slower than the request deadline");
+    const key = "slow-past-deadline-000000000001";
+    const upload = await createStagedUpload(
+      server,
+      installation,
+      file.path,
+      [file],
+      undefined,
+      "static",
+      key,
+    );
+    const planned = onlyPlannedFile(upload.body);
+    const storageToken = storageTokenOf(planned.uploadUrl);
+
+    const streamed = await streamSlowly(planned.uploadUrl, file.bytes, 12, 250);
+
+    expect(streamed).not.toEqual({kind: "response", status: 200});
+    await collector.waitFor(["http.request.interrupted", "UploadInterrupted"]);
+    const logs = collector.logs();
+    expect(logs).toContain("ECONNRESET");
+    expect(logs).not.toContain(storageToken);
+    expect(logs).not.toContain(installation.apiToken);
+    expect(collector.serialized()).not.toContain("StagingStorageFailure");
+
+    const resumed = await createStagedUpload(
+      server,
+      installation,
+      file.path,
+      [file],
+      undefined,
+      "static",
+      key,
+    );
+    expect(resumed.body.status).toBe("resumed");
+    expect(resumed.body.files[0]?.verified).toBe(false);
+    const retried = await uploadStagedFile(
+      installation,
+      onlyPlannedFile(resumed.body),
+      file.bytes,
+    );
+    expect(retried.status).toBe(200);
+    const committed = await commitStagedUpload(
+      installation,
+      resumed.body,
+      key,
+      {accessSetting: "account_required", kind: "new_artifact", name: "resumed"},
+    );
+    expect(committed.response.status).toBe(201);
+  });
+
+  test("a client that disconnects mid-body leaves its slot unverified and is not reported as a storage failure", async () => {
+    server = await startTestServer(installation, {
+      completedRequestLogSampleRate: 1,
+      observability: true,
+    });
+    const file = slowFixture("client disconnects mid-body");
+    const key = "client-disconnect-0000000000001";
+    const upload = await createStagedUpload(
+      server,
+      installation,
+      file.path,
+      [file],
+      undefined,
+      "static",
+      key,
+    );
+    const planned = onlyPlannedFile(upload.body);
+
+    const streamed = await streamThenDisconnect("PUT", planned.uploadUrl, file.bytes);
+
+    expect(streamed.kind).toBe("closed");
+    await collector.waitFor(["http.request.interrupted", "UploadInterrupted"]);
+    expect(collector.serialized()).not.toContain("StagingStorageFailure");
+    const resumed = await createStagedUpload(
+      server,
+      installation,
+      file.path,
+      [file],
+      undefined,
+      "static",
+      key,
+    );
+    expect(resumed.body.files[0]?.verified).toBe(false);
+  });
+
+  test("a batch frame cut off by a disconnect is an interrupted upload, not a malformed frame", async () => {
+    server = await startTestServer(installation, {
+      completedRequestLogSampleRate: 1,
+      observability: true,
+    });
+    const files = [
+      testSiteFile("first batch part", undefined, "index.html"),
+      testSiteFile("second batch part", undefined, "second.html"),
+    ];
+    const upload = await createStagedUpload(
+      server,
+      installation,
+      "index.html",
+      files,
+      undefined,
+      "static",
+      "batch-disconnect-0000000000001",
+    );
+    const firstPlanned = upload.body.files[0];
+    if (firstPlanned === undefined) throw new Error("The plan has no files.");
+    const batchUrl = new URL(
+      `/api/v1/uploads/${upload.body.uploadId}/batch`,
+      server.baseUrl,
+    );
+    batchUrl.search = new URL(firstPlanned.uploadUrl).search;
+    const frame = batchFrame(upload.body, files);
+
+    const streamed = await streamThenDisconnect(
+      "POST",
+      batchUrl.toString(),
+      frame,
+      installation.apiToken,
+    );
+
+    expect(streamed.kind).toBe("closed");
+    await collector.waitFor(["http.request.interrupted", "UploadInterrupted"]);
+    expect(collector.serialized()).not.toContain("UploadedFileMismatch");
+  });
+
+  test.skipIf(process.getuid?.() === 0)(
+    "a genuine staging provider failure stays a storage failure and logs a bounded cause without the storage token",
+    async () => {
+      server = await startTestServer(installation, {observability: true});
+      const file = slowFixture("provider failure");
+      const upload = await createStagedUpload(
+        server,
+        installation,
+        file.path,
+        [file],
+        undefined,
+        "static",
+        "provider-failure-000000000000001",
+      );
+      const planned = onlyPlannedFile(upload.body);
+      const storageToken = storageTokenOf(planned.uploadUrl);
+      // The upload's own staging directory exists but refuses new files, so
+      // the provider error names a path that contains the storage token.
+      const uploadDirectory = path.join(
+        installation.dataDirectory,
+        "staging",
+        upload.body.uploadId,
+      );
+      await mkdir(uploadDirectory, {recursive: true});
+      await chmod(uploadDirectory, 0o500);
+
+      const response = await uploadStagedFile(installation, planned, file.bytes);
+      await chmod(uploadDirectory, 0o700);
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "The server could not complete the request.",
+        },
+      });
+      await collector.waitFor(["http.request.failed", "StagingStorageFailure", "EACCES"]);
+      const logs = collector.logs();
+      expect(logs).toContain("failure_cause");
+      expect(logs).not.toContain(storageToken);
+      expect(logs).not.toContain(upload.body.uploadId);
+      expect(logs).not.toContain(installation.dataDirectory);
+    },
+  );
+});
+
+describe("failure cause summaries", () => {
+  test("keep error names and codes but drop URLs, quoted values, paths, and opaque identifiers", () => {
+    const storageToken = "f9808fe76b2a4ba287dfc82ab2f0514119b3";
+    const provider = Object.assign(
+      new Error(
+        `EACCES: permission denied, open '/srv/data/staging/upl_1/${storageToken}.tmp'`,
+      ),
+      {code: "EACCES"},
+    );
+    const transport = Object.assign(
+      new Error(
+        `request to https://bucket.example.test/staging/${storageToken}?X-Amz-Signature=abc failed for /srv/data/${storageToken}`,
+        {cause: provider},
+      ),
+      {code: "not a code; it has spaces"},
+    );
+
+    const summary = summarizeFailureCause(new TypeError("fetch failed", {cause: transport}));
+
+    expect(summary).toBe(
+      "TypeError: fetch failed <- Error: request to [url] failed for [path] <- Error EACCES: EACCES: permission denied, open [value]",
+    );
+    expect(summary).not.toContain(storageToken);
+    expect(summarizeFailureCause("a string thrown as a failure")).toBe("non-error value");
+    const long = new Error("word ".repeat(2_000), {cause: new Error("word ".repeat(2_000))});
+    expect(summarizeFailureCause(long).length).toBeLessThanOrEqual(400);
+  });
 });
 
 function slowFixture(label: string): ReturnType<typeof testSiteFile> {
@@ -94,6 +319,14 @@ function onlyPlannedFile(
     throw new Error("The upload plan should contain exactly one file.");
   }
   return planned;
+}
+
+function storageTokenOf(uploadUrl: string): string {
+  const token = new URL(uploadUrl).pathname.split("/").at(-1);
+  if (token === undefined || token.length < 16) {
+    throw new Error("The upload URL does not carry a storage token.");
+  }
+  return token;
 }
 
 /** Stream a declared-length PUT body in evenly spaced chunks. */
@@ -143,5 +376,58 @@ function streamSlowly(
   });
   return outcome.finally(() => {
     clearInterval(timer);
+  });
+}
+
+/** Encode every planned file as one binary batch frame, in plan order. */
+function batchFrame(
+  upload: CreateUploadResponse,
+  files: readonly ReturnType<typeof testSiteFile>[],
+): Uint8Array {
+  const parts = upload.files.map((planned, orderIndex) => {
+    const file = files.find((candidate) => candidate.path === planned.path);
+    if (file === undefined) throw new Error(`No fixture for ${planned.path}.`);
+    const header = new Uint8Array(12);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, orderIndex, true);
+    view.setFloat64(4, file.bytes.byteLength, true);
+    return Buffer.concat([header, file.bytes]);
+  });
+  return new Uint8Array(Buffer.concat(parts));
+}
+
+/** Send half of a declared-length body, then destroy the connection. */
+function streamThenDisconnect(
+  method: "POST" | "PUT",
+  uploadUrl: string,
+  bytes: Uint8Array,
+  apiToken?: string,
+): Promise<StreamOutcome> {
+  const target = new URL(uploadUrl);
+  const contentLength = String(bytes.byteLength);
+  const headers = apiToken === undefined
+    ? {"Content-Length": contentLength}
+    : {Authorization: `Bearer ${apiToken}`, "Content-Length": contentLength};
+  return new Promise((resolve) => {
+    const settle = (outcome: StreamOutcome): void => {
+      resolve(outcome);
+    };
+    const outgoing = request({
+      headers,
+      hostname: target.hostname,
+      method,
+      path: `${target.pathname}${target.search}`,
+      port: target.port,
+    }, (incoming) => {
+      incoming.resume();
+      settle({kind: "response", status: incoming.statusCode ?? 0});
+    });
+    outgoing.on("error", (error: NodeJS.ErrnoException) =>
+      settle({kind: "closed", code: error.code ?? error.name}));
+    outgoing.write(bytes.subarray(0, Math.floor(bytes.byteLength / 2)), () => {
+      setTimeout(() => {
+        outgoing.destroy(new Error("client went away"));
+      }, 100);
+    });
   });
 }
