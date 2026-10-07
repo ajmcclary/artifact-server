@@ -1449,6 +1449,18 @@ function ScenarioUrlSync({artifactId, focusMode, path, projectId, versionId}: {
   const scenarioId = scenario.view === null
     ? null
     : scenario.onScreen.scenarioId ?? scenario.requested?.scenarioId ?? null;
+  const {requestScenario} = scenario;
+  const shownRef = useRef(scenarioId);
+  shownRef.current = scenarioId;
+  useEffect(() => {
+    // Back and forward land on an entry that may name another scenario: open it.
+    const followHistory = (): void => {
+      const restored = currentReviewLocation().scenarioId ?? null;
+      if (restored !== null && restored !== shownRef.current) requestScenario(restored);
+    };
+    window.addEventListener("popstate", followHistory);
+    return () => window.removeEventListener("popstate", followHistory);
+  }, [requestScenario]);
   useEffect(() => {
     writeReviewHistory(workspaceHref({
       artifactId,

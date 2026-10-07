@@ -9,6 +9,7 @@ import {
   reduceViewState,
   restorePropsFor,
   sanitizeLabel,
+  scenarioFailureText,
   threadPlacement,
   viewAnchorFrom,
   viewForPath,
@@ -119,5 +120,16 @@ describe("annotations without a known view", () => {
     const otherView = {...view, viewId: "fixture/other"};
     expect(annotationsForScenario(annotations, otherView, "5")[0]?.anchor?.view).toBeUndefined();
     expect(annotationsForScenario(annotations, view, "5")[0]?.anchor?.view?.regionId).toBe("inspector.min");
+  });
+});
+
+describe("restore failures", () => {
+  test("DSN-008-F: are explained in words, never as raw reason codes", () => {
+    expect(scenarioFailureText("5", "timeout")).toBe("Couldn't open scenario 5: the page didn't confirm it in time.");
+    expect(scenarioFailureText("5", "no-adapter")).toBe("Couldn't open scenario 5: this page can't be told which scenario to show.");
+    expect(scenarioFailureText("5", "scenario-mismatch")).toBe("Couldn't open scenario 5: the page showed a different scenario.");
+    expect(scenarioFailureText("5", "adapter-error")).toBe("Couldn't open scenario 5: the page reported an error while switching.");
+    expect(scenarioFailureText("5", "some-future-code")).toBe("Couldn't open scenario 5: the page didn't say why.");
+    expect(scenarioFailureText("5", null)).toBe("Couldn't open scenario 5: the page didn't say why.");
   });
 });

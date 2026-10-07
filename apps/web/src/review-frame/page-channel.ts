@@ -14,7 +14,9 @@ export type RestoreResult =
     readonly reason: "adapter-error" | "scenario-mismatch" | "timeout";
     readonly state: PageState | null;
   }
-  | {readonly outcome: "unsupported"; readonly reason: "no-adapter"};
+  | {readonly outcome: "unsupported"; readonly reason: "no-adapter"}
+  /** A later restore replaced this one before it finished; only the later one speaks. */
+  | {readonly outcome: "superseded"};
 
 export type RegionAnswer =
   | {readonly region: PageRegion}
@@ -24,6 +26,8 @@ export type RegionCounts = ReadonlyMap<string, {readonly count: number; readonly
 
 export interface PageChannel {
   readonly capture: (props: readonly string[]) => Promise<PageState | null>;
+  /** The sandbox document fired `load`: the page's own scripts have arrived. */
+  readonly documentLoaded: () => void;
   readonly findRegions: (regionIds: readonly string[]) => Promise<RegionCounts | null>;
   readonly receive: (message: PageMessage) => void;
   readonly regionAt: (selector: string) => Promise<RegionAnswer>;
@@ -35,7 +39,10 @@ export interface PageChannel {
 }
 
 export interface PageChannelOptions {
+  /** How long a loaded page may take to say hello. */
   readonly helloTimeoutMilliseconds?: number;
+  /** How long a page may take to load at all before it is treated as having no adapter. */
+  readonly loadTimeoutMilliseconds?: number;
   readonly nextRequestId?: () => string;
   /** An adapter said hello after the wait had already reported none. */
   readonly onLateHello?: () => void;
@@ -57,11 +64,16 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
   const schedule = options.schedule ?? defaultSchedule;
   const nextRequestId = options.nextRequestId ?? (() => crypto.randomUUID());
   const helloTimeout = options.helloTimeoutMilliseconds ?? 3_000;
+  const loadTimeout = options.loadTimeoutMilliseconds ?? 20_000;
   const replyTimeout = options.replyTimeoutMilliseconds ?? 6_000;
   let supported: boolean | null = null;
   let waiters: ((supported: boolean) => void)[] = [];
   let pending = new Map<string, Pending>();
-  let cancelHelloWait = schedule(() => settleHello(false), helloTimeout);
+  let latestRestore = 0;
+  // A cold page fetches its runtime before it can answer, so the hello window
+  // opens at the document's load; the longer wait only bounds a page that never loads.
+  let helloWindowOpen = false;
+  let cancelHelloWait = schedule(() => settleHello(false), loadTimeout);
 
   function settleHello(value: boolean): void {
     if (supported !== null) return;
@@ -95,6 +107,12 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
   }
 
   return {
+    documentLoaded: () => {
+      if (supported !== null || helloWindowOpen) return;
+      helloWindowOpen = true;
+      cancelHelloWait();
+      cancelHelloWait = schedule(() => settleHello(false), helloTimeout);
+    },
     capture: async (props) => {
       const reply = await ask((requestId) => ({props, requestId, type: "as-page-capture"}));
       return reply?.type === "as-page-state" ? reply.state : null;
@@ -140,17 +158,24 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
       const blocked = waiters;
       waiters = [];
       supported = null;
+      helloWindowOpen = false;
       cancelHelloWait();
-      cancelHelloWait = schedule(() => settleHello(false), helloTimeout);
+      cancelHelloWait = schedule(() => settleHello(false), loadTimeout);
       // Callers waiting on the old document's hello must wait for the new one.
       waiters.push(...blocked);
     },
     restore: async (props, scenarioId) => {
+      const turn = ++latestRestore;
       if (!await ready()) return {outcome: "unsupported", reason: "no-adapter"};
       const reply = await ask((requestId) => ({props, requestId, type: "as-page-restore"}));
+      // An adapter may end a replaced restore any way it likes (pageVersion 1
+      // adapters say "timeout"); the restore that replaced it reports the outcome.
+      if (turn !== latestRestore || (reply?.type === "as-page-restored" && reply.reason === "superseded")) {
+        return {outcome: "superseded"};
+      }
       if (reply === null) return {outcome: "failed", reason: "timeout", state: null};
       if (reply.type !== "as-page-restored") return {outcome: "failed", reason: "adapter-error", state: null};
-      if (!reply.ok) return {outcome: "failed", reason: reply.reason ?? "adapter-error", state: reply.state};
+      if (!reply.ok) return {outcome: "failed", reason: reply.reason === "timeout" ? "timeout" : "adapter-error", state: reply.state};
       if (reply.state?.scenarioId !== scenarioId) {
         return {outcome: "failed", reason: "scenario-mismatch", state: reply.state};
       }

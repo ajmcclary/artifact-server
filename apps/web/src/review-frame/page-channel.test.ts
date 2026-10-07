@@ -64,9 +64,10 @@ describe("page channel", () => {
     expect(await restoring).toEqual({outcome: "failed", reason: "scenario-mismatch", state: state("6")});
   });
 
-  test("reports no adapter after the hello wait", async () => {
+  test("reports no adapter after the hello wait that follows the page's load", async () => {
     const {advance, channel} = harness();
     const restoring = channel.restore({scenario: "5"}, "5");
+    channel.documentLoaded();
     advance(3_000);
     expect(await restoring).toEqual({outcome: "unsupported", reason: "no-adapter"});
     expect(channel.supports()).toBe(false);
@@ -100,8 +101,54 @@ describe("page channel", () => {
     channel.receive({requestId: "r1", state: state("5"), type: "as-page-state"});
     expect(await before).toBeNull();
     expect(channel.supports()).toBeNull();
+    channel.documentLoaded();
     advance(3_000);
     expect(channel.supports()).toBe(false);
+  });
+
+  test("DSN-008-B: a cold page that is still loading its runtime gets its hello window after load", async () => {
+    const {advance, channel, posted} = harness();
+    const restoring = channel.restore({scenario: "5"}, "5");
+    // A cold cache: React and a large bundle take longer than the hello window to arrive.
+    advance(9_000);
+    expect(channel.supports()).toBeNull();
+    channel.documentLoaded();
+    advance(1_000);
+    channel.receive(hello);
+    await flush();
+    expect(posted[1]).toEqual({props: {scenario: "5"}, requestId: "r1", type: "as-page-restore"});
+    channel.receive({ok: true, requestId: "r1", state: state("5"), type: "as-page-restored"});
+    expect(await restoring).toEqual({outcome: "restored", state: state("5")});
+  });
+
+  test("DSN-008-F: a page whose document never finishes loading is reported without an adapter", async () => {
+    const {advance, channel} = harness();
+    const restoring = channel.restore({scenario: "5"}, "5");
+    advance(20_000);
+    expect(await restoring).toEqual({outcome: "unsupported", reason: "no-adapter"});
+  });
+
+  test("DSN-008-F: a restore superseded by a later one is superseded, not a timeout", async () => {
+    const {channel} = harness();
+    channel.receive(hello);
+    const first = channel.restore({scenario: "6"}, "6");
+    await flush();
+    const second = channel.restore({scenario: "5"}, "5");
+    await flush();
+    // Design's pageVersion 1 adapter ends the earlier restore with reason "timeout".
+    channel.receive({ok: false, reason: "timeout", requestId: "r1", state: state("1"), type: "as-page-restored"});
+    channel.receive({ok: true, requestId: "r2", state: state("5"), type: "as-page-restored"});
+    expect(await first).toEqual({outcome: "superseded"});
+    expect(await second).toEqual({outcome: "restored", state: state("5")});
+  });
+
+  test("DSN-008-F: an adapter's own superseded reason is never a failure", async () => {
+    const {channel} = harness();
+    channel.receive(hello);
+    const only = channel.restore({scenario: "6"}, "6");
+    await flush();
+    channel.receive({ok: false, reason: "superseded", requestId: "r1", state: state("1"), type: "as-page-restored"});
+    expect(await only).toEqual({outcome: "superseded"});
   });
 
   test("answers region queries", async () => {

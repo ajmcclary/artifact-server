@@ -47,7 +47,8 @@ export const pageMessageSchema = z.discriminatedUnion("type", [
   }).strict(),
   z.object({
     ok: z.boolean(),
-    reason: z.enum(["adapter-error", "timeout"]).optional(),
+    // "superseded" is additive under pageVersion 1: a later restore replaced this one.
+    reason: z.enum(["adapter-error", "superseded", "timeout"]).optional(),
     requestId: requestIdSchema,
     state: pageStateSchema.nullable(),
     type: z.literal("as-page-restored"),

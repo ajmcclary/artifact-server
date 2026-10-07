@@ -363,3 +363,14 @@ Recorded on 2026-10-06 while writing the implementation plans, after reading the
 3. **The anchor's `view` block also stores `scenarioLabel` and `sourceRef`.** Native bridges read only the thread's anchor, so the location they render must be in it.
 4. **Bundles carry a location line, not a provenance summary.** A provenance summary would make every native bridge fetch one more document per version, adding a failure mode to code that must fail open. Agents read provenance through `artifact_version_context` instead. DSN-011 is reworded to match.
 
+
+## Amendments after the hosted pilot
+
+Recorded on 2026-10-07 after Design's hosted acceptance run on Forms v13. Each keeps the approved intent and stays additive under `v: 1` and `pageVersion: 1`.
+
+1. **A superseded restore is not a failure.** `as-page-restored` may carry `reason: "superseded"` when a later `as-page-restore` replaced the one it answers. The review frame reports only the latest restore to the host: an earlier one ends silently, whatever reason the adapter gave. Adapters written before this amendment end a replaced restore with `reason: "timeout"`, and the frame treats that answer as superseded too. Design's adapter should send `superseded` from its next `support.js` sync; until then nothing user-visible depends on it.
+2. **The hello window opens at the sandbox's load, as written above.** The frame waits up to 20 seconds for the sandbox document's `load` event, then 3 seconds for `as-page-hello`. A cold cache that fetches React and a large bundle therefore no longer reads as `no-adapter`. A hello that still arrives after the window gets its adapter, and the host restores the scenario the review asked for instead of only reporting the one on screen.
+3. **Annotate is chosen once views are known.** A page that would otherwise prefer Interactive preview (a `.dc.html` artboard, for one) waits for its views outcome before the review picks a mode, so a page with a valid view opens in Annotate on a fresh load. A views read that fails transiently (a dropped connection or a 5xx) is retried after 1, 2 and 4 seconds before the page falls back to being reviewed without views.
+4. **Failures are told in words.** The toolbar says, for example, "Couldn't open scenario 5: the page didn't confirm it in time." instead of the raw reason code.
+5. **Back and forward follow `scenario=`.** Returning to a history entry that names another scenario restores it.
+6. **Bundles read the view block exactly as the review client does.** A view block the client would treat as absent renders no location line, and control characters in labels and source paths are replaced before the line reaches an agent, in both the mailbox and the patched native bridge.

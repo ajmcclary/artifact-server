@@ -131,6 +131,19 @@ export function annotationsForScenario(
     });
 }
 
+const restoreFailureReasons = new Map<string, string>([
+  ["adapter-error", "the page reported an error while switching"],
+  ["no-adapter", "this page can't be told which scenario to show"],
+  ["scenario-mismatch", "the page showed a different scenario"],
+  ["timeout", "the page didn't confirm it in time"],
+]);
+
+/** The toolbar's sentence for a restore that did not reach the requested scenario. */
+export function scenarioFailureText(scenarioId: string, reason: string | null): string {
+  const explained = reason === null ? undefined : restoreFailureReasons.get(reason);
+  return `Couldn't open scenario ${scenarioId}: ${explained ?? "the page didn't say why"}.`;
+}
+
 /** Settle the on-screen scenario from one frame report; stale replies change nothing. */
 export function reduceViewState(
   current: ScenarioStatus,

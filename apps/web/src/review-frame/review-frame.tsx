@@ -184,7 +184,13 @@ export function ReviewFrame(): React.ReactNode {
       if (parsed.success) channel.receive(parsed.data);
     };
     window.addEventListener("message", onPageMessage);
+    // Plannotator owns the sandbox iframe; its load does not bubble, so listen while capturing.
+    const onDocumentLoad = (event: Event): void => {
+      if (event.target instanceof HTMLIFrameElement && event.target.hasAttribute("srcdoc")) channel.documentLoaded();
+    };
+    document.addEventListener("load", onDocumentLoad, true);
     return () => {
+      document.removeEventListener("load", onDocumentLoad, true);
       window.removeEventListener("message", onPageMessage);
       channel.reset();
       channelRef.current = null;
@@ -242,6 +248,8 @@ export function ReviewFrame(): React.ReactNode {
           const result = channel === null
             ? {outcome: "unsupported", reason: "no-adapter"} as const
             : await channel.restore(message.props, message.scenarioId);
+          // The restore that replaced this one answers the host instead.
+          if (result.outcome === "superseded") return;
           send(result.outcome === "restored"
             ? {outcome: "restored", requestId: message.requestId, state: result.state, type: "as-review-view-state", v: reviewProtocolVersion}
             : result.outcome === "failed"

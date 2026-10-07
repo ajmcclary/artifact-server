@@ -20,6 +20,7 @@ import {sourceDriftDescription} from "@/lib/presentation";
 import {ArtifactBreadcrumb, PageMenu, VersionMenu} from "@/ui/review-ui";
 
 import {htmlPages} from "./page-inventory.ts";
+import {scenarioFailureText} from "./scenario-model.ts";
 import {useScenarioSession} from "./scenario-session.tsx";
 import {versionMenuEntries} from "./version-entries.ts";
 import type {VersionListItem} from "./workspace-types.ts";
@@ -272,7 +273,7 @@ export function ReviewToolbar({
   const requestedScenario = scenario.requested?.scenarioId ?? null;
   const scenarioFailure = requestedScenario !== null
     && (scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported")
-    ? `Couldn't open scenario ${requestedScenario} (${scenario.onScreen.reason ?? "unknown"})`
+    ? scenarioFailureText(requestedScenario, scenario.onScreen.reason)
     : null;
   const scenarioPicker = scenario.view === null ? null : (
     <>

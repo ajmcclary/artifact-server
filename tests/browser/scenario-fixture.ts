@@ -10,7 +10,10 @@ import {
 /**
  * A page adapter written to the pageVersion 1 contract. Behaviors: honest
  * (restores and confirms), silent (never answers a restore), liar (confirms a
- * different scenario), no-adapter (never says hello).
+ * different scenario), no-adapter (never says hello), and overlapping (renders
+ * a restore over several frames and ends one still running when the next
+ * arrives with reason "timeout", as Design's pageVersion 1 adapter does), and
+ * late (says hello four seconds after its document loaded).
  */
 const adapterScript = `
 (function () {
@@ -43,6 +46,20 @@ const adapterScript = `
   }
   function post(message) { parent.postMessage(message, "*"); }
   function afterPaint(callback) { requestAnimationFrame(function () { requestAnimationFrame(callback); }); }
+  var pendingRestore = null;
+  function slowRestore(id, requestId) {
+    if (pendingRestore !== null) {
+      clearTimeout(pendingRestore.timer);
+      post({ok: false, reason: "timeout", requestId: pendingRestore.requestId, state: state(), type: "as-page-restored"});
+    }
+    var job = {requestId: requestId, timer: 0};
+    pendingRestore = job;
+    job.timer = setTimeout(function () {
+      if (pendingRestore !== job) return;
+      pendingRestore = null;
+      setScenario(id, requestId);
+    }, 150);
+  }
   function setScenario(id, requestId) {
     current = labels[id] ? id : current;
     render();
@@ -58,6 +75,7 @@ const adapterScript = `
     if (!m || typeof m.type !== "string") return;
     if (m.type === "as-page-restore") {
       if (behavior === "silent") return;
+      if (behavior === "overlapping") { slowRestore(String(m.props.scenario), m.requestId); return; }
       setScenario(behavior === "liar" ? "6" : String(m.props.scenario), m.requestId);
     } else if (m.type === "as-page-capture") {
       post({requestId: m.requestId, state: state(), type: "as-page-state"});
@@ -79,15 +97,18 @@ const adapterScript = `
     }
   });
   render();
-  if (behavior !== "no-adapter") post({capabilities: ["capture", "regions", "restore"], pageVersion: 1, type: "as-page-hello"});
+  var hello = {capabilities: ["capture", "regions", "restore"], pageVersion: 1, type: "as-page-hello"};
+  if (behavior === "late") setTimeout(function () { post(hello); }, 4000);
+  else if (behavior !== "no-adapter") post(hello);
 })();
 `;
 
 const encoder = new TextEncoder();
 
-function page(path: string, behavior: string): TestSiteFile {
+function page(path: string, behavior: string, runtime: "external" | "inline" = "inline"): TestSiteFile {
+  const script = runtime === "inline" ? `<script>${adapterScript}</script>` : `<script src="cold-runtime.js"></script>`;
   return {
-    bytes: encoder.encode(`<!doctype html><html lang="en" data-fixture-behavior="${behavior}"><head><meta charset="utf-8"><title>${behavior}</title></head><body><main id="root"></main><script>${adapterScript}</script></body></html>`),
+    bytes: encoder.encode(`<!doctype html><html lang="en" data-fixture-behavior="${behavior}"><head><meta charset="utf-8"><title>${behavior}</title></head><body><main id="root"></main>${script}</body></html>`),
     mediaType: "text/html; charset=utf-8",
     path,
   };
@@ -115,6 +136,11 @@ export async function publishScenarioFixture(fixture: BrowserFixture, key: strin
     page("silent.html", "silent"),
     page("liar.html", "liar"),
     page("no-adapter.html", "no-adapter"),
+    page("overlapping.html", "overlapping"),
+    page("late.html", "late"),
+    // A Claude Design artboard that loads its runtime from a file, as Forms loads React.
+    page("cold.dc.html", "honest", "external"),
+    {bytes: encoder.encode(adapterScript), mediaType: "text/javascript; charset=utf-8", path: "cold-runtime.js"},
     {
       bytes: encoder.encode(JSON.stringify({
         format: "artifact-server.views",
@@ -124,6 +150,9 @@ export async function publishScenarioFixture(fixture: BrowserFixture, key: strin
           view("fixture/silent", "silent.html"),
           view("fixture/liar", "liar.html"),
           view("fixture/no-adapter", "no-adapter.html"),
+          view("fixture/overlapping", "overlapping.html"),
+          view("fixture/late", "late.html"),
+          view("fixture/cold", "cold.dc.html"),
         ],
       })),
       mediaType: "application/json",

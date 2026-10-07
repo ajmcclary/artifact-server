@@ -1,6 +1,6 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from "react";
 
-import {api} from "../../api/client.ts";
+import {api, ApiError} from "../../api/client.ts";
 import type {ReviewView, ViewsOutcome} from "../../api/views.ts";
 import type {ViewStateMessage} from "../../review-frame/protocol.ts";
 import {
@@ -9,6 +9,9 @@ import {
   type ParameterValue,
   type ScenarioStatus,
 } from "./scenario-model.ts";
+
+/** Waits before re-reading a views outcome that failed transiently. */
+const viewsReadRetryDelays = [1_000, 2_000, 4_000] as const;
 
 export interface ScenarioRequestState {
   readonly parameters: Readonly<Record<string, ParameterValue>>;
@@ -75,13 +78,21 @@ export function ScenarioSessionProvider({
     let current = true;
     // Outcomes are per immutable version, so one read per version suffices.
     void (async () => {
-      let outcome: ViewsOutcome;
-      try {
-        outcome = await api.versionViews(projectId, artifactId, versionId);
-      } catch {
-        // An unreadable outcome leaves the page reviewable without views.
-        outcome = {diagnostic: "Views could not be read.", status: "invalid"};
+      let outcome: ViewsOutcome = {diagnostic: "Views could not be read.", status: "invalid"};
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          // eslint-disable-next-line no-await-in-loop -- each retry waits for the previous read
+          outcome = await api.versionViews(projectId, artifactId, versionId);
+          break;
+        } catch (cause) {
+          // A refusal is final; a dropped connection or a server failure may pass.
+          const transient = !(cause instanceof ApiError) || cause.status >= 500;
+          if (!current || !transient || attempt >= viewsReadRetryDelays.length) break;
+          // eslint-disable-next-line no-await-in-loop -- bounded, increasing backoff
+          await new Promise((resolve) => setTimeout(resolve, viewsReadRetryDelays[attempt]));
+        }
       }
+      // An unreadable outcome leaves the page reviewable without views.
       if (current) setLoaded({outcome, versionId});
     })();
     return () => {

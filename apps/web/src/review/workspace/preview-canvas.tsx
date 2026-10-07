@@ -628,18 +628,22 @@ function HtmlPreview({
     };
   }, [accessSetting, artifactId, entry.path, isCurrentVersion, projectId, version.links.version, version.version.id]);
 
-  // A producer that declared views for this page made it reviewable in Annotate.
+  // A producer that declared views for this page made it reviewable in Annotate,
+  // so a page that may prefer Interactive waits for its views before choosing.
+  const deciding = chosenMode === null && previewDocument?.prefersInteractive === true && !scenario.loaded;
   const mode = chosenMode ?? (previewDocument?.prefersInteractive === true && scenario.view === null
     ? "interactive"
     : "annotate");
 
-  useEffect(() => onViewModeChange(mode), [mode, onViewModeChange]);
+  useEffect(() => {
+    if (!deciding) onViewModeChange(mode);
+  }, [deciding, mode, onViewModeChange]);
 
   useEffect(() => {
-    if (mode !== "interactive") return;
+    if (mode !== "interactive" || deciding) return;
     initialisedRef.current = false;
     setFrameReady(false);
-  }, [mode]);
+  }, [deciding, mode]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -666,6 +670,17 @@ function HtmlPreview({
       }
       if (message.type === "as-review-view-state") {
         scenario.report(message);
+        // An adapter that said hello after the wait had already reported none
+        // never received the scenario this review asked for: ask again.
+        const wanted = scenario.requested;
+        if (
+          message.requestId === null
+          && scenario.onScreen.status === "unsupported"
+          && wanted !== null
+          && message.state?.scenarioId !== wanted.scenarioId
+        ) {
+          scenario.requestScenario(wanted.scenarioId, wanted.parameters);
+        }
         return;
       }
       void (async () => {
@@ -783,7 +798,7 @@ function HtmlPreview({
     });
   }, [postToFrame, selectedThreadId, threadFocusRevision]);
 
-  if (loading) {
+  if (loading || deciding) {
     return (
       <PreviewState
         description={`Reading ${entry.path} from the selected version.`}

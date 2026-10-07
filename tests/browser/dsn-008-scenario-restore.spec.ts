@@ -50,15 +50,15 @@ test("DSN-008-F: a page without an adapter, a silent page and a lying page never
   const {page} = fixture;
 
   await page.goto(scenarioUrl(published, "no-adapter.html", "5"));
-  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5 (no-adapter)"})).toBeVisible({timeout: 10_000});
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: this page can't be told which scenario to show."})).toBeVisible({timeout: 10_000});
   await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
   await page.goto(scenarioUrl(published, "silent.html", "5"));
-  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5 (timeout)"})).toBeVisible({timeout: 15_000});
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page didn't confirm it in time."})).toBeVisible({timeout: 15_000});
   await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
   await page.goto(scenarioUrl(published, "liar.html", "5"));
-  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5 (scenario-mismatch)"})).toBeVisible({timeout: 10_000});
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page showed a different scenario."})).toBeVisible({timeout: 10_000});
 });
 
 test("a page with views but no adapter behaves as before, with no scenario controls", async () => {
@@ -76,5 +76,85 @@ test("a page with views but no adapter behaves as before, with no scenario contr
   // Comments are placed once the adapter wait ends, so the outcome is settled here.
   await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1, {timeout: 10_000});
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveCount(0);
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
+});
+
+test("DSN-008-F: a restore superseded by a later one is not reported as a failure", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-f-overlap");
+  const {page} = fixture;
+  await page.goto(scenarioUrl(published, "overlapping.html"));
+  const picker = page.getByRole("combobox", {name: "Designed scenario"});
+  await expect(picker).toHaveValue("1");
+  // Two requests in quick succession, as a scripted input plus change event produces.
+  await picker.evaluate((select) => {
+    if (!(select instanceof HTMLSelectElement)) throw new Error("The scenario picker is not a select.");
+    select.value = "5";
+    select.dispatchEvent(new Event("input", {bubbles: true}));
+    select.dispatchEvent(new Event("change", {bubbles: true}));
+  });
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  await expect(picker).toHaveValue("5");
+  await page.waitForTimeout(500);
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
+});
+
+test("DSN-008-B: back and forward open the scenario their history entry names", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-b-history");
+  const {page} = fixture;
+  await page.goto(scenarioUrl(published, "honest.html", "5"));
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  // A later entry that names another scenario, as a shared link opened in place would.
+  await page.evaluate(() => {
+    const next = new URL(window.location.href);
+    next.searchParams.set("scenario", "6");
+    window.history.pushState(window.history.state, "", next);
+  });
+  await page.goBack();
+  await expect(page).toHaveURL(/[?&]scenario=5(?:&|$)/u);
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  await page.goForward();
+  await expect(previewFrame(page).getByRole("heading", {name: "Logic"})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("6");
+});
+
+test("DSN-008-B: a designed artboard opens in Annotate on a fresh load, even when its first views read fails", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-b-annotate");
+  const {page} = fixture;
+  let failed = 0;
+  await page.route("**/versions/*/views?*", async (route) => {
+    if (failed === 0) {
+      failed += 1;
+      await route.fulfill({body: "{}", contentType: "application/json", status: 503});
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(scenarioUrl(published, "cold.dc.html", "5"));
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 15_000});
+  expect(failed).toBe(1);
+  // The scenario is on screen in the annotation frame, and no Interactive preview was ever chosen.
+  await expect(page.locator('iframe[title^="Interactive preview"]')).toHaveCount(0);
+  await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
+});
+
+test("DSN-008-B: a cold page whose runtime arrives after the hello window still opens the linked scenario", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-b-cold");
+  const {page} = fixture;
+  await page.route("**/cold-runtime.js", async (route) => {
+    // A cold cache: the runtime takes longer than the whole hello window to arrive.
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await route.continue();
+  });
+  await page.goto(scenarioUrl(published, "cold.dc.html", "5"));
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 20_000});
+  await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
+});
+
+test("DSN-008-B: an adapter that says hello after the window still receives the linked scenario", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-008-b-late");
+  const {page} = fixture;
+  await page.goto(scenarioUrl(published, "late.html", "5"));
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 15_000});
+  await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
 });
