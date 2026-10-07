@@ -801,7 +801,7 @@ requirements:
       failure: {id: PUB-014-F, description: "A missing or changed owner, wrong token, wrong digest, or anonymous commit is refused, and wrong owner and token reveal no distinguishable upload state."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP tests prove URL-only PUT, digest restriction, indistinguishable wrong locator, and private commit. External ingress logging and the multi-deployment hostile matrix remain unrecorded.
+    proof_gap: Local HTTP tests prove URL-only PUT, digest restriction, indistinguishable wrong locator, and private commit, and that a batch upload, which carries no per-file token, is accepted only from the upload's signed-in owner. External ingress logging and the multi-deployment hostile matrix remain unrecorded.
     depends_on: [PUB-001, PUB-003, MCP-013]
     evidence:
       - deployment: local
@@ -839,7 +839,7 @@ requirements:
       failure: {id: PUB-016-F, description: "Reject malformed, duplicate, unknown, oversized, or truncated batch frames without verifying those parts or producing a version, and accept no base64 framing."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "PUB-016-B/F prove a bounded binary batch producing the same manifest digest as per-file staging, and rejection of wrong hashes, malformed or truncated headers and bodies, base64 bodies, and oversized frames with no artifact created; this proof found and fixed a header truncation reported as a clean end of stream. Only the local runtime is exercised, and the batch route takes its upload owner from a query parameter rather than the signed-in principal."
+    proof_gap: "PUB-016-B/F prove a bounded binary batch producing the same manifest digest as per-file staging, and rejection of wrong hashes, malformed or truncated headers and bodies, base64 bodies, and oversized frames with no artifact created; this proof found and fixed a header truncation reported as a clean end of stream. Only the local runtime is exercised. The batch route takes its upload owner from the signed-in principal, never the issued URL's owner query: a batch from another administrator copying that URL verifies nothing and reads exactly like a missing upload (tests/http/upload-batch-owner.test.ts)."
     depends_on: [PUB-001, PUB-003, PUB-015]
     evidence:
       - deployment: local

@@ -2597,14 +2597,17 @@ export function createHttpApp(
   });
 
   app.post("/api/v1/uploads/:uploadId/batch", async (context) => {
-    const ownerId = context.req.query("owner");
+    // A batch carries no per-file capability token, so only the signed-in
+    // owner may send one. The issued URL's owner query is ignored here: a
+    // principal who copies another's URL must find no upload at all.
+    const ownerId = context.get("principal").id;
     const projectId = requestedProjectId(context);
-    if (ownerId === undefined || projectId === null) {
+    if (projectId === null) {
       return context.json({
         error: {
           code: errorCodes.invalidInput,
           message:
-            "Use the upload URL as it was issued: its project and owner identify the staged upload.",
+            "Use the upload URL as it was issued: its project identifies the staged upload.",
         },
       }, 400);
     }
