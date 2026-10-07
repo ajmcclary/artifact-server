@@ -24,3 +24,25 @@ index 337065dc0d49079e806fd9e09abadf8aec4bd36e..683a4eb60014411e1f305dfcbcf335bb
      // Track Shift while a multi-select draft composer is open; releasing it
      // (or losing window focus) always restores the composer.
      useEffect(() => {
+diff --git a/components/html-viewer/bridge-script.ts b/components/html-viewer/bridge-script.ts
+index 939c91888ae5d5ce64d996acc58fc497da36b599..6ad0a9e70f2b37e4710094cf3b1a38ad6b42ec57 100644
+--- a/components/html-viewer/bridge-script.ts
++++ b/components/html-viewer/bridge-script.ts
+@@ -2522,7 +2522,7 @@ export const BRIDGE_SCRIPT = `(function() {
+   // tag > tag:nth-of-type() path as the last resort. Restoration fails closed:
+   // a weak (positional/class) selector must also match the captured text
+   // snapshot, so a shifted list never mis-anchors an annotation.
+-  var ANCHOR_IDENTITY_ATTRS = ['data-annotate', 'data-testid', 'data-test', 'data-test-id', 'data-cy', 'data-qa', 'aria-label', 'name', 'role', 'href', 'alt'];
++  var ANCHOR_IDENTITY_ATTRS = ['data-annotate', 'data-review-region', 'data-testid', 'data-test', 'data-test-id', 'data-cy', 'data-qa', 'aria-label', 'name', 'role', 'href', 'alt'];
+ 
+   function anchorTextSnapshot(el) {
+     var text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+@@ -2648,7 +2648,7 @@ export const BRIDGE_SCRIPT = `(function() {
+   // name, alt) identify what an element does, not what it says, so they never
+   // exempt an anchor from the text check: a regenerated page keeps its
+   // role="button" while the button's meaning changes completely.
+-  var STABLE_IDENTITY_ATTRS = ['data-annotate', 'data-testid', 'data-test', 'data-test-id', 'data-cy', 'data-qa'];
++  var STABLE_IDENTITY_ATTRS = ['data-annotate', 'data-review-region', 'data-testid', 'data-test', 'data-test-id', 'data-cy', 'data-qa'];
+ 
+   function anchorHasStableIdentity(selector, el) {
+     var canEscape = typeof CSS !== 'undefined' && CSS.escape;
