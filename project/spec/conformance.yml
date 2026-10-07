@@ -1204,7 +1204,7 @@ requirements:
         tests: [DSN-008-B, DSN-008-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-07T01:33:25.906Z"
+        recorded_at: "2026-10-07T02:05:39.057Z"
 
   - id: DSN-009
     kind: behavior
@@ -1223,7 +1223,7 @@ requirements:
         tests: [DSN-009-B, DSN-009-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-07T01:33:25.906Z"
+        recorded_at: "2026-10-07T02:05:39.057Z"
       - deployment: local
         tests: [DSN-009-F]
         result: pass
