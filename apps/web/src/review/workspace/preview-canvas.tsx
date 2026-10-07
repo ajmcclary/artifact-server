@@ -706,7 +706,7 @@ function HtmlPreview({
     const view = scenario.view;
     postToFrame({
       annotateModeActive,
-      annotations: view === null ? [...annotations] : [],
+      annotations: view === null ? placed : [],
       baseHref: previewDocument.baseHref,
       entryPath: previewDocument.entryPath,
       html: previewDocument.html,
@@ -724,7 +724,7 @@ function HtmlPreview({
     postToFrame(props === null || wanted === null
       ? {props: [...captureProps(view)], requestId, type: "as-review-capture", v: reviewProtocolVersion}
       : {props, requestId, scenarioId: wanted.scenarioId, type: "as-review-restore", v: reviewProtocolVersion, viewId: view.viewId});
-  }, [annotateModeActive, annotations, frameReady, mode, postToFrame, previewDocument, readOnly, scenario]);
+  }, [annotateModeActive, frameReady, mode, placed, postToFrame, previewDocument, readOnly, scenario]);
 
   const requestedRevision = scenario.requested?.revision ?? 0;
   const scenarioRef = useRef(scenario);

@@ -110,15 +110,25 @@ export function threadPlacement(
   return {kind: "other-scenario", scenarioId: located.scenarioId, scenarioLabel: located.scenarioLabel};
 }
 
-/** The annotations the frame should place for the scenario on screen. */
+/**
+ * The annotations the frame should place for the scenario on screen. A view
+ * block is passed on only when it belongs to the view on screen; otherwise it
+ * is dropped so the frame falls back to its ordinary placement and never
+ * places a thread by region in a scenario nobody confirmed.
+ */
 export function annotationsForScenario(
   annotations: readonly ReviewAnnotation[],
   view: ReviewView | null,
   onScreenScenarioId: string | null,
 ): ReviewAnnotation[] {
-  return annotations.filter((annotation) =>
-    threadPlacement(annotation.anchor, view, onScreenScenarioId).kind === "place"
-  );
+  return annotations
+    .filter((annotation) => threadPlacement(annotation.anchor, view, onScreenScenarioId).kind === "place")
+    .map((annotation) => {
+      const anchor = annotation.anchor;
+      if (anchor?.view === undefined || (view !== null && anchor.view.viewId === view.viewId)) return annotation;
+      const {view: _unused, ...legacy} = anchor;
+      return {anchor: legacy, body: annotation.body, state: annotation.state, threadId: annotation.threadId};
+    });
 }
 
 /** Settle the on-screen scenario from one frame report; stale replies change nothing. */

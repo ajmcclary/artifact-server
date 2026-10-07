@@ -110,3 +110,14 @@ describe("view state while a restore is pending", () => {
     expect(mismatch).toEqual({reason: "scenario-mismatch", requestId: null, scenarioId: "5", status: "failed"});
   });
 });
+
+describe("annotations without a known view", () => {
+  test("drop their view block so the frame never places them by region", () => {
+    const located = viewAnchorFrom(view, {region: {label: "Min", regionId: "inspector.min", tagName: "label"}, state: state("5")});
+    const annotations = [{anchor: {htmlAnchor: null, originalText: "", view: located}, body: "b", state: "open" as const, threadId: "t"}];
+    expect(annotationsForScenario(annotations, null, null)[0]?.anchor?.view).toBeUndefined();
+    const otherView = {...view, viewId: "fixture/other"};
+    expect(annotationsForScenario(annotations, otherView, "5")[0]?.anchor?.view).toBeUndefined();
+    expect(annotationsForScenario(annotations, view, "5")[0]?.anchor?.view?.regionId).toBe("inspector.min");
+  });
+});
