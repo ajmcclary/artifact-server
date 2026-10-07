@@ -19,6 +19,8 @@ export interface ReviewLocation {
   readonly artifactId: string | null;
   readonly path: string | null;
   readonly projectId: string | null;
+  /** A designed scenario of the open page's view; optional so other navigation drops it. */
+  readonly scenarioId?: string | null;
   /** The conversation to select once the version's threads load. */
   readonly threadId: string | null;
   readonly versionId: string | null;
@@ -171,6 +173,7 @@ export function readReviewLocation(search: URLSearchParams): ReviewLocation {
     artifactId: search.get("artifact"),
     path: search.get("path"),
     projectId: search.get("project"),
+    scenarioId: search.get("scenario"),
     threadId: search.get("thread"),
     versionId: search.get("version"),
     view: search.get("view") === "focus" ? "focus" : null,
@@ -186,6 +189,9 @@ export function workspaceHref(location: ReviewLocation): string {
   if (location.artifactId !== null) search.set("artifact", location.artifactId);
   if (location.versionId !== null) search.set("version", location.versionId);
   if (location.path !== null) search.set("path", location.path);
+  if (location.scenarioId !== null && location.scenarioId !== undefined) {
+    search.set("scenario", location.scenarioId);
+  }
   if (location.threadId !== null) search.set("thread", location.threadId);
   if (location.view !== null) search.set("view", location.view);
   return search.size === 0 ? activityHref() : `/review?${search}`;

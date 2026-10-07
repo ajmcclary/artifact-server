@@ -19,6 +19,7 @@ const emptyLocation: ReviewLocation = {
   artifactId: null,
   path: null,
   projectId: null,
+  scenarioId: null,
   threadId: null,
   versionId: null,
   view: null,
@@ -111,6 +112,7 @@ describe("parseReviewRoute", () => {
         artifactId: "art_b",
         path: "docs/a.html",
         projectId: "prj_a",
+        scenarioId: null,
         threadId: null,
         versionId: "ver_c",
         view: "focus",
@@ -166,12 +168,20 @@ describe("review hrefs", () => {
       artifactId: "art_1",
       path: "pages/index.html",
       projectId: "prj_1",
+      scenarioId: null,
       threadId: null,
       versionId: "ver_1",
       view: null,
     };
     expect(readReviewLocation(new URL(workspaceHref(location), origin).searchParams))
       .toEqual(location);
+  });
+
+  it("round-trips a designed scenario after the path", () => {
+    const href = workspaceHref({...emptyLocation, artifactId: "art_1", path: "project/builder.html", projectId: "prj_default", scenarioId: "5", versionId: "ver_1"});
+    expect(href).toBe("/review?project=prj_default&artifact=art_1&version=ver_1&path=project%2Fbuilder.html&scenario=5");
+    expect(readReviewLocation(new URL(href, origin).searchParams).scenarioId).toBe("5");
+    expect(readReviewLocation(new URLSearchParams("artifact=a")).scenarioId).toBeNull();
   });
 });
 

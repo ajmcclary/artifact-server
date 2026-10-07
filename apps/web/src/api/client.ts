@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {readBoundedReviewHtml} from "./bounded-text";
+import {provenanceOutcomeSchema, viewsOutcomeSchema} from "./views.ts";
 import {previewKinds} from "../review/workspace/preview-index.ts";
 import {createPreviewLeaseStore} from "../review/preview-lease-store.ts";
 import {browserStorage} from "../ui/density-model.ts";
@@ -1292,6 +1293,16 @@ export const api = {
     if (lease.versionId === versionId) previewLeases.remember(lease);
     return lease;
   },
+  versionViews: (projectId: string, artifactId: string, versionId: string) =>
+    request(
+      viewsOutcomeSchema,
+      `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/views?${projectQuery(projectId)}`,
+    ),
+  versionProvenance: (projectId: string, artifactId: string, versionId: string) =>
+    request(
+      provenanceOutcomeSchema,
+      `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/provenance?${projectQuery(projectId)}`,
+    ),
   versionFile: (
     projectId: string,
     artifactId: string,

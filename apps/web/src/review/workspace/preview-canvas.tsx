@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -27,10 +28,18 @@ import {
   type HostMessage,
   type ReviewAnchor,
   type ReviewAnnotation,
+  type UnanchoredReason,
 } from "@/review-frame/protocol";
 import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 
 import {mediaTypeEssence} from "./page-inventory.ts";
+import {
+  annotationsForScenario,
+  captureProps,
+  restorePropsFor,
+  viewAnchorFrom,
+} from "./scenario-model.ts";
+import {useScenarioSession} from "./scenario-session.tsx";
 import type {HtmlViewerMode} from "./workspace-types.ts";
 
 interface PreviewDocument {
@@ -85,7 +94,10 @@ export interface PreviewCanvasProps {
   readonly onOpenRawArtifact: () => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
   readonly onSubmitAnnotation: (body: string, anchor: ReviewAnchor | null, path: string) => Promise<boolean>;
-  readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onUnanchoredChange: (
+    threadIds: readonly string[],
+    reasons: Readonly<Record<string, UnanchoredReason>>,
+  ) => void;
   readonly onViewModeChange: (mode: HtmlViewerMode) => void;
   readonly opening: boolean;
   readonly projectId: string;
@@ -331,7 +343,10 @@ function ReviewPreview({
     anchor: ReviewAnchor | null,
     path: string,
   ) => Promise<boolean>;
-  readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onUnanchoredChange: (
+    threadIds: readonly string[],
+    reasons: Readonly<Record<string, UnanchoredReason>>,
+  ) => void;
   readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly opening: boolean;
   readonly projectId: string;
@@ -529,7 +544,10 @@ function HtmlPreview({
     anchor: ReviewAnchor | null,
     path: string,
   ) => Promise<boolean>;
-  readonly onUnanchoredChange: (threadIds: readonly string[]) => void;
+  readonly onUnanchoredChange: (
+    threadIds: readonly string[],
+    reasons: Readonly<Record<string, UnanchoredReason>>,
+  ) => void;
   readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly projectId: string;
   readonly readOnly: boolean;
@@ -553,6 +571,14 @@ function HtmlPreview({
     if (frame === null || frame === undefined) return;
     frame.postMessage(message, window.location.origin);
   }, []);
+  const scenario = useScenarioSession();
+  const placed = useMemo(
+    () => annotationsForScenario(annotations, scenario.view, scenario.onScreen.scenarioId),
+    [annotations, scenario.onScreen.scenarioId, scenario.view],
+  );
+  // A page with views shows comments only once the page has confirmed its state.
+  const holdAnnotations = scenario.view !== null
+    && (scenario.onScreen.status === "idle" || scenario.onScreen.status === "restoring");
 
   useEffect(() => {
     let current = true;
@@ -602,7 +628,8 @@ function HtmlPreview({
     };
   }, [accessSetting, artifactId, entry.path, isCurrentVersion, projectId, version.links.version, version.version.id]);
 
-  const mode = chosenMode ?? (previewDocument?.prefersInteractive === true
+  // A producer that declared views for this page made it reviewable in Annotate.
+  const mode = chosenMode ?? (previewDocument?.prefersInteractive === true && scenario.view === null
     ? "interactive"
     : "annotate");
 
@@ -630,16 +657,24 @@ function HtmlPreview({
         return;
       }
       if (message.type === "as-review-unanchored") {
-        onUnanchoredChange(message.threadIds);
+        onUnanchoredChange(message.threadIds, message.reasons ?? {});
         return;
       }
       if (message.type === "as-review-annotate-mode-request") {
         onAnnotateModeChange(message.active);
         return;
       }
-      if (message.type !== "as-review-submit") return;
+      if (message.type === "as-review-view-state") {
+        scenario.report(message);
+        return;
+      }
       void (async () => {
-        const saved = await onSubmitAnnotation(message.body, message.anchor, entry.path);
+        const view = scenario.view;
+        const located = view === null ? undefined : viewAnchorFrom(view, message.capture);
+        const anchor = message.anchor === null || located === undefined
+          ? message.anchor
+          : {...message.anchor, view: located};
+        const saved = await onSubmitAnnotation(message.body, anchor, entry.path);
         if (!saved) {
           postToFrame({
             annotations: [...annotations],
@@ -659,14 +694,17 @@ function HtmlPreview({
     onSubmitAnnotation,
     onUnanchoredChange,
     postToFrame,
+    scenario,
   ]);
 
   useEffect(() => {
     if (mode !== "annotate" || !frameReady || previewDocument === null || initialisedRef.current) return;
+    if (!scenario.loaded) return;
     initialisedRef.current = true;
+    const view = scenario.view;
     postToFrame({
       annotateModeActive,
-      annotations: [...annotations],
+      annotations: view === null ? [...annotations] : [],
       baseHref: previewDocument.baseHref,
       entryPath: previewDocument.entryPath,
       html: previewDocument.html,
@@ -676,7 +714,31 @@ function HtmlPreview({
       type: "as-review-init",
       v: reviewProtocolVersion,
     });
-  }, [annotateModeActive, annotations, frameReady, mode, postToFrame, previewDocument, readOnly]);
+    if (view === null) return;
+    const requestId = crypto.randomUUID();
+    scenario.beginRequest(requestId);
+    const wanted = scenario.requested;
+    const props = wanted === null ? null : restorePropsFor(view, wanted.scenarioId, wanted.parameters);
+    postToFrame(props === null || wanted === null
+      ? {props: [...captureProps(view)], requestId, type: "as-review-capture", v: reviewProtocolVersion}
+      : {props, requestId, scenarioId: wanted.scenarioId, type: "as-review-restore", v: reviewProtocolVersion, viewId: view.viewId});
+  }, [annotateModeActive, annotations, frameReady, mode, postToFrame, previewDocument, readOnly, scenario]);
+
+  const requestedRevision = scenario.requested?.revision ?? 0;
+  const scenarioRef = useRef(scenario);
+  scenarioRef.current = scenario;
+  useEffect(() => {
+    // Only a new request revision restores; on-screen changes must not loop back here.
+    const current = scenarioRef.current;
+    const view = current.view;
+    const wanted = current.requested;
+    if (!initialisedRef.current || view === null || wanted === null) return;
+    const props = restorePropsFor(view, wanted.scenarioId, wanted.parameters);
+    if (props === null) return;
+    const requestId = crypto.randomUUID();
+    current.beginRequest(requestId);
+    postToFrame({props, requestId, scenarioId: wanted.scenarioId, type: "as-review-restore", v: reviewProtocolVersion, viewId: view.viewId});
+  }, [requestedRevision, postToFrame]);
 
   useEffect(() => {
     if (!initialisedRef.current) return;
@@ -702,13 +764,13 @@ function HtmlPreview({
   }, [postToFrame, themeRevision]);
 
   useEffect(() => {
-    if (!initialisedRef.current) return;
+    if (!initialisedRef.current || holdAnnotations) return;
     postToFrame({
-      annotations: [...annotations],
+      annotations: placed,
       type: "as-review-annotations",
       v: reviewProtocolVersion,
     });
-  }, [annotations, postToFrame]);
+  }, [holdAnnotations, placed, postToFrame]);
 
   useEffect(() => {
     if (!initialisedRef.current) return;

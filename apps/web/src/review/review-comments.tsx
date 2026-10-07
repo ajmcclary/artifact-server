@@ -28,6 +28,7 @@ import {
   reviewAnchorSchema,
   type ReviewAnchor,
   type ReviewAnnotation,
+  type UnanchoredReason,
 } from "@/review-frame/protocol";
 
 const threadPageSize = 100;
@@ -137,7 +138,12 @@ export interface ReviewCommentSession {
   ) => Promise<boolean>;
   readonly threads: readonly CommentThread[];
   readonly unanchoredIds: readonly string[];
-  readonly updateUnanchored: (threadIds: readonly string[]) => void;
+  /** Why the frame left a region-anchored thread unplaced, by thread id. */
+  readonly unanchoredReasons: ReadonlyMap<string, UnanchoredReason>;
+  readonly updateUnanchored: (
+    threadIds: readonly string[],
+    reasons?: Readonly<Record<string, UnanchoredReason>>,
+  ) => void;
   readonly updateReply: (reply: CommentReply, body: string) => Promise<boolean>;
 }
 
@@ -160,6 +166,14 @@ export function useReviewComments({
   >>(new Map());
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [unanchoredIds, setUnanchoredIds] = useState<readonly string[]>([]);
+  const [unanchoredReasons, setUnanchoredReasons] = useState<ReadonlyMap<string, UnanchoredReason>>(new Map());
+  const updateUnanchored = useCallback((
+    threadIds: readonly string[],
+    reasons: Readonly<Record<string, UnanchoredReason>> = {},
+  ): void => {
+    setUnanchoredIds(threadIds);
+    setUnanchoredReasons(new Map(Object.entries(reasons)));
+  }, []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const revisionRef = useRef<number | null>(null);
@@ -178,6 +192,7 @@ export function useReviewComments({
       setRepliesByThread(new Map());
       setSelectedThreadId(null);
       setUnanchoredIds([]);
+      setUnanchoredReasons(new Map());
       setError(null);
       return null;
     }
@@ -225,6 +240,7 @@ export function useReviewComments({
     setRepliesByThread(new Map());
     setSelectedThreadId(null);
     setUnanchoredIds([]);
+      setUnanchoredReasons(new Map());
     revisionRef.current = null;
     void reload();
   }, [reload]);
@@ -392,7 +408,8 @@ export function useReviewComments({
     submit,
     threads,
     unanchoredIds,
-    updateUnanchored: setUnanchoredIds,
+    unanchoredReasons,
+    updateUnanchored,
     updateReply,
   };
 }

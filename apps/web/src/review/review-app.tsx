@@ -72,6 +72,7 @@ import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
 import {canonicalReviewRoute, settingsAccess} from "./settings/settings-view.ts";
 import {useWebmcp, type WebmcpBindings} from "./webmcp.tsx";
+import {ScenarioSessionProvider, useScenarioSession} from "./workspace/scenario-session.tsx";
 
 const workspaceStyle = {
   background: "var(--surface-canvas)",
@@ -570,18 +571,6 @@ function ProjectReview({
     setComparisonView(null);
     setComparisonPair(null);
   }, [selectedArtifactId]);
-
-  useEffect(() => {
-    const href = workspaceHref({
-      artifactId: selectedArtifactId,
-      path: selectedPath,
-      projectId,
-      threadId: null,
-      versionId: selectedVersionId,
-      view: focusMode ? "focus" : null,
-    });
-    writeReviewHistory(href, "replace");
-  }, [focusMode, projectId, selectedArtifactId, selectedPath, selectedVersionId]);
 
   useEffect(() => {
     // Back, forward, and in-place links within this project. Another project
@@ -1174,211 +1163,252 @@ function ProjectReview({
   );
 
   return (
-    <div ref={workspaceRef} style={focusMode ? focusLayerStyle : phone ? phoneWorkspaceStyle : workspaceStyle}>
-      {focusMode || (phone && !catalogSheetOpen) ? null : (
-        <aside aria-label="Artifact catalog" style={catalogLandmarkStyle}>
-          <ArtifactListPanel
-            canPin={docking.listDocked}
-            commentFilter={catalog.commentFilter}
-            filtersOpen={catalogFiltersOpen}
-            items={catalogItems}
-            knownTags={catalog.knownTags}
-            listError={catalog.error}
-            listLoading={catalog.loading}
-            listRereading={catalog.rereading}
-            nextCursor={catalog.nextCursor}
-            onAnnounce={announce}
-            onCommentFilterChange={catalog.setCommentFilter}
-            onFiltersOpenChange={setCatalogFiltersOpen}
-            onLoadMore={catalog.loadMore}
-            onPeekChange={setCatalogPeeking}
-            onPinChange={(pinned) => {
-              setCatalogPinned(pinned);
-              setCatalogPeeking(false);
-            }}
-            onQueryChange={catalog.setQuery}
-            onRefresh={catalog.refresh}
-            onSelect={(artifactId, versionId) => {
-              setCatalogSheetOpen(false);
-              selectArtifact(artifactId, versionId);
-            }}
-            onSheetClose={() => setCatalogSheetOpen(false)}
-            onSortChange={catalog.setSort}
-            onTagFiltersChange={catalog.setTagFilters}
-            onWidthChange={catalogPreference.setWidth}
-            peeking={catalogPeeking}
-            pinned={catalogPreference.pinned}
-            projectName={selectedProject?.name ?? "this project"}
-            query={catalog.query}
-            refreshState={catalog.refreshState}
-            selectedArtifactId={selectedArtifactId}
-            selectedCommentCount={comments.loading ? null : comments.threads.length}
-            sheet={phone}
-            sort={catalog.sort}
-            tagFilters={catalog.tagFilters}
-            width={catalogPreference.width ?? catalogWidth.defaultWidth}
-          />
-        </aside>
-      )}
-      <div style={workspaceColumnStyle}>
-        {focusMode ? null : (
-          <ReviewToolbar
-            annotate={annotateToggle}
-            artboard={{
-              onChange: setArtboardKey,
-              presets: artboardPresets,
-              value: artboardPreset?.key ?? "Fit",
-            }}
-            artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
-            canManage={canManageArtifacts}
-            details={details}
-            focusActive={false}
-            gallery={galleryCanvas.galleryCrumb}
-            linkedArtifacts={session.capabilities.linkedArtifacts}
-            onAnnounce={announce}
-            onCapture={captureLinkedArtifact}
-            onEnterFocus={enterFocusMode}
-            onMakeCurrent={makeVersionCurrent}
-            onOpenCatalog={toggleCatalog}
-            onOpenComments={() => openInspector("comments")}
-            onOpenComparison={() => openComparison(null, "compare")}
-            onOpenLive={openLinkedArtifact}
-            onOpenRawArtifact={() => void openRawArtifact()}
-            onOpenVersionsPanel={() => openInspector("versions")}
-            onReload={reloadComments}
-            onSelectPath={selectManifestPath}
-            onSelectVersion={(versionId) => {
-              setDetailError(null);
-              setSelectedVersionId(versionId);
-              setSelectedPath(null);
-            }}
-            opening={opening}
-            phone={phone}
-            projectName={selectedProject?.name ?? "project"}
-            reloading={comments.loading}
-            selectedPath={selectedPath}
-            selectedVersion={selectedVersion}
-            share={sharePopover("toolbar")}
-            // The docked list already names the artifact; collapsed, the name joins the breadcrumb.
-            showName={!catalogDocked}
-            versions={versions}
-          />
-        )}
-        <div style={canvasRowStyle}>
-          <div style={canvasColumnStyle}>
-            {!comparisonOpen || details === null || comparisonView === null ? null : (
-              <ComparisonView
-                actions={activity.actions}
-                activityError={activity.error}
-                activityLoading={activity.loading}
-                activityNextCursor={activity.nextCursor}
-                artifactName={details.artifact.name}
-                comparison={versionComparison.comparison}
-                comparisonError={versionComparison.error}
-                comparisonLoading={versionComparison.loading}
-                currentVersionId={details.artifact.currentVersionId}
-                initialPair={comparisonPair}
-                key={`${details.artifact.id}:${comparisonPair?.from ?? ""}:${comparisonPair?.to ?? ""}`}
-                onBack={() => setComparisonView(null)}
-                onCompare={versionComparison.compare}
-                onLoadMoreActivity={activity.loadMore}
-                onTabChange={setComparisonView}
-                tab={comparisonView}
-                versions={versions}
-              />
-            )}
-            <div ref={canvasSlotRef} style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
-              <PreviewCanvas
-                accessSetting={details?.artifact.accessSetting ?? "account_required"}
-                annotateModeActive={htmlAnnotateModeActive}
-                annotations={comments.annotations}
-                artifactId={selectedArtifactId}
-                artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
-                chrome={focusMode ? "focus" : "workspace"}
-                detailError={detailError}
-                awaitingCatalog={catalog.loading && catalog.items.length === 0}
-                detailLoading={detailLoading}
-                emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
-                focusControls={focusMode ? (
-                  <FocusViewerControls
-                    collapsed={focusControlsCollapsed}
-                    commentCount={openCommentCount}
-                    commentsOpen={focusCommentsOpen}
-                    commentsToggleRef={commentsToggleRef}
-                    onOpenRawArtifact={() => void openRawArtifact()}
-                    opening={opening}
-                    rawAvailable={selectedVersion !== null}
-                    onExit={exitFocusMode}
-                    onHide={hideFocusControls}
-                    onReturnToGallery={galleryCanvas.onReturnToGallery}
-                    onShow={showFocusControls}
-                    onToggleComments={() => setFocusCommentsOpen((open) => !open)}
-                    restoreRef={restoreControlsRef}
-                    share={sharePopover("focus")}
-                  />
-                ) : null}
-                focusTitleControls={focusMode ? <FocusAnnotationControl annotate={annotateToggle} collapsed={focusControlsCollapsed} /> : null}
-                frameWidth={artboardPreset?.px ?? null}
-                gallery={galleryCanvas.gallery}
-                galleryNotice={galleryCanvas.galleryNotice}
-                hasDetails={details !== null}
-                isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
-                modeControlsTarget={previewModeTarget}
-                onAnnotateModeChange={setHtmlAnnotateModeActive}
-                onOpenRawArtifact={() => void openRawArtifact()}
-                onSelectAnnotation={selectAnnotation}
-                onSubmitAnnotation={submitAnnotation}
-                onUnanchoredChange={comments.updateUnanchored}
-                onViewModeChange={setHtmlViewerMode}
-                opening={opening}
-                projectId={projectId}
-                readOnly={!canComment}
-                selectedPath={selectedPath}
-                selectedThreadId={comments.selectedThreadId}
-                threadFocusRevision={threadFocusRevision}
-                version={selectedVersion}
-              />
-            </div>
-          </div>
-          {focusMode ? null : (
-            <InspectorPanel
-              actions={inspectorTab === "versions" && details !== null ? (
-                <Button icon="bi-layout-split" onClick={() => openComparison(null, "compare")} size="sm" variant="ghost">
-                  Compare
-                </Button>
-              ) : inspectorTab === "comments" ? agentControlsToggle
-                : inspectorTab === "files" ? <FilesDownload download={download} selected={selectedFileDownload} /> : null}
-              active={inspectorTab}
-              canPin={!phone && viewportWidth >= workspaceBudget.inspector}
-              items={inspectorItems}
+    <ScenarioSessionProvider
+      artifactId={selectedArtifactId}
+      initialScenarioId={initialLocation.scenarioId ?? null}
+      path={selectedPath ?? selectedVersion?.manifest.entryPath ?? null}
+      projectId={projectId}
+      versionId={selectedVersionId}
+    >
+      <ScenarioUrlSync
+        artifactId={selectedArtifactId}
+        focusMode={focusMode}
+        path={selectedPath}
+        projectId={projectId}
+        versionId={selectedVersionId}
+      />
+      <div ref={workspaceRef} style={focusMode ? focusLayerStyle : phone ? phoneWorkspaceStyle : workspaceStyle}>
+        {focusMode || (phone && !catalogSheetOpen) ? null : (
+          <aside aria-label="Artifact catalog" style={catalogLandmarkStyle}>
+            <ArtifactListPanel
+              canPin={docking.listDocked}
+              commentFilter={catalog.commentFilter}
+              filtersOpen={catalogFiltersOpen}
+              items={catalogItems}
+              knownTags={catalog.knownTags}
+              listError={catalog.error}
+              listLoading={catalog.loading}
+              listRereading={catalog.rereading}
+              nextCursor={catalog.nextCursor}
               onAnnounce={announce}
-              onClose={() => setInspectorOpen(false)}
-              onPinChange={inspectorPreference.setPinned}
-              onSelect={selectInspectorTab}
-              onWidthChange={inspectorPreference.setWidth}
-              open={inspectorOpen}
-              pinned={inspectorPreference.pinned}
-              railLabels={viewportHeight >= 680}
-              footer={inspectorTab === "files" && selectedVersion !== null
-                ? <FilesSelection selectedPath={selectedFilePath} version={selectedVersion} />
-                : inspectorTab === "comments" && selectedArtifactId !== null ? commentsComposer : null}
+              onCommentFilterChange={catalog.setCommentFilter}
+              onFiltersOpenChange={setCatalogFiltersOpen}
+              onLoadMore={catalog.loadMore}
+              onPeekChange={setCatalogPeeking}
+              onPinChange={(pinned) => {
+                setCatalogPinned(pinned);
+                setCatalogPeeking(false);
+              }}
+              onQueryChange={catalog.setQuery}
+              onRefresh={catalog.refresh}
+              onSelect={(artifactId, versionId) => {
+                setCatalogSheetOpen(false);
+                selectArtifact(artifactId, versionId);
+              }}
+              onSheetClose={() => setCatalogSheetOpen(false)}
+              onSortChange={catalog.setSort}
+              onTagFiltersChange={catalog.setTagFilters}
+              onWidthChange={catalogPreference.setWidth}
+              peeking={catalogPeeking}
+              pinned={catalogPreference.pinned}
+              projectName={selectedProject?.name ?? "this project"}
+              query={catalog.query}
+              refreshState={catalog.refreshState}
+              selectedArtifactId={selectedArtifactId}
+              selectedCommentCount={comments.loading ? null : comments.threads.length}
               sheet={phone}
-              title={inspectorTitles[inspectorTab]}
-              titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
-              width={inspectorPreference.width ?? inspectorDefaultWidth()}
-            >
-              {inspectorBody}
-            </InspectorPanel>
+              sort={catalog.sort}
+              tagFilters={catalog.tagFilters}
+              width={catalogPreference.width ?? catalogWidth.defaultWidth}
+            />
+          </aside>
+        )}
+        <div style={workspaceColumnStyle}>
+          {focusMode ? null : (
+            <ReviewToolbar
+              annotate={annotateToggle}
+              artboard={{
+                onChange: setArtboardKey,
+                presets: artboardPresets,
+                value: artboardPreset?.key ?? "Fit",
+              }}
+              artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact Server"}
+              canManage={canManageArtifacts}
+              details={details}
+              focusActive={false}
+              gallery={galleryCanvas.galleryCrumb}
+              linkedArtifacts={session.capabilities.linkedArtifacts}
+              onAnnounce={announce}
+              onCapture={captureLinkedArtifact}
+              onEnterFocus={enterFocusMode}
+              onMakeCurrent={makeVersionCurrent}
+              onOpenCatalog={toggleCatalog}
+              onOpenComments={() => openInspector("comments")}
+              onOpenComparison={() => openComparison(null, "compare")}
+              onOpenLive={openLinkedArtifact}
+              onOpenRawArtifact={() => void openRawArtifact()}
+              onOpenVersionsPanel={() => openInspector("versions")}
+              onReload={reloadComments}
+              onSelectPath={selectManifestPath}
+              onSelectVersion={(versionId) => {
+                setDetailError(null);
+                setSelectedVersionId(versionId);
+                setSelectedPath(null);
+              }}
+              opening={opening}
+              phone={phone}
+              projectName={selectedProject?.name ?? "project"}
+              reloading={comments.loading}
+              selectedPath={selectedPath}
+              selectedVersion={selectedVersion}
+              share={sharePopover("toolbar")}
+              // The docked list already names the artifact; collapsed, the name joins the breadcrumb.
+              showName={!catalogDocked}
+              versions={versions}
+            />
           )}
-          {focusMode && focusCommentsOpen ? (
-            <FocusComments actions={agentControlsToggle} commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
-              {commentsTab}
-            </FocusComments>
-          ) : null}
+          <div style={canvasRowStyle}>
+            <div style={canvasColumnStyle}>
+              {!comparisonOpen || details === null || comparisonView === null ? null : (
+                <ComparisonView
+                  actions={activity.actions}
+                  activityError={activity.error}
+                  activityLoading={activity.loading}
+                  activityNextCursor={activity.nextCursor}
+                  artifactName={details.artifact.name}
+                  comparison={versionComparison.comparison}
+                  comparisonError={versionComparison.error}
+                  comparisonLoading={versionComparison.loading}
+                  currentVersionId={details.artifact.currentVersionId}
+                  initialPair={comparisonPair}
+                  key={`${details.artifact.id}:${comparisonPair?.from ?? ""}:${comparisonPair?.to ?? ""}`}
+                  onBack={() => setComparisonView(null)}
+                  onCompare={versionComparison.compare}
+                  onLoadMoreActivity={activity.loadMore}
+                  onTabChange={setComparisonView}
+                  tab={comparisonView}
+                  versions={versions}
+                />
+              )}
+              <div ref={canvasSlotRef} style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
+                <PreviewCanvas
+                  accessSetting={details?.artifact.accessSetting ?? "account_required"}
+                  annotateModeActive={htmlAnnotateModeActive}
+                  annotations={comments.annotations}
+                  artifactId={selectedArtifactId}
+                  artifactName={details?.artifact.name ?? selectedItem?.artifact.name ?? "Artifact"}
+                  chrome={focusMode ? "focus" : "workspace"}
+                  detailError={detailError}
+                  awaitingCatalog={catalog.loading && catalog.items.length === 0}
+                  detailLoading={detailLoading}
+                  emptyProject={projectEmpty && selectedProject !== null ? <EmptyProjectCanvas project={selectedProject} /> : null}
+                  focusControls={focusMode ? (
+                    <FocusViewerControls
+                      collapsed={focusControlsCollapsed}
+                      commentCount={openCommentCount}
+                      commentsOpen={focusCommentsOpen}
+                      commentsToggleRef={commentsToggleRef}
+                      onOpenRawArtifact={() => void openRawArtifact()}
+                      opening={opening}
+                      rawAvailable={selectedVersion !== null}
+                      onExit={exitFocusMode}
+                      onHide={hideFocusControls}
+                      onReturnToGallery={galleryCanvas.onReturnToGallery}
+                      onShow={showFocusControls}
+                      onToggleComments={() => setFocusCommentsOpen((open) => !open)}
+                      restoreRef={restoreControlsRef}
+                      share={sharePopover("focus")}
+                    />
+                  ) : null}
+                  focusTitleControls={focusMode ? <FocusAnnotationControl annotate={annotateToggle} collapsed={focusControlsCollapsed} /> : null}
+                  frameWidth={artboardPreset?.px ?? null}
+                  gallery={galleryCanvas.gallery}
+                  galleryNotice={galleryCanvas.galleryNotice}
+                  hasDetails={details !== null}
+                  isCurrentVersion={selectedVersion?.version.id === details?.artifact.currentVersionId}
+                  modeControlsTarget={previewModeTarget}
+                  onAnnotateModeChange={setHtmlAnnotateModeActive}
+                  onOpenRawArtifact={() => void openRawArtifact()}
+                  onSelectAnnotation={selectAnnotation}
+                  onSubmitAnnotation={submitAnnotation}
+                  onUnanchoredChange={comments.updateUnanchored}
+                  onViewModeChange={setHtmlViewerMode}
+                  opening={opening}
+                  projectId={projectId}
+                  readOnly={!canComment}
+                  selectedPath={selectedPath}
+                  selectedThreadId={comments.selectedThreadId}
+                  threadFocusRevision={threadFocusRevision}
+                  version={selectedVersion}
+                />
+              </div>
+            </div>
+            {focusMode ? null : (
+              <InspectorPanel
+                actions={inspectorTab === "versions" && details !== null ? (
+                  <Button icon="bi-layout-split" onClick={() => openComparison(null, "compare")} size="sm" variant="ghost">
+                    Compare
+                  </Button>
+                ) : inspectorTab === "comments" ? agentControlsToggle
+                  : inspectorTab === "files" ? <FilesDownload download={download} selected={selectedFileDownload} /> : null}
+                active={inspectorTab}
+                canPin={!phone && viewportWidth >= workspaceBudget.inspector}
+                items={inspectorItems}
+                onAnnounce={announce}
+                onClose={() => setInspectorOpen(false)}
+                onPinChange={inspectorPreference.setPinned}
+                onSelect={selectInspectorTab}
+                onWidthChange={inspectorPreference.setWidth}
+                open={inspectorOpen}
+                pinned={inspectorPreference.pinned}
+                railLabels={viewportHeight >= 680}
+                footer={inspectorTab === "files" && selectedVersion !== null
+                  ? <FilesSelection selectedPath={selectedFilePath} version={selectedVersion} />
+                  : inspectorTab === "comments" && selectedArtifactId !== null ? commentsComposer : null}
+                sheet={phone}
+                title={inspectorTitles[inspectorTab]}
+                titleCount={inspectorTab === "comments" && openCommentCount > 0 ? openCommentCount : null}
+                width={inspectorPreference.width ?? inspectorDefaultWidth()}
+              >
+                {inspectorBody}
+              </InspectorPanel>
+            )}
+            {focusMode && focusCommentsOpen ? (
+              <FocusComments actions={agentControlsToggle} commentCount={openCommentCount} footer={commentsComposer} onClose={() => setFocusCommentsOpen(false)}>
+                {commentsTab}
+              </FocusComments>
+            ) : null}
+          </div>
         </div>
       </div>
-    </div>
+    </ScenarioSessionProvider>
   );
+}
+
+/** Keeps `scenario=` in the review URL in step with the scenario on screen. */
+function ScenarioUrlSync({artifactId, focusMode, path, projectId, versionId}: {
+  readonly artifactId: string | null;
+  readonly focusMode: boolean;
+  readonly path: string | null;
+  readonly projectId: string;
+  readonly versionId: string | null;
+}) {
+  const scenario = useScenarioSession();
+  const scenarioId = scenario.view === null
+    ? null
+    : scenario.onScreen.scenarioId ?? scenario.requested?.scenarioId ?? null;
+  useEffect(() => {
+    writeReviewHistory(workspaceHref({
+      artifactId,
+      path,
+      projectId,
+      scenarioId,
+      threadId: null,
+      versionId,
+      view: focusMode ? "focus" : null,
+    }), "replace");
+  }, [artifactId, focusMode, path, projectId, scenarioId, versionId]);
+  return null;
 }
 
 function reviewDownload(
