@@ -144,6 +144,7 @@ import type {PublishedContentObserver} from "../core/content-variants.js";
 import type {IdentityRepository} from "../core/identity-ports.js";
 import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
+import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 import {InvitationService} from "../application/invitations.js";
 import { FileVerificationError } from "../storage/verified-file.js";
 import {defaultStagingCleanupPolicy} from
@@ -266,7 +267,7 @@ export function createApplicationLayer(
           signal: combineAbortSignals(fiberSignal, write.signal),
         }),
         catch: (cause) =>
-          new BlobStorageFailure({cause, operation: "put"}),
+          new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "put"}),
       }),
   };
   if (adapters.blobs.promote !== undefined) {
@@ -275,7 +276,7 @@ export function createApplicationLayer(
       Effect.tryPromise({
         try: () => promote(source),
         catch: (cause) =>
-          new BlobStorageFailure({cause, operation: "promote"}),
+          new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "promote"}),
       });
   }
   const publishDependencies: PublishArtifactDependencies = {
@@ -341,7 +342,7 @@ export function createApplicationLayer(
       Effect.tryPromise({
         try: () => adapters.staging.open(uploadId, storageToken),
         catch: (cause) =>
-          new StagingStorageFailure({cause, operation: "open"}),
+          new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
       }),
     put: (write) =>
       Effect.tryPromise({
@@ -355,13 +356,13 @@ export function createApplicationLayer(
               message:
                 "The uploaded bytes do not match the declared size and SHA-256 fingerprint.",
             })
-            : new StagingStorageFailure({cause, operation: "put"}),
+            : new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "put"}),
       }),
     remove: (uploadId, storageToken) =>
       Effect.tryPromise({
         try: () => adapters.staging.remove(uploadId, storageToken),
         catch: (cause) =>
-          new StagingStorageFailure({cause, operation: "remove"}),
+          new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "remove"}),
       }),
   };
   const preparationDependencies: PublicationPreparationDependencies = {
@@ -847,7 +848,7 @@ export function createApplicationLayer(
         Effect.tryPromise({
           try: () => readBlobBytes(adapters.blobs, entry),
           catch: (cause) =>
-            new BlobStorageFailure({cause, operation: "open"}),
+            new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
         }),
     },
     repository: {
@@ -1433,7 +1434,7 @@ export function createApplicationLayer(
     readBlobText: (entry) =>
       Effect.tryPromise({
         try: async () => new TextDecoder().decode(await readBlobBytes(adapters.blobs, entry)),
-        catch: (cause) => new BlobStorageFailure({cause, operation: "open"}),
+        catch: (cause) => new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
       }),
   }).pipe(Layer.provideMerge(authorizationLayer));
   return Layer.mergeAll(

@@ -12,9 +12,13 @@ export interface OtlpLogCollector {
   reset(): void;
   /** Every exported signal body since the last reset, as one searchable string. */
   serialized(): string;
+  /** Exported trace spans since the last reset, as one searchable string. */
+  spans(): string;
   stop(): Promise<void>;
   /** Wait until every value appears in an exported signal. */
   waitFor(values: readonly string[]): Promise<void>;
+  /** Wait until an exported trace span contains the value. */
+  waitForSpan(value: string): Promise<void>;
 }
 
 const exportedVariables = {
@@ -58,12 +62,28 @@ export async function startOtlpLogCollector(): Promise<OtlpLogCollector> {
     assign(name, value);
   }
   const serialized = (): string => bodies.join("\n");
+  const signal = (key: string): string =>
+    bodies.filter((body) => body.includes(`"${key}"`)).join("\n");
+  const waitUntil = async (
+    contains: () => boolean,
+    describe: () => string,
+  ): Promise<void> => {
+    const deadline = Date.now() + 5_000;
+    while (!contains()) {
+      if (Date.now() > deadline) {
+        throw new Error(`${describe()} after ${bodies.length} exports.`);
+      }
+      // eslint-disable-next-line no-await-in-loop -- poll the collector
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  };
   return {
-    logs: () => bodies.filter((body) => body.includes("\"resourceLogs\"")).join("\n"),
+    logs: () => signal("resourceLogs"),
     reset: () => {
       bodies.length = 0;
     },
     serialized,
+    spans: () => signal("resourceSpans"),
     stop: async () => {
       for (const [name, value] of previous) {
         if (value === undefined) delete process.env[name];
@@ -74,18 +94,18 @@ export async function startOtlpLogCollector(): Promise<OtlpLogCollector> {
         server.close((error) => error === undefined ? resolve() : reject(error));
       });
     },
-    waitFor: async (values) => {
-      const deadline = Date.now() + 5_000;
-      while (!values.every((value) => serialized().includes(value))) {
-        if (Date.now() > deadline) {
+    waitFor: (values) =>
+      waitUntil(
+        () => values.every((value) => serialized().includes(value)),
+        () => {
           const missing = values.filter((value) => !serialized().includes(value));
-          throw new Error(
-            `OTLP signals never contained ${JSON.stringify(missing)} after ${bodies.length} exports.`,
-          );
-        }
-        // eslint-disable-next-line no-await-in-loop -- poll the collector
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-    },
+          return `OTLP signals never contained ${JSON.stringify(missing)}`;
+        },
+      ),
+    waitForSpan: (value) =>
+      waitUntil(
+        () => signal("resourceSpans").includes(value),
+        () => `No exported span contained ${JSON.stringify(value)}`,
+      ),
   };
 }

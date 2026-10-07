@@ -63,6 +63,7 @@ import {
   type ObservedUploadBody,
   observeUploadBody,
 } from "./upload-body-source.js";
+import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 
 const uploadInterruptedMessage =
   "The upload body was interrupted before it was complete. Re-run the same publish to resume; files already verified are not sent again.";
@@ -561,7 +562,7 @@ function makeStagedUploadService(
               message: "The staged upload batch frame is malformed.",
             })
             : new UploadInterrupted({
-              cause: interrupted.cause,
+              cause: redactedFailureCause(interrupted.cause),
               message: uploadInterruptedMessage,
             });
         },
@@ -640,7 +641,7 @@ function makeStagedUploadService(
           yield* Effect.tryPromise({
             try: () => opened.body.cancel(),
             catch: (cause) =>
-              new StagingStorageFailure({cause, operation: "open"}),
+              new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
           });
           return yield* new StagingStorageFailure({
             cause: new Error(
@@ -798,7 +799,7 @@ function stagedWriteFailure<E>(
   return interrupted === undefined
     ? error
     : new UploadInterrupted({
-      cause: interrupted.cause,
+      cause: redactedFailureCause(interrupted.cause),
       message: uploadInterruptedMessage,
     });
 }

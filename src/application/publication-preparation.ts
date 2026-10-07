@@ -27,6 +27,7 @@ import {
   installPublicationFile,
   type PublicationFileSource,
 } from "./install-publication-file.js";
+import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 
 const preparationLeaseSeconds = 45;
 const preparationRenewalSeconds = 15;
@@ -429,7 +430,7 @@ function stagedFileSource(
         if (opened.size !== file.entry.size) {
           yield* Effect.tryPromise({
             try: () => opened.body.cancel(),
-            catch: (cause) => new StagingStorageFailure({cause, operation: "open"}),
+            catch: (cause) => new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
           });
           return yield* new StagingStorageFailure({
             cause: new Error("A verified staged file changed before publication."),

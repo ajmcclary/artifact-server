@@ -28,7 +28,10 @@ import {
   defaultHttpRequestTimeoutMilliseconds,
   nodeHttpServerTimeouts,
 } from "../../src/http/node-http-server.js";
-import {summarizeFailureCause} from "../../src/observability/failure-cause-summary.js";
+import {
+  redactedFailureCause,
+  summarizeFailureCause,
+} from "../../src/observability/failure-cause-summary.js";
 
 type StreamOutcome =
   | {readonly kind: "closed"; readonly code: string}
@@ -128,6 +131,9 @@ describe("staged upload transport", () => {
     expect(logs).toContain("ECONNRESET");
     expect(logs).not.toContain(storageToken);
     expect(logs).not.toContain(installation.apiToken);
+    await collector.waitForSpan("UploadInterrupted");
+    expect(collector.serialized()).not.toContain(storageToken);
+    expect(collector.serialized()).not.toContain(installation.apiToken);
     expect(collector.serialized()).not.toContain("StagingStorageFailure");
 
     const resumed = await createStagedUpload(
@@ -231,7 +237,7 @@ describe("staged upload transport", () => {
   });
 
   test.skipIf(process.getuid?.() === 0)(
-    "a genuine staging provider failure stays a storage failure and logs a bounded cause without the storage token",
+    "a genuine staging provider failure stays a storage failure, and no exported log or span carries its staging path",
     async () => {
       server = await startTestServer(installation, {observability: true});
       const file = slowFixture("provider failure");
@@ -267,11 +273,18 @@ describe("staged upload transport", () => {
         },
       });
       await collector.waitFor(["http.request.failed", "StagingStorageFailure", "EACCES"]);
+      await collector.waitForSpan("StagingStorageFailure");
       const logs = collector.logs();
       expect(logs).toContain("failure_cause");
-      expect(logs).not.toContain(storageToken);
-      expect(logs).not.toContain(upload.body.uploadId);
-      expect(logs).not.toContain(installation.dataDirectory);
+      // The failed spans still name the failure and the provider's code, so a
+      // trace stays diagnosable without the path that works as a write key.
+      const spans = collector.spans();
+      expect(spans).toContain("EACCES");
+      for (const signal of [logs, spans, collector.serialized()]) {
+        expect(signal).not.toContain(storageToken);
+        expect(signal).not.toContain(upload.body.uploadId);
+        expect(signal).not.toContain(installation.dataDirectory);
+      }
     },
   );
 });
@@ -302,6 +315,34 @@ describe("failure cause summaries", () => {
     expect(summarizeFailureCause("a string thrown as a failure")).toBe("non-error value");
     const long = new Error("word ".repeat(2_000), {cause: new Error("word ".repeat(2_000))});
     expect(summarizeFailureCause(long).length).toBeLessThanOrEqual(400);
+  });
+
+  test("a redacted cause keeps the summary but carries no path, token, or stack frame for a span to export", () => {
+    const storageToken = "f9808fe76b2a4ba287dfc82ab2f0514119b3";
+    const provider = Object.assign(
+      new Error(`EACCES: permission denied, open '/srv/data/staging/upl_1/${storageToken}.tmp'`),
+      {code: "EACCES", path: `/srv/data/staging/upl_1/${storageToken}.tmp`},
+    );
+    const raw = new TypeError("fetch failed", {
+      cause: new Error("level two", {cause: new Error("level three", {cause: provider})}),
+    });
+
+    const redacted = redactedFailureCause(raw);
+
+    expect(summarizeFailureCause(redacted)).toBe(summarizeFailureCause(raw));
+    expect(redacted.stack).toBe("TypeError: fetch failed");
+    // The chain stops at the same depth as the log summary.
+    const chain: unknown[] = [];
+    for (let level: unknown = redacted; level instanceof Error; level = level.cause) {
+      chain.push(level.stack);
+    }
+    expect(chain).toEqual(["TypeError: fetch failed", "Error: level two", "Error: level three"]);
+    const provided = redactedFailureCause(provider);
+    expect(provided).toMatchObject({code: "EACCES", name: "Error"});
+    expect(provided).not.toHaveProperty("path");
+    expect(`${provided.message}\n${provided.stack}`).not.toContain(storageToken);
+    expect(provided.stack).not.toContain("/srv/data");
+    expect(redactedFailureCause("a string thrown as a failure").message).toBe("non-error value");
   });
 });
 
