@@ -5,6 +5,15 @@ import type {
   HtmlElementAnchor,
 } from "@plannotator/ui/components/html-viewer";
 
+import {
+  pagePropsSchema,
+  pageRegionSchema,
+  pageStateSchema,
+  propNameSchema,
+  regionIdSchema,
+  scenarioIdSchema,
+} from "./page-protocol.ts";
+
 /** Protocol version carried by every host <-> review-frame message. */
 export const reviewProtocolVersion = 1;
 
@@ -33,18 +42,53 @@ const htmlAnnotationTargetSchema = z.object({
   text: z.string().max(10_000),
 });
 
+const parameterValueSchema = z.union([z.string().max(256), z.number().finite(), z.boolean()]);
+
+/**
+ * Where on a designed page a comment was made. Copied from the version's
+ * validated views document and the page's confirmed state at capture time,
+ * so the anchor describes its own location without another lookup.
+ */
+export const viewAnchorSchema = z.object({
+  regionId: regionIdSchema.optional(),
+  regionLabel: z.string().max(64).optional(),
+  scenarioId: scenarioIdSchema,
+  scenarioLabel: z.string().max(200),
+  sourceRef: z.object({
+    line: z.number().int().min(1).optional(),
+    path: z.string().min(1).max(1_024),
+  }).strict(),
+  state: z.object({
+    direction: z.enum(["ltr", "rtl"]),
+    locale: z.string().max(64).nullable(),
+    parameters: z.record(propNameSchema, parameterValueSchema),
+    theme: z.enum(["light", "dark"]),
+    viewport: z.object({
+      height: z.number().int().min(0).max(100_000),
+      width: z.number().int().min(0).max(100_000),
+    }).strict(),
+  }).strict(),
+  viewFormat: z.literal(1),
+  viewId: z.string().min(1).max(128),
+}).strict();
+
+export type ViewAnchor = z.infer<typeof viewAnchorSchema>;
+
 /**
  * The anchor shape this client stores on a comment thread. The server treats
  * it as opaque, so the frame is its only reader: anything it does not
  * recognise (a whole-file `{kind: "page"}` anchor, an anchor written by a
  * future client) becomes `null` and the thread simply gets no page marker,
  * which is the same fail-closed outcome the bridge's own anchor builder uses.
+ * The parse is loose so a later field survives a read, and an invalid `view`
+ * block reads as absent rather than breaking the whole anchor.
  */
 export const reviewAnchorSchema = z.object({
   htmlAdditionalTargets: z.array(htmlAnnotationTargetSchema).max(16).optional(),
   htmlAnchor: htmlElementAnchorSchema.nullable(),
   originalText: z.string().max(10_000),
-});
+  view: viewAnchorSchema.optional().catch(undefined),
+}).loose();
 
 const optionalAnchorSchema = reviewAnchorSchema.nullable().catch(null);
 
@@ -96,6 +140,20 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("as-review-focus"),
     v: versionSchema,
   }),
+  z.object({
+    props: pagePropsSchema,
+    requestId: z.string().min(1).max(64),
+    scenarioId: scenarioIdSchema,
+    type: z.literal("as-review-restore"),
+    v: versionSchema,
+    viewId: z.string().min(1).max(128),
+  }),
+  z.object({
+    props: z.array(propNameSchema).max(16),
+    requestId: z.string().min(1).max(64),
+    type: z.literal("as-review-capture"),
+    v: versionSchema,
+  }),
 ]);
 
 export type HostMessage = z.infer<typeof hostMessageSchema>;
@@ -113,6 +171,10 @@ export const frameMessageSchema = z.discriminatedUnion("type", [
   z.object({
     anchor: optionalAnchorSchema,
     body: z.string(),
+    capture: z.object({
+      region: pageRegionSchema.nullable(),
+      state: pageStateSchema.nullable(),
+    }).strict().optional(),
     originalText: z.string(),
     type: z.literal("as-review-submit"),
     v: versionSchema,
@@ -128,13 +190,26 @@ export const frameMessageSchema = z.discriminatedUnion("type", [
     v: versionSchema,
   }),
   z.object({
+    reasons: z.record(z.string(), z.enum(["region-ambiguous", "region-missing"])).optional(),
     threadIds: z.array(z.string()),
     type: z.literal("as-review-unanchored"),
+    v: versionSchema,
+  }),
+  z.object({
+    outcome: z.enum(["failed", "restored", "unsupported"]),
+    reason: z.enum(["adapter-error", "no-adapter", "scenario-mismatch", "timeout"]).optional(),
+    requestId: z.string().min(1).max(64).nullable(),
+    state: pageStateSchema.nullable(),
+    type: z.literal("as-review-view-state"),
     v: versionSchema,
   }),
 ]);
 
 export type FrameMessage = z.infer<typeof frameMessageSchema>;
+export type ViewStateMessage = Extract<FrameMessage, {type: "as-review-view-state"}>;
+export type UnanchoredReason = "region-ambiguous" | "region-missing";
+export type RestoreRequest = Extract<HostMessage, {type: "as-review-restore"}>;
+export type CaptureRequest = Extract<HostMessage, {type: "as-review-capture"}>;
 
 /** Build the anchor stored on a thread from what the viewer emitted. */
 export function reviewAnchorFrom(

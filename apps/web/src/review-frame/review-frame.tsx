@@ -119,6 +119,7 @@ export function ReviewFrame(): React.ReactNode {
         );
         return;
       }
+      if (message.type !== "as-review-focus") return;
       setSelectedThreadId(message.threadId);
     };
     if (framed) {

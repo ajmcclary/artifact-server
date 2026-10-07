@@ -637,6 +637,7 @@ function HtmlPreview({
         onAnnotateModeChange(message.active);
         return;
       }
+      if (message.type !== "as-review-submit") return;
       void (async () => {
         const saved = await onSubmitAnnotation(message.body, message.anchor, entry.path);
         if (!saved) {
