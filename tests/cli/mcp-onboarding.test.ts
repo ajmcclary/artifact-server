@@ -147,7 +147,7 @@ describe("local MCP onboarding", {timeout: testTimeoutMilliseconds}, () => {
     const doctor = await runCli(["doctor", "--data", dataDirectory]);
     expect(doctor.exitCode).toBe(0);
     expect(doctorSchema.parse(JSON.parse(doctor.stdout))).toMatchObject({
-      discovery: {tools: 34},
+      discovery: {tools: 35},
       status: "healthy",
     });
     const apiCredential = (await readFile(
