@@ -310,7 +310,7 @@ export function loginHandshakeCookie(loginResponse: Response): string {
 }
 
 export function apiHeaders(
-  installation: TestInstallation,
+  installation: Pick<TestInstallation, "apiToken">,
   idempotencyKey: string,
 ): Headers {
   return new Headers({

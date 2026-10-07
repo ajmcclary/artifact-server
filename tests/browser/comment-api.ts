@@ -1,8 +1,8 @@
 import {expect} from "@playwright/test";
 import {z} from "zod";
 
+import type {ApiTarget} from "../support/publishing.js";
 import {apiHeaders} from "../support/runtime-harness.js";
-import type {BrowserFixture} from "./browser-fixture.js";
 
 /**
  * The comment shapes these browser tests read, mirroring the response shaping
@@ -50,7 +50,7 @@ export type CommentThread = z.infer<typeof threadSchema>;
 
 /** Seed one reply through the same HTTP contract used by agents and Review. */
 export async function createReplyOverApi(
-  fixture: BrowserFixture,
+  fixture: ApiTarget,
   input: {
     readonly artifactId: string;
     readonly body: string;
@@ -77,7 +77,7 @@ export async function createReplyOverApi(
  * before anybody opens the browser.
  */
 export async function createThreadOverApi(
-  fixture: BrowserFixture,
+  fixture: ApiTarget,
   input: {
     readonly anchor?: unknown;
     readonly artifactId: string;
@@ -106,7 +106,7 @@ export async function createThreadOverApi(
 
 /** Read the stored threads for one artifact straight from the API. */
 export async function listThreadsOverApi(
-  fixture: BrowserFixture,
+  fixture: ApiTarget,
   artifactId: string,
   projectId = "prj_default",
 ): Promise<readonly CommentThread[]> {
@@ -120,7 +120,7 @@ export async function listThreadsOverApi(
 
 /** Delete one thread through the same HTTP contract the Review UI uses. */
 export async function deleteThreadOverApi(
-  fixture: BrowserFixture,
+  fixture: ApiTarget,
   input: {
     readonly artifactId: string;
     readonly idempotencyKey: string;

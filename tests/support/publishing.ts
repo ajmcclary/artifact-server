@@ -54,6 +54,12 @@ const createUploadResponseSchema = z.object({
 
 export type CreateUploadResponse = z.infer<typeof createUploadResponseSchema>;
 
+/** The two facts an HTTP helper needs about any server, local or hosted. */
+export interface ApiTarget {
+  readonly installation: Pick<TestInstallation, "apiToken">;
+  readonly server: Pick<RunningTestServer, "baseUrl">;
+}
+
 export interface TestSiteFile {
   readonly bytes: Uint8Array;
   readonly mediaType: string;
@@ -143,8 +149,8 @@ export async function publishVersion(
 }
 
 export async function createStagedUpload(
-  server: RunningTestServer,
-  installation: TestInstallation,
+  server: Pick<RunningTestServer, "baseUrl">,
+  installation: Pick<TestInstallation, "apiToken">,
   entryPath: string,
   files: readonly TestSiteFile[],
   projectId?: string,
@@ -180,7 +186,7 @@ export async function createStagedUpload(
 }
 
 export async function uploadStagedFile(
-  installation: TestInstallation,
+  installation: Pick<TestInstallation, "apiToken">,
   file: CreateUploadResponse["files"][number],
   bytes: Uint8Array,
 ): Promise<Response> {
@@ -198,7 +204,7 @@ function copiedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export async function uploadEveryStagedFile(
-  installation: TestInstallation,
+  installation: Pick<TestInstallation, "apiToken">,
   upload: CreateUploadResponse,
   files: readonly TestSiteFile[],
 ): Promise<readonly Response[]> {
@@ -212,7 +218,7 @@ export async function uploadEveryStagedFile(
 }
 
 export async function commitStagedUpload(
-  installation: TestInstallation,
+  installation: Pick<TestInstallation, "apiToken">,
   upload: CreateUploadResponse,
   idempotencyKey: string,
   target: z.input<typeof commitTargetSchema>,

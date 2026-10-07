@@ -1,5 +1,5 @@
-import type {BrowserFixture} from "./browser-fixture.js";
 import {
+  type ApiTarget,
   commitStagedUpload,
   createStagedUpload,
   type PublishResponse,
@@ -130,8 +130,9 @@ function view(viewId: string, path: string) {
   };
 }
 
-export async function publishScenarioFixture(fixture: BrowserFixture, key: string): Promise<PublishResponse> {
-  const files: TestSiteFile[] = [
+/** Every page, runtime and views document the scenario fixture publishes. */
+export function scenarioFixtureFiles(): TestSiteFile[] {
+  return [
     page("honest.html", "honest"),
     page("silent.html", "silent"),
     page("liar.html", "liar"),
@@ -159,12 +160,20 @@ export async function publishScenarioFixture(fixture: BrowserFixture, key: strin
       path: "artifactserver.views.json",
     },
   ];
+}
+
+export async function publishScenarioFixture(
+  fixture: ApiTarget,
+  key: string,
+  name = "Scenario fixture",
+  files: readonly TestSiteFile[] = scenarioFixtureFiles(),
+): Promise<PublishResponse> {
   const upload = await createStagedUpload(fixture.server, fixture.installation, "honest.html", files);
   await uploadEveryStagedFile(fixture.installation, upload.body, files);
   return (await commitStagedUpload(fixture.installation, upload.body, `scenario-fixture-${key}`, {
     accessSetting: "account_required",
     kind: "new_artifact",
-    name: "Scenario fixture",
+    name,
     tags: [],
   })).body;
 }

@@ -109,6 +109,7 @@ interface EvidenceEnvironment {
 
 interface BrowserEvidence {
   readonly configDigest: string;
+  readonly deployment?: {readonly origin: string; readonly revision: string};
   readonly engine: string;
   readonly environment: EvidenceEnvironment;
   readonly evidenceError: string | null;
@@ -124,14 +125,19 @@ interface BrowserEvidence {
   readonly numTotalTests: number;
   readonly startTime: number;
   readonly success: boolean;
+  /** The ledger deployment this evidence proves, checked by the conformance validator. */
+  readonly target?: string;
   readonly testResults: readonly EvidenceTestResult[];
 }
 
 interface FinalizerInputs {
   readonly configPath: string;
+  /** A deployed run names its deployment, origin and revision; a local run names none. */
+  readonly deployment: {readonly origin: string; readonly revision: string} | null;
   readonly evidencePath: string;
   readonly playwrightExitCode: number;
   readonly reportPath: string;
+  readonly target: string | null;
 }
 
 function readInputs(): FinalizerInputs {
@@ -139,11 +145,15 @@ function readInputs(): FinalizerInputs {
   const parsedExitCode = z.coerce.number().int().safeParse(rawExitCode);
   const playwrightExitCode = parsedExitCode.success ? parsedExitCode.data : 0;
 
+  const origin = process.env["BROWSER_EVIDENCE_ORIGIN"];
+  const revision = process.env["BROWSER_EVIDENCE_REVISION"];
   return {
     configPath: process.env["PLAYWRIGHT_CONFIG_PATH"] ?? defaultConfigPath,
+    deployment: origin === undefined || revision === undefined ? null : {origin, revision},
     evidencePath: process.env["BROWSER_EVIDENCE_PATH"] ?? defaultEvidencePath,
     playwrightExitCode,
     reportPath: process.env["BROWSER_REPORT_PATH"] ?? defaultReportPath,
+    target: process.env["BROWSER_EVIDENCE_TARGET"] ?? null,
   };
 }
 
@@ -330,7 +340,7 @@ async function finalizeEvidence(inputs: FinalizerInputs): Promise<boolean> {
     : buildFailingEvidence(environment, parsed.error);
 
   const effectiveSuccess = evidence.success && inputs.playwrightExitCode === 0;
-  const finalEvidence: BrowserEvidence = {
+  const settled: BrowserEvidence = {
     ...evidence,
     evidenceError:
       parsed.report !== null && inputs.playwrightExitCode !== 0
@@ -338,6 +348,9 @@ async function finalizeEvidence(inputs: FinalizerInputs): Promise<boolean> {
         : evidence.evidenceError,
     success: effectiveSuccess,
   };
+
+  const targeted = inputs.target === null ? settled : {...settled, target: inputs.target};
+  const finalEvidence = inputs.deployment === null ? targeted : {...targeted, deployment: inputs.deployment};
 
   await rotateExistingEvidence(inputs.evidencePath);
   await writeFile(inputs.evidencePath, `${JSON.stringify(finalEvidence)}\n`, "utf8");
