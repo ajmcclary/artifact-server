@@ -1,0 +1,242 @@
+{
+  "$defs": {},
+  "$id": "urn:artifact-server:schema:artifact-server.source-provenance.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "build": {
+      "type": "object",
+      "properties": {
+        "dsRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "lockfileSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "recipe": {
+          "type": "string",
+          "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+          "maxLength": 128
+        },
+        "recipeRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "renderer": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+              "maxLength": 64
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "toolchain": {
+          "type": "object",
+          "patternProperties": {
+            "^[a-z][a-z0-9-]{0,31}$": {
+              "type": "string",
+              "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+              "maxLength": 64
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 8
+        }
+      },
+      "required": [
+        "dsRevision",
+        "lockfileSha256",
+        "recipe",
+        "recipeRevision",
+        "renderer",
+        "toolchain"
+      ],
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "dependencyEdges": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "none"
+          ]
+        },
+        "externalVariability": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+            "maxLength": 200
+          },
+          "maxItems": 32
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "dependencyEdges",
+        "externalVariability"
+      ],
+      "additionalProperties": false
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "artifact-server.source-provenance"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5000
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 5000
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "descriptorId": {
+          "type": "string",
+          "pattern": "^[^\\p{Cc}\\p{Cf}]*$",
+          "maxLength": 128
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "repository": {
+          "type": "string",
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "commit",
+        "descriptorId",
+        "dirty",
+        "repository"
+      ],
+      "additionalProperties": false
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "number",
+          "enum": [
+            1
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "build",
+    "coverage",
+    "format",
+    "inputs",
+    "outputs",
+    "source",
+    "version"
+  ],
+  "additionalProperties": false
+}

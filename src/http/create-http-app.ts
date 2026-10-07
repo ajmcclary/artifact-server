@@ -18,6 +18,7 @@ import {
 } from "../application/application-runtime.js";
 import {ActivityService} from "../application/activity.js";
 import {PrincipalActivityService} from "../application/principal-activity.js";
+import {createVersionDocuments} from "../application/version-documents.js";
 import {
   type CreateStagedUploadCommand,
   type CommitStagedUploadResult,
@@ -637,6 +638,9 @@ export function createHttpApp(
   const gitHistory = dependencies.gitHistory ?? fixedGitHistoryCapabilityReader(
     disabledGitHistoryCapability(),
   );
+  // Views and provenance outcomes are pure functions of immutable version
+  // bytes, so one reader per process serves every request and the MCP adapter.
+  const versionDocuments = createVersionDocuments({blobs: dependencies.blobs});
   const mcp = createMcpHttpAdapter({
     allowedHostnames: mcpAllowedHostnames,
     allowedOriginHostnames: mcpAllowedHostnames,
@@ -2040,6 +2044,44 @@ export function createHttpApp(
         context.req.raw.headers,
         dependencies,
       );
+    },
+  );
+
+  app.get(
+    "/api/v1/artifacts/:artifactId/versions/:versionId/views",
+    async (context) => {
+      const saved = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.getVersion({
+            artifactId: context.req.param("artifactId"),
+            principal: context.get("principal"),
+            projectId: requestedProjectId(context),
+            versionId: context.req.param("versionId"),
+          })
+        ),
+      );
+      return context.json(await versionDocuments.views(saved));
+    },
+  );
+
+  app.get(
+    "/api/v1/artifacts/:artifactId/versions/:versionId/provenance",
+    async (context) => {
+      const saved = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.getVersion({
+            artifactId: context.req.param("artifactId"),
+            principal: context.get("principal"),
+            projectId: requestedProjectId(context),
+            versionId: context.req.param("versionId"),
+          })
+        ),
+      );
+      return context.json(await versionDocuments.provenance(saved));
     },
   );
 
