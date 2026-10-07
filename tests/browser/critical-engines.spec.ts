@@ -26,7 +26,8 @@ import {
   workspaceViewport,
 } from "./browser-fixture.js";
 import {fetchVersion} from "../support/runtime-harness.js";
-import {isolatedReviewFrame, openInspectorTab, openReview, returnToGallery, reviewHref} from "./review-helpers.js";
+import {isolatedReviewFrame, openInspectorTab, openReview, previewFrame, returnToGallery, reviewHref} from "./review-helpers.js";
+import {publishScenarioFixture} from "./scenario-fixture.js";
 import {
   createThreadOverApi,
   deleteThreadOverApi,
@@ -299,6 +300,19 @@ test.describe("critical engine review paths @critical", () => {
         .toHaveCount(0, {timeout: 25_000});
     } finally {
       await secondContext.close();
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("DSN-008-B DSN-009-B: a designed scenario restores inside the opaque-origin sandbox @critical", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const published = await publishScenarioFixture(fixture, "critical-dsn-008");
+      await fixture.page.goto(`${reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "honest.html", versionId: published.version.id})}&scenario=5`);
+      await expect(previewFrame(fixture.page).getByRole("heading", {name: "Validation"})).toBeVisible();
+      await expect(fixture.page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
+    } finally {
       await stopBrowserFixture(fixture);
     }
   });

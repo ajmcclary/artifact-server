@@ -39,7 +39,7 @@ import {
 } from "../review-comments.tsx";
 import {reviewAnchorSchema, type UnanchoredReason} from "@/review-frame/protocol";
 import {threadPlacement} from "./scenario-model.ts";
-import {useScenarioSession} from "./scenario-session.tsx";
+import {useScenarioSession, type ScenarioSession} from "./scenario-session.tsx";
 
 type CommentView = "all" | "open" | "resolved" | "sent";
 
@@ -116,6 +116,7 @@ export function CommentsTab({
   versionId,
 }: CommentsTabProps) {
   const unanchored = new Set(session.unanchoredIds);
+  const scenario = useScenarioSession();
   const [agents, setAgents] = useState<readonly AgentPresence[] | null>(null);
   const [agentError, setAgentError] = useState<Error | null>(null);
   const [view, setView] = useState<CommentView>("open");
@@ -316,6 +317,7 @@ export function CommentsTab({
               resolveBundle={() => Promise.resolve(bundleOfThreads([thread]))}
             />
           ) : null}
+          <OpenScenarioAction scenario={scenario} thread={thread} />
           {thread.path === null ? null : (
             <IconButton
               ariaLabel="Show in the artifact"
@@ -425,6 +427,30 @@ function ThreadBody({dispatch, replyCount, selected, thread, unanchored, unancho
   );
 }
 
+/**
+ * A selected thread made in another designed scenario offers to open it. It
+ * sits with the thread's actions, not inside the selectable thread body.
+ */
+function OpenScenarioAction({scenario, thread}: {
+  readonly scenario: ScenarioSession;
+  readonly thread: ReviewThread;
+}) {
+  const parsed = reviewAnchorSchema.safeParse(thread.anchor);
+  const anchor = parsed.success ? parsed.data : null;
+  const placement = threadPlacement(anchor, scenario.view, scenario.onScreen.scenarioId);
+  if (placement.kind !== "other-scenario") return null;
+  return (
+    <Button
+      onClick={() => scenario.requestScenario(placement.scenarioId, anchor?.view?.state.parameters ?? {})}
+      outline
+      size="xs"
+      variant="secondary"
+    >
+      {`Open scenario ${placement.scenarioId}`}
+    </Button>
+  );
+}
+
 /** Where a thread is on the page now: placed, in another scenario, or unavailable. */
 function ThreadLocation({thread, unanchored, unanchoredReason}: {
   readonly thread: ReviewThread;
@@ -444,19 +470,7 @@ function ThreadLocation({thread, unanchored, unanchoredReason}: {
     return <p style={metaStyle}>{`Location unavailable: scenario ${wanted} couldn't be opened`}</p>;
   }
   if (placement.kind === "other-scenario") {
-    return (
-      <p style={metaStyle}>
-        {`In scenario ${placement.scenarioId} · ${placement.scenarioLabel}`}{" "}
-        <Button
-          onClick={() => scenario.requestScenario(placement.scenarioId, anchor?.view?.state.parameters ?? {})}
-          outline
-          size="xs"
-          variant="secondary"
-        >
-          Open
-        </Button>
-      </p>
-    );
+    return <p style={metaStyle}>{`In scenario ${placement.scenarioId} · ${placement.scenarioLabel}`}</p>;
   }
   if (unanchoredReason !== null) return <p style={metaStyle}>Location unavailable: the region isn't on the page</p>;
   return unanchored ? <p style={metaStyle}>Location unavailable in this version</p> : null;
