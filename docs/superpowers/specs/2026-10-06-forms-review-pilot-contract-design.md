@@ -1,7 +1,7 @@
 # Forms review pilot contract — design
 
 Date: 2026-10-06
-Status: approved (written spec reviewed 2026-10-06)
+Status: approved (written spec reviewed 2026-10-06); amended while planning (see "Amendments made while planning")
 Source: [HANDOFF.md](../../../HANDOFF.md) Task 2, [PLAN.md](../../../PLAN.md) steps 2–4, [NEXT.md](../../../NEXT.md) "Second milestone: Forms review prerequisites", and the brainstorming conversation of 2026-10-06.
 
 ## Intent
@@ -134,12 +134,18 @@ Both sides ship in one web build, and each already drops message types it does n
 
 | Direction | Message | Fields |
 |---|---|---|
-| Page → frame | `as-page-hello` | `pageVersion` (highest supported), `capabilities` (`restore`, `capture`) |
+| Page → frame | `as-page-hello` | `pageVersion` (highest supported), `capabilities` (`restore`, `capture`, `regions`) |
 | Frame → page | `as-page-welcome` | `pageVersion` (the lower of the two sides' highest versions) |
 | Frame → page | `as-page-restore` | `requestId`, `props` |
 | Page → frame | `as-page-restored` | `requestId`, `ok`, `reason` (optional), `state` |
 | Frame → page | `as-page-capture` | `requestId`, `props` (names) |
 | Page → frame | `as-page-state` | `requestId` (or `null` when the page reports a change on its own), `state` |
+| Frame → page | `as-page-region-at` | `requestId`, `selector` (the annotation target's selector, at most 1,024 characters) |
+| Page → frame | `as-page-region` | `requestId`, `region` (`{regionId, label, tagName}` or `null`), `reason` (`none` or `ambiguous`, when `region` is `null`) |
+| Frame → page | `as-page-region-find` | `requestId`, `regionIds` (1–64) |
+| Page → frame | `as-page-regions` | `requestId`, `results` (one `{regionId, count, tagName}` per requested id; `tagName` is `null` unless `count` is 1) |
+
+The review frame cannot read the page's document: the page runs in an opaque-origin sandbox. Region capture and region lookup are therefore answered by the adapter. The frame never trusts a region answer it did not ask for, matched by `requestId`.
 
 `state` is `{pageVersion, scenarioId, props, viewport: {width, height}, theme, locale, direction}`:
 
@@ -158,6 +164,7 @@ The adapter lives once, in canonical `arkcase/project/dc-support/support.js`, an
 - **Hello.** After boot, it sends `as-page-hello` to `window.parent`. It listens only for messages whose `source` is `window.parent`.
 - **Restore.** It applies `props` with `runtime.setProps(rootName, props)`. It answers `ok: true` only after `data-review-scenario` equals the requested scenario and two animation frames have passed. After 5 seconds it answers `ok: false, reason: "timeout"`.
 - **Capture.** It answers from the live page.
+- **Regions.** `as-page-region-at` resolves the selector to one element, takes its nearest ancestor-or-self carrying `data-review-region`, and answers `null` with `ambiguous` when that id occurs more than once, or `none` when there is no region. `as-page-region-find` counts each id.
 - **Changes.** It reports every change of `data-review-scenario` as an unprompted `as-page-state`, at most once per animation frame.
 - **Failure handling.** It never throws into the page; adapter errors become `ok: false, reason: "adapter-error"`.
 
@@ -196,6 +203,8 @@ The Form Builder must boot in the annotate sandbox using only scripts in its own
   "viewFormat": 1,
   "viewId": "arkcase-forms/form-builder",
   "scenarioId": "5",
+  "scenarioLabel": "Inspector · Validation",
+  "sourceRef": {"path": "arkcase-forms/project/Prototype - Form Builder.dc.html"},
   "regionId": "inspector.validation.min-length",
   "regionLabel": "Minimum length",
   "state": {
@@ -207,6 +216,7 @@ The Form Builder must boot in the annotate sandbox using only scripts in its own
 ```
 
 - `regionId` and `regionLabel` are optional.
+- `scenarioLabel` and `sourceRef` are copied from the version's validated views document at capture time. The anchor is then self-describing, so a bridge can render the location without fetching the views document.
 - `regionLabel` comes from the region element's accessible name or text. It is capped at 64 characters, with bidirectional overrides, zero-width characters and control characters removed.
 - The whole anchor stays within 16,384 bytes. The server keeps treating it as opaque.
 
@@ -221,7 +231,7 @@ The Form Builder must boot in the annotate sandbox using only scripts in its own
 When a reviewer submits an annotation, the review frame requests capture and then builds the anchor:
 
 1. `scenarioId` is recorded only if the page reported it and it is in the version's `valid` views document. Otherwise the anchor has no `view` block at all.
-2. The region is the target element's nearest ancestor-or-self carrying `data-review-region`. It is recorded only if exactly one element in the document carries that id.
+2. The frame asks the adapter with `as-page-region-at`, passing the annotation target's selector. The region is recorded only when the adapter answers with one, which means its id is unique in the document.
 3. `state.parameters` maps captured props back to declared parameter values. Undeclared props are not stored.
 
 ### Reopen
@@ -231,7 +241,7 @@ For each thread on the open version, in order:
 1. **No `view` block:** it is placed exactly as today.
 2. **A different scenario from the one on screen:** it is listed as "In scenario 5 · Open" without a marker. This is not a failure.
 3. **Opening it:** the host restores its scenario and parameters. If restore is `failed` or `unsupported`, the thread shows **"Location unavailable: scenario 5 couldn't be opened"** with the reason.
-4. **With a `regionId`:** the frame looks for that id among the page's region markers. If exactly one element matches, the marker is placed there; the stored `point`, if any, is applied relative to that element. If none or several match, the thread shows **"Location unavailable: the region isn't on the page"**. The CSS selector is not tried: it was captured in this same state, so falling back to it would be a guess.
+4. **With a `regionId`:** the frame asks the adapter with `as-page-region-find`. If exactly one element carries the id, the frame hands Plannotator an anchor whose selector is `<tagName>[data-review-region="<regionId>"]`, keeping the stored `point`. Artifact Server's Plannotator patch lists `data-review-region` as a stable identity attribute, so that selector needs no text-snapshot match. If none or several match, the thread shows **"Location unavailable: the region isn't on the page"**. The CSS selector is not tried: it was captured in this same state, so falling back to it would be a guess.
 5. **Without a `regionId`:** the existing selector and text-quote placement runs inside the restored scenario.
 
 `as-review-unanchored` gains an optional `reasons` map from thread id to `region-missing` or `region-ambiguous`. Restore failures are already known to the host from `as-review-view-state`.
@@ -240,16 +250,15 @@ Threads stay on their original version. The existing "follow a comment to its ve
 
 ## 5. Agent context
 
-Comment bundles delivered through the agent bridge gain, per comment, a `location` object with:
+A comment whose anchor carries a valid `view` block gains one location line in its rendered bundle item, between the place header and the body:
 
-- `viewId`
-- `scenarioId` and its label
-- `regionId` and `regionLabel`
-- `sourceRef`
+```
+   at {scenarioLabel} (scenario {scenarioId}) · region {regionId} "{regionLabel}" · source {sourceRef.path}[:{line}]
+```
 
-Each bundle's version also gets a `provenance` summary: outcome, repository, commit, `dirty`, and coverage.
+Parts whose fields are absent are left out. The line is built from the anchor alone, so the native bridge (`@plannotator/agent-bridge`, patched here) and the server's mailbox render produce it identically without extra requests, and BRP-002-B keeps pinning the two renders byte for byte. Every part passes through the existing bridge sanitizer (bidirectional overrides and zero-width characters stripped). The recorded shape in `project/spec/agent-dispatch-spec.md` gains the line.
 
-Every text field passes through the existing bridge sanitizer (bidirectional overrides and zero-width characters stripped). The MCP read of a version returns its views outcome and provenance outcome. The adapters in `integrations/` render the new fields as follow-up input only, per the bridge protocol.
+Provenance is not rendered into bundles. Agents read it, together with the views outcome, through the new MCP tool `artifact_version_context` or the API, and reviewers see it in the Details panel. The adapters in `integrations/` render bundles as follow-up input only, per the bridge protocol.
 
 ## 6. Source provenance
 
@@ -312,7 +321,7 @@ New ledger entries in `project/spec/conformance.yml`, all `status: specified`, w
 | DSN-008 | The review restores a designed scenario through the frame and page adapter, and reports the outcome. | The picker and a `scenario=5` link open the Validation inspector; capture returns scenario, props, viewport, theme, locale and direction; markers are located after restore. | A page without an adapter is `unsupported`; a slow page times out; a page confirming a different scenario is `failed`; messages from another window, oversized fields, and scenarios not in the views document are ignored; an adapter error never breaks the page. |
 | DSN-009 | Anchors carry view, scenario and region identity and reopen to that state, or say "Location unavailable". | An annotation on the minimum-length field in scenario 5 reopens there with its marker on that field; a thread from another scenario is listed with an Open action; anchors without `view` behave as before. | A failed restore and a missing or duplicated region each show "Location unavailable" with the reason and place no marker; an invalid `view` block is treated as absent; replacing an anchor through the web client and MCP preserves unknown fields; a region label carrying bidi or zero-width characters is stored stripped. |
 | DSN-010 | A version's source-provenance record is validated against its manifest, cached per version, and reported with its coverage. | A matching record is `verified` with declared-file coverage; `dirty` and partial dependency edges are reported as such; the three identities are shown separately. | Changed or missing outputs yield `mismatch` with the paths; malformed, escaping, over-limit or credential-bearing records yield `invalid`; an absent record is `not-recorded`; none of these affects review or annotation. |
-| DSN-011 | Agents receive the view location and provenance with each comment. | A bundle for the scenario 5 comment carries view, scenario, region, `sourceRef` and the provenance summary; MCP returns both outcomes for the version. | Hostile region labels and source paths reach the agent sanitized; a version without views or provenance yields a bundle without those fields and an inspection-only handoff. |
+| DSN-011 | Agents receive each comment's view location in its bundle, and a version's views and provenance outcomes through MCP. | A bundle for the scenario 5 comment carries its location line in both the native and mailbox renders; `artifact_version_context` returns both outcomes for the version. | Hostile region labels, scenario labels and source paths reach the agent sanitized; a comment without a valid `view` block renders exactly as before; a version without views or provenance reports `absent` and `not-recorded`. |
 
 Dependencies:
 
@@ -344,3 +353,13 @@ Both sides can start once this spec is approved: Design's `check:source` needs o
 - The candidate publication model (NEXT.md, "Candidate publication and acceptance"). The pilot does not need it.
 - The server fetching authored source on an agent's behalf.
 - Any change to the annotate frame's content security policy, to the preview source or index, or to DSN-003/DSN-004.
+
+## Amendments made while planning
+
+Recorded on 2026-10-06 while writing the implementation plans, after reading the code the spec builds on. Each keeps the approved intent.
+
+1. **Region capture and lookup go through the adapter.** The review frame cannot read the page's document because the page runs in an opaque-origin sandbox. The page channel gains `as-page-region-at`/`as-page-region` and `as-page-region-find`/`as-page-regions`, and hello advertises a `regions` capability.
+2. **Plannotator treats `data-review-region` as a stable identity.** Its anchor resolver demands a text-snapshot match for any selector that is not an id or a listed `data-*` identity. Artifact Server's existing `@plannotator/ui` patch adds `data-review-region` to both identity lists, so a region selector resolves by uniqueness alone.
+3. **The anchor's `view` block also stores `scenarioLabel` and `sourceRef`.** Native bridges read only the thread's anchor, so the location they render must be in it.
+4. **Bundles carry a location line, not a provenance summary.** A provenance summary would make every native bridge fetch one more document per version, adding a failure mode to code that must fail open. Agents read provenance through `artifact_version_context` instead. DSN-011 is reworded to match.
+
