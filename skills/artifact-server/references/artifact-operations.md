@@ -43,6 +43,7 @@ The CLI owns local file inspection, symlink policy, media types, SHA-256 hashing
 - `artifact_open`: obtain `reviewUrl` for exact full-screen Review and `browserUrl` for raw immutable content for the current or an exact saved version. Prefer `reviewUrl` for human handoff. Never describe `browserUrl` as Review.
 - `artifact_manifest_page`: page one exact version's manifest, at most 100 path-ordered entries per call, when `artifact_get` with `projection: "compact"` reports only `entryCount`. Follow `nextCursor` until it is null.
 - `artifact_version_list`: list immutable versions newest first.
+- `artifact_version_context`: read one version's validated views document and source-provenance record with their outcomes. Use it to find the designed scenarios behind a comment and the authored repository and commit behind the published bytes.
 - `artifact_diff`: compare two exact version IDs.
 
 Prefer `artifact_get` over several discovery calls when the artifact ID is already known.

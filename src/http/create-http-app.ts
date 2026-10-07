@@ -651,6 +651,7 @@ export function createHttpApp(
     linkedArtifacts: dependencies.linkedArtifacts === true,
     mode: dependencies.trustedApplicationOrigin === null ? "local" : "remote",
     oauthResource: dependencies.mcpOAuthResource?.resource ?? null,
+    versionDocuments,
   });
   const inviteLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
   const boundedJsonBody = bodyLimit({

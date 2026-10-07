@@ -17,6 +17,7 @@ import {
   runApplicationEffect,
 } from "../application/application-runtime.js";
 import {AuthenticationService} from "../application/authentication.js";
+import type {VersionDocuments} from "../application/version-documents.js";
 import {
   isArtifactServerFailure,
 } from "../core/errors.js";
@@ -65,6 +66,8 @@ export interface McpHttpAdapterDependencies {
   readonly linkedArtifacts?: boolean;
   readonly mode: ArtifactMcpServerDependencies["mode"];
   readonly oauthResource: string | null;
+  /** Per-version views and provenance outcomes shared with the HTTP routes. */
+  readonly versionDocuments: VersionDocuments;
 }
 
 /** Stateless MCP HTTP adapter mounted by every Artifact Server deployment. */
@@ -92,6 +95,7 @@ export function createMcpHttpAdapter(
         mode: dependencies.mode,
         requestId: requestIdFrom(context.requestInfo),
         requestMetadata: requestMetadataFrom(context),
+        versionDocuments: dependencies.versionDocuments,
       };
       return createArtifactMcpServer(
         serverDependencies,

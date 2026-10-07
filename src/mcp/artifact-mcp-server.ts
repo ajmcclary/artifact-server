@@ -27,6 +27,7 @@ import {
 } from "../application/artifact-comments.js";
 import {ArtifactManagementService} from "../application/artifact-management.js";
 import {CompareArtifactService} from "../application/compare-artifact.js";
+import type {VersionDocuments} from "../application/version-documents.js";
 import {ContentAccessService} from "../application/content-access.js";
 import {
   LinkedArtifactService,
@@ -403,6 +404,8 @@ export interface ArtifactMcpServerDependencies {
     era: "legacy" | "modern";
     protocolVersion: string;
   };
+  /** Per-version views and provenance outcomes shared with the HTTP routes. */
+  readonly versionDocuments: VersionDocuments;
 }
 
 function runMcpApplicationEffect<A, E>(
@@ -1186,6 +1189,45 @@ export function createArtifactMcpServer(
           publisherPrincipalId: version.publisherPrincipalId,
         })),
       };
+    }),
+  );
+
+  registerNudgedTool(
+    "artifact_version_context",
+    {
+      title: "Read a version's review views and source provenance",
+      description:
+        "Return the validated views document (the designed scenarios a review can open) and the validated source-provenance record for one exact immutable version. Views are valid, absent, unsupported-version or invalid; provenance is verified, mismatch, invalid, unsupported-version or not-recorded, with coverage when verified or mismatched. Provenance names the authored repository and commit behind the published bytes; it is a pointer, not an access grant.",
+      inputSchema: z.object({
+        artifactId: artifactIdSchema,
+        projectId: optionalProjectIdSchema,
+        versionId: versionIdSchema,
+      }).strict(),
+      outputSchema: z.object({
+        artifactId: z.string(),
+        provenance: z.object({status: z.string()}).loose(),
+        versionId: z.string(),
+        views: z.object({status: z.string()}).loose(),
+      }).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    async ({artifactId, projectId, versionId}) => toolResult(async () => {
+      const saved = await runMcpApplicationEffect(
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.getVersion({
+            artifactId,
+            principal: identity.principal,
+            projectId,
+            versionId,
+          })
+        ),
+      );
+      const [views, provenance] = await Promise.all([
+        dependencies.versionDocuments.views(saved),
+        dependencies.versionDocuments.provenance(saved),
+      ]);
+      return {artifactId, provenance, versionId, views};
     }),
   );
 
