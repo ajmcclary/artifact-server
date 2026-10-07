@@ -47,8 +47,9 @@ const adapterScript = `
     current = labels[id] ? id : current;
     render();
     afterPaint(function () {
-      if (requestId === null) post({requestId: null, state: state(), type: "as-page-state"});
-      else post({ok: true, requestId: requestId, state: state(), type: "as-page-restored"});
+      // Like the specified adapter, report every scenario change, then answer the restore.
+      post({requestId: null, state: state(), type: "as-page-state"});
+      if (requestId !== null) post({ok: true, requestId: requestId, state: state(), type: "as-page-restored"});
     });
   }
   window.addEventListener("message", function (event) {

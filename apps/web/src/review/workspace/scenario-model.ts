@@ -132,6 +132,11 @@ export function reduceViewState(
   const declared = confirmed !== null && view.scenarios.some((scenario) => scenario.scenarioId === confirmed)
     ? confirmed
     : null;
+  // A page reports its own scenario changes, including the one a restore
+  // causes, before it answers the restore: track it, but keep waiting.
+  if (message.requestId === null && current.status === "restoring") {
+    return {...current, scenarioId: declared};
+  }
   if (message.outcome === "restored") {
     return {reason: null, requestId: null, scenarioId: declared, status: "ready"};
   }

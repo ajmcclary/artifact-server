@@ -100,3 +100,13 @@ describe("scenario model", () => {
     expect(unknown.scenarioId).toBeNull();
   });
 });
+
+describe("view state while a restore is pending", () => {
+  test("keeps waiting for the restore reply when the page reports a change on its own", () => {
+    const restoring = {reason: null, requestId: "r1", scenarioId: "1", status: "restoring" as const};
+    const reported = reduceViewState(restoring, {outcome: "restored", requestId: null, state: state("5"), type: "as-review-view-state", v: 1}, view);
+    expect(reported).toEqual({reason: null, requestId: "r1", scenarioId: "5", status: "restoring"});
+    const mismatch = reduceViewState(reported, {outcome: "failed", reason: "scenario-mismatch", requestId: "r1", state: state("5"), type: "as-review-view-state", v: 1}, view);
+    expect(mismatch).toEqual({reason: "scenario-mismatch", requestId: null, scenarioId: "5", status: "failed"});
+  });
+});
