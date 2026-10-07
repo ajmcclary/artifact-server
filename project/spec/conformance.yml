@@ -1,6 +1,6 @@
 version: 1
 product: Artifact Server
-updated: "2026-10-06"
+updated: "2026-10-07"
 evidence_root: "../.."
 
 source:
@@ -943,10 +943,15 @@ requirements:
       behavior: {id: PUB-021-B, description: "Stream a staged file slowly but inside the server request deadline, verify it, and commit one version; the production request deadline is derived from the staged write deadline rather than Node's 300-second default."}
       failure: {id: PUB-021-F, description: "A body slower than the server request deadline or cut off mid-stream leaves its slot unverified, is logged as UploadInterrupted with its transport cause and never as StagingStorageFailure, puts no storage token or credential in the log, and the same publish resumes and commits one version."}
     deployments: *all
-    status: implementing
+    status: behavior_verified
     proof_gap: "Local Node HTTP tests shorten the server request deadline to prove a slow body inside it verifies and a slower one is refused and resumes; the ten-minute production deadline is proved by derivation, not by a live run longer than 300 seconds. The external-storage runtime, a reverse proxy in front of the server, and the Cloudflare Worker are not exercised. Exported trace spans still record the raw provider error of a storage failure, including its staging path, so only the log line is redacted."
     depends_on: [PUB-001, PUB-003, PUB-015]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-021-B, PUB-021-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-07T14:48:44.621Z"
 
   - id: PUB-022
     kind: behavior
@@ -957,10 +962,15 @@ requirements:
       behavior: {id: PUB-022-B, description: "Drop a staged file PUT mid-body twice through a fault proxy in front of the real server and observe the client retry it, send no other file twice, and commit exactly one version with the exact bytes."}
       failure: {id: PUB-022-F, description: "A digest mismatch is sent once and reported with its server code and file; a PUT dropped on every attempt stops after the bounded attempts with the file, elapsed seconds, and transport code and no upload URL; an unreachable server is reported as unreachable."}
     deployments: *all
-    status: implementing
+    status: behavior_verified
     proof_gap: "Local tests drive the real client through a loopback fault proxy in front of the local server, with a shortened retry policy except for one check of the production one-second first backoff. The thirty-second ceiling is never reached by the four-attempt production policy and is not timed. Retry-After is not honored, upload concurrency stays at four, and no remote deployment or real slow uplink is exercised."
     depends_on: [PUB-015, PUB-021, CLI-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-022-B, PUB-022-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-07T14:48:44.621Z"
 
   - id: CLI-001
     kind: security
