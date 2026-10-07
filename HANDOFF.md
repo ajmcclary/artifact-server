@@ -4,6 +4,20 @@ Written October 7, 2026, and updated after Design's `bda4eba` report and the eve
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
+## Review never opens in Annotate (October 7, late)
+
+The owner's rule: no screen ever starts in Annotate, because the annotation surface locks the page. Its opaque-origin sandbox and CSP block browser storage, links to the version's other files and scripts from other origins. That is why Forms v16's ScenarioBar and the ArkCase Training site's Get Started, Glossary and Downloads links did nothing. Since `e5159bb`, a page with designed views had been forced onto that surface.
+
+- Every HTML page now opens live in Interactive preview on its content origin: plain, designed, scenario links and comment links alike (`preview-canvas.tsx`: the surface follows the switch).
+- The toolbar pencil is the one switch (`AnnotateToggle`, `annotateToggleLabel` in `review-toolbar.tsx`). On mounts the annotation surface armed; off or Escape returns to the live page. The "Interactive preview | Annotate" segmented control and the in-frame Interact state are gone.
+- Annotate belongs to the exact artifact, version and page it was turned on for (`annotatingScreen` in `review-app.tsx`). Any other screen arrives live.
+- Explicit actions turn it on: Show in the artifact, a comment's Open scenario N, and choosing from the scenario picker, since only the annotation surface can restore a scenario.
+- A reader who may not comment gets the same switch, labeled "Show comments on the page".
+- The two surfaces are keyed iframes. Reusing one element navigated it, adding a history entry that Back replayed inside the frame; a gallery Back hung on it.
+- The spec (`artifact-comments-spec.md` §9, the product spec's Review note) and the CMT-022 ledger text say this now. CMT-022-B gains a journey proving a designed page, a scenario link and a comment link all open live with Annotate off. The hosted Forms suite gains a check that Forms opens live and that its ScenarioBar works there.
+
+The trade-off the owner chose: turning Annotate on reloads the page into the sandbox, so state reached by clicking around is lost unless it is a designed scenario the page can restore.
+
 ## What closed since the October 7 morning deploy
 
 Both changes are deployed: all four server pods run the new digest, Argo reports Synced and Healthy at `7a5fc6c`, and the served `protocol` chunk accepts `high-contrast`.
@@ -76,14 +90,14 @@ The hostile cases stay on the fixture. A local rehearsal (the same spec against 
 
 Design is at `9ef257a`. Nothing here needs a schema re-pin.
 
-1. **Fix the ScenarioBar in the review sandbox.** In an `allow-scripts` opaque-origin `srcdoc` (Design's own `openInReviewSandbox`, with or without its CSP), Forms' ScenarioBar Previous, Next and menu do nothing: the IconButton's `onClick` runs, but `data-review-scenario` and `__fb.state.sc` never change, while `window.__fb.go('6')` works. It works on the static server. A reviewer cannot move through scenarios from inside the page. Artifact Server's hosted suite expects this to fail until it re-pins a fixed Forms.
+1. **Fix the ScenarioBar in the review sandbox.** In an `allow-scripts` opaque-origin `srcdoc` (Design's own `openInReviewSandbox`, with or without its CSP), Forms' ScenarioBar Previous, Next and menu do nothing: the IconButton's `onClick` runs, but `data-review-scenario` and `__fb.state.sc` never change, while `window.__fb.go('6')` works. It works on the static server. Review now opens pages live, where it works, so this only bites while annotating. Artifact Server's hosted suite expects this to fail until it re-pins a fixed Forms.
 2. **Optional: skip the `new Function` probe in the sandbox.** `evalDcLogic` (`support.js:848`) triggers a `script-src eval` violation on every boot in Artifact Server's review before it falls back to inline evaluation. It is harmless, but it is the only violation left in the console.
 3. **The `style-src` refusal** did not reproduce under Chromium or WebKit on hosted v16. If it appears again in Safari, log `securitypolicyviolation` events (document, `effectiveDirective`, `sourceFile`) to name the frame. A top-level `<style>` from an extension is the likely cause.
 4. **The theme on restore is settled:** a restore does not set it, and the thread says which theme the comment was made in. `arkcase:theme` stays Design-private. No Design change is needed.
 
 ## Decided
 
-The review's in-frame toggle starts in Interact mode on every page, including designed pages. Reviewers click around before commenting. Only the preview-mode choice (Interactive preview vs Annotate) was a bug.
+Review never opens a page in Annotate, in any circumstance (owner, October 7). Pages open live in Interactive preview, and the pencil is the one switch to the annotation surface. This replaces the earlier note that designed pages should open on the Annotate surface.
 
 A restore sets the scenario, not the theme (contract amendment 8).
 

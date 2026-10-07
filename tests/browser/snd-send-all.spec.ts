@@ -21,7 +21,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {openAgentControls, openInspectorTab, openReview, previewFrame, reloadReview, selectThread, toast} from "./review-helpers.js";
+import {openAgentControls, openInspectorTab, openReview, previewFrame, reloadReview, selectThread, startAnnotating, toast} from "./review-helpers.js";
 import {createThreadOverApi} from "./comment-api.js";
 
 const fixtureHtml = "<!doctype html><html lang=\"en\"><head><title>Send all fixture</title></head>"
@@ -118,6 +118,7 @@ test.describe("Review send-all", () => {
       await localLogin(fixture);
       const page = fixture.page;
       await openReview(fixture, {artifactId: published.artifact.id, versionId: published.version.id});
+      await startAnnotating(fixture.page);
       await openInspectorTab(page, "Comments");
       await openAgentControls(page);
       await expect(page.getByRole("button", {

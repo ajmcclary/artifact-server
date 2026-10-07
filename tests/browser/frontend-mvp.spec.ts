@@ -24,15 +24,18 @@ import {
   type BrowserFixture,
 } from "./browser-fixture.js";
 import {
+  annotateSwitch,
   artifactFrameSelectors,
   deleteOpenArtifact,
   inspectorTabButton,
+  interactiveFrame,
   isolatedReviewFrame,
   makeVersionCurrent,
   openComparison,
   openInspectorTab,
   openReview,
   openSettings,
+  startAnnotating,
   versionRow,
   waitForSettledPaint,
 } from "./review-helpers.js";
@@ -142,30 +145,24 @@ test.describe("Artifact Server frontend MVP", () => {
       await agentToggle.click();
       await expect(agentToggle).toHaveAttribute("aria-expanded", "false");
       await fixture.page.screenshot({path: "test-results/browser/comments-panel-compact.png"});
+      // The page opens live with Annotate off, and its own controls work.
+      const annotate = annotateSwitch(fixture.page);
+      await expect(annotate).toHaveAttribute("aria-pressed", "false");
+      const live = interactiveFrame(fixture.page);
+      await live.locator("#review-native-action").click();
+      await expect(live.locator("#review-native-action")).toHaveAttribute("data-clicked", "true");
+
+      // Annotate moves to the sandbox; Escape inside the page returns to the live page.
+      await startAnnotating(fixture.page);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
-
-      const annotateMode = fixture.page.getByRole("button", {
-        name: /^Annotate mode:/u,
-      });
-      const interactMode = fixture.page.getByRole("button", {
-        name: /^Interact mode:/u,
-      });
-      await expect(interactMode).toHaveAttribute("aria-pressed", "false");
-      await interactMode.click();
-      await expect(annotateMode).toHaveAttribute("aria-pressed", "true");
       await preview.locator("#review-native-action").focus();
       await fixture.page.keyboard.press("Escape");
-      await expect(interactMode).toHaveAttribute("aria-pressed", "false");
-      await preview.locator("#review-native-action").click();
-      await expect(preview.locator("#review-native-action"))
-        .toHaveAttribute("data-clicked", "true");
-      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toHaveCount(0);
-      await interactMode.click();
-      await expect(annotateMode).toHaveAttribute("aria-pressed", "true");
-
+      await expect(annotate).toHaveAttribute("aria-pressed", "false");
+      await expect(live.getByRole("heading", {name: "Review preview content"})).toBeVisible();
+      await startAnnotating(fixture.page);
 
       await preview.locator("#review-target").hover();
       await expect(preview.locator("[data-plannotator-pinpoint-box]"))
@@ -317,6 +314,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(fixture.page.getByRole("button", {name: "Next artifact"})).toHaveCount(0);
 
       await fixture.page.reload();
+      await startAnnotating(fixture.page);
       await expect(preview.locator("#review-target")).toBeVisible();
       await expect(preview.locator("button[data-plannotator-marker]"))
         .toHaveCount(1);
@@ -411,7 +409,7 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(
         fixture.page.getByRole("heading", {exact: true, name: "Review fixture"}),
       ).toBeVisible();
-      await expect(preview.getByRole("heading", {name: "Review preview content"}))
+      await expect(live.getByRole("heading", {name: "Review preview content"}))
         .toBeVisible();
 
 
@@ -714,6 +712,7 @@ test.describe("Artifact Server frontend MVP", () => {
       });
 
       await fixture.page.goto(target.body.links.review);
+      await startAnnotating(fixture.page);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Historical exact target"}))
@@ -723,12 +722,15 @@ test.describe("Artifact Server frontend MVP", () => {
       expect(new URL(fixture.page.url()).searchParams.get("version"))
         .toBe(target.body.version.id);
       await fixture.page.goto(decoy.body.links.review);
+      await startAnnotating(fixture.page);
       await expect(preview.getByRole("heading", {name: "Catalog decoy content"}))
         .toBeVisible();
       await fixture.page.goBack();
+      await startAnnotating(fixture.page);
       await expect(preview.getByRole("heading", {name: "Historical exact target"}))
         .toBeVisible();
       await fixture.page.reload();
+      await startAnnotating(fixture.page);
       await expect(preview.getByRole("heading", {name: "Historical exact target"}))
         .toBeVisible();
 
@@ -765,6 +767,7 @@ test.describe("Artifact Server frontend MVP", () => {
       const historicalReview = new URL(historical.body.links.review);
       historicalReview.searchParams.set("path", "site/pages/index.html");
       await fixture.page.goto(historicalReview.toString());
+      await startAnnotating(fixture.page);
 
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
@@ -794,6 +797,7 @@ test.describe("Artifact Server frontend MVP", () => {
         idempotencyKey: "frontend-private-multifile-v2",
       });
       await fixture.page.reload();
+      await startAnnotating(fixture.page);
       await assertMultifilePreview();
 
       const resourceUrls = await preview.locator("html").evaluate(() =>

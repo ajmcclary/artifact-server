@@ -317,7 +317,7 @@ export function CommentsTab({
               resolveBundle={() => Promise.resolve(bundleOfThreads([thread]))}
             />
           ) : null}
-          <OpenScenarioAction scenario={scenario} thread={thread} />
+          <OpenScenarioAction onShowInArtifact={onShowInArtifact} scenario={scenario} thread={thread} />
           {thread.path === null ? null : (
             <IconButton
               ariaLabel="Show in the artifact"
@@ -430,8 +430,10 @@ function ThreadBody({dispatch, replyCount, selected, thread, unanchored, unancho
 /**
  * A selected thread made in another designed scenario offers to open it. It
  * sits with the thread's actions, not inside the selectable thread body.
+ * Opening it shows the thread in the artifact, on the annotation surface.
  */
-function OpenScenarioAction({scenario, thread}: {
+function OpenScenarioAction({onShowInArtifact, scenario, thread}: {
+  readonly onShowInArtifact: (threadId: string) => void;
   readonly scenario: ScenarioSession;
   readonly thread: ReviewThread;
 }) {
@@ -441,7 +443,10 @@ function OpenScenarioAction({scenario, thread}: {
   if (placement.kind !== "other-scenario") return null;
   return (
     <Button
-      onClick={() => scenario.requestScenario(placement.scenarioId, anchor?.view?.state.parameters ?? {})}
+      onClick={() => {
+        scenario.requestScenario(placement.scenarioId, anchor?.view?.state.parameters ?? {});
+        onShowInArtifact(thread.id);
+      }}
       outline
       size="xs"
       variant="secondary"

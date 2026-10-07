@@ -26,11 +26,29 @@ import {versionMenuEntries} from "./version-entries.ts";
 import type {VersionListItem} from "./workspace-types.ts";
 
 /** The Annotate / Interact toggle for the in-frame annotation surface. */
+/**
+ * The one switch between the live page and the annotation surface. Review
+ * always opens on the live page; only this switch (or showing a comment in
+ * the artifact) moves a reviewer onto the annotation surface.
+ */
 export interface AnnotateToggle {
   readonly active: boolean;
-  /** Shown only for an HTML preview in annotate view to a reviewer who may comment. */
+  /** Shown for any single HTML page; galleries and other previews have no annotation surface. */
   readonly available: boolean;
   readonly onToggle: () => void;
+  /** A reviewer who may not comment can still show where comments are. */
+  readonly readOnly: boolean;
+}
+
+export function annotateToggleLabel({active, readOnly}: AnnotateToggle): string {
+  if (readOnly) {
+    return active
+      ? "Showing comments on the page. Press Escape to return to the live page."
+      : "Show comments on the page";
+  }
+  return active
+    ? "Annotate: click an element or select text to comment. Press Escape to return to the live page."
+    : "Annotate: comment on the page";
 }
 
 /** The artboard widths that fit the canvas, picked from the More menu. */
@@ -281,7 +299,11 @@ export function ReviewToolbar({
         <Select
           aria-label="Designed scenario"
           fit="selected"
-          onChange={(event) => scenario.requestScenario(event.currentTarget.value)}
+          onChange={(event) => {
+            scenario.requestScenario(event.currentTarget.value);
+            // Only the annotation surface can be told which scenario to show.
+            if (annotate.available && !annotate.active) annotate.onToggle();
+          }}
           options={scenario.view.scenarios.map((option) => ({
             label: `${option.scenarioId} · ${option.label}`,
             value: option.scenarioId,
@@ -356,9 +378,7 @@ export function ReviewToolbar({
         ) : null}
         {annotate.available ? (
           <IconButton
-            ariaLabel={annotate.active
-              ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
-              : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
+            ariaLabel={annotateToggleLabel(annotate)}
             icon="bi-pencil-square"
             onClick={annotate.onToggle}
             pressed={annotate.active}

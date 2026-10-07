@@ -11,7 +11,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {publishPath} from "../../src/client/file-publication-client.js";
 import {writeClaudeDesignFixture, writeDesignCardFixture} from "../support/claude-design-fixture.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
-import {interactiveFrame, openInspectorTab, previewFrame, returnToGallery, searchPreviews} from "./review-helpers.js";
+import {interactiveFrame, previewFrame, returnToGallery, searchPreviews, startAnnotating} from "./review-helpers.js";
 
 for (const annotated of [false, true]) {
   test(`DSN-${annotated ? "002" : "001"}-B: browse a nested ${annotated ? "annotated" : "manifest"} system, run its scripts, search the gallery and open cards and templates in Review`, async ({browser}) => {
@@ -49,14 +49,15 @@ for (const annotated of [false, true]) {
     await page.screenshot({path: `test-results/browser/claude-design-${annotated ? "annotated" : "manifest"}-gallery.png`, fullPage: true});
 
     // A card opens as an exact page whose relative styles and scripts resolve from its original path.
+    // It opens live: Annotate is never on when a page arrives.
     await button.click();
-    await expect(previewFrame(page).getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
-    await page.getByRole("button", {name: "Exit full screen"}).click();
-    await openInspectorTab(page, "Comments");
-    await page.getByRole("group", {name: "HTML preview mode"}).getByRole("button", {name: "Interactive preview"}).click();
     const card = interactiveFrame(page);
+    await expect(card.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
     await card.getByRole("button", {name: "Try button"}).click();
     await expect(card.locator("output")).toHaveText("Clicked");
+    await startAnnotating(page);
+    await expect(previewFrame(page).getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
+    await page.getByRole("button", {name: "Exit full screen"}).click();
     await returnToGallery(page);
     await view.getByRole("link", {name: annotated ? "Open Screen · Artboard · Artboards" : "Open Screen · Template · Templates"}).click();
     await expect(page).toHaveURL(/path=project%2Ftemplates%2FScreen\.dc\.html/u);

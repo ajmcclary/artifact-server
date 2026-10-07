@@ -4,7 +4,7 @@ import {expect, test} from "@playwright/test";
 import {z} from "zod";
 
 import {createThreadOverApi, deleteThreadOverApi, listThreadsOverApi} from "../browser/comment-api.js";
-import {annotationFrame, openInspectorTab, previewFrame, reviewHref} from "../browser/review-helpers.js";
+import {annotationFrame, openInspectorTab, previewFrame, reviewHref, startAnnotating} from "../browser/review-helpers.js";
 import {publishScenarioFixture, scenarioFixtureFiles} from "../browser/scenario-fixture.js";
 import {
   commitStagedUpload,
@@ -233,6 +233,7 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     const {page} = fixture;
     const href = reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "honest.html", versionId: published.version.id});
     await page.goto(href);
+    await startAnnotating(page);
     const picker = page.getByRole("combobox", {name: "Designed scenario"});
     await expect(picker).toHaveValue("1", {timeout: 30_000});
     await picker.selectOption("5");
@@ -240,11 +241,16 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     await expect(page).toHaveURL(/[?&]scenario=5(?:&|$)/u);
 
     await page.goto(`${href}&scenario=5`);
+    await startAnnotating(page);
     await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 30_000});
     await expect(picker).toHaveValue("5");
 
     await page.goto(`${href}&scenario=1`);
-    await previewFrame(page).getByRole("button", {name: "Open Logic"}).click({timeout: 30_000});
+    await startAnnotating(page);
+    // An armed annotation surface takes a click as a comment, so the page moves itself.
+    await previewFrame(page).getByRole("button", {name: "Open Logic"}).evaluate((button) => {
+      if (button instanceof HTMLButtonElement) button.onclick?.(new PointerEvent("click"));
+    }, undefined, {timeout: 30_000});
     await expect(previewFrame(page).getByRole("heading", {name: "Logic"})).toBeVisible();
     await expect(picker).toHaveValue("6");
     await expect(annotationFrame(page).locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
@@ -254,17 +260,21 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     const {page} = fixture;
     const href = (path: string) => `${reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path, versionId: published.version.id})}&scenario=5`;
     await page.goto(href("no-adapter.html"));
+    await startAnnotating(page);
     await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: this page can't be told which scenario to show."})).toBeVisible({timeout: 30_000});
     await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
     await page.goto(href("silent.html"));
+    await startAnnotating(page);
     await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page didn't confirm it in time."})).toBeVisible({timeout: 30_000});
     await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
     await page.goto(href("liar.html"));
+    await startAnnotating(page);
     await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page showed a different scenario."})).toBeVisible({timeout: 30_000});
 
     await page.goto(reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "overlapping.html", versionId: published.version.id}));
+    await startAnnotating(page);
     const picker = page.getByRole("combobox", {name: "Designed scenario"});
     await expect(picker).toHaveValue("1", {timeout: 30_000});
     await picker.evaluate((select) => {
@@ -284,8 +294,8 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     const ids = {artifactId: published.artifact.id, versionId: published.version.id};
     const href = reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"});
     await page.goto(`${href}&scenario=5`);
+    await startAnnotating(page);
     await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 30_000});
-    await page.getByRole("button", {name: /^Interact mode:/u}).click();
     await previewFrame(page).getByText("Minimum length").click();
     await annotationFrame(page).getByPlaceholder("Add a comment...").fill("Hosted qualification: raise the minimum length to 4.");
     await annotationFrame(page).getByRole("button", {name: "Save"}).click();
@@ -298,6 +308,7 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     });
 
     await page.goto(href);
+    await startAnnotating(page);
     await openInspectorTab(page, "Comments");
     const thread = page.getByRole("article").filter({hasText: "Hosted qualification: raise the minimum length to 4."});
     await expect(thread.getByText("In scenario 5 · Inspector · Validation")).toBeVisible({timeout: 30_000});
@@ -323,10 +334,12 @@ test.describe.serial("Forms review pilot on a hosted deployment", () => {
     createdThreads.push(liar.id);
 
     await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"})}&scenario=5`);
+    await startAnnotating(page);
     await openInspectorTab(page, "Comments");
     await Promise.all(regions.map(([, body]) =>
       expect(page.getByRole("article").filter({hasText: body}).getByText("Location unavailable: the region isn't on the page")).toBeVisible({timeout: 30_000})));
     await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "liar.html"})}&scenario=5`);
+    await startAnnotating(page);
     await openInspectorTab(page, "Comments");
     await expect(page.getByRole("article").filter({hasText: "Hosted qualification: liar."}).getByText("Location unavailable: scenario 5 couldn't be opened")).toBeVisible({timeout: 30_000});
   });

@@ -29,6 +29,7 @@ import {
   openReview,
   openSettings,
   previewFrame,
+  startAnnotating,
   type SettingsSection,
 } from "./review-helpers.js";
 
@@ -70,6 +71,7 @@ test.describe("CSP-clean production build", () => {
 
         await localLogin(fixture);
         await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
+        await startAnnotating(fixture.page);
         await expect(previewFrame(fixture.page).getByRole("heading", {name: "CSP walk fixture"})).toBeVisible();
         await expect(fixture.page.locator("html")).toHaveAttribute("data-theme-mode", mode);
         // The DS shell adopts its injected styles as constructable sheets; none reach a <style>.
@@ -199,6 +201,7 @@ test("CSP-clean: the artifact review workspace raises no policy violation in any
     ): Promise<void> => {
       await page.emulateMedia(media);
       await openReview(fixture, {artifactId: first.body.artifact.id});
+      await startAnnotating(fixture.page);
       await expect(previewFrame(page).getByRole("heading", {name: "CSP workspace content"})).toBeVisible();
       const toolbar = page.getByRole("toolbar", {exact: true, name: "Artifact"});
       await toolbar.getByRole("button", {exact: true, name: "Share this version"}).click();

@@ -1,18 +1,24 @@
 import {expect, test} from "@playwright/test";
 
 import {publishNew} from "../support/publishing.js";
+import {createThreadOverApi} from "./comment-api.js";
 import {
   localLogin,
   startBrowserFixture,
   stopBrowserFixture,
 } from "./browser-fixture.js";
 import {
+  annotateSwitch,
   annotationFrame,
   interactiveFrame,
   openInspectorTab,
   isolatedReviewFrame,
   openReview,
+  previewFrame,
+  reviewHref,
+  startAnnotating,
 } from "./review-helpers.js";
+import {publishScenarioFixture} from "./scenario-fixture.js";
 
 const hostileArtifact = `<!doctype html>
 <html lang="en">
@@ -97,6 +103,7 @@ test.describe("Review sandbox isolation", () => {
       });
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
+      await startAnnotating(fixture.page);
 
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const sandboxElement = reviewFrame.locator("iframe");
@@ -142,15 +149,9 @@ test.describe("Review sandbox isolation", () => {
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
 
       const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
-      await openInspectorTab(fixture.page, "Comments");
-      const commentsView = fixture.page.getByRole("complementary", {name: "Comments", exact: true});
-      const modes = commentsView.getByRole("group", {name: "HTML preview mode"});
-      await expect(preview.getByRole("group", {name: "HTML preview mode"})).toHaveCount(0);
-      await expect(modes.getByRole("button", {exact: true, name: "Interactive preview"}))
-        .toHaveAttribute("aria-pressed", "true");
-      await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
-        .getByRole("button", {name: /Annotate mode:|Interact mode:/u}))
-        .toHaveCount(0);
+      // One switch, off on arrival: no second preview-mode control anywhere.
+      await expect(fixture.page.getByRole("group", {name: "HTML preview mode"})).toHaveCount(0);
+      await expect(annotateSwitch(fixture.page)).toHaveAttribute("aria-pressed", "false");
       const interactiveElement = preview.locator('iframe[title^="Interactive preview: "]');
       await expect(interactiveElement).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
       await expect(interactiveElement).toHaveAttribute(
@@ -159,15 +160,13 @@ test.describe("Review sandbox isolation", () => {
       );
       await expect(interactiveFrame(fixture.page).locator("#interactive-result"))
         .toHaveText("true:7:blocked");
+      await expect(preview.locator('iframe[src="/review-frame"]')).toHaveCount(0);
 
-      await modes.getByRole("button", {exact: true, name: "Annotate"}).click();
-      await expect(modes.getByRole("button", {exact: true, name: "Annotate"}))
-        .toHaveAttribute("aria-pressed", "true");
-      await expect(fixture.page.getByRole("toolbar", {exact: true, name: "Artifact"})
-        .getByRole("button", {name: /Interact mode:/u}))
-        .toBeVisible();
+      await startAnnotating(fixture.page);
       await expect(annotationFrame(fixture.page).locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
-      await modes.getByRole("button", {exact: true, name: "Interactive preview"}).click();
+      await expect(interactiveElement).toHaveCount(0);
+      await annotateSwitch(fixture.page).click();
+      await expect(annotateSwitch(fixture.page)).toHaveAttribute("aria-pressed", "false");
       await expect(interactiveFrame(fixture.page).locator("#interactive-result"))
         .toHaveText("true:7:blocked");
     } finally {
@@ -202,9 +201,7 @@ test.describe("Review sandbox isolation", () => {
       const preview = fixture.page.getByRole("region", {name: "Artifact preview"});
       await openInspectorTab(fixture.page, "Comments");
       const commentsView = fixture.page.getByRole("complementary", {name: "Comments", exact: true});
-      await expect(commentsView.getByRole("group", {name: "HTML preview mode"})
-        .getByRole("button", {exact: true, name: "Interactive preview"}))
-        .toHaveAttribute("aria-pressed", "true");
+      await expect(annotateSwitch(fixture.page)).toHaveAttribute("aria-pressed", "false");
       await expect(commentsView).toContainText("Preview changes may be lost");
       await expect(preview.locator('iframe[title^="Interactive preview: "]')).toHaveAttribute(
         "src",
@@ -216,6 +213,44 @@ test.describe("Review sandbox isolation", () => {
         .toHaveText("blocked");
       expect(await fixture.page.request.get(published.body.links.version).then((response) => response.status()))
         .not.toBe(200);
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
+
+  test("CMT-022-B: a designed page, a scenario link and a comment link all open live with Annotate off", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      await localLogin(fixture);
+      const published = await publishScenarioFixture(fixture, "cmt-022-never-annotate");
+      const thread = await createThreadOverApi(fixture, {
+        anchor: {htmlAnchor: {selector: "#root", tagName: "main"}, originalText: ""},
+        artifactId: published.artifact.id,
+        body: "A comment linked by URL.",
+        idempotencyKey: "cmt-022-never-annotate-thread",
+        path: "honest.html",
+        versionId: published.version.id,
+      });
+      const href = reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "honest.html", versionId: published.version.id});
+      const {page} = fixture;
+      const opensLive = async (url: string): Promise<void> => {
+        await page.goto(url);
+        await expect(interactiveFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
+        await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+        await expect(page.locator('iframe[src="/review-frame"]')).toHaveCount(0);
+      };
+      await opensLive(href);
+      await opensLive(`${href}&scenario=5`);
+      await opensLive(`${href}&thread=${thread.id}`);
+      // The live page's own controls work.
+      await interactiveFrame(page).getByRole("button", {name: "Open Logic"}).click();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Logic"})).toBeVisible();
+
+      await startAnnotating(page);
+      await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1, {timeout: 10_000});
+      await page.keyboard.press("Escape");
+      await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }

@@ -2,7 +2,7 @@ import {expect, test} from "@playwright/test";
 
 import {publishNew} from "../support/publishing.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture} from "./browser-fixture.js";
-import {annotationFrame, openReview, previewFrame} from "./review-helpers.js";
+import {annotationFrame, openReview, previewFrame, startAnnotating} from "./review-helpers.js";
 
 const themeModes = [
   {media: {colorScheme: "light", contrast: "no-preference"}, theme: "default"},
@@ -26,6 +26,7 @@ test("CMT-015-B CMT-015-F: ArkCase theme tokens reach the isolated review frame 
       artifactId: published.body.artifact.id,
       versionId: published.body.version.id,
     });
+    await startAnnotating(fixture.page);
     await expect(previewFrame(page).getByRole("heading", {name: "Frame theme target"})).toBeVisible();
 
     const frameRoot = annotationFrame(page).locator("html");

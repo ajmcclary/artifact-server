@@ -57,6 +57,21 @@ export function previewFrame(page: Page): FrameLocator {
   return annotationFrame(page).frameLocator("iframe");
 }
 
+/** The one Annotate switch, off on every fresh load; read-only reviewers see it as "Show comments". */
+export function annotateSwitch(page: Page): Locator {
+  return page.getByRole("button", {name: /^(?:Annotate:|Show(?:ing)? comments on the page)/u});
+}
+
+/**
+ * Turns Annotate on. Review always opens on the live Interactive preview, so a
+ * spec that places or inspects comments on the page asks for the annotation surface.
+ */
+export async function startAnnotating(page: Page): Promise<void> {
+  const toggle = annotateSwitch(page);
+  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+}
+
 /** The interactive preview: the version's own content origin, outside the review frame. */
 export function interactiveFrame(page: Page): FrameLocator {
   return page.frameLocator(artifactFrameSelectors[1]);

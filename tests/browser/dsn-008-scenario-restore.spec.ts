@@ -2,7 +2,7 @@ import {expect, test} from "@playwright/test";
 
 import {createThreadOverApi} from "./comment-api.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
-import {annotationFrame, previewFrame, reviewHref} from "./review-helpers.js";
+import {annotateSwitch, annotationFrame, interactiveFrame, previewFrame, reviewHref, startAnnotating} from "./review-helpers.js";
 import {publishScenarioFixture} from "./scenario-fixture.js";
 
 let fixture: BrowserFixture;
@@ -26,20 +26,27 @@ test("DSN-008-B: the picker and a scenario link open a designed scenario that th
   const {page} = fixture;
   await page.goto(scenarioUrl(published, "honest.html"));
   const picker = page.getByRole("combobox", {name: "Designed scenario"});
-  await expect(picker).toHaveValue("1");
-  await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
-
+  await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+  // Choosing a scenario asks for the annotation surface, the only one that can be told which to show.
   await picker.selectOption("5");
+  await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "true");
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
   await expect(page).toHaveURL(/[?&]scenario=5(?:&|$)/u);
 
   await page.goto(scenarioUrl(published, "honest.html", "5"));
+  await startAnnotating(page);
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
   await expect(picker).toHaveValue("5");
 
-  // A scenario changed from inside the page moves the picker with it.
+  // A scenario the page changes itself moves the picker with it. An armed
+  // annotation surface takes a click as a comment, so the page moves itself.
   await page.goto(scenarioUrl(published, "honest.html", "1"));
-  await previewFrame(page).getByRole("button", {name: "Open Logic"}).click();
+  await startAnnotating(page);
+  await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
+  await expect(picker).toHaveValue("1");
+  await previewFrame(page).getByRole("button", {name: "Open Logic"}).evaluate((button) => {
+    if (button instanceof HTMLButtonElement) button.onclick?.(new PointerEvent("click"));
+  });
   await expect(previewFrame(page).getByRole("heading", {name: "Logic"})).toBeVisible();
   await expect(picker).toHaveValue("6");
   await expect(annotationFrame(page).locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
@@ -50,14 +57,17 @@ test("DSN-008-F: a page without an adapter, a silent page and a lying page never
   const {page} = fixture;
 
   await page.goto(scenarioUrl(published, "no-adapter.html", "5"));
+  await startAnnotating(page);
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: this page can't be told which scenario to show."})).toBeVisible({timeout: 10_000});
   await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
   await page.goto(scenarioUrl(published, "silent.html", "5"));
+  await startAnnotating(page);
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page didn't confirm it in time."})).toBeVisible({timeout: 15_000});
   await expect(previewFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
 
   await page.goto(scenarioUrl(published, "liar.html", "5"));
+  await startAnnotating(page);
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario 5: the page showed a different scenario."})).toBeVisible({timeout: 10_000});
 });
 
@@ -73,6 +83,7 @@ test("a page with views but no adapter behaves as before, with no scenario contr
     versionId: published.version.id,
   });
   await page.goto(scenarioUrl(published, "no-adapter.html"));
+  await startAnnotating(page);
   // Comments are placed once the adapter wait ends, so the outcome is settled here.
   await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1, {timeout: 10_000});
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveCount(0);
@@ -83,6 +94,7 @@ test("DSN-008-F: a restore superseded by a later one is not reported as a failur
   const published = await publishScenarioFixture(fixture, "dsn-008-f-overlap");
   const {page} = fixture;
   await page.goto(scenarioUrl(published, "overlapping.html"));
+  await startAnnotating(page);
   const picker = page.getByRole("combobox", {name: "Designed scenario"});
   await expect(picker).toHaveValue("1");
   // Two requests in quick succession, as a scripted input plus change event produces.
@@ -102,6 +114,7 @@ test("DSN-008-B: back and forward open the scenario their history entry names", 
   const published = await publishScenarioFixture(fixture, "dsn-008-b-history");
   const {page} = fixture;
   await page.goto(scenarioUrl(published, "honest.html", "5"));
+  await startAnnotating(page);
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
   // A later entry that names another scenario, as a shared link opened in place would.
   await page.evaluate(() => {
@@ -117,7 +130,7 @@ test("DSN-008-B: back and forward open the scenario their history entry names", 
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("6");
 });
 
-test("DSN-008-B: a designed artboard opens in Annotate on a fresh load, even when its first views read fails", async () => {
+test("DSN-008-B: a designed artboard opens live, and its linked scenario opens once Annotate is on, even when its first views read fails", async () => {
   const published = await publishScenarioFixture(fixture, "dsn-008-b-annotate");
   const {page} = fixture;
   let failed = 0;
@@ -130,9 +143,13 @@ test("DSN-008-B: a designed artboard opens in Annotate on a fresh load, even whe
     await route.continue();
   });
   await page.goto(scenarioUrl(published, "cold.dc.html", "5"));
+  // Never Annotate on arrival, designed or not.
+  await expect(interactiveFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
+  await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator('iframe[src="/review-frame"]')).toHaveCount(0);
+  await startAnnotating(page);
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 15_000});
   expect(failed).toBe(1);
-  // The scenario is on screen in the annotation frame, and no Interactive preview was ever chosen.
   await expect(page.locator('iframe[title^="Interactive preview"]')).toHaveCount(0);
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
 });
@@ -146,6 +163,7 @@ test("DSN-008-B: a cold page whose runtime arrives after the hello window still 
     await route.continue();
   });
   await page.goto(scenarioUrl(published, "cold.dc.html", "5"));
+  await startAnnotating(page);
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 20_000});
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
 });
@@ -154,6 +172,7 @@ test("DSN-008-B: an adapter that says hello after the window still receives the 
   const published = await publishScenarioFixture(fixture, "dsn-008-b-late");
   const {page} = fixture;
   await page.goto(scenarioUrl(published, "late.html", "5"));
+  await startAnnotating(page);
   await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible({timeout: 15_000});
   await expect(page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
   await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);

@@ -472,8 +472,14 @@ function ProjectReview({
   const [focusCommentsOpen, setFocusCommentsOpen] = useState(false);
   const [focusControlsCollapsed, setFocusControlsCollapsed] = useState(false);
   const [agentControlsOpen, setAgentControlsOpen] = useState(false);
-  const [htmlAnnotateModeActive, setHtmlAnnotateModeActive] = useState(false);
-  const [htmlViewerMode, setHtmlViewerMode] = useState<"annotate" | "interactive">("annotate");
+  // Review never opens in Annotate. Annotate belongs to the exact screen it was
+  // turned on for, so every artifact, version and page arrives on its live page.
+  const annotateScreen = `${selectedArtifactId ?? ""}\n${selectedVersionId ?? ""}\n${selectedPath ?? ""}`;
+  const [annotatingScreen, setAnnotatingScreen] = useState<string | null>(null);
+  const htmlAnnotateModeActive = annotatingScreen === annotateScreen;
+  const setHtmlAnnotateModeActive = useCallback((active: boolean): void => {
+    setAnnotatingScreen(active ? annotateScreen : null);
+  }, [annotateScreen]);
   // The artboard width lives in the toolbar's More menu; the presets offered are those the canvas has room for.
   const canvasSlotRef = useRef<HTMLDivElement | null>(null);
   const {width: canvasSlotWidth} = useElementSize(canvasSlotRef);
@@ -881,7 +887,7 @@ function ProjectReview({
           {close: () => setComparisonView(null), open: comparisonView !== null},
           {
             close: () => setHtmlAnnotateModeActive(false),
-            open: htmlViewerMode === "annotate" && htmlAnnotateModeActive,
+            open: htmlAnnotateModeActive,
           },
           {close: exitFocusMode, open: focusMode},
         ]);
@@ -938,7 +944,6 @@ function ProjectReview({
     focusCommentsOpen,
     focusMode,
     htmlAnnotateModeActive,
-    htmlViewerMode,
     selectArtifact,
     selectedIndex,
     selectedVersionId,
@@ -1065,8 +1070,9 @@ function ProjectReview({
     && !catalog.filtered;
   const annotateToggle = {
     active: htmlAnnotateModeActive,
-    available: previewKind === "html" && galleryCanvas.gallery === null && canComment && htmlViewerMode === "annotate",
-    onToggle: () => setHtmlAnnotateModeActive((active) => !active),
+    available: previewKind === "html" && galleryCanvas.gallery === null,
+    onToggle: () => setHtmlAnnotateModeActive(!htmlAnnotateModeActive),
+    readOnly: !canComment,
   };
   const comparisonOpen = comparisonView !== null && details !== null;
   const sharePopover = (placement: "focus" | "toolbar") => (
@@ -1084,6 +1090,8 @@ function ProjectReview({
   );
   const showThreadInArtifact = (threadId: string): void => {
     comments.selectThread(threadId);
+    // Asking to see a comment on the page is the reviewer choosing the annotation surface.
+    if (previewKind === "html" && galleryCanvas.gallery === null) setHtmlAnnotateModeActive(true);
     setThreadFocusRevision((revision) => revision + 1);
   };
   const commentsComposer = (
@@ -1359,7 +1367,6 @@ function ProjectReview({
                   onSelectAnnotation={selectAnnotation}
                   onSubmitAnnotation={submitAnnotation}
                   onUnanchoredChange={comments.updateUnanchored}
-                  onViewModeChange={setHtmlViewerMode}
                   opening={opening}
                   projectId={projectId}
                   readOnly={!canComment}

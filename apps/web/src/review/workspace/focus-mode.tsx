@@ -2,7 +2,7 @@ import {useEffect, type CSSProperties, type ReactNode, type RefObject} from "rea
 
 import {Button, CountBadge, IconButton, SlideOver, Toolbar} from "@/arkcase";
 
-import type {AnnotateToggle} from "./review-toolbar.tsx";
+import {type AnnotateToggle, annotateToggleLabel} from "./review-toolbar.tsx";
 
 export interface FocusViewerControlsProps {
   /** Returns to the version's design gallery while one of its pages is open. */
@@ -43,15 +43,13 @@ export function FocusAnnotationControl({annotate, collapsed}: {readonly annotate
   return <span hidden={collapsed} style={{display: collapsed ? "none" : "inline-flex"}}>
   {annotate.available ? (
     <IconButton
-      ariaLabel={annotate.active ? "Annotate mode" : "Interact mode"}
+      ariaLabel={annotateToggleLabel(annotate)}
       icon="bi-pencil-square"
       onClick={annotate.onToggle}
       pressed={annotate.active}
       size="xs"
       style={focusButtonStyle}
-      title={annotate.active
-        ? "Annotate mode: click an element or select text to comment. Press Escape to interact."
-        : "Interact mode: links and controls work normally. Select text or turn annotation mode back on to comment."}
+      title={annotateToggleLabel(annotate)}
       variant="navy"
     />
   ) : null}

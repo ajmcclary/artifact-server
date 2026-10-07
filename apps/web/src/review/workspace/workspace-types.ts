@@ -17,8 +17,6 @@ export type CatalogRefreshState = "complete" | "idle" | "loading";
 export type CatalogSort = "comments" | "newest";
 export type InspectorTab = "comments" | "details" | "files" | "versions";
 export type ComparisonTab = "activity" | "compare";
-export type HtmlViewerMode = "annotate" | "interactive";
-
 /** The inspector's views in rail order. */
 export const inspectorTabs = [
   "comments",

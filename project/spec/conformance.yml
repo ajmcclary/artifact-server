@@ -3531,11 +3531,11 @@ requirements:
 
   - id: CMT-022
     kind: security
-    behavior: Script-dependent HTML can run in an isolated Interactive preview of the exact selected version, with a reversible switch to the opaque-origin annotation viewer and no annotation bridge in Interactive preview.
+    behavior: Every HTML page opens live in an isolated Interactive preview of the exact selected version and never in Annotate, with one reversible Annotate switch to the opaque-origin annotation viewer and no annotation bridge in Interactive preview.
     owner: artifact-comments
     source: {file: artifact-comments-spec.md, anchor: interactive-html-preview}
     acceptance:
-      behavior: {id: CMT-022-B, description: "Open public current and private HTML with an external script and runtime code generation, observe a working Interactive preview on the exact version's content origin, and switch to Annotate and back."}
+      behavior: {id: CMT-022-B, description: "Open public current and private HTML with an external script and runtime code generation, a plain page, a designed page, a scenario link and a comment link, observe each open live in Interactive preview on the exact version's content origin with Annotate off, and switch to Annotate and back."}
       failure: {id: CMT-022-F, description: "Interactive artifact code cannot access the application document or comment API, private and historical previews cannot bypass the expiring exact-version lease, and Interactive preview has no annotation-bridge authority."}
     deployments: *all
     status: behavior_verified

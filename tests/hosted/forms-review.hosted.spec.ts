@@ -2,7 +2,7 @@ import {type BrowserContext, type ConsoleMessage, expect, type Page, test} from 
 import {z} from "zod";
 
 import {deleteThreadOverApi, listThreadsOverApi} from "../browser/comment-api.js";
-import {annotationFrame, openInspectorTab, previewFrame, reviewHref} from "../browser/review-helpers.js";
+import {annotateSwitch, annotationFrame, interactiveFrame, openInspectorTab, previewFrame, reviewHref, startAnnotating} from "../browser/review-helpers.js";
 import type {PublishResponse} from "../support/publishing.js";
 import {
   deleteHostedArtifact,
@@ -147,15 +147,30 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     expect(provenance.record?.source.dirty).toBe(false);
   });
 
+  test("CMT-022-B: Forms opens live with Annotate off, and its own ScenarioBar works there", async () => {
+    const {page} = fixture;
+    await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+    await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator('iframe[src="/review-frame"]')).toHaveCount(0);
+    const live = interactiveFrame(page);
+    const shown = live.locator("[data-review-scenario]");
+    await expect(shown).toHaveAttribute("data-review-scenario", /.+/u, {timeout: 60_000});
+    const before = await shown.getAttribute("data-review-scenario");
+    await live.getByRole("region", {name: "Scenario review"}).getByRole("button", {name: "Next scenario"}).click();
+    await expect(shown).not.toHaveAttribute("data-review-scenario", before ?? "", {timeout: 5_000});
+  });
+
   test("DSN-008-B: on Forms, the picker and a scenario link open the scenario the page confirms", async () => {
     const {page} = fixture;
     await page.goto(href());
+    await startAnnotating(page);
     await expect(picker(page)).toHaveValue(view.defaultScenarioId, {timeout: 60_000});
     await picker(page).selectOption(forms.scenarioId);
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId);
     await expect(page).toHaveURL(new RegExp(`[?&]scenario=${forms.scenarioId}(?:&|$)`, "u"));
 
     await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+    await startAnnotating(page);
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
     await expect(picker(page)).toHaveValue(forms.scenarioId);
   });
@@ -169,6 +184,7 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     test.fail(true, "Forms v16 ScenarioBar is inert in an opaque-origin sandbox (Design defect)");
     const {page} = fixture;
     await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+    await startAnnotating(page);
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
     await previewFrame(page).getByRole("region", {name: "Scenario review"}).getByRole("button", {name: "Next scenario"}).click();
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.nextScenarioId, {timeout: 5_000});
@@ -178,6 +194,7 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
   test("DSN-008-B: rapid picker changes on Forms end on the last choice without a failure", async () => {
     const {page} = fixture;
     await page.goto(href());
+    await startAnnotating(page);
     await expect(picker(page)).toHaveValue(view.defaultScenarioId, {timeout: 60_000});
     await picker(page).evaluate((select, ids) => {
       if (!(select instanceof HTMLSelectElement)) throw new Error("The scenario picker is not a select.");
@@ -197,6 +214,7 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
       await watchPolicyViolations(context, violations);
       const page = await context.newPage();
       await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+      await startAnnotating(page);
       await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
       await expect(picker(page)).toHaveValue(forms.scenarioId);
       await expect(page.getByRole("status").filter({hasText: "Couldn't open scenario"})).toHaveCount(0);
@@ -210,9 +228,9 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     // The reviewer's own contrast setting: Forms follows it in the review sandbox.
     await page.emulateMedia({contrast: "more"});
     await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+    await startAnnotating(page);
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
     await expect(previewFrame(page).locator("html")).toHaveAttribute("data-theme", "high-contrast");
-    await page.getByRole("button", {name: /^Interact mode:/u}).click();
     await previewFrame(page).locator(`[data-review-region="${forms.regionId}"]`).getByLabel(forms.regionLabel, {exact: true}).click();
     const body = `Hosted qualification ${fixture.runTag}: ${forms.regionLabel} is hard to read here.`;
     await annotationFrame(page).getByPlaceholder("Add a comment...").fill(body);
@@ -236,6 +254,7 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     // A restore sets the scenario, not the theme (contract amendment 8).
     await page.emulateMedia({contrast: "no-preference"});
     await page.goto(`${href()}&thread=${created?.id ?? ""}`);
+    await startAnnotating(page);
     await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
     await expect(previewFrame(page).locator("html")).not.toHaveAttribute("data-theme", "high-contrast");
     await openInspectorTab(page, "Comments");

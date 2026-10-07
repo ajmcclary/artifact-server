@@ -9,7 +9,7 @@ import {
   startTestServer,
 } from "../support/runtime-harness.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
-import {previewFrame} from "./review-helpers.js";
+import {interactiveFrame} from "./review-helpers.js";
 
 const outputDirectory = path.resolve("project/evidence/frontend-mvp");
 const retiredCaptures = [
@@ -75,7 +75,7 @@ try {
 
   const workspace = `${server.baseUrl}/review?project=prj_default&artifact=${first.body.artifact.id}`;
   await page.goto(`${workspace}&theme=default`);
-  await previewFrame(page).getByText("Version two").waitFor();
+  await interactiveFrame(page).getByText("Version two").waitFor();
   await capture(page, "workspace-light.png");
 
   await page.keyboard.press("ControlOrMeta+k");
@@ -85,11 +85,11 @@ try {
   await page.keyboard.press("Escape");
 
   await page.goto(`${workspace}&theme=dark`);
-  await previewFrame(page).getByText("Version two").waitFor();
+  await interactiveFrame(page).getByText("Version two").waitFor();
   await capture(page, "workspace-dark.png");
 
   await page.goto(`${workspace}&theme=high-contrast`);
-  await previewFrame(page).getByText("Version two").waitFor();
+  await interactiveFrame(page).getByText("Version two").waitFor();
   await capture(page, "workspace-high-contrast.png");
 
   await page.goto(`${server.baseUrl}/review/projects?project=prj_default&theme=default`);
@@ -98,7 +98,7 @@ try {
 
   await page.setViewportSize({height: 844, width: 390});
   await page.goto(`${workspace}&theme=default`);
-  await previewFrame(page).getByText("Version two").waitFor();
+  await interactiveFrame(page).getByText("Version two").waitFor();
   await capture(page, "narrow-workspace.png");
 
   await page.setViewportSize({height: 900, width: 1440});

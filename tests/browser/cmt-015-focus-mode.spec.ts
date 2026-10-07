@@ -6,6 +6,7 @@ import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture
 import {createThreadOverApi} from "./comment-api.js";
 import {
   annotationFrame,
+  interactiveFrame,
   artifactFrameSelectors,
   openReview,
   previewFrame,
@@ -46,7 +47,7 @@ test.describe("Artifact review full screen", () => {
       const viewport = page.viewportSize();
       if (viewport === null) throw new Error("The page has no viewport.");
       const fullCanvas = [0, 0, viewport.width, viewport.height];
-      await expect(previewFrame(page).getByRole("heading", {name: "Focus fixture content"})).toBeVisible();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Focus fixture content"})).toBeVisible();
 
       await expect(page.getByRole("toolbar", {exact: true, name: "Artifact"}).getByRole("button", {name: "Focus — expand the workspace"}))
         .toHaveAttribute("aria-keyshortcuts", "F");
@@ -64,7 +65,7 @@ test.describe("Artifact review full screen", () => {
       const buttonStyles = await controls.getByRole("button").evaluateAll((buttons) => buttons.filter((element) => element.getAttribute("aria-label") !== "Exit full screen").map((element) => ({background: getComputedStyle(element).backgroundColor, border: getComputedStyle(element).borderWidth})));
       expect(buttonStyles.every((style) => style.background === "rgba(0, 0, 0, 0)" && style.border === "0px")).toBe(true);
       const bar = page.locator("[data-preview-bar]");
-      const annotation = bar.getByRole("button", {name: "Interact mode", exact: true});
+      const annotation = bar.getByRole("button", {name: "Annotate: comment on the page", exact: true});
       const version = bar.getByText("v1", {exact: true});
       expect((await version.boundingBox())?.x).toBeLessThan((await annotation.boundingBox())?.x ?? 0);
       expect((await annotation.boundingBox())?.x).toBeLessThan((await share.boundingBox())?.x ?? 0);
@@ -88,7 +89,7 @@ test.describe("Artifact review full screen", () => {
         const nav = document.querySelector('nav, [data-ac-left-nav]');
         return nav === null || nav.closest("[inert]") !== null;
       })).toBe(true);
-      await expect(previewFrame(page).getByRole("heading", {name: "Focus fixture content"})).toBeVisible();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Focus fixture content"})).toBeVisible();
 
       // Comments open beside the canvas with ] and leave with ] or Escape.
       const focusComments = page.getByRole("complementary", {name: "Comments"});
@@ -100,10 +101,9 @@ test.describe("Artifact review full screen", () => {
       await expect(focusComments).toHaveCount(0);
 
       // Commenting in full screen keeps the canvas uninterrupted until asked.
-      const interact = page.locator("[data-preview-bar]").getByRole("button", {exact: true, name: "Interact mode"});
-      await expect(interact).toHaveAttribute("aria-pressed", "false");
-      await interact.click();
-      const annotate = page.locator("[data-preview-bar]").getByRole("button", {exact: true, name: "Annotate mode"});
+      const annotate = page.locator("[data-preview-bar]").getByRole("button", {name: /^Annotate:/u});
+      await expect(annotate).toHaveAttribute("aria-pressed", "false");
+      await annotate.click();
       await expect(annotate).toHaveAttribute("aria-pressed", "true");
       await previewFrame(page).locator("#focus-target").click();
       const composer = annotationFrame(page).getByPlaceholder("Add a comment...");
@@ -132,7 +132,7 @@ test.describe("Artifact review full screen", () => {
       await expect(restore).toHaveAttribute("aria-keyshortcuts", "Meta+\\ Control+\\");
       await expect.poll(() => canvasBox(page)).toEqual(fullCanvas);
       await page.keyboard.press("Escape");
-      await expect(page.getByRole("button", {exact: true, includeHidden: true, name: "Interact mode"}))
+      await expect(page.getByRole("button", {includeHidden: true, name: /^Annotate:/u}))
         .toHaveAttribute("aria-pressed", "false");
       await restore.click();
       await expect(controls).toBeVisible();

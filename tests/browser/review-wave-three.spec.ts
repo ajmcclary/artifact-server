@@ -12,6 +12,7 @@ import {
   openInspectorTab,
   previewFrame,
   selectThread,
+  startAnnotating,
   versionRow,
   versionsList,
 } from "./review-helpers.js";
@@ -39,6 +40,7 @@ test.describe("Artifact Server Review wave three", () => {
         first.body.artifact.id,
         first.body.version.id,
       ));
+      await startAnnotating(fixture.page);
       const preview = previewFrame(fixture.page);
       await expect(preview.getByRole("heading", {name: "Historical review stays open"}))
         .toBeVisible();
@@ -201,6 +203,7 @@ test.describe("Artifact Server Review wave three", () => {
         selected.body.artifact.id,
         selected.body.version.id,
       ));
+      await startAnnotating(fixture.page);
       const preview = previewFrame(fixture.page);
       await expect(preview.getByRole("heading", {name: "Selected preview remains"}))
         .toBeVisible();

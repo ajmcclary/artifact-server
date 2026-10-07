@@ -16,10 +16,10 @@ import {
   annotationFrame,
   expectGalleryReturn,
   interactiveFrame,
-  openInspectorTab,
   previewFrame,
   returnToGallery,
   searchPreviews,
+  startAnnotating,
 } from "./review-helpers.js";
 
 const privateArtifact = {kind: "new_artifact", accessSetting: "account_required", tags: []} as const;
@@ -168,15 +168,10 @@ test("DSN-004-B: open design previews from the native gallery as exact Review pa
     const interactive = interactiveFrame(page);
     await interactive.getByRole("button", {name: "Try button"}).click();
     await expect(interactive.locator("output")).toHaveText("Clicked");
-    // The reversible mode switch sits with the workspace comment controls.
+    // The one Annotate switch sits in the workspace toolbar, off until asked.
     await page.getByRole("button", {name: "Exit full screen"}).click();
     await expectGalleryReturn(page, true);
-    await openInspectorTab(page, "Comments");
-    const mode = page.getByRole("group", {name: "HTML preview mode"});
-    await expect(mode.getByRole("button", {name: "Interactive preview"})).toHaveAttribute("aria-pressed", "true");
-    await mode.getByRole("button", {name: "Annotate"}).click();
-    await page.getByRole("toolbar", {exact: true, name: "Artifact"})
-      .getByRole("button", {name: /^Interact mode:/u}).click();
+    await startAnnotating(page);
     const preview = previewFrame(page);
     await expect(preview.getByRole("button", {name: "Try button"})).toHaveCSS("background-color", "rgb(20, 90, 60)");
     await preview.getByRole("heading", {name: "Examiner app"}).click();

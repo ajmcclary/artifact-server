@@ -18,7 +18,6 @@ import {
   FieldGrid,
   onThemeChange,
   PreviewFrame,
-  SegmentedControl,
   SurfaceState,
 } from "@/arkcase";
 import {formatBytes} from "@/lib/presentation";
@@ -40,7 +39,6 @@ import {
   viewAnchorFrom,
 } from "./scenario-model.ts";
 import {useScenarioSession} from "./scenario-session.tsx";
-import type {HtmlViewerMode} from "./workspace-types.ts";
 
 interface PreviewDocument {
   readonly baseHref: string;
@@ -88,7 +86,7 @@ export interface PreviewCanvasProps {
   readonly galleryNotice: string | null;
   readonly hasDetails: boolean;
   readonly isCurrentVersion: boolean;
-  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  /** The Comments view shows the preview's notes, outside the artifact canvas. */
   readonly modeControlsTarget: HTMLElement | null;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onOpenRawArtifact: () => void;
@@ -98,7 +96,6 @@ export interface PreviewCanvasProps {
     threadIds: readonly string[],
     reasons: Readonly<Record<string, UnanchoredReason>>,
   ) => void;
-  readonly onViewModeChange: (mode: HtmlViewerMode) => void;
   readonly opening: boolean;
   readonly projectId: string;
   readonly readOnly: boolean;
@@ -196,7 +193,6 @@ export function PreviewCanvas({
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
-  onViewModeChange,
   opening,
   projectId,
   readOnly,
@@ -288,7 +284,6 @@ export function PreviewCanvas({
             onSelectAnnotation={onSelectAnnotation}
             onSubmitAnnotation={onSubmitAnnotation}
             onUnanchoredChange={onUnanchoredChange}
-            onViewModeChange={onViewModeChange}
             opening={opening}
             projectId={projectId}
             readOnly={readOnly}
@@ -318,7 +313,6 @@ function ReviewPreview({
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
-  onViewModeChange,
   opening,
   projectId,
   readOnly,
@@ -333,7 +327,7 @@ function ReviewPreview({
   readonly artifactId: string;
   readonly artifactName: string;
   readonly isCurrentVersion: boolean;
-  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  /** The Comments view shows the preview's notes, outside the artifact canvas. */
   readonly modeControlsTarget: HTMLElement | null;
   readonly onOpenRawArtifact: () => void;
   readonly onAnnotateModeChange: (active: boolean) => void;
@@ -347,7 +341,6 @@ function ReviewPreview({
     threadIds: readonly string[],
     reasons: Readonly<Record<string, UnanchoredReason>>,
   ) => void;
-  readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly opening: boolean;
   readonly projectId: string;
   readonly readOnly: boolean;
@@ -418,7 +411,6 @@ function ReviewPreview({
         onSelectAnnotation={onSelectAnnotation}
         onSubmitAnnotation={onSubmitAnnotation}
         onUnanchoredChange={onUnanchoredChange}
-        onViewModeChange={onViewModeChange}
         projectId={projectId}
         readOnly={readOnly}
         selectedThreadId={selectedThreadId}
@@ -521,7 +513,6 @@ function HtmlPreview({
   onSelectAnnotation,
   onSubmitAnnotation,
   onUnanchoredChange,
-  onViewModeChange,
   projectId,
   readOnly,
   selectedThreadId,
@@ -535,7 +526,7 @@ function HtmlPreview({
   readonly artifactId: string;
   readonly entry: PreviewEntry;
   readonly isCurrentVersion: boolean;
-  /** The Comments view owns the preview mode controls, outside the artifact canvas. */
+  /** The Comments view shows the preview's notes, outside the artifact canvas. */
   readonly modeControlsTarget: HTMLElement | null;
   readonly onAnnotateModeChange: (active: boolean) => void;
   readonly onSelectAnnotation: (threadId: string | null) => void;
@@ -548,7 +539,6 @@ function HtmlPreview({
     threadIds: readonly string[],
     reasons: Readonly<Record<string, UnanchoredReason>>,
   ) => void;
-  readonly onViewModeChange: (mode: "annotate" | "interactive") => void;
   readonly projectId: string;
   readonly readOnly: boolean;
   readonly selectedThreadId: string | null;
@@ -557,7 +547,6 @@ function HtmlPreview({
   readonly version: ArtifactVersion;
 }) {
   const [previewDocument, setPreviewDocument] = useState<PreviewDocument | null>(null);
-  const [chosenMode, setChosenMode] = useState<"annotate" | "interactive" | null>(null);
   const [frameReady, setFrameReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -628,22 +617,16 @@ function HtmlPreview({
     };
   }, [accessSetting, artifactId, entry.path, isCurrentVersion, projectId, version.links.version, version.version.id]);
 
-  // A producer that declared views for this page made it reviewable in Annotate,
-  // so a page that may prefer Interactive waits for its views before choosing.
-  const deciding = chosenMode === null && previewDocument?.prefersInteractive === true && !scenario.loaded;
-  const mode = chosenMode ?? (previewDocument?.prefersInteractive === true && scenario.view === null
-    ? "interactive"
-    : "annotate");
+  // The page is always live on its own content origin. The annotation surface's
+  // opaque-origin sandbox blocks storage, other-file navigation and external
+  // scripts, so it is shown only while the reviewer has turned Annotate on.
+  const mode = annotateModeActive ? "annotate" : "interactive";
 
   useEffect(() => {
-    if (!deciding) onViewModeChange(mode);
-  }, [deciding, mode, onViewModeChange]);
-
-  useEffect(() => {
-    if (mode !== "interactive" || deciding) return;
+    if (mode !== "interactive") return;
     initialisedRef.current = false;
     setFrameReady(false);
-  }, [deciding, mode]);
+  }, [mode]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -798,7 +781,7 @@ function HtmlPreview({
     });
   }, [postToFrame, selectedThreadId, threadFocusRevision]);
 
-  if (loading || deciding) {
+  if (loading) {
     return (
       <PreviewState
         description={`Reading ${entry.path} from the selected version.`}
@@ -821,35 +804,23 @@ function HtmlPreview({
   const modeNote = mode === "interactive"
     ? previewDocument?.temporarySession === true
       ? "Preview changes may be lost. Open raw artifact to keep work."
-      : previewDocument?.prefersInteractive === true
-        ? "Annotate may not render this page's external scripts."
-        : "Use Annotate to place comments on the page."
+      : null
     : previewDocument?.prefersInteractive === true
-      ? "This page's external scripts are blocked here. Switch to Interactive preview if blank."
+      ? "This page's external scripts are blocked while annotating. Turn Annotate off to use the live page."
       : null;
   return (
     <>
-      {modeControlsTarget === null ? null : createPortal(
+      {modeControlsTarget === null || modeNote === null ? null : createPortal(
         <div style={modeBarStyle}>
-          <SegmentedControl
-            label="HTML preview mode"
-            mode="toggle"
-            onChange={(id) => {
-              if (id === "annotate" || id === "interactive") setChosenMode(id);
-            }}
-            options={[
-              {id: "interactive", label: "Interactive preview"},
-              {id: "annotate", label: "Annotate"},
-            ]}
-            size="sm"
-            value={mode}
-          />
-          {modeNote === null ? null : <span style={modeNoteStyle}>{modeNote}</span>}
+          <span style={modeNoteStyle}>{modeNote}</span>
         </div>, modeControlsTarget,
       )}
       <div style={htmlPreviewStyle}>
+        {/* Distinct keys mount a fresh frame per surface: reusing one element would
+            navigate it, adding a history entry that Back would replay inside the frame. */}
         {mode === "interactive" && previewDocument !== null ? (
           <iframe
+            key="interactive"
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin"
             src={previewDocument.interactiveUrl}
@@ -858,6 +829,7 @@ function HtmlPreview({
           />
         ) : (
           <iframe
+            key="annotate"
             ref={frameRef}
             src="/review-frame"
             style={frameElementStyle}

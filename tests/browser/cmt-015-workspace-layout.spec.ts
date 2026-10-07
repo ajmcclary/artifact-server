@@ -14,7 +14,7 @@ import {
   stopBrowserFixture,
   workspaceViewport,
 } from "./browser-fixture.js";
-import {inspectorTabButton, openInspectorTab, openMoreMenu, openReview, pageCrumb, previewFrame, versionCrumb} from "./review-helpers.js";
+import {inspectorTabButton, interactiveFrame, openInspectorTab, openMoreMenu, openReview, pageCrumb, previewFrame, startAnnotating, versionCrumb} from "./review-helpers.js";
 
 function catalogPanel(page: Page) {
   return page.locator('[data-panel="artifact-catalog"]');
@@ -228,7 +228,7 @@ test.describe("Artifact review workspace layout", () => {
       const page = fixture.page;
       const toolbar = page.getByRole("toolbar", {exact: true, name: "Artifact"});
       await expect(toolbar.getByRole("heading", {level: 1, name: "Pages fixture"})).toBeVisible();
-      await expect(previewFrame(page).getByRole("heading", {name: "Pages second version"})).toBeVisible();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Pages second version"})).toBeVisible();
 
       // The breadcrumb's version crumb finds a version; the shown one is checked, the current one tagged.
       await versionCrumb(page).click();
@@ -237,7 +237,7 @@ test.describe("Artifact review workspace layout", () => {
       await expect(versionMenu.getByText("2 of 2 versions")).toBeVisible();
       await versionMenu.getByRole("searchbox", {name: "Find a version"}).fill("v1");
       await versionMenu.getByRole("button", {name: /^v1 /u}).click();
-      await expect(previewFrame(page).getByRole("heading", {name: "Pages home"})).toBeVisible();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Pages home"})).toBeVisible();
       expect(new URL(page.url()).searchParams.get("version")).toBe(first.body.version.id);
       // An older version is a preview with its way back and Make Current.
       await expect(toolbar.getByText("Preview", {exact: true})).toBeVisible();
@@ -248,7 +248,7 @@ test.describe("Artifact review workspace layout", () => {
       await expect(pageCrumb(page)).toHaveAttribute("aria-current", "page");
       await pageCrumb(page).click();
       await page.getByRole("dialog", {name: "Choose a page"}).getByRole("button", {name: /^about\.html/u}).click();
-      await expect(previewFrame(page).getByRole("heading", {name: "Pages about"})).toBeVisible();
+      await expect(interactiveFrame(page).getByRole("heading", {name: "Pages about"})).toBeVisible();
       expect(new URL(page.url()).searchParams.get("path")).toBe("about.html");
       await expect(pageCrumb(page)).toHaveAccessibleName("Page about.html · Choose a page");
 
@@ -290,6 +290,7 @@ test.describe("Artifact review workspace layout", () => {
         artifactId: published.body.artifact.id,
         versionId: published.body.version.id,
       });
+      await startAnnotating(fixture.page);
       const page = fixture.page;
       const region = page.getByRole("region", {name: "Artifact preview"});
       // The artboard widths live in the toolbar's More menu; the canvas has no footer.

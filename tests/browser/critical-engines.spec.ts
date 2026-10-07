@@ -26,7 +26,7 @@ import {
   workspaceViewport,
 } from "./browser-fixture.js";
 import {fetchVersion} from "../support/runtime-harness.js";
-import {isolatedReviewFrame, openInspectorTab, openReview, previewFrame, returnToGallery, reviewHref} from "./review-helpers.js";
+import {annotateSwitch, interactiveFrame, isolatedReviewFrame, openInspectorTab, openReview, previewFrame, returnToGallery, reviewHref, startAnnotating} from "./review-helpers.js";
 import {publishScenarioFixture} from "./scenario-fixture.js";
 import {
   createThreadOverApi,
@@ -39,7 +39,7 @@ import {
  * Chromium suite owns the cosmetic coverage. Tag: @critical.
  */
 test.describe("critical engine review paths @critical", () => {
-  test("CMT-015-B CMT-015-F: Interact defaults on and fragment navigation survives annotation toggles @critical", async ({browser}) => {
+  test("CMT-015-B CMT-015-F: pages open live with Annotate off, and the one Annotate switch moves to the sandbox and back @critical", async ({browser}) => {
     const fixture = await startBrowserFixture(browser);
     try {
       const published = await publishNew(fixture.server, fixture.installation, {
@@ -61,29 +61,29 @@ test.describe("critical engine review paths @critical", () => {
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
       const page = fixture.page;
+      const toggle = annotateSwitch(page);
+      // The page opens live with Annotate off: its own links and controls work.
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      const live = interactiveFrame(page);
+      await live.getByRole("button", {name: "Save action"}).click();
+      await live.getByRole("link", {name: "Claims", exact: true}).click();
+      await expect(live.getByRole("heading", {name: "Claims screen"})).toBeVisible();
+      await expect(live.getByRole("button", {name: "Action saved"})).toBeVisible();
+
+      await startAnnotating(page);
       const reviewFrame = isolatedReviewFrame(page);
       const preview = reviewFrame.frameLocator("iframe");
-      const toggle = page.getByRole("toolbar", {exact: true, name: "Artifact"})
-        .getByRole("button", {name: /Annotate mode:|Interact mode:/u});
-      await expect(toggle).toHaveAttribute("aria-pressed", "false");
-      await preview.getByRole("button", {name: "Save action"}).click();
-      await preview.getByRole("link", {name: "Claims", exact: true}).click();
-      await expect(preview.getByRole("heading", {name: "Claims screen"})).toBeVisible();
-      await expect(preview.getByRole("button", {name: "Action saved"})).toBeVisible();
-
-      await toggle.click();
-      await expect(toggle).toHaveAttribute("aria-pressed", "true");
-      await preview.getByRole("link", {name: "Dashboard", exact: true}).click();
-      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toBeVisible();
-      await expect(preview.getByRole("heading", {name: "Claims screen"})).toBeVisible();
-      await toggle.click();
-      await expect(toggle).toHaveAttribute("aria-pressed", "false");
-      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toHaveCount(0);
-      await preview.getByRole("link", {name: "Dashboard", exact: true}).click();
-      await expect(preview.getByRole("heading", {name: "Dashboard"})).toBeVisible();
-      await expect(preview.getByRole("button", {name: "Action saved"})).toBeVisible();
       await expect(reviewFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
       expect(await preview.locator("body").evaluate(() => window.origin)).toBe("null");
+      // Armed, a click on a link places a comment instead of navigating.
+      await preview.getByRole("link", {name: "Claims", exact: true}).click();
+      await expect(reviewFrame.getByPlaceholder("Add a comment...")).toBeVisible();
+      await expect(preview.getByRole("heading", {name: "Dashboard"})).toBeVisible();
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(page.locator('iframe[src="/review-frame"]')).toHaveCount(0);
+      await live.getByRole("link", {name: "Claims", exact: true}).click();
+      await expect(live.getByRole("heading", {name: "Claims screen"})).toBeVisible();
     } finally {
       await stopBrowserFixture(fixture);
     }
@@ -107,6 +107,7 @@ test.describe("critical engine review paths @critical", () => {
 
       await localLogin(fixture);
       await fixture.page.goto(target.body.links.review);
+      await startAnnotating(fixture.page);
 
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
@@ -134,6 +135,7 @@ test.describe("critical engine review paths @critical", () => {
       });
       await localLogin(fixture);
       await openReview(fixture, {artifactId: published.body.artifact.id, versionId: published.body.version.id});
+      await startAnnotating(fixture.page);
 
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const sandboxElement = reviewFrame.locator("iframe");
@@ -167,6 +169,7 @@ test.describe("critical engine review paths @critical", () => {
 
       await localLogin(fixture);
       await fixture.page.goto(historical.body.links.review);
+      await startAnnotating(fixture.page);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       const preview = reviewFrame.frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Private historical asset"}))
@@ -217,6 +220,7 @@ test.describe("critical engine review paths @critical", () => {
 
       await localLogin(fixture);
       await fixture.page.goto(reviewHref(fixture.server.baseUrl, target));
+      await startAnnotating(fixture.page);
       const preview = isolatedReviewFrame(fixture.page).frameLocator("iframe");
       await expect(preview.getByRole("heading", {name: "Lease page one"})).toBeVisible();
       await expect.poll(() => leaseHosts.size).toBe(1);
@@ -225,6 +229,7 @@ test.describe("critical engine review paths @critical", () => {
       // A reopen is a new navigation to the same review, as a person returning to it makes.
       await fixture.page.goto("about:blank");
       await fixture.page.goto(reviewHref(fixture.server.baseUrl, target));
+      await startAnnotating(fixture.page);
       await expect(preview.getByRole("heading", {name: "Lease page one"})).toBeVisible();
       expect(leaseStatuses.at(-1), "the reopen confirmed the stored lease").toBe(200);
       expect(leaseHosts.size, "the reopen used the same lease origin").toBe(1);
@@ -233,6 +238,7 @@ test.describe("critical engine review paths @critical", () => {
 
       const beforeSwitch = bytesRead;
       await fixture.page.goto(reviewHref(fixture.server.baseUrl, {...target, path: "two.html"}));
+      await startAnnotating(fixture.page);
       await expect(preview.getByRole("heading", {name: "Lease page two"})).toBeVisible();
       expect(leaseHosts.size, "the page switch used the same lease origin").toBe(1);
       expect(bytesRead - beforeSwitch, "the page switch served the shared stylesheet from cache").toBeLessThan(stylesheetBytes);
@@ -310,6 +316,7 @@ test.describe("critical engine review paths @critical", () => {
       await localLogin(fixture);
       const published = await publishScenarioFixture(fixture, "critical-dsn-008");
       await fixture.page.goto(`${reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "honest.html", versionId: published.version.id})}&scenario=5`);
+      await startAnnotating(fixture.page);
       await expect(previewFrame(fixture.page).getByRole("heading", {name: "Validation"})).toBeVisible();
       await expect(fixture.page.getByRole("combobox", {name: "Designed scenario"})).toHaveValue("5");
     } finally {
@@ -339,6 +346,9 @@ test.describe("critical engine review paths @critical", () => {
       await expect(fixture.page.locator("iframe")).toHaveCount(0);
 
       await card.click();
+      // A gallery page opens live; Annotate moves it into the sandbox.
+      await expect(interactiveFrame(fixture.page).getByRole("button", {name: "Try button"})).toBeVisible();
+      await startAnnotating(fixture.page);
       const reviewFrame = isolatedReviewFrame(fixture.page);
       await expect(reviewFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
       await expect(reviewFrame.frameLocator("iframe").getByRole("button", {name: "Try button"})).toBeVisible();
@@ -384,7 +394,7 @@ test.describe("critical engine review paths @critical", () => {
       const exact = new URL(fixture.page.url());
       expect(exact.searchParams.get("version")).toBe(published.version.id);
       expect(exact.searchParams.get("path")).toBe("project/components/buttons.card.html");
-      await expect(isolatedReviewFrame(fixture.page).frameLocator("iframe").getByRole("button", {name: "Try button"})).toBeVisible();
+      await expect(interactiveFrame(fixture.page).getByRole("button", {name: "Try button"})).toBeVisible();
       await fixture.page.goBack();
       await expect(card).toBeFocused();
     } finally {
