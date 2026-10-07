@@ -1,6 +1,6 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026, and updated after the late deploy that opens every Review page live. artifacts.backend.app runs image `sha256:04f28068fd9d4db55400873f754d976e14a3715b2c0f3c477145db53110b5da5` (Artifact Server `a44e55e`, Workspace `2065e5174`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-B7F9bKyD.js` carries "Annotate: comment on the page" and no "HTML preview mode" control. The ArkCase Training Site opens there in Interactive preview with Annotate off. Design (`~/Dev/Design`) is at `9ef257a`. Recheck both before relying on anything below.
+Written October 7, 2026, and updated after the late deploys. artifacts.backend.app runs image `sha256:6b4edff2864b65ac5993d7a802c1d13a19262cda6f4ab03550f1318baafa9d26` (Artifact Server `fcc8cc4`, Workspace `3297cbb2d`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `9ef257a`. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
