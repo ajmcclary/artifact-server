@@ -1,6 +1,6 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026 (updated after Design's `1632239` handoff). artifacts.backend.app runs image `sha256:e5b19d0e160bec5fc311c73f9d905d66cb83dbca688d718643fc32571383f47a` (Artifact Server `7a5fc6c`, Workspace `543140cf3`), which includes the two changes under "What closed since the October 7 morning deploy". Design (`~/Dev/Design`) is at `1632239`. Recheck both before relying on anything below.
+Written October 7, 2026, and updated after Design's `1632239` handoff and the afternoon deploy. artifacts.backend.app runs image `sha256:e5b19d0e160bec5fc311c73f9d905d66cb83dbca688d718643fc32571383f47a` (Artifact Server `7a5fc6c`, Workspace `543140cf3`), which includes the two changes under "What closed since the October 7 morning deploy". Design (`~/Dev/Design`) is at `1632239`. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
@@ -47,8 +47,16 @@ These are recorded in the contract spec's "Amendments after the hosted pilot".
 1. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal and a live native bridge. The MCP mailbox's connection key is derived from the principal, so the operator's key can hold only one mailbox; a native bridge registers under its own key (a hash of hostname and working directory) and would not rename it. Options, costs and a recommendation: [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md).
 2. **Forms itself is not driven by an automated run.** DSN-008/009 hosted proof uses the fixture adapter, and Design's Forms adapter is covered only by Design's manual Safari checks. The same plan copies a pinned Forms version into the suite's disposable artifact; nothing hosted has run.
 3. **Repository failures export their raw driver error in trace spans** (see PUB-021 above).
-4. **For Design**, in its next `support.js` sync: report `high-contrast` from `data-theme="high-contrast"` instead of folding it into `light`.
-5. **Open owner decisions** carried from the October 6 handoff: the browser `auth login` 404, the batch upload owner query parameter, not-found vs denied, CLI renewal errors, and Cloudflare Artifacts Gate 3. They are unchanged by this work.
+4. **Open owner decisions** carried from the October 6 handoff: the browser `auth login` 404, the batch upload owner query parameter, not-found vs denied, CLI renewal errors, and Cloudflare Artifacts Gate 3. They are unchanged by this work.
+
+## Next for Design
+
+Design is at `1632239`; check it before acting. Nothing here needs Design to re-pin a schema.
+
+1. **Report high contrast honestly.** In canonical `arkcase/project/dc-support/support.js`, the page adapter's `state()` builds `theme` as `root.getAttribute("data-theme") === "dark" ? "dark" : "light"`, so a page in high contrast reports `light`. Map `data-theme` to the protocol value instead: `high-contrast` to `high-contrast`, `dark` to `dark`, and anything else (`default`, missing) to `light`. Then run `sync:support` so every project gets the same copy, and add a case to `tests/review-adapter.spec.js`. artifacts.backend.app accepts the value from `7a5fc6c`. An older server drops the whole page state, so do not point a build that sends it at one.
+2. **Verify on hosted after the next Forms publish.** Switch Forms to high contrast, open scenario 5 from the review's picker, and make a region comment. The restore must succeed without "Couldn't open scenario 5", and the thread's anchor must store `view.state.theme: "high-contrast"`. Publishing needs the owner's approval.
+3. **Answer one question for the hosted-suite plan.** How does a reviewer switch Forms to high contrast inside the review sandbox (a scenario prop, a views parameter, or the app's own theme control)? The plan in [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md) needs it before it can test high-contrast capture.
+4. **Optional.** The canvas background helper's `__dc_theme` listener (in `createHelmetManager`) also knows only `light` and `dark`. It is not part of the review protocol, so changing it is Design's call.
 
 ## Decided
 
