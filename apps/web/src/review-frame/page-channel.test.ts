@@ -116,3 +116,28 @@ describe("page channel", () => {
     expect(await find).toEqual(new Map([["a.b", {count: 1, tagName: "label"}], ["gone", {count: 0, tagName: null}]]));
   });
 });
+
+describe("a late adapter", () => {
+  test("upgrades the session when hello arrives after the wait", () => {
+    const posted: FrameToPageMessage[] = [];
+    let late = 0;
+    const scheduled: (() => void)[] = [];
+    const channel = createPageChannel({
+      onLateHello: () => {
+        late += 1;
+      },
+      onUnpromptedState: () => undefined,
+      post: (message) => posted.push(message),
+      schedule: (callback) => {
+        scheduled.push(callback);
+        return () => undefined;
+      },
+    });
+    for (const callback of scheduled) callback();
+    expect(channel.supports()).toBe(false);
+    channel.receive(hello);
+    expect(channel.supports()).toBe(true);
+    expect(posted).toEqual([{pageVersion: 1, type: "as-page-welcome"}]);
+    expect(late).toBe(1);
+  });
+});

@@ -159,6 +159,15 @@ export function ReviewFrame(): React.ReactNode {
 
   useEffect(() => {
     const channel = createPageChannel({
+      onLateHello: () => {
+        // The host already heard "no adapter": tell it what the page now shows.
+        void (async () => {
+          const state = await channel.capture(capturePropsRef.current);
+          if (state !== null) {
+            send({outcome: "restored", requestId: null, state, type: "as-review-view-state", v: reviewProtocolVersion});
+          }
+        })();
+      },
       onUnpromptedState: (state) => {
         send({outcome: "restored", requestId: null, state, type: "as-review-view-state", v: reviewProtocolVersion});
       },

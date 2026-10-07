@@ -37,6 +37,8 @@ export interface PageChannel {
 export interface PageChannelOptions {
   readonly helloTimeoutMilliseconds?: number;
   readonly nextRequestId?: () => string;
+  /** An adapter said hello after the wait had already reported none. */
+  readonly onLateHello?: () => void;
   readonly onUnpromptedState: (state: PageState) => void;
   readonly post: (message: FrameToPageMessage) => void;
   readonly replyTimeoutMilliseconds?: number;
@@ -104,10 +106,15 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
     },
     receive: (message) => {
       if (message.type === "as-page-hello") {
+        if (supported === true) return;
+        options.post({pageVersion: Math.min(message.pageVersion, pageProtocolVersion), type: "as-page-welcome"});
         if (supported === null) {
-          options.post({pageVersion: Math.min(message.pageVersion, pageProtocolVersion), type: "as-page-welcome"});
           settleHello(true);
+          return;
         }
+        // A slow page (one that loads its own runtime, say) still gets its adapter.
+        supported = true;
+        options.onLateHello?.();
         return;
       }
       if (message.type === "as-page-state" && message.requestId === null) {
