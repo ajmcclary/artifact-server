@@ -1216,7 +1216,7 @@ requirements:
       failure: {id: DSN-007-F, description: "Report malformed JSON, non-UTF-8 bytes, oversized files, unknown fields, unsupported versions, malformed or duplicate ids, non-HTML, missing, escaping or case-mismatched paths, two views on one path, out-of-range sizes, control characters, non-primitive props, unknown default scenarios and parameter props reused by scenarios as invalid or unsupported-version, without failing the version's other reads; never cache a storage failure."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP validation, per-version caching and fallback pass; the MCP read is exercised by tests/conformance/dsn-011-version-context.test.ts. Team-deployment evidence and a hosted Forms publication remain unrecorded.
+    proof_gap: "Local evidence and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass. The hosted run publishes its own views document with scenarios and a parameter, reads it over HTTP and MCP, repeats the read, reads a version without the file as absent, and reports an invalid document beside a working file read; the rest of the hostile matrix is proved locally only. single_server, cloudflare, aws and gcp have no evidence. Design's Forms v13 also reads valid on that host, from Design's own manual check, which is not recorded evidence."
     depends_on: [MAN-001]
     evidence:
       - deployment: local
@@ -1224,6 +1224,11 @@ requirements:
         result: pass
         run: project/evidence/design-review-documents-2026-10-06.json
         recorded_at: "2026-10-07T00:57:39.771Z"
+      - deployment: kubernetes
+        tests: [DSN-007-B, DSN-007-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
+        recorded_at: "2026-10-07T15:44:47.841Z"
 
   - id: DSN-008
     kind: behavior
@@ -1235,14 +1240,19 @@ requirements:
       failure: {id: DSN-008-F, description: "Report a page without an adapter as unsupported, a page that never confirms as timed out, and a page confirming another scenario as failed; ignore page messages from other windows, oversized or malformed messages and scenarios outside the views document; keep the page as it was after any failure."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local Chromium journeys against a fixture page adapter pass, and the critical path passes in Chromium, Firefox and WebKit. Design's Forms adapter, its published version and the hosted acceptance journey remain unrecorded.
+    proof_gap: "Local Chromium journeys (Firefox and WebKit on the critical path) and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass against the fixture page adapter; a cold runtime, a late hello and a superseded restore are proved locally. No automated run drives Design's Forms adapter: it is covered only by Design's manual Safari check on Forms v13 (2026-10-07). No hosted run uses Firefox or WebKit. Design's pageVersion 1 adapter still ends a superseded restore with reason timeout, which the frame treats as superseded. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [DSN-007, CMT-014, CMT-018, CMT-022]
     evidence:
       - deployment: local
         tests: [DSN-008-B, DSN-008-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-07T02:05:39.057Z"
+        recorded_at: "2026-10-07T15:09:40.691Z"
+      - deployment: kubernetes
+        tests: [DSN-008-B, DSN-008-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
+        recorded_at: "2026-10-07T15:44:47.841Z"
 
   - id: DSN-009
     kind: behavior
@@ -1254,19 +1264,24 @@ requirements:
       failure: {id: DSN-009-F, description: "Show location unavailable with its reason, and place no marker, after a failed restore and for a missing or duplicated region; treat an invalid view block as absent; preserve unknown anchor fields through web and MCP anchor replacement; store region labels stripped of bidirectional and zero-width characters."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local Chromium journeys against a fixture page adapter pass, and the critical path passes in Chromium, Firefox and WebKit. Design's Forms adapter, its published version and the hosted acceptance journey remain unrecorded.
+    proof_gap: "Local Chromium journeys and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass: a region comment placed through the review UI stores its view block and reopens in its scenario, and missing and duplicated regions and a failed restore say the location is unavailable. Design's Forms comment on Min length is covered only by Design's manual Safari check on Forms v13 (2026-10-07). No hosted run uses Firefox or WebKit. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [DSN-008, CMT-003, CMT-016]
     evidence:
       - deployment: local
         tests: [DSN-009-B, DSN-009-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-10-07T02:05:39.057Z"
+        recorded_at: "2026-10-07T15:09:40.691Z"
       - deployment: local
         tests: [DSN-009-F]
         result: pass
         run: project/evidence/design-review-experience-2026-10-07.json
         recorded_at: "2026-10-07T01:39:53.255Z"
+      - deployment: kubernetes
+        tests: [DSN-009-B, DSN-009-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
+        recorded_at: "2026-10-07T15:44:47.841Z"
 
   - id: DSN-010
     kind: behavior
@@ -1278,7 +1293,7 @@ requirements:
       failure: {id: DSN-010-F, description: "Report changed and missing outputs as mismatch with their paths; report malformed, escaping, over-limit, duplicate-output and credential-bearing records as invalid and unknown versions as unsupported-version; none of these affects the version's other reads."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP validation, coverage reporting and per-version caching pass; the MCP read is exercised by tests/conformance/dsn-011-version-context.test.ts. Review Details shows the authored commit and the manifest digest, but not the history mirror commit, so the three identities are not yet shown side by side. Team-deployment evidence and a record generated by Design remain unrecorded.
+    proof_gap: "Local evidence and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass, including a changed output reported as a mismatch and MCP context reads. Review Details shows the authored commit and the manifest digest, but not the history mirror commit, so the three identities are not yet shown side by side. Design's own record for Forms v13 reads verified on that host (commit 2c38adb), from Design's manual check, which is not recorded evidence. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [MAN-001]
     evidence:
       - deployment: local
@@ -1286,6 +1301,11 @@ requirements:
         result: pass
         run: project/evidence/design-review-documents-2026-10-06.json
         recorded_at: "2026-10-07T00:57:39.771Z"
+      - deployment: kubernetes
+        tests: [DSN-010-B, DSN-010-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
+        recorded_at: "2026-10-07T15:44:47.841Z"
 
   - id: DSN-011
     kind: behavior
@@ -1297,14 +1317,14 @@ requirements:
       failure: {id: DSN-011-F, description: "Hostile scenario labels, region labels and source paths reach the agent sanitized; a comment without a valid view block renders exactly as before."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Mailbox and patched native-bridge renders carry the location line byte for byte locally, and the MCP context read passes. Live native-bridge delivery from a hosted Forms comment remains unrecorded.
+    proof_gap: "Mailbox and patched native-bridge renders carry the same location line byte for byte locally, read view blocks as strictly as the review client, and replace control characters; artifact_version_context passes locally and inside the DSN-007/DSN-010 hosted run, which does not claim DSN-011. Hosted bundle delivery is unrecorded: a principal has exactly one mailbox, so the operator's key cannot exercise it without renaming that mailbox. It needs a dedicated agent principal or a live native bridge reading a hosted Forms comment."
     depends_on: [DSN-009, DSN-010, DSP-011, BRP-002]
     evidence:
       - deployment: local
         tests: [DSN-011-B, DSN-011-F]
         result: pass
-        run: project/evidence/design-review-experience-2026-10-07.json
-        recorded_at: "2026-10-07T01:39:53.255Z"
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-07T15:00:34.951Z"
 
   - id: AUD-001
     kind: security
