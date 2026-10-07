@@ -38,11 +38,12 @@ function describeLevel(cause: unknown): string {
       errorCodePattern.test(cause.code)
     ? ` ${cause.code}`
     : "";
-  const message = redactMessage(cause.message);
+  const message = redactFailureMessage(cause.message);
   return message === "" ? `${name}${code}` : `${name}${code}: ${message}`;
 }
 
-function redactMessage(message: string): string {
+/** Remove quoted values, URLs, paths, and opaque identifiers from one error message. */
+export function redactFailureMessage(message: string): string {
   const redacted = message
     .replaceAll(/\p{Cc}+/gu, " ")
     .replaceAll(/(["'`]).*?\1/gu, "[value]")

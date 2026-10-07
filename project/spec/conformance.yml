@@ -948,6 +948,20 @@ requirements:
     depends_on: [PUB-001, PUB-003, PUB-015]
     evidence: []
 
+  - id: PUB-022
+    kind: behavior
+    behavior: The publication client repeats a staged file PUT or batch POST that failed transiently (a broken connection, 408, 429, 502, 503, 504, or an interrupted upload) a bounded number of times with jittered exponential backoff from one second capped at thirty seconds, reopening each local file and re-checking that it is unchanged on every attempt, never repeats a validation rejection or digest mismatch, and when it gives up names the operation, the file, the elapsed time, and the transport's own error code, reserving "could not be reached" for a connection that never opened.
+    owner: cli
+    source: {file: phase-10-cli-auth-and-remote-publishing.md, anchor: publication-path}
+    acceptance:
+      behavior: {id: PUB-022-B, description: "Drop a staged file PUT mid-body twice through a fault proxy in front of the real server and observe the client retry it, send no other file twice, and commit exactly one version with the exact bytes."}
+      failure: {id: PUB-022-F, description: "A digest mismatch is sent once and reported with its server code and file; a PUT dropped on every attempt stops after the bounded attempts with the file, elapsed seconds, and transport code and no upload URL; an unreachable server is reported as unreachable."}
+    deployments: *all
+    status: implementing
+    proof_gap: "Local tests drive the real client through a loopback fault proxy in front of the local server, with a shortened retry policy except for one check of the production one-second first backoff. The thirty-second ceiling is never reached by the four-attempt production policy and is not timed. Retry-After is not honored, upload concurrency stays at four, and no remote deployment or real slow uplink is exercised."
+    depends_on: [PUB-015, PUB-021, CLI-002]
+    evidence: []
+
   - id: CLI-001
     kind: security
     behavior: The Artifact Server CLI keeps profiles by exact server origin and account; remote interactive login uses browser authorization and operating-system credential storage, local mode uses private user-only state without visible secrets, and CI uses scoped service credentials from its secret manager.

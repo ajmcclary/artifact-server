@@ -8,16 +8,28 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import {Duration, Effect, Option, Schema, type Redacted} from "effect";
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Option,
+  Predicate,
+  Schedule,
+  Schema,
+  type Redacted,
+} from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import {
   EmptyManifest,
+  errorCodes,
   InvalidManifestFile,
   InvalidManifestPath,
   MissingManifestEntry,
@@ -30,6 +42,7 @@ import {
   maximumBatchParts,
   maximumBatchRequestBytes,
 } from "../core/publishing-limits.js";
+import {redactFailureMessage} from "../observability/failure-cause-summary.js";
 
 import {
   claudeDesignManifestPath,
@@ -237,8 +250,34 @@ export class FilePublicationProtocolError extends Schema.TaggedError<FilePublica
     ]),
     serverCode: Schema.NullOr(Schema.String),
     status: Schema.NullOr(Schema.Int),
+    /** The transport error code when the exchange broke before an answer arrived. */
+    transportCode: Schema.NullOr(Schema.String),
   },
 ) {}
+
+/** Bounded retry of one idempotent staged transfer: a file PUT or a batch POST. */
+export interface StagedTransferRetryPolicy {
+  readonly initialDelayMilliseconds: number;
+  readonly maximumAttempts: number;
+  readonly maximumDelayMilliseconds: number;
+}
+
+/**
+ * The staged transfer retry policy: four attempts with jittered exponential
+ * backoff from one second, never sleeping past thirty seconds. A transfer is
+ * safe to repeat because its URL names one slot and the server verifies the
+ * bytes by size and SHA-256 before marking it.
+ */
+export const StagedTransferRetry = Context.Reference<StagedTransferRetryPolicy>(
+  "artifact-server/client/StagedTransferRetry",
+  {
+    defaultValue: () => ({
+      initialDelayMilliseconds: 1_000,
+      maximumAttempts: 4,
+      maximumDelayMilliseconds: 30_000,
+    }),
+  },
+);
 
 /** Expected failures from the file-first publication client. */
 export type FilePublicationFailure =
@@ -360,6 +399,55 @@ type FilePublicationRequestBody =
   | CommitUploadRequestBody;
 
 type FilePublicationOperation = FilePublicationProtocolError["operation"];
+
+/** What one HTTP exchange was doing, for a failure message a person can act on. */
+interface TransferSubject {
+  /** A present-participle phrase, such as "Uploading index.html". */
+  readonly action: string;
+  readonly operation: FilePublicationOperation;
+}
+
+/** The stable code and redacted message of one broken HTTP exchange. */
+interface TransportCause {
+  readonly code: string | null;
+  readonly message: string;
+}
+
+/** Answers that mean "try the same transfer again", never "your input is wrong". */
+const transientTransferStatuses: ReadonlySet<number> = new Set([408, 429, 502, 503, 504]);
+
+/** Transport codes for a connection that was never established. */
+const unreachableTransportCodes: ReadonlySet<string> = new Set([
+  "EADDRNOTAVAIL",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+const transportCodeDescriptions: ReadonlyMap<string, string> = new Map([
+  ["ECONNABORTED", "the connection was aborted"],
+  ["ECONNRESET", "the connection was reset"],
+  ["EPIPE", "the connection closed while the request was still being sent"],
+  ["ETIMEDOUT", "the connection timed out"],
+  ["UND_ERR_BODY_TIMEOUT", "the server's answer stalled"],
+  ["UND_ERR_CLOSED", "the connection closed unexpectedly"],
+  ["UND_ERR_HEADERS_TIMEOUT", "the server did not answer in time"],
+  ["UND_ERR_SOCKET", "the connection closed unexpectedly"],
+]);
+/**
+ * Transport codes worth another attempt: a connection that broke or never
+ * opened. A failure without one of these codes, such as a refused redirect
+ * or a certificate error, is never repeated.
+ */
+const transientTransportCodes: ReadonlySet<string> = new Set([
+  ...unreachableTransportCodes,
+  ...transportCodeDescriptions.keys(),
+]);
+const transportCodePattern = /^[A-Z][A-Z0-9_]{1,63}$/u;
+const maximumTransportCauseDepth = 5;
 
 /**
  * Publish one local file or finished directory through a server-issued upload
@@ -1011,7 +1099,7 @@ const createUpload = Effect.fn("FilePublicationClient.createUpload")(
     return yield* executeJson(
       request,
       createUploadResponseSchema,
-      "create_upload",
+      {action: "Creating the upload", operation: "create_upload"},
     );
   },
 );
@@ -1065,17 +1153,20 @@ const uploadPreparedFile = Effect.fn("FilePublicationClient.uploadPreparedFile")
     FilePublicationInputError | FilePublicationProtocolError,
     FileSystem.FileSystem | HttpClient.HttpClient
   > {
-    const body = preparedFile.kind === "generated"
-      ? HttpBody.uint8Array(preparedFile.content, preparedFile.mediaType)
-      : yield* preparedDiskBody(preparedFile);
-    const request = HttpClientRequest.put(plannedFile.uploadUrl).pipe(
-      HttpClientRequest.setBody(body),
-    );
-    const uploaded = yield* executeJson(
-      request,
-      uploadedFileResponseSchema,
-      "upload_file",
-    );
+    const subject: TransferSubject = {
+      action: `Uploading ${plannedFile.path}`,
+      operation: "upload_file",
+    };
+    const uploaded = yield* retryStagedTransfer(Effect.gen(function*() {
+      // Each attempt reopens the file and re-checks it is the prepared one.
+      const body = preparedFile.kind === "generated"
+        ? HttpBody.uint8Array(preparedFile.content, preparedFile.mediaType)
+        : yield* preparedDiskBody(preparedFile);
+      const request = HttpClientRequest.put(plannedFile.uploadUrl).pipe(
+        HttpClientRequest.setBody(body),
+      );
+      return yield* executeJson(request, uploadedFileResponseSchema, subject);
+    }));
     if (uploaded.path !== plannedFile.path || uploaded.uploadId !== uploadId) {
       return yield* protocolFailure(
         "upload_file",
@@ -1139,28 +1230,35 @@ const uploadPreparedBatch = Effect.fn("FilePublicationClient.uploadPreparedBatch
     batchUrl.search = new URL(firstFile.uploadUrl).search;
 
     for (const batch of batches) {
-      const parts: {bytes: Uint8Array; declaredSize: number; orderIndex: number}[] = [];
-      for (const plannedFile of batch) {
-        const preparedFile = requiredPreparedFile(preparedFiles, plannedFile.path);
-        const orderIndex = orderIndexByPath.get(plannedFile.path);
-        if (orderIndex === undefined) {
-          return yield* protocolFailure(
-            "upload_batch",
-            `The upload plan does not declare ${plannedFile.path}.`,
-            200,
-          );
-        }
-        // eslint-disable-next-line no-await-in-loop -- sequential per-part reads
-        const bytes = yield* preparedFileBytes(preparedFile);
-        parts.push({bytes, declaredSize: bytes.byteLength, orderIndex});
-      }
-      const frame = encodeBatchFrame(parts);
-      const request = HttpClientRequest.post(batchUrl).pipe(
-        HttpClientRequest.bearerToken(config.apiToken),
-        HttpClientRequest.setBody(HttpBody.uint8Array(frame)),
-      );
+      const subject: TransferSubject = {
+        action: `Uploading a batch of ${batch.length} files starting with ${batch[0]?.path ?? "?"}`,
+        operation: "upload_batch",
+      };
       // eslint-disable-next-line no-await-in-loop -- sequential batch POSTs
-      const result = yield* executeJson(request, batchUploadResponseSchema, "upload_batch");
+      const result = yield* retryStagedTransfer(Effect.gen(function*() {
+        // Each attempt rereads every part and re-checks it is the prepared file.
+        const parts: {bytes: Uint8Array; declaredSize: number; orderIndex: number}[] = [];
+        for (const plannedFile of batch) {
+          const preparedFile = requiredPreparedFile(preparedFiles, plannedFile.path);
+          const orderIndex = orderIndexByPath.get(plannedFile.path);
+          if (orderIndex === undefined) {
+            return yield* protocolFailure(
+              "upload_batch",
+              `The upload plan does not declare ${plannedFile.path}.`,
+              200,
+            );
+          }
+          // eslint-disable-next-line no-await-in-loop -- sequential per-part reads
+          const bytes = yield* preparedFileBytes(preparedFile);
+          parts.push({bytes, declaredSize: bytes.byteLength, orderIndex});
+        }
+        const frame = encodeBatchFrame(parts);
+        const request = HttpClientRequest.post(batchUrl).pipe(
+          HttpClientRequest.bearerToken(config.apiToken),
+          HttpClientRequest.setBody(HttpBody.uint8Array(frame)),
+        );
+        return yield* executeJson(request, batchUploadResponseSchema, subject);
+      }));
       if (result.uploadId !== uploadId) {
         return yield* protocolFailure(
           "upload_batch",
@@ -1301,11 +1399,9 @@ const tryCommitUpload = Effect.fn("FilePublicationClient.tryCommitUpload")(
       {target},
       "commit_upload",
     );
-    const response = yield* HttpClient.execute(request).pipe(
-      Effect.mapError(() => protocolFailure(
-        "commit_upload",
-        "Artifact Server could not be reached.",
-      )),
+    const response = yield* executeWithTransportContext(
+      request,
+      {action: "Committing the upload", operation: "commit_upload"},
     );
     if (response.status === 202) {
       const preparing = yield* HttpClientResponse.schemaBodyJson(
@@ -1320,7 +1416,10 @@ const tryCommitUpload = Effect.fn("FilePublicationClient.tryCommitUpload")(
       return {kind: "preparing" as const, ...preparing};
     }
     if (response.status < 200 || response.status >= 300) {
-      return yield* failureFromResponse(response, "commit_upload");
+      return yield* failureFromResponse(
+        response,
+        {action: "Committing the upload", operation: "commit_upload"},
+      );
     }
     const publication = yield* HttpClientResponse.schemaBodyJson(publishResponseSchema)(response).pipe(
       Effect.mapError(() => protocolFailure(
@@ -1369,6 +1468,7 @@ const commitUpload = Effect.fn("FilePublicationClient.commitUpload")(
       operation: "commit_upload",
       serverCode: null,
       status: 202,
+      transportCode: null,
     });
   },
 );
@@ -1396,20 +1496,15 @@ const executeJson = Effect.fn("FilePublicationClient.executeJson")(
   function*<A>(
     request: HttpClientRequest.HttpClientRequest,
     schema: Schema.ConstraintDecoder<A>,
-    operation: FilePublicationOperation,
+    subject: TransferSubject,
   ): Effect.fn.Return<A, FilePublicationProtocolError, HttpClient.HttpClient> {
-    const response = yield* HttpClient.execute(request).pipe(
-      Effect.mapError(() => protocolFailure(
-        operation,
-        "Artifact Server could not be reached.",
-      )),
-    );
+    const response = yield* executeWithTransportContext(request, subject);
     if (response.status < 200 || response.status >= 300) {
-      return yield* failureFromResponse(response, operation);
+      return yield* failureFromResponse(response, subject);
     }
     return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
       Effect.mapError(() => protocolFailure(
-        operation,
+        subject.operation,
         "Artifact Server returned an invalid success response.",
         response.status,
       )),
@@ -1417,30 +1512,164 @@ const executeJson = Effect.fn("FilePublicationClient.executeJson")(
   },
 );
 
+/**
+ * Send one request, and when the exchange breaks before an answer arrives,
+ * say what was being sent, how long it ran, and the transport's own code.
+ * "Could not be reached" is kept for a connection that never opened.
+ */
+const executeWithTransportContext = Effect.fn(
+  "FilePublicationClient.executeWithTransportContext",
+)(function*(
+  request: HttpClientRequest.HttpClientRequest,
+  subject: TransferSubject,
+): Effect.fn.Return<
+  HttpClientResponse.HttpClientResponse,
+  FilePublicationProtocolError,
+  HttpClient.HttpClient
+> {
+  const startedAt = yield* Clock.currentTimeMillis;
+  return yield* HttpClient.execute(request).pipe(
+    Effect.catch((error) => Effect.flatMap(
+      Clock.currentTimeMillis,
+      (failedAt) => Effect.fail(transportFailure(subject, error, failedAt - startedAt)),
+    )),
+  );
+});
+
 const failureFromResponse = Effect.fn("FilePublicationClient.failureFromResponse")(
   function*(
     response: HttpClientResponse.HttpClientResponse,
-    operation: FilePublicationOperation,
+    subject: TransferSubject,
   ): Effect.fn.Return<never, FilePublicationProtocolError> {
     const decoded = yield* response.json.pipe(
       Effect.map(decodeServerError),
       Effect.catch(() => Effect.succeed(Option.none())),
     );
+    // A file transfer names its file; whole-publication answers stand alone.
+    const prefix = subject.operation === "upload_file" || subject.operation === "upload_batch"
+      ? `${subject.action} failed: `
+      : "";
     return yield* Option.match(decoded, {
       onNone: () => protocolFailure(
-        operation,
-        `Artifact Server rejected the publication request with HTTP ${response.status}.`,
+        subject.operation,
+        `${prefix}Artifact Server rejected the publication request with HTTP ${response.status}.`,
         response.status,
       ),
       onSome: (body) => new FilePublicationProtocolError({
-        message: body.error.message,
-        operation,
+        message: `${prefix}${body.error.message}`,
+        operation: subject.operation,
         serverCode: body.error.code,
         status: response.status,
+        transportCode: null,
       }),
     });
   },
 );
+
+/**
+ * Repeat one staged transfer while it fails transiently, with jittered
+ * exponential backoff capped at the policy ceiling. A validation rejection,
+ * a digest mismatch, or a changed local file is never repeated.
+ */
+const retryStagedTransfer = Effect.fnUntraced(function*<A, R>(
+  transfer: Effect.Effect<A, FilePublicationInputError | FilePublicationProtocolError, R>,
+): Effect.fn.Return<A, FilePublicationInputError | FilePublicationProtocolError, R> {
+  const policy = yield* StagedTransferRetry;
+  const ceiling = Duration.millis(policy.maximumDelayMilliseconds);
+  const backoff = Schedule.exponential(Duration.millis(policy.initialDelayMilliseconds)).pipe(
+    Schedule.jittered,
+    Schedule.modifyDelay(({duration}) => Effect.succeed(Duration.min(duration, ceiling))),
+  );
+  let attempts = 0;
+  return yield* Effect.suspend(() => {
+    attempts += 1;
+    return transfer;
+  }).pipe(
+    Effect.retry({
+      schedule: backoff,
+      times: Math.max(0, policy.maximumAttempts - 1),
+      while: isTransientTransferFailure,
+    }),
+    Effect.mapError((error) =>
+      attempts > 1 && error._tag === "FilePublicationProtocolError"
+        ? new FilePublicationProtocolError({
+          message:
+            `${error.message} Gave up after ${attempts} attempts; re-run the same publish to resume. Files already verified are not sent again.`,
+          operation: error.operation,
+          serverCode: error.serverCode,
+          status: error.status,
+          transportCode: error.transportCode,
+        })
+        : error
+    ),
+  );
+});
+
+function isTransientTransferFailure(
+  error: FilePublicationInputError | FilePublicationProtocolError,
+): boolean {
+  return error._tag === "FilePublicationProtocolError" && (
+    (error.transportCode !== null && transientTransportCodes.has(error.transportCode))
+    || (error.status !== null && transientTransferStatuses.has(error.status))
+    || error.serverCode === errorCodes.uploadInterrupted
+  );
+}
+
+function transportFailure(
+  subject: TransferSubject,
+  error: HttpClientError.HttpClientError,
+  elapsedMilliseconds: number,
+): FilePublicationProtocolError {
+  const cause = transportCause(error);
+  const detail = cause.code === null
+    ? cause.message === "" ? "" : ` (${cause.message})`
+    : cause.message === "" || cause.message.includes(cause.code)
+    ? ` (${cause.code})`
+    : ` (${cause.code}: ${cause.message})`;
+  const unreachable = cause.code !== null && unreachableTransportCodes.has(cause.code);
+  const fileTransfer = subject.operation === "upload_file" || subject.operation === "upload_batch";
+  const seconds = Math.max(0, Math.round(elapsedMilliseconds / 1_000));
+  const description = cause.code === null
+    ? "the request failed"
+    : transportCodeDescriptions.get(cause.code) ?? "the request failed";
+  const message = unreachable
+    ? `${fileTransfer ? `${subject.action} failed: ` : ""}Artifact Server could not be reached${detail}.`
+    : `${subject.action} failed after ${seconds} s: ${description}${detail}.`;
+  return new FilePublicationProtocolError({
+    message,
+    operation: subject.operation,
+    serverCode: null,
+    status: null,
+    transportCode: cause.code ?? "TRANSPORT_FAILURE",
+  });
+}
+
+/**
+ * The deepest stable transport code in a fetch failure's cause chain, with
+ * that error's message stripped of URLs, paths, and opaque identifiers. The
+ * HTTP client's own message is skipped because it repeats the request URL,
+ * and an upload URL carries its slot's write capability.
+ */
+function transportCause(error: HttpClientError.HttpClientError): TransportCause {
+  let found: TransportCause = {code: null, message: ""};
+  let current: unknown = error.cause;
+  for (
+    let depth = 0;
+    depth < maximumTransportCauseDepth && current instanceof Error;
+    depth += 1
+  ) {
+    const code = Predicate.hasProperty(current, "code") &&
+        Predicate.isString(current.code) &&
+        transportCodePattern.test(current.code)
+      ? current.code
+      : null;
+    if (code !== null || found.code === null) {
+      found = {code: code ?? found.code, message: redactFailureMessage(current.message)};
+    }
+    current = current.cause;
+  }
+  return found;
+}
 
 function requiredPreparedFile(
   files: readonly PreparedFile[],
@@ -1480,6 +1709,7 @@ function protocolFailure(
     operation,
     serverCode: null,
     status,
+    transportCode: null,
   });
 }
 

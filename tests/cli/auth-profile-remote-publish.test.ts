@@ -111,7 +111,11 @@ describe("authenticated CLI profiles and remote publication", () => {
       const lost = await runCli(publicationArguments, environment);
       expect(proxy.errors()).toEqual([]);
       expect(lost.exitCode).not.toBe(0);
-      expect(lost.stderr).toContain("Artifact Server could not be reached");
+      // The commit reached the server; only its answer was lost.
+      expect(lost.stderr).toMatch(
+        /Committing the upload failed after \d+ s: the connection closed unexpectedly \(UND_ERR_SOCKET/u,
+      );
+      expect(lost.stderr).not.toContain("could not be reached");
       expect(proxy.droppedResponses()).toBe(1);
       const operationDirectory = path.join(profileData, "publications");
       const pendingOperations = await readdir(operationDirectory);
