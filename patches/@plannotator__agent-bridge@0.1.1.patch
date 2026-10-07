@@ -1,22 +1,39 @@
 diff --git a/index.ts b/index.ts
-index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae5824932e58f7e6 100644
+index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc57bb6acf 100644
 --- a/index.ts
 +++ b/index.ts
-@@ -185,6 +185,36 @@ export function sanitizeBundleText(text: string): string {
+@@ -185,6 +185,55 @@ export function sanitizeBundleText(text: string): string {
    return text.replace(invisibleDirectivePattern, "");
  }
  
++/**
++ * The review client's stored `view` block, checked exactly as strictly as the
++ * client reads it, so an agent never sees a location the reviewer's page
++ * would have treated as absent.
++ */
++const bundleParameterValueSchema = z.union([z.string().max(256), z.number().finite(), z.boolean()]);
 +const bundleViewBlockSchema = z.object({
-+  regionId: z.string().max(128).optional(),
++  regionId: z.string().max(128).regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$/u).optional(),
 +  regionLabel: z.string().max(64).optional(),
-+  scenarioId: z.string().max(32),
++  scenarioId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u),
 +  scenarioLabel: z.string().max(200),
 +  sourceRef: z.object({
-+    line: z.number().int().positive().optional(),
++    line: z.number().int().min(1).optional(),
 +    path: z.string().min(1).max(1_024),
-+  }).loose(),
++  }).strict(),
++  state: z.object({
++    direction: z.enum(["ltr", "rtl"]),
++    locale: z.string().max(64).nullable(),
++    parameters: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u), bundleParameterValueSchema),
++    theme: z.enum(["light", "dark"]),
++    viewport: z.object({
++      height: z.number().int().min(0).max(100_000),
++      width: z.number().int().min(0).max(100_000),
++    }).strict(),
++  }).strict(),
 +  viewFormat: z.literal(1),
-+}).loose();
++  viewId: z.string().min(1).max(128),
++}).strict();
 +
 +/** Reads a thread's opaque anchor for the design review `view` block a location line names. */
 +export const bundleAnchorSchema = z.object({view: bundleViewBlockSchema}).loose();
@@ -33,13 +50,15 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae582493
 +    parts.push(view.regionLabel === undefined ? `region ${view.regionId}` : `region ${view.regionId} "${view.regionLabel}"`);
 +  }
 +  parts.push(`source ${view.sourceRef.path}${view.sourceRef.line === undefined ? "" : `:${view.sourceRef.line}`}`);
-+  return sanitizeBundleText(parts.join(" · ")).replace(/\s+/gu, " ").trim();
++  // A stored anchor is untrusted: control characters (a newline, an escape
++  // sequence) in a label or source path must not reach the agent either.
++  return sanitizeBundleText(parts.join(" · ")).replace(/[\s\p{Cc}]+/gu, " ").trim();
 +}
 +
  // ---------------------------------------------------------------------------
  // Bundle rendering
  // ---------------------------------------------------------------------------
-@@ -198,6 +228,8 @@ export interface BundleItem {
+@@ -198,6 +247,8 @@ export interface BundleItem {
    readonly body: string;
    readonly path: string | null;
    readonly quotedSelection: string | null;
@@ -48,7 +67,7 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae582493
    readonly threadId: string;
    readonly versionNumber: number;
  }
-@@ -251,20 +283,24 @@ export function renderBundleMessage(
+@@ -251,20 +302,24 @@ export function renderBundleMessage(
  ): string {
    const lines: string[] = [];
    lines.push(
@@ -76,7 +95,7 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae582493
      for (const bodyLine of sanitizeBundleText(item.body).split("\n")) {
        lines.push(`   ${bodyLine}`);
      }
-@@ -630,10 +666,12 @@ export async function fetchBundle(
+@@ -630,10 +685,12 @@ export async function fetchBundle(
        versionNumbers.set(location.artifactId, numbers);
      }
      const anchor = anchorSelectionSchema.safeParse(details.thread.anchor);
@@ -89,7 +108,7 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae582493
        path: details.thread.path,
        quotedSelection: anchor.success ? anchor.data.originalText : null,
        threadId,
-@@ -1099,7 +1137,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+@@ -1099,7 +1156,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
      callPort(() =>
        options.host.notify(
          `Artifact Server: delivering ${dispatch.threadIds.length} ` +

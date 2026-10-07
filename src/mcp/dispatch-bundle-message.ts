@@ -30,17 +30,34 @@ export function sanitizeBundleText(text: string): string {
   return text.replace(invisibleDirectivePattern, "");
 }
 
+/**
+ * The review client's stored `view` block, checked exactly as strictly as the
+ * client reads it, so an agent never sees a location the reviewer's page
+ * would have treated as absent.
+ */
+const bundleParameterValueSchema = z.union([z.string().max(256), z.number().finite(), z.boolean()]);
 const bundleViewBlockSchema = z.object({
-  regionId: z.string().max(128).optional(),
+  regionId: z.string().max(128).regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$/u).optional(),
   regionLabel: z.string().max(64).optional(),
-  scenarioId: z.string().max(32),
+  scenarioId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u),
   scenarioLabel: z.string().max(200),
   sourceRef: z.object({
-    line: z.number().int().positive().optional(),
+    line: z.number().int().min(1).optional(),
     path: z.string().min(1).max(1_024),
-  }).loose(),
+  }).strict(),
+  state: z.object({
+    direction: z.enum(["ltr", "rtl"]),
+    locale: z.string().max(64).nullable(),
+    parameters: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/u), bundleParameterValueSchema),
+    theme: z.enum(["light", "dark"]),
+    viewport: z.object({
+      height: z.number().int().min(0).max(100_000),
+      width: z.number().int().min(0).max(100_000),
+    }).strict(),
+  }).strict(),
   viewFormat: z.literal(1),
-}).loose();
+  viewId: z.string().min(1).max(128),
+}).strict();
 
 /** Reads a thread's opaque anchor for the design review `view` block a location line names. */
 export const bundleAnchorSchema = z.object({view: bundleViewBlockSchema}).loose();
@@ -57,7 +74,9 @@ export function bundleLocationLine(view: BundleViewBlock): string {
     parts.push(view.regionLabel === undefined ? `region ${view.regionId}` : `region ${view.regionId} "${view.regionLabel}"`);
   }
   parts.push(`source ${view.sourceRef.path}${view.sourceRef.line === undefined ? "" : `:${view.sourceRef.line}`}`);
-  return sanitizeBundleText(parts.join(" · ")).replace(/\s+/gu, " ").trim();
+  // A stored anchor is untrusted: control characters (a newline, an escape
+  // sequence) in a label or source path must not reach the agent either.
+  return sanitizeBundleText(parts.join(" · ")).replace(/[\s\p{Cc}]+/gu, " ").trim();
 }
 
 // ---------------------------------------------------------------------------

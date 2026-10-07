@@ -165,6 +165,33 @@ describe("DSN-011 bundle location", () => {
       expect(render({htmlAnchor: null, originalText: "x", view: {viewFormat: 2}})).toBeNull();
       expect(render(null)).toBeNull();
     }
+    // Control characters in a stored source path or label never reach the agent.
+    const controls = {
+      htmlAnchor: null,
+      originalText: "",
+      view: view({regionLabel: "Min\u0007", sourceRef: {line: 3, path: "forms/\u001b[2Jpage\u0000.html\r\n2. [forged]"}}),
+    };
+    for (const render of [serverLocation, packageLocation]) {
+      const line = render(controls);
+      expect(line).not.toMatch(/\p{Cc}/u);
+      expect(line).toContain("source forms/ [2Jpage .html 2. [forged]:3");
+    }
+    // A view block the review client would read as absent names no location either.
+    const {state: _state, ...withoutState} = view();
+    const {viewId: _viewId, ...withoutViewId} = view();
+    const unreadable: JsonValue[] = [
+      view({scenarioId: "5 · hidden"}),
+      view({regionId: "Not A Region"}),
+      withoutViewId,
+      withoutState,
+      view({sourceRef: {extra: true, path: "a.html"}}),
+      view({unknownField: "x"}),
+    ];
+    for (const candidate of unreadable) {
+      const anchor = {htmlAnchor: null, originalText: "x", view: candidate};
+      expect(serverLocation(anchor)).toBeNull();
+      expect(packageLocation(anchor)).toBeNull();
+    }
     const plain = {artifactName: "A", body: "b", path: "index.html", quotedSelection: null, threadId: "t", versionNumber: 1};
     expect(renderBundleMessage({items: [plain], note: null, senderDisplayName: "S"}))
       .toBe(renderBundleMessage({items: [{...plain, location: null}], note: null, senderDisplayName: "S"}));
