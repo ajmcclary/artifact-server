@@ -454,5 +454,5 @@ function repositoryFailure(
   operation: ArtifactRepositoryFailure["operation"],
   cause: unknown,
 ): ArtifactRepositoryFailure {
-  return new ArtifactRepositoryFailure({cause, operation});
+  return new ArtifactRepositoryFailure({cause: redactedFailureCause(cause), operation});
 }

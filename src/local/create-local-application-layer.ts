@@ -1479,7 +1479,7 @@ function identityEffect<A>(
 ): Effect.Effect<A, IdentityRepositoryFailure> {
   return Effect.tryPromise({
     try: run,
-    catch: (cause) => new IdentityRepositoryFailure({cause, operation}),
+    catch: (cause) => identityRepositoryFailure(operation, cause),
   });
 }
 
@@ -1491,7 +1491,7 @@ function identityEffectWithConflict<A>(
     try: run,
     catch: (cause) => cause instanceof IdentityConflict
       ? cause
-      : new IdentityRepositoryFailure({cause, operation}),
+      : identityRepositoryFailure(operation, cause),
   });
 }
 
@@ -1503,7 +1503,7 @@ function identityEffectWithNotFound<A>(
     try: run,
     catch: (cause) => cause instanceof IdentityNotFound
       ? cause
-      : new IdentityRepositoryFailure({cause, operation}),
+      : identityRepositoryFailure(operation, cause),
   });
 }
 
@@ -1519,7 +1519,7 @@ function identityEffectWithConflictOrNotFound<A>(
     catch: (cause) =>
       cause instanceof IdentityConflict || cause instanceof IdentityNotFound
         ? cause
-        : new IdentityRepositoryFailure({cause, operation}),
+        : identityRepositoryFailure(operation, cause),
   });
 }
 
@@ -1531,7 +1531,7 @@ function loginAttemptEffect<A>(
     try: run,
     catch: (cause) => cause instanceof LoginAttemptRejected
       ? cause
-      : new IdentityRepositoryFailure({cause, operation}),
+      : identityRepositoryFailure(operation, cause),
   });
 }
 
@@ -1751,9 +1751,19 @@ function classifyCommentFailure(
   return repositoryFailure(operation, cause);
 }
 
+// A failed span renders its whole cause chain, including a driver error's
+// stack and properties (a Postgres `detail` names the conflicting value), so
+// repository failures carry the redacted copy that operator logs already print.
 function repositoryFailure(
   operation: ArtifactRepositoryFailure["operation"],
   cause: unknown,
 ): ArtifactRepositoryFailure {
-  return new ArtifactRepositoryFailure({cause, operation});
+  return new ArtifactRepositoryFailure({cause: redactedFailureCause(cause), operation});
+}
+
+function identityRepositoryFailure(
+  operation: IdentityRepositoryFailure["operation"],
+  cause: unknown,
+): IdentityRepositoryFailure {
+  return new IdentityRepositoryFailure({cause: redactedFailureCause(cause), operation});
 }

@@ -64,6 +64,7 @@ import {
   type PublicationPreparationFailure,
   PublicationPreparationService,
 } from "./publication-preparation.js";
+import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 
 const liveBootstrapLifetimeMilliseconds = 2 * 60 * 1_000;
 const liveTokenPrefix = "live-";
@@ -1028,7 +1029,7 @@ const describeCapability = () => Effect.succeed({linkedArtifacts: true});
 const discardCapture = (capture: CapturedSourceSpool) =>
   Effect.tryPromise({
     catch: (cause) =>
-      new ArtifactRepositoryFailure({cause, operation: "linkedSource"}),
+      new ArtifactRepositoryFailure({cause: redactedFailureCause(cause), operation: "linkedSource"}),
     try: () => capture.discard(),
   }).pipe(Effect.catch(() => Effect.void));
 
@@ -1056,7 +1057,7 @@ function classifyEngineFailure(cause: unknown): EngineFailure {
       return cause;
     }
   }
-  return new ArtifactRepositoryFailure({cause, operation: "linkedSource"});
+  return new ArtifactRepositoryFailure({cause: redactedFailureCause(cause), operation: "linkedSource"});
 }
 
 function liveSessionRequired(): Effect.Effect<never, ContentSessionRequired> {
