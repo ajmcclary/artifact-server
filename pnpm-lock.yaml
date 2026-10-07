@@ -19,7 +19,7 @@ overrides:
 
 patchedDependencies:
   '@plannotator/agent-bridge@0.1.1':
-    hash: 179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4
+    hash: cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4
     path: patches/@plannotator__agent-bridge@0.1.1.patch
   '@plannotator/ui@0.31.0':
     hash: 19cb6070a2515ace897b29f0ccbf00468b08f31b426e618122adc10477e19ea6
@@ -110,7 +110,7 @@ importers:
         version: 1.78.0
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
+        version: 0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
@@ -319,7 +319,7 @@ importers:
         version: 1.30.0(zod@4.4.3)
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
+        version: 0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)
       tsx:
         specifier: 4.23.12
         version: 4.23.12
@@ -335,7 +335,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
+        version: 0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)
     devDependencies:
       typebox:
         specifier: 1.3.7
@@ -348,7 +348,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
+        version: 0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -361,7 +361,7 @@ importers:
     dependencies:
       '@plannotator/agent-bridge':
         specifier: ^0.1.1
-        version: 0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)
+        version: 0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)
     devDependencies:
       typebox:
         specifier: 1.3.7
@@ -9761,7 +9761,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@plannotator/agent-bridge@0.1.1(patch_hash=179ec090e1f1bb2fd3d9dd286358f60a46fb19ef95acfbe2ea9519fc81a0c0d4)':
+  '@plannotator/agent-bridge@0.1.1(patch_hash=cc45ffbdc8f4987c489426637e11526cc9f6ae63d72f6bc582e296c491b991f4)':
     dependencies:
       zod: 4.4.3
 

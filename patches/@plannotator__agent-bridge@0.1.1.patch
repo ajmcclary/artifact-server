@@ -1,8 +1,54 @@
 diff --git a/index.ts b/index.ts
-index 47153f0a446edfa3089c90f16c568eee67ebee2a..6348e783a9e29441466f0f9aebe52beb06045b21 100644
+index 47153f0a446edfa3089c90f16c568eee67ebee2a..baf4ebfc11a705c2f561d9d8ae5824932e58f7e6 100644
 --- a/index.ts
 +++ b/index.ts
-@@ -251,16 +251,16 @@ export function renderBundleMessage(
+@@ -185,6 +185,36 @@ export function sanitizeBundleText(text: string): string {
+   return text.replace(invisibleDirectivePattern, "");
+ }
+ 
++const bundleViewBlockSchema = z.object({
++  regionId: z.string().max(128).optional(),
++  regionLabel: z.string().max(64).optional(),
++  scenarioId: z.string().max(32),
++  scenarioLabel: z.string().max(200),
++  sourceRef: z.object({
++    line: z.number().int().positive().optional(),
++    path: z.string().min(1).max(1_024),
++  }).loose(),
++  viewFormat: z.literal(1),
++}).loose();
++
++/** Reads a thread's opaque anchor for the design review `view` block a location line names. */
++export const bundleAnchorSchema = z.object({view: bundleViewBlockSchema}).loose();
++export type BundleViewBlock = z.infer<typeof bundleViewBlockSchema>;
++
++/**
++ * The one-line location of a comment made on a designed page, built from its
++ * anchor's view block alone so every renderer produces it without another
++ * request.
++ */
++export function bundleLocationLine(view: BundleViewBlock): string {
++  const parts = [`at ${view.scenarioLabel} (scenario ${view.scenarioId})`];
++  if (view.regionId !== undefined) {
++    parts.push(view.regionLabel === undefined ? `region ${view.regionId}` : `region ${view.regionId} "${view.regionLabel}"`);
++  }
++  parts.push(`source ${view.sourceRef.path}${view.sourceRef.line === undefined ? "" : `:${view.sourceRef.line}`}`);
++  return sanitizeBundleText(parts.join(" · ")).replace(/\s+/gu, " ").trim();
++}
++
+ // ---------------------------------------------------------------------------
+ // Bundle rendering
+ // ---------------------------------------------------------------------------
+@@ -198,6 +228,8 @@ export interface BundleItem {
+   readonly body: string;
+   readonly path: string | null;
+   readonly quotedSelection: string | null;
++  /** The comment's designed-page location, when its anchor has one. */
++  readonly location?: string | null;
+   readonly threadId: string;
+   readonly versionNumber: number;
+ }
+@@ -251,20 +283,24 @@ export function renderBundleMessage(
  ): string {
    const lines: string[] = [];
    lines.push(
@@ -22,7 +68,28 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..6348e783a9e29441466f0f9aebe52beb
      const quoted = item.quotedSelection === null
        ? ""
        : ` ${quotedSelectionFragment(item.quotedSelection)}`;
-@@ -1099,7 +1099,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     lines.push(`${index + 1}. ${place}${quoted}`);
++    const location = item.location === undefined || item.location === null
++      ? ""
++      : sanitizeBundleText(item.location).replace(/\s+/gu, " ").trim();
++    if (location !== "") lines.push(`   ${location}`);
+     for (const bodyLine of sanitizeBundleText(item.body).split("\n")) {
+       lines.push(`   ${bodyLine}`);
+     }
+@@ -630,10 +666,12 @@ export async function fetchBundle(
+       versionNumbers.set(location.artifactId, numbers);
+     }
+     const anchor = anchorSelectionSchema.safeParse(details.thread.anchor);
++    const viewAnchor = bundleAnchorSchema.safeParse(details.thread.anchor);
+     items.push({
+       artifactName: artifactNames.get(location.artifactId) ??
+         location.artifactId,
+       body: details.thread.body,
++      location: viewAnchor.success ? bundleLocationLine(viewAnchor.data.view) : null,
+       path: details.thread.path,
+       quotedSelection: anchor.success ? anchor.data.originalText : null,
+       threadId,
+@@ -1099,7 +1137,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
      callPort(() =>
        options.host.notify(
          `Artifact Server: delivering ${dispatch.threadIds.length} ` +

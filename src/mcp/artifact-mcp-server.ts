@@ -102,6 +102,8 @@ import {
 } from "../http/artifact-http-links.js";
 import {artifactServerFailureResponse} from "../http/artifact-http-failure.js";
 import {
+  bundleAnchorSchema,
+  bundleLocationLine,
   renderBundleMessage,
   sanitizeBundleText,
   type BundleItem,
@@ -2249,11 +2251,13 @@ export function createArtifactMcpServer(
         versionNumbers.set(thread.artifactId, numbers);
       }
       const anchor = mailboxAnchorSchema.safeParse(thread.anchor);
+      const viewAnchor = bundleAnchorSchema.safeParse(thread.anchor);
       items.push({
         artifactName: artifactNames.get(thread.artifactId) ??
           thread.artifactId,
         body: thread.body,
         path: thread.path,
+        location: viewAnchor.success ? bundleLocationLine(viewAnchor.data.view) : null,
         quotedSelection: anchor.success ? anchor.data.originalText : null,
         threadId,
         versionNumber: numbers.get(thread.versionId) ?? 0,

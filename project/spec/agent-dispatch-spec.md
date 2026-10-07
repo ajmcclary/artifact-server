@@ -202,6 +202,7 @@ Artifact Server: {sender.displayName} sent {N} annotation(s) to address.
 {note, when present}
 
 1. [{artifact name} · version {number} · {path}] {quoted selection, when the anchor has originalText}
+   at {scenario label} (scenario {scenarioId}) · region {regionId} "{region label}" · source {source path}[:{line}]
    {thread body}
    (thread {threadId})
 2. …
@@ -209,6 +210,8 @@ Artifact Server: {sender.displayName} sent {N} annotation(s) to address.
 When each item is done: use the artifact_comments tool to reply to its thread
 with what you did, then resolve it. Do not wait for confirmation.
 ```
+
+The `at …` location line appears only when the thread's anchor carries a valid design review `view` block (DSN-011); parts whose fields are absent are left out, and every part is sanitized like the rest of the message.
 
 **The registered tool** — `pi.registerTool` name `artifact_comments`, operations `get_bundle {threadIds}` (each named thread with its replies, so one call reads a whole bundle), `reply {threadId, body}`, `resolve {threadId}`, wrapping the existing comment HTTP routes with the same credential. This closes the loop: the agent's replies and resolves land in the comment tables, resolution flips the dispatch to `addressed`, and nothing new is invented on the return path.
 

@@ -11,6 +11,8 @@
  * same bundle — any drift between the copies fails that test.
  */
 
+import {z} from "zod";
+
 /**
  * Bidirectional controls (U+202A–202E, U+2066–2069) and zero-width or
  * otherwise invisible characters (U+200B–200F, U+2060, U+FEFF) that hostile
@@ -28,6 +30,36 @@ export function sanitizeBundleText(text: string): string {
   return text.replace(invisibleDirectivePattern, "");
 }
 
+const bundleViewBlockSchema = z.object({
+  regionId: z.string().max(128).optional(),
+  regionLabel: z.string().max(64).optional(),
+  scenarioId: z.string().max(32),
+  scenarioLabel: z.string().max(200),
+  sourceRef: z.object({
+    line: z.number().int().positive().optional(),
+    path: z.string().min(1).max(1_024),
+  }).loose(),
+  viewFormat: z.literal(1),
+}).loose();
+
+/** Reads a thread's opaque anchor for the design review `view` block a location line names. */
+export const bundleAnchorSchema = z.object({view: bundleViewBlockSchema}).loose();
+export type BundleViewBlock = z.infer<typeof bundleViewBlockSchema>;
+
+/**
+ * The one-line location of a comment made on a designed page, built from its
+ * anchor's view block alone so every renderer produces it without another
+ * request.
+ */
+export function bundleLocationLine(view: BundleViewBlock): string {
+  const parts = [`at ${view.scenarioLabel} (scenario ${view.scenarioId})`];
+  if (view.regionId !== undefined) {
+    parts.push(view.regionLabel === undefined ? `region ${view.regionId}` : `region ${view.regionId} "${view.regionLabel}"`);
+  }
+  parts.push(`source ${view.sourceRef.path}${view.sourceRef.line === undefined ? "" : `:${view.sourceRef.line}`}`);
+  return sanitizeBundleText(parts.join(" · ")).replace(/\s+/gu, " ").trim();
+}
+
 // ---------------------------------------------------------------------------
 // Bundle rendering
 // ---------------------------------------------------------------------------
@@ -41,6 +73,8 @@ export interface BundleItem {
   readonly body: string;
   readonly path: string | null;
   readonly quotedSelection: string | null;
+  /** The comment's designed-page location, when its anchor has one. */
+  readonly location?: string | null;
   readonly threadId: string;
   readonly versionNumber: number;
 }
@@ -108,6 +142,10 @@ export function renderBundleMessage(
       ? ""
       : ` ${quotedSelectionFragment(item.quotedSelection)}`;
     lines.push(`${index + 1}. ${place}${quoted}`);
+    const location = item.location === undefined || item.location === null
+      ? ""
+      : sanitizeBundleText(item.location).replace(/\s+/gu, " ").trim();
+    if (location !== "") lines.push(`   ${location}`);
     for (const bodyLine of sanitizeBundleText(item.body).split("\n")) {
       lines.push(`   ${bodyLine}`);
     }
