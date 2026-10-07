@@ -13,7 +13,9 @@ import {
  * different scenario), no-adapter (never says hello), and overlapping (renders
  * a restore over several frames and ends one still running when the next
  * arrives with reason "timeout", as Design's pageVersion 1 adapter does), and
- * late (says hello four seconds after its document loaded).
+ * late (says hello four seconds after its document loaded). Every behavior
+ * reports high contrast while the browser prefers more contrast, as Design's
+ * adapter does in its system theme mode.
  */
 const adapterScript = `
 (function () {
@@ -40,7 +42,7 @@ const adapterScript = `
       pageVersion: 1,
       props: {scenario: current},
       scenarioId: root.getAttribute("data-review-scenario"),
-      theme: "light",
+      theme: matchMedia("(prefers-contrast: more)").matches ? "high-contrast" : "light",
       viewport: {height: innerHeight, width: innerWidth}
     };
   }

@@ -9,7 +9,11 @@ export default defineConfig({
   expect: {timeout: 15_000},
   fullyParallel: false,
   outputDir: "test-results/hosted",
-  projects: [{name: "chromium", use: {browserName: "chromium"}}],
+  projects: [
+    {name: "chromium", use: {browserName: "chromium"}},
+    // Design reviews Forms in Safari, so the Forms run also goes through WebKit.
+    {name: "webkit", testMatch: /forms-review\.hosted\.spec\.ts$/u, use: {browserName: "webkit"}},
+  ],
   reporter: [
     ["line"],
     ["json", {outputFile: "test-results/hosted/playwright-report.json"}],

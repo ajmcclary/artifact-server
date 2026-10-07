@@ -27,33 +27,40 @@ export interface HostedFixture extends ApiTarget {
   readonly runTag: string;
 }
 
-/**
- * Open one hosted session. The API key is attached only to the application
- * origin's `/api/` requests, never to the content origin, and the CSRF cookie
- * the web client reads before a mutation is a placeholder: the server checks
- * CSRF only for browser sessions, never for a bearer request.
- */
+/** Open one hosted session, signed in with the operator's API key. */
 export async function startHostedFixture(browser: Browser): Promise<HostedFixture> {
   const hosted = await hostedConnection();
+  const target = {installation: {apiToken: hosted.apiToken}, server: {baseUrl: hosted.baseUrl}};
+  const context = await openHostedContext(browser, target);
+  const page = await context.newPage();
+  return {
+    ...target,
+    context,
+    page,
+    runTag: new Date().toISOString().replace(/[^0-9]/gu, "").slice(0, 14),
+  };
+}
+
+/**
+ * A fresh browser context signed in to the hosted server, with an empty cache.
+ * The API key is attached only to the application origin's `/api/` requests,
+ * never to the content origin, and the CSRF cookie the web client reads before
+ * a mutation is a placeholder: the server checks CSRF only for browser
+ * sessions, never for a bearer request.
+ */
+export async function openHostedContext(browser: Browser, target: ApiTarget): Promise<BrowserContext> {
   const context = await browser.newContext({viewport: {height: 1000, width: 1680}});
-  await context.route(`${hosted.baseUrl}/api/**`, async (route) => {
-    await route.continue({headers: {...route.request().headers(), authorization: `Bearer ${hosted.apiToken}`}});
+  await context.route(`${target.server.baseUrl}/api/**`, async (route) => {
+    await route.continue({headers: {...route.request().headers(), authorization: `Bearer ${target.installation.apiToken}`}});
   });
   await context.addCookies([{
     name: "__Host-artifact_csrf",
     sameSite: "Strict",
     secure: true,
-    url: hosted.baseUrl,
+    url: target.server.baseUrl,
     value: "bearer-request",
   }]);
-  const page = await context.newPage();
-  return {
-    context,
-    installation: {apiToken: hosted.apiToken},
-    page,
-    runTag: new Date().toISOString().replace(/[^0-9]/gu, "").slice(0, 14),
-    server: {baseUrl: hosted.baseUrl},
-  };
+  return context;
 }
 
 /** Call one MCP tool on the hosted server and return its structured result. */

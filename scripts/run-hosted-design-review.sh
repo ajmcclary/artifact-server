@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Hosted qualification of the Forms review pilot (DSN-007 … DSN-011) against a
 # deployed Artifact Server. It signs in with the operator's existing CLI profile
-# for that origin and never prints the credential. It publishes one disposable
-# artifact, then deletes it with its comments. It registers no agent.
+# for that origin and never prints the credential. It publishes a disposable
+# scenario fixture and, per engine, a copy of a pinned Forms version it reads
+# from that origin, then deletes each with its comments. It registers no agent.
 set -euo pipefail
 
 artifactserver_repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)

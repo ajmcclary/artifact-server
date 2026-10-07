@@ -110,6 +110,23 @@ export function threadPlacement(
   return {kind: "other-scenario", scenarioId: located.scenarioId, scenarioLabel: located.scenarioLabel};
 }
 
+const capturedThemes = new Map<string, string>([
+  ["dark", "Made in the dark theme"],
+  ["high-contrast", "Made in high contrast"],
+]);
+
+/**
+ * The theme a comment was made in, when it was not the light default. A
+ * restore sets the scenario and props, never the theme: the reviewer's own
+ * theme may be an accessibility setting. Saying so keeps a reopened comment
+ * from showing a different theme silently.
+ */
+export function capturedThemeText(anchor: ReviewAnchor | null, view: ReviewView | null): string | null {
+  const located = anchor?.view;
+  if (view === null || located === undefined || located.viewId !== view.viewId) return null;
+  return capturedThemes.get(located.state.theme) ?? null;
+}
+
 /**
  * The annotations the frame should place for the scenario on screen. A view
  * block is passed on only when it belongs to the view on screen; otherwise it

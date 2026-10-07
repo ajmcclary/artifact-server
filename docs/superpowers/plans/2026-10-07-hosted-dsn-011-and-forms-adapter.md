@@ -67,7 +67,9 @@ What it leaves open:
    - Rapid picker changes produce no "Couldn't open" status. This checks that the adapter now sends `superseded`.
    - A cold browser context still gets its hello. This exercises the load-anchored window with the real React bundle.
    - The console has no CSP violation, including the old `about:srcdoc` fetch.
-   - Once Design ships it and the server is deployed: a capture in high contrast stores `view.state.theme: "high-contrast"`. How a reviewer switches Forms to high contrast still needs to be confirmed with Design.
+   - A capture in high contrast stores `view.state.theme: "high-contrast"`. Forms follows the reviewer's contrast preference in the sandbox (Design, `0a572ec`), so the suite uses `emulateMedia({contrast: "more"})`. Reopening it without that preference shows the reviewer's theme and says "Made in high contrast" (contract amendment 8).
+
+   **Status (October 7 evening):** written as `tests/hosted/forms-review.hosted.spec.ts`. It passed a local rehearsal in Chromium and WebKit. The in-page ScenarioBar case is an expected failure, because of a Forms defect in opaque-origin sandboxes. Nothing hosted has run.
 5. **What stays on the fixture.** The hostile DSN-008-F and DSN-009-F cases (no adapter, silent, liar, overlapping), because a real adapter cannot be made to misbehave.
 6. **Engines.** Design's manual checks run in Safari, so add a `webkit` project to `playwright.hosted.config.ts` for the Forms tests only.
 7. **Cleanup.** Delete the copy and its comments, as the fixture run does now.

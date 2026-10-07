@@ -42,25 +42,50 @@ These are recorded in the contract spec's "Amendments after the hosted pilot".
 
 **Deferred minor findings.** All five listed on the Artifact Server side are fixed. The bundle's view-block check now matches the web's, and control characters no longer reach agents. The `runClientCommand` exit-vs-close race is fixed too.
 
+## Since Design's `bda4eba` report (October 7 evening, not committed or deployed yet)
+
+**A restore sets the scenario, not the theme (contract amendment 8).** The page protocol is unchanged, and the review frame never posts Design's `arkcase:theme`. Theme, viewport, locale and direction in a stored `view.state` describe the reviewer's surroundings: a reviewer's theme can be an accessibility setting. So that a reopened comment never shows another theme silently, a thread whose view block (for the view on screen) stored `dark` or `high-contrast` now says "Made in the dark theme" or "Made in high contrast" (`capturedThemeText` in `apps/web/src/review/workspace/scenario-model.ts`, shown by `ThreadLocation` in `comments-tab.tsx`). The scenario fixture now reports `high-contrast` while the browser prefers more contrast, and a DSN-009-B journey captures in high contrast and reopens without it. A `theme` field on `as-page-restore` would stay additive if owners later want restores to apply it.
+
+**The hosted suite drives Forms itself** (`tests/hosted/forms-review.hosted.spec.ts`, `tests/hosted/pinned-copy.ts`). It reads Forms v16 (`ver_c4301bda…`, pinned, never "current"), checks every file's SHA-256 against the source manifest, and publishes the bytes as its own disposable artifact. It then checks a small Forms table (scenario 5, region `inspector.validation.min-length` "Min length", 6 after 5) against the views document, failing with "re-pin Forms" on a mismatch. On the copy it proves, in Chromium and WebKit:
+- views `valid` and provenance `verified` on real Design output;
+- the picker and a `scenario=` link;
+- rapid picker changes with no failure;
+- a cold context's hello;
+- a region comment captured in high contrast (through `emulateMedia({contrast: "more"})`, the reviewer's own route) that stores `view.state.theme: "high-contrast"` and reopens in its scenario saying "Made in high contrast";
+- no content security policy violation in any frame except Forms' deliberate `eval` probe. The check reads `securitypolicyviolation` events, so it names the document and directive. An injected inline `<style>` was confirmed to fail it.
+
+The hostile cases stay on the fixture. A local rehearsal (the same spec against a local server, with Forms read from hosted) passed 7/7 in both engines. **Nothing hosted has run.** The reopen assertion needs the theme note deployed first.
+
+**Forms' ScenarioBar does nothing in an opaque-origin sandbox.** Previous, Next and the menu run their React handlers, but the scenario never changes, while `window.__fb.go()` works. It reproduces in Design's own sandbox harness, with or without a CSP, and works on an ordinary origin, so it is a Forms runtime defect, not Artifact Server's. The suite's ScenarioBar test is marked `test.fail` with that reason, so it reports once a re-pinned Forms fixes it.
+
+**The `style-src` refusal from Design's v16 check does not reproduce.** Hosted Forms v16, opened read-only in Chromium and WebKit with a listener in every frame, shows only Forms' `script-src eval` probe (`support.js:848`, its `new Function` attempt before the inline fallback). Every stylesheet comes from an allowed origin. The review frame and the sandbox both allow inline styles, and only the top-level application (`style-src 'self'`) refuses them; the app adopts its runtime styles as constructable sheets. The likely source is something in that Safari session (an extension or automation overlay) adding an inline `<style>` to the top document. Design can confirm by logging `securitypolicyviolation` events in Safari.
+
 ## Still open
 
-1. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal and a live native bridge. The MCP mailbox's connection key is derived from the principal, so the operator's key can hold only one mailbox; a native bridge registers under its own key (a hash of hostname and working directory) and would not rename it. Options, costs and a recommendation: [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md).
-2. **Forms itself is not driven by an automated run.** DSN-008/009 hosted proof uses the fixture adapter, and Design's Forms adapter is covered only by Design's manual Safari checks. The same plan copies a pinned Forms version into the suite's disposable artifact; nothing hosted has run.
+1. **Hosted run of the Forms suite.** It needs the owner's approval, and the deployed image must include the theme note first. Run `ARTIFACT_SERVER_HOSTED_REVISION=<digest> pnpm qualify:hosted:design-review`, then attach the evidence to DSN-007 … DSN-010 and update DSN-009's proof gap, which still says Forms is covered only by Design's manual check.
+2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
 3. **Repository failures export their raw driver error in trace spans** (see PUB-021 above).
-4. **Open owner decisions** carried from the October 6 handoff: the browser `auth login` 404, the batch upload owner query parameter, not-found vs denied, CLI renewal errors, and Cloudflare Artifacts Gate 3. They are unchanged by this work.
+4. **Open owner decisions from October 6, rechecked against the code on October 7 and unchanged:**
+   - **Browser `auth login` 404 (CLI-001).** No production entry point sets `apiOAuthResource`, and ADR 0028 left it unset on purpose. The CLI already says to use `--api-key-stdin`; `docs/cli.md` still describes a browser login.
+   - **Batch upload owner (PUB-016, PUB-014, PUB-001).** `POST /api/v1/uploads/:uploadId/batch` takes `owner` from the query and never compares it with the signed-in principal. Any authenticated principal who knows another owner's upload ID and principal ID can upload that upload's exact declared bytes and mark its slots verified. They cannot change content, and commit still uses the signed-in principal. This contradicts PUB-014's "principal authorization".
+   - **Not-found vs denied (MCP-009).** Reads look up the artifact before checking read permission. A service principal with project access but no read permission therefore sees 404 for a missing artifact and 403 for an existing one.
+   - **CLI renewal errors (CLI-001).** `refreshCliOAuthCredential` maps every failure, including a network failure or a 5xx, to `credential_revoked`. It is only reachable where the API OAuth resource is wired.
+   - **Cloudflare Artifacts Gate 3.** Production configuration needs deployment authorization.
 
 ## Next for Design
 
-Design is at `1632239`; check it before acting. Nothing here needs Design to re-pin a schema.
+Design is at `9ef257a`. Nothing here needs a schema re-pin.
 
-1. **Report high contrast honestly.** In canonical `arkcase/project/dc-support/support.js`, the page adapter's `state()` builds `theme` as `root.getAttribute("data-theme") === "dark" ? "dark" : "light"`, so a page in high contrast reports `light`. Map `data-theme` to the protocol value instead: `high-contrast` to `high-contrast`, `dark` to `dark`, and anything else (`default`, missing) to `light`. Then run `sync:support` so every project gets the same copy, and add a case to `tests/review-adapter.spec.js`. artifacts.backend.app accepts the value from `7a5fc6c`. An older server drops the whole page state, so do not point a build that sends it at one.
-2. **Verify on hosted after the next Forms publish.** Switch Forms to high contrast, open scenario 5 from the review's picker, and make a region comment. The restore must succeed without "Couldn't open scenario 5", and the thread's anchor must store `view.state.theme: "high-contrast"`. Publishing needs the owner's approval.
-3. **Answer one question for the hosted-suite plan.** How does a reviewer switch Forms to high contrast inside the review sandbox (a scenario prop, a views parameter, or the app's own theme control)? The plan in [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md) needs it before it can test high-contrast capture.
-4. **Optional.** The canvas background helper's `__dc_theme` listener (in `createHelmetManager`) also knows only `light` and `dark`. It is not part of the review protocol, so changing it is Design's call.
+1. **Fix the ScenarioBar in the review sandbox.** In an `allow-scripts` opaque-origin `srcdoc` (Design's own `openInReviewSandbox`, with or without its CSP), Forms' ScenarioBar Previous, Next and menu do nothing: the IconButton's `onClick` runs, but `data-review-scenario` and `__fb.state.sc` never change, while `window.__fb.go('6')` works. It works on the static server. A reviewer cannot move through scenarios from inside the page. Artifact Server's hosted suite expects this to fail until it re-pins a fixed Forms.
+2. **Optional: skip the `new Function` probe in the sandbox.** `evalDcLogic` (`support.js:848`) triggers a `script-src eval` violation on every boot in Artifact Server's review before it falls back to inline evaluation. It is harmless, but it is the only violation left in the console.
+3. **The `style-src` refusal** did not reproduce under Chromium or WebKit on hosted v16. If it appears again in Safari, log `securitypolicyviolation` events (document, `effectiveDirective`, `sourceFile`) to name the frame. A top-level `<style>` from an extension is the likely cause.
+4. **The theme on restore is settled:** a restore does not set it, and the thread says which theme the comment was made in. `arkcase:theme` stays Design-private. No Design change is needed.
 
 ## Decided
 
 The review's in-frame toggle starts in Interact mode on every page, including designed pages. Reviewers click around before commenting. Only the preview-mode choice (Interactive preview vs Annotate) was a bug.
+
+A restore sets the scenario, not the theme (contract amendment 8).
 
 ## Deploying
 

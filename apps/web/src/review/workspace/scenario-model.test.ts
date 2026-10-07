@@ -4,6 +4,7 @@ import type {ReviewView} from "../../api/views.ts";
 import type {PageState} from "../../review-frame/page-protocol.ts";
 import {
   annotationsForScenario,
+  capturedThemeText,
   captureProps,
   parametersFromProps,
   reduceViewState,
@@ -131,5 +132,26 @@ describe("restore failures", () => {
     expect(scenarioFailureText("5", "adapter-error")).toBe("Couldn't open scenario 5: the page reported an error while switching.");
     expect(scenarioFailureText("5", "some-future-code")).toBe("Couldn't open scenario 5: the page didn't say why.");
     expect(scenarioFailureText("5", null)).toBe("Couldn't open scenario 5: the page didn't say why.");
+  });
+});
+
+describe("the theme a comment was made in", () => {
+  const madeIn = (theme: PageState["theme"]) => ({
+    htmlAnchor: null,
+    originalText: "",
+    view: viewAnchorFrom(view, {region: null, state: {...state("5"), theme}}),
+  });
+
+  test("is named for dark and high contrast, since a restore does not set it", () => {
+    expect(capturedThemeText(madeIn("high-contrast"), view)).toBe("Made in high contrast");
+    expect(capturedThemeText(madeIn("dark"), view)).toBe("Made in the dark theme");
+    expect(capturedThemeText(madeIn("light"), view)).toBeNull();
+  });
+
+  test("is not named from a view block the page on screen would treat as absent", () => {
+    expect(capturedThemeText(madeIn("high-contrast"), null)).toBeNull();
+    expect(capturedThemeText(madeIn("high-contrast"), {...view, viewId: "fixture/other"})).toBeNull();
+    expect(capturedThemeText({htmlAnchor: null, originalText: ""}, view)).toBeNull();
+    expect(capturedThemeText(null, view)).toBeNull();
   });
 });

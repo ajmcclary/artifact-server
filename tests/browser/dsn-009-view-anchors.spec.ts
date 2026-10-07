@@ -86,6 +86,32 @@ test("DSN-009-B: a region comment in a designed scenario reopens there, and othe
   await expect(page.getByRole("article").filter({hasText: "Logic needs a second rule."}).getByText(/^In scenario 6/u)).toHaveCount(0);
 });
 
+test("DSN-009-B: a comment made in high contrast says so, and reopening it keeps the reviewer's theme", async () => {
+  const published = await publishScenarioFixture(fixture, "dsn-009-b-theme");
+  const {page} = fixture;
+  const ids = {artifactId: published.artifact.id, versionId: published.version.id};
+
+  await page.emulateMedia({contrast: "more"});
+  await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"})}&scenario=5`);
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  await page.getByRole("button", {name: /^Interact mode:/u}).click();
+  await previewFrame(page).getByText("Minimum length").click();
+  await annotationFrame(page).getByPlaceholder("Add a comment...").fill("Min length is hard to read here.");
+  await annotationFrame(page).getByRole("button", {name: "Save"}).click();
+  await expect.poll(async () => (await listThreadsOverApi(fixture, ids.artifactId)).length).toBe(1);
+  const [created] = await listThreadsOverApi(fixture, ids.artifactId);
+  expect(created?.anchor).toMatchObject({view: {regionId: "inspector.validation.min-length", scenarioId: "5", state: {theme: "high-contrast"}}});
+
+  // A restore sets the scenario, not the theme: the thread names the theme it was made in.
+  await page.emulateMedia({contrast: "no-preference"});
+  await page.goto(`${reviewHref(fixture.server.baseUrl, {...ids, path: "honest.html"})}&thread=${created?.id ?? ""}`);
+  await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+  await openInspectorTab(page, "Comments");
+  const thread = page.getByRole("article").filter({hasText: "Min length is hard to read here."});
+  await expect(thread.getByText("Made in high contrast")).toBeVisible();
+  await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1);
+});
+
 test("DSN-009-F: a failed restore and a missing or duplicated region say the location is unavailable", async () => {
   const published = await publishScenarioFixture(fixture, "dsn-009-f");
   const {page} = fixture;

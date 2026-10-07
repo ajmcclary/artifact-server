@@ -37,8 +37,8 @@ import {
   loadConversations,
   type ReviewCommentSession,
 } from "../review-comments.tsx";
-import {reviewAnchorSchema, type UnanchoredReason} from "@/review-frame/protocol";
-import {threadPlacement} from "./scenario-model.ts";
+import {reviewAnchorSchema, type ReviewAnchor, type UnanchoredReason} from "@/review-frame/protocol";
+import {capturedThemeText, threadPlacement} from "./scenario-model.ts";
 import {useScenarioSession, type ScenarioSession} from "./scenario-session.tsx";
 
 type CommentView = "all" | "open" | "resolved" | "sent";
@@ -451,7 +451,10 @@ function OpenScenarioAction({scenario, thread}: {
   );
 }
 
-/** Where a thread is on the page now: placed, in another scenario, or unavailable. */
+/**
+ * Where a thread is on the page now (placed, in another scenario, or
+ * unavailable), and the theme it was made in when a restore cannot show it.
+ */
 function ThreadLocation({thread, unanchored, unanchoredReason}: {
   readonly thread: ReviewThread;
   readonly unanchored: boolean;
@@ -460,6 +463,22 @@ function ThreadLocation({thread, unanchored, unanchoredReason}: {
   const scenario = useScenarioSession();
   const parsed = reviewAnchorSchema.safeParse(thread.anchor);
   const anchor = parsed.success ? parsed.data : null;
+  const location = threadLocationText(anchor, scenario, unanchored, unanchoredReason);
+  const theme = capturedThemeText(anchor, scenario.view);
+  return (
+    <>
+      {location === null ? null : <p style={metaStyle}>{location}</p>}
+      {theme === null ? null : <p style={metaStyle}>{theme}</p>}
+    </>
+  );
+}
+
+function threadLocationText(
+  anchor: ReviewAnchor | null,
+  scenario: ScenarioSession,
+  unanchored: boolean,
+  unanchoredReason: UnanchoredReason | null,
+): string | null {
   const placement = threadPlacement(anchor, scenario.view, scenario.onScreen.scenarioId);
   const wanted = anchor?.view?.scenarioId ?? null;
   if (
@@ -467,13 +486,11 @@ function ThreadLocation({thread, unanchored, unanchoredReason}: {
     scenario.requested?.scenarioId === wanted &&
     (scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported")
   ) {
-    return <p style={metaStyle}>{`Location unavailable: scenario ${wanted} couldn't be opened`}</p>;
+    return `Location unavailable: scenario ${wanted} couldn't be opened`;
   }
-  if (placement.kind === "other-scenario") {
-    return <p style={metaStyle}>{`In scenario ${placement.scenarioId} · ${placement.scenarioLabel}`}</p>;
-  }
-  if (unanchoredReason !== null) return <p style={metaStyle}>Location unavailable: the region isn't on the page</p>;
-  return unanchored ? <p style={metaStyle}>Location unavailable in this version</p> : null;
+  if (placement.kind === "other-scenario") return `In scenario ${placement.scenarioId} · ${placement.scenarioLabel}`;
+  if (unanchoredReason !== null) return "Location unavailable: the region isn't on the page";
+  return unanchored ? "Location unavailable in this version" : null;
 }
 
 /** A thread's leading mark: a pin for a place on the page, layers for the whole page or version. */
