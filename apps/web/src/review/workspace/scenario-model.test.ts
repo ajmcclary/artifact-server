@@ -124,7 +124,7 @@ describe("annotations without a known view", () => {
 });
 
 describe("restore failures", () => {
-  test("DSN-008-F: are explained in words, never as raw reason codes", () => {
+  test("are explained in words, never as raw reason codes", () => {
     expect(scenarioFailureText("5", "timeout")).toBe("Couldn't open scenario 5: the page didn't confirm it in time.");
     expect(scenarioFailureText("5", "no-adapter")).toBe("Couldn't open scenario 5: this page can't be told which scenario to show.");
     expect(scenarioFailureText("5", "scenario-mismatch")).toBe("Couldn't open scenario 5: the page showed a different scenario.");

@@ -106,7 +106,7 @@ describe("page channel", () => {
     expect(channel.supports()).toBe(false);
   });
 
-  test("DSN-008-B: a cold page that is still loading its runtime gets its hello window after load", async () => {
+  test("a cold page that is still loading its runtime gets its hello window after load", async () => {
     const {advance, channel, posted} = harness();
     const restoring = channel.restore({scenario: "5"}, "5");
     // A cold cache: React and a large bundle take longer than the hello window to arrive.
@@ -121,14 +121,14 @@ describe("page channel", () => {
     expect(await restoring).toEqual({outcome: "restored", state: state("5")});
   });
 
-  test("DSN-008-F: a page whose document never finishes loading is reported without an adapter", async () => {
+  test("a page whose document never finishes loading is reported without an adapter", async () => {
     const {advance, channel} = harness();
     const restoring = channel.restore({scenario: "5"}, "5");
     advance(20_000);
     expect(await restoring).toEqual({outcome: "unsupported", reason: "no-adapter"});
   });
 
-  test("DSN-008-F: a restore superseded by a later one is superseded, not a timeout", async () => {
+  test("a restore superseded by a later one is superseded, not a timeout", async () => {
     const {channel} = harness();
     channel.receive(hello);
     const first = channel.restore({scenario: "6"}, "6");
@@ -142,7 +142,7 @@ describe("page channel", () => {
     expect(await second).toEqual({outcome: "restored", state: state("5")});
   });
 
-  test("DSN-008-F: an adapter's own superseded reason is never a failure", async () => {
+  test("an adapter's own superseded reason is never a failure", async () => {
     const {channel} = harness();
     channel.receive(hello);
     const only = channel.restore({scenario: "6"}, "6");
