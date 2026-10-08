@@ -1,0 +1,53 @@
+name: Home runner smoke
+
+# Proves the home Kubernetes runner (docs/ci-home-runner.md) can carry the full
+# gate before ci.yml's full tier is pointed at it. Manual dispatch from main only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Home runner smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: artifact-server-home
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No service-account token is mounted
+        run: test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token
+      - name: Docker uses the containerd image store
+        run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
+      - name: Tools the full gate takes from the runner are present
+        run: |
+          missing=()
+          for tool in curl git jq openssl sudo unzip zip; do
+            command -v "$tool" >/dev/null || missing+=("$tool")
+          done
+          docker compose version >/dev/null 2>&1 || missing+=("docker compose")
+          docker buildx version >/dev/null 2>&1 || missing+=("docker buildx")
+          if (( ${#missing[@]} )); then
+            printf 'Missing on the home runner: %s\n' "${missing[@]}"
+            exit 1
+          fi
+      - name: kind creates and deletes a cluster inside Docker-in-Docker
+        run: |
+          scripts/with-kubernetes-test-tools.sh bash -c \
+            'kind create cluster --name home-smoke --wait 120s && kind delete cluster --name home-smoke'
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.34.3
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+      - name: Playwright system dependencies install
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium

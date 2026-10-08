@@ -8,6 +8,11 @@ on:
         required: false
         default: release
         type: string
+      runner:
+        description: Where the full gate runs (github or home)
+        required: false
+        default: github
+        type: string
   workflow_dispatch:
     inputs:
       tier:
@@ -18,6 +23,14 @@ on:
         options:
           - full
           - pr
+      runner:
+        description: Where the full gate runs (home is the owner's Kubernetes node; see docs/ci-home-runner.md)
+        required: true
+        default: github
+        type: choice
+        options:
+          - github
+          - home
 
 permissions:
   contents: read
@@ -270,7 +283,8 @@ jobs:
   full:
     name: Full / Linux iteration gate
     if: inputs.tier == 'release' || (github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.tier == 'full'))
-    runs-on: ubuntu-latest
+    # Only an owner's manual dispatch from main may use the home runner.
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner == 'home' && github.ref == 'refs/heads/main') && 'artifact-server-home' || 'ubuntu-latest' }}
     timeout-minutes: 47
     env:
       BROWSER_CRITICAL_ENGINES: all
@@ -281,6 +295,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Reclaim unused runner disk
+        if: inputs.runner != 'home'
         run: |
           df -h /
           sudo rm -rf -- \
@@ -314,6 +329,7 @@ jobs:
       - name: Install critical browser engines
         run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Enable the containerd image store
+        if: inputs.runner != 'home'
         run: |
           artifactserver_daemon_config=$(mktemp)
           if [[ -s /etc/docker/daemon.json ]]; then
@@ -333,6 +349,10 @@ jobs:
           sudo systemctl restart docker
           docker info --format '{{json .DriverStatus}}' \
             | grep -F 'io.containerd.snapshotter.v1'
+      # The home runner's dind daemon starts with the containerd image store.
+      - name: Confirm the containerd image store on the home runner
+        if: inputs.runner == 'home'
+        run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
       - name: Prepare attestation-capable BuildKit
         run: |
           docker buildx create \
