@@ -294,6 +294,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Prepare the home runner
+        if: inputs.runner == 'home'
+        run: scripts/prepare-home-runner.sh
       - name: Reclaim unused runner disk
         if: inputs.runner != 'home'
         run: |
@@ -353,9 +356,6 @@ jobs:
       - name: Confirm the containerd image store on the home runner
         if: inputs.runner == 'home'
         run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
-      - name: Prepare the home runner
-        if: inputs.runner == 'home'
-        run: scripts/prepare-home-runner.sh
       - name: Prepare attestation-capable BuildKit
         run: |
           docker buildx create \

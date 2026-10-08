@@ -7,6 +7,12 @@ set -euo pipefail
 readonly artifactserver_compose_version="v5.6.0"
 readonly artifactserver_compose_sha256="40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a"
 
+# pnpm's standalone installer links against libatomic, absent from the image.
+if ! ldconfig -p | grep -q 'libatomic\.so\.1'; then
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq --no-install-recommends libatomic1
+fi
+
 if ! docker compose version >/dev/null 2>&1; then
   artifactserver_plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
   mkdir -p "$artifactserver_plugins"
