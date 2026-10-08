@@ -58,10 +58,9 @@ Details are in the archive and the ledger.
 |---|---|---|
 | 1 | **Restore on the live page?** Forms answers `as-page-restore` in Interactive preview, so Review could restore a scenario without reloading into Annotate. | Review would have to post to the live page, which CMT-022 forbids. It needs a spec amendment, journeys, and a rule for pages that never answer. Until then, Forms' default-on-load handling of `?scenario=` is fine. |
 | 2 | **DSN-011 hosted bundle delivery:** a dedicated agent principal (recommended) or a live native bridge. | [Plan](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment. |
-| 3 | **Candidate publication model:** a separate candidate artifact, or a staged version that does not advance current. | Today a publish advances current in the same transaction. Pick one and record new acceptance IDs before automatic publication. Source acceptance and output promotion must stay distinct actions. |
-| 4 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
-| 5 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
-| 6 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
+| 3 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
+| 4 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
+| 5 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
 
 ### Product choices (T24)
 
@@ -124,9 +123,17 @@ namespace empty ([report](project/evidence/cloudflare-artifacts-node-postgres-qu
 
 The target journey: open Forms scenario 5, annotate its field, send
 source-aware feedback, propose an authored-source commit, build it, publish it
-under the chosen candidate model (decision 3), review it, then explicitly accept
+as a candidate version, review it, then explicitly accept
 the source and/or promote the exact output. The views, review SDK and
 provenance contracts this depends on are done (DSN-007 … DSN-011). What remains:
+
+- **Candidate versions (decided October 8).** A candidate is a staged version
+  of the same artifact that does not move current; promotion repoints current
+  to that exact version. Candidates are not mirrored to Git, promotion requires
+  current to still equal the candidate's base, only a human can promote, and
+  rejected candidates are kept but hidden. Next: add the proposed CND-001 …
+  CND-006 to the ledger with their tests, then implement across SQLite,
+  Postgres and D1 ([design](docs/superpowers/specs/2026-10-08-candidate-versions-design.md)).
 
 - **Agent delivery.** Extend the existing
   [dispatch](project/spec/agent-dispatch-spec.md) and
