@@ -23,10 +23,12 @@ jobs:
         run: test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token
       - name: Docker uses the containerd image store
         run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
+      - name: Prepare the home runner
+        run: scripts/prepare-home-runner.sh
       - name: Tools the full gate takes from the runner are present
         run: |
           missing=()
-          for tool in curl git jq openssl sudo unzip zip; do
+          for tool in curl git jq openssl sudo unzip; do
             command -v "$tool" >/dev/null || missing+=("$tool")
           done
           docker compose version >/dev/null 2>&1 || missing+=("docker compose")

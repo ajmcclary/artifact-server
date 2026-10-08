@@ -353,6 +353,9 @@ jobs:
       - name: Confirm the containerd image store on the home runner
         if: inputs.runner == 'home'
         run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
+      - name: Prepare the home runner
+        if: inputs.runner == 'home'
+        run: scripts/prepare-home-runner.sh
       - name: Prepare attestation-capable BuildKit
         run: |
           docker buildx create \
