@@ -40,7 +40,23 @@ jobs:
       - name: kind creates and deletes a cluster inside Docker-in-Docker
         run: |
           scripts/with-kubernetes-test-tools.sh bash -c \
-            'kind create cluster --name home-smoke --wait 120s && kind delete cluster --name home-smoke'
+            'kind create cluster --name home-smoke --retain --wait 120s && kind delete cluster --name home-smoke'
+      - name: Diagnose a failed kind cluster
+        if: failure()
+        run: |
+          echo "== inotify limits (shared with the node)"
+          sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches || true
+          echo "== cgroup"
+          stat -fc %T /sys/fs/cgroup || true
+          node=home-smoke-control-plane
+          echo "== node containers"
+          docker exec "$node" crictl ps -a 2>&1 | tail -20 || true
+          echo "== kubelet"
+          docker exec "$node" journalctl -u kubelet --no-pager 2>&1 | grep -iE "error|fail|too many|cgroup" | tail -40 || true
+          echo "== kube-apiserver"
+          docker exec "$node" sh -c 'crictl logs --tail 40 $(crictl ps -a --name kube-apiserver -q | head -1)' 2>&1 | tail -40 || true
+          echo "== etcd"
+          docker exec "$node" sh -c 'crictl logs --tail 20 $(crictl ps -a --name etcd -q | head -1)' 2>&1 | tail -20 || true
       - name: Install pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
