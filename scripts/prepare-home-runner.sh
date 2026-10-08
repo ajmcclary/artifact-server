@@ -7,11 +7,13 @@ set -euo pipefail
 readonly artifactserver_compose_version="v5.6.0"
 readonly artifactserver_compose_sha256="40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a"
 
-# pnpm's standalone installer links against libatomic, absent from the image.
-if ! ldconfig -p | grep -q 'libatomic\.so\.1'; then
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq --no-install-recommends libatomic1
-fi
+# Libraries GitHub-hosted runners carry and the image lacks: pnpm's standalone
+# installer links libatomic, and setup-ruby's prebuilt Ruby links libyaml.
+sudo apt-get update -qq
+sudo apt-get install -y -qq --no-install-recommends libatomic1 libyaml-0-2
+
+# setup-ruby's prebuilt Rubies only run from the hosted runners' tool cache path.
+sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/hostedtoolcache
 
 if ! docker compose version >/dev/null 2>&1; then
   artifactserver_plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
