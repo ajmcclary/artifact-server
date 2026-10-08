@@ -60,7 +60,7 @@ Check current account limits and pricing before claiming a zero-cost deployment;
 free Pulumi software does not make the provisioned AWS/GCP resources free.
 
 The [engineering reconciliation](../project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
-records qualified source corrections. [T08–T12 and T20–T21](../NEXT-STEPS.md)
+records qualified source corrections. [T08–T12 and T20–T21](../ROADMAP.md#engineering-backlog)
 track workload qualification and future changes. These tasks do not add new
 runtime switches or change the current deployment contract.
 

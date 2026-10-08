@@ -35,7 +35,7 @@ Postgres, full history-growth curves, live Git calls and controlled repeated
 baselines remain unqualified.
 
 The [September 17 research reconciliation](../research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
-and root [next steps](../../NEXT-STEPS.md) separate implemented fixes from open
+and the [archived backlog](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md) separate implemented fixes from open
 experiments. Historical timing series below are tied to their recorded machines,
 runtimes and workload. They are not interchangeable with the latest JSON report
 or proof of a paired improvement. In particular, the retained prior-review
@@ -178,7 +178,7 @@ These fixes remove the obvious read-amplification and crash-durability problems 
 | Worker/D1 limits differ from Node/Postgres | Already-implemented R2/assets/Cron do not prove a free-tier many-file envelope. Qualify actual query, parameter, object-operation and CPU limits before chunked preparation. | T08/T09 |
 | SQLite activity-log migration copies `actions` once at startup | Measured 10/01/2026 on an Apple M1 Max, Node v24.15.0: one startup over a populated schema-17 file with 1,000,000 legacy actions took 12.62 s, against the spec's 30 s stop (`pnpm perf:activity-migration`, `project/evidence/activity-migration-baseline.json`). Within budget; the copy holds one IMMEDIATE transaction, so first startup after upgrade blocks writers for that time. | ACT-002 |
 
-Task definitions and gates are in [NEXT-STEPS.md](../../NEXT-STEPS.md). These are
+Task definitions are in the [archived backlog](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md); open tasks and gates are in the [roadmap](../../ROADMAP.md). These are
 observations and hypotheses, not completed performance changes. A 201.571-second
 commit inside the recorded 523.94-second publication occupies about 38.5% of
 the run; halving that whole stage would save about 19.2% overall, but that does
@@ -535,8 +535,8 @@ After:
 
 - **Transfer fell 80%, but prototype ready time did not improve.** ExtractionKit's prototype transfer dropped from 18.7 MiB to 3.7 MiB cold. Content responses arrived single-encoded as `br` through Traefik; the proxy neither stripped nor re-encoded them. Ready time stayed within noise: cold median 14.3 s before and 17.9 s after, with overlapping ranges (10.5–20.0 s and 12.7–18.7 s); warm 14.0 s and 13.8 s. One before sample reached ready after only 2.9 MiB, so the readiness signal can fire before late data scripts start.
 - **Server-side streaming compression is now the prototype's bottleneck on this network.** In the raw captures, `ek-data-design-record.js` (5.9 MB) received in 3.0–3.7 s as identity. Compressed to 0.2 MB, it took 5.7–11.9 s, and `ds-bundle.js` and `ek-data-viewer.js` behaved the same way. Each open requests about 30 content files at once, and they compress at roughly 0.5 MB/s of input per stream. The pods request one CPU with no limit. Likely causes, not yet isolated: one chunk in flight per stream through the pull-through source, the default four-thread libuv pool shared by zlib, and the S3 read path. Local runs read 64 KiB disk chunks and do not reproduce this. Measuring per-chunk timing on the external-storage runtime, and the effect of `UV_THREADPOOL_SIZE`, comes before tuning.
-- **The Library's cold median moved from 33 s to 22 s, but compression does not cause it.** Library API responses were already compressed by the buffering wrapper, and the Library loads no lease content. The change reflects variance between hosted sessions (before ranged 24–77 s). The Library remains the slowest journey, at about 180 requests per open, and needs the server-side catalog (PLAN.md step 1), not compression.
-- **Every open still transfers and compresses again.** Preview leases are `private, no-store`, and each Review open mints a new lease origin, so a warm open repeats the full transfer and the full compression work. Precompressed variants keyed by digest and coding (deferred approach 2) would remove both the per-open CPU and the throughput ceiling above. Whether the browser can reuse bytes across opens is the separate cache and lease contract decision in PLAN.md step 0.
+- **The Library's cold median moved from 33 s to 22 s, but compression does not cause it.** Library API responses were already compressed by the buffering wrapper, and the Library loads no lease content. The change reflects variance between hosted sessions (before ranged 24–77 s). The Library remains the slowest journey, at about 180 requests per open, and needs the server-side catalog (archived PLAN.md step 1), not compression.
+- **Every open still transfers and compresses again.** Preview leases are `private, no-store`, and each Review open mints a new lease origin, so a warm open repeats the full transfer and the full compression work. Precompressed variants keyed by digest and coding (deferred approach 2) would remove both the per-open CPU and the throughput ceiling above. Whether the browser can reuse bytes across opens is the separate cache and lease contract decision in archived PLAN.md step 0.
 - **Memory is bounded.** A size hint for large entries gave Brotli a 16 MiB window, and 20 concurrent 64 MiB reads grew resident memory by 577 MiB. With a 1 MiB window and no size hint, the same reads grew it by 153 MiB, against gzip's 17–70 MiB; `tests/http/content-delivery-compression.test.ts` bounds both codings at 256 MiB of resident growth.
 
 ## October 2026 precompressed content variants (CNT-011)
@@ -585,8 +585,8 @@ The earlier hosted runs are in the CNT-010 section above: 14.3 s cold and 14.0 s
 ### What this shows and what it does not
 
 - **The success criteria are met.** ExtractionKit's cold ready median fell from 14.3 s before compression (and 17.9 s with streaming) to 8.9 s, and the after range (7.6–11.5 s) sits almost entirely below the before range (10.5–20.0 s). Warm opens fell from 14.0 s to 9.7 s. Transfer is 3.38 MiB cold, below the 3.7 MiB streaming result, and requests spend no CPU on compression.
-- **Ready time is still about 9 seconds.** About 20 MiB of decoded script and CSS still has to be parsed and run on every open, and every open mints a new lease origin with `no-store` responses, so even a warm open transfers about 2.8 MiB again. Splitting ExtractionKit's eager data scripts (PLAN.md step 2) and the cache and lease contract decision (PLAN.md step 0) are the next levers.
-- **The Library is unchanged and remains the slowest journey**, at about 20–26 s median with roughly 180 requests per open. Compression does not touch it; it needs the server-side catalog (PLAN.md step 1).
+- **Ready time is still about 9 seconds.** About 20 MiB of decoded script and CSS still has to be parsed and run on every open, and every open mints a new lease origin with `no-store` responses, so even a warm open transfers about 2.8 MiB again. Splitting ExtractionKit's eager data scripts (archived PLAN.md step 2) and the cache and lease contract decision (archived PLAN.md step 0) are the next levers.
+- **The Library is unchanged and remains the slowest journey**, at about 20–26 s median with roughly 180 requests per open. Compression does not touch it; it needs the server-side catalog (archived PLAN.md step 1).
 - **Hosted timings vary widely between sessions.** The Library, which these changes do not affect, measured 33 s, 22 s, and 26 s cold across the three hosted runs. Read single comparisons with that in mind.
 - **Rollout and rollback.** Migration 20 runs in the pre-upgrade hook, so the old pods report "schema newer" and go not-ready until the new ones are ready; expect a brief readiness gap, as with migrations 18 and 19. Rolling back the image needs `DELETE FROM artifact_server_postgres_migrations WHERE migration_id = 20;` first. The table itself is harmless to an older image.
 

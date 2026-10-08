@@ -5,7 +5,7 @@ Imported on September 17, 2026 against code commit
 of an engineering decision dossier. Both are retained byte-for-byte.
 
 Read the [repository reconciliation](./RECONCILIATION.md) for applicability and
-corrections, then the root [next steps](../../../NEXT-STEPS.md) for implementation
+corrections, then the root [next steps](../../../docs/archive/planning-2026-10-08/NEXT-STEPS.md) for implementation
 order, acceptance conditions, and gates. The dossier's recommendations are
 research input, not instructions authorizing code changes, external services,
 deployment, altered bridge behavior, or broader access.

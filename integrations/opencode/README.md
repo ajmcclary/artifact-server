@@ -158,7 +158,7 @@ Still not covered live:
   [August 27 staging report](../../project/research/STAGING-E2E-REPORT-2026-08-27.md)
   separately records a bounded live pass on OpenCode 1.18.23. It does not prove
   every compaction or session-deletion race. Any remaining live qualification
-  is tracked in [T17](../../NEXT-STEPS.md).
+  is tracked in [T17](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md#t17-complete-live-bridge-qualification-without-changing-citizenship).
 
 ## Compatibility
 

@@ -40,7 +40,7 @@ The follow-up review checked the revised plan against the source and conformance
 | Public current-version bytes use `public, no-cache, must-revalidate`. | Repeat visits can revalidate using ETags and 304s. Overall public-versus-authenticated performance has not been measured. |
 | Portable artboards reference React 18.3.1 UMD, while the vendored web components run under React 19. | Portable CDN dependencies and native runtime compatibility need separate handling. Native modules can share the host runtime while legacy previews retain React 18 in isolated documents. |
 
-The library's [loader](apps/web/src/review/library/use-design-library.ts) waits for [history and comment calculations](apps/web/src/review/library/page-dates.ts). Using the actual gallery membership, the current cold path can require approximately **173 metadata requests before comment reads**, assuming successful reads and empty session caches. This is a source-derived estimate, not a captured network trace; it supersedes the preliminary estimate of roughly 188 requests discussed during the review.
+The library's [loader](../../../apps/web/src/review/library/use-design-library.ts) waits for [history and comment calculations](../../../apps/web/src/review/library/page-dates.ts). Using the actual gallery membership, the current cold path can require approximately **173 metadata requests before comment reads**, assuming successful reads and empty session caches. This is a source-derived estimate, not a captured network trace; it supersedes the preliminary estimate of roughly 188 requests discussed during the review.
 
 Per gallery the cold path is three requests (artifact detail, preview index, unpaginated version list), plus manifests for uncached historical versions in a window of up to 40 versions; the current manifest is already available. Galleries with comments can add up to five comment pages and up to 40 thread reads, through a four-wide request limiter. The library, manifest-digest, and reply-time caches are module-level memory: they can survive client-side navigation but not a full page reload.
 
@@ -50,11 +50,11 @@ The live inventory contained 11 artifacts and 154 versions. Ten artifacts had pr
 
 | Observation | Where | Consequence |
 |---|---|---|
-| `contentHeaders` sets `Accept-Ranges: bytes` on version-content responses. | [create-http-app.ts](src/http/create-http-app.ts) `contentHeaders` | The [compression wrapper](src/http/node-response-compression.ts) skips these responses. It also buffers eligible bodies, which matters when extending it to blob streams. |
+| `contentHeaders` sets `Accept-Ranges: bytes` on version-content responses. | [create-http-app.ts](../../../src/http/create-http-app.ts) `contentHeaders` | The [compression wrapper](../../../src/http/node-response-compression.ts) skips these responses. It also buffers eligible bodies, which matters when extending it to blob streams. |
 | The inspected Traefik ingress values declare no compress middleware; the earlier application-host probe reported Brotli application bundles and no CDN headers. | Workspace `deployments/clusters/vps/artifact-server/helm-values.yaml` | This suggests a delivery gap but does not establish active global middleware, upstream proxy behavior, or content-host response encoding. |
-| Preview leases mint a `review-<56 hex>.frontend.app` origin per open with a 15-minute life, and `serveStoredVersionContent` forces `private, no-store` on lease responses. | [content-access.ts](src/application/content-access.ts) `issuePreviewLease`; create-http-app.ts `serveStoredVersionContent` | A new origin per open defeats the HTTP cache even if the headers were relaxed. |
+| Preview leases mint a `review-<56 hex>.frontend.app` origin per open with a 15-minute life, and `serveStoredVersionContent` forces `private, no-store` on lease responses. | [content-access.ts](../../../src/application/content-access.ts) `issuePreviewLease`; create-http-app.ts `serveStoredVersionContent` | A new origin per open defeats the HTTP cache even if the headers were relaxed. |
 | Authenticated non-current and private current content uses `private, no-store`, while the `/file`, `/media`, and `/archive` routes use `private, max-age=31536000, immutable`. | create-http-app.ts | Existing download/media policies are relevant precedent, but do not automatically establish the right policy for executable previews and short-lived leases. |
-| `project/performance/FINDINGS.md` includes server-side browse and content-read measurements, but the authenticated prototype browser waterfall was not measured in this review. | [performance findings](project/performance/FINDINGS.md) | Add a hosted browser-delivery section alongside existing read and publication evidence. |
+| `project/performance/FINDINGS.md` includes server-side browse and content-read measurements, but the authenticated prototype browser waterfall was not measured in this review. | [performance findings](../../../project/performance/FINDINGS.md) | Add a hosted browser-delivery section alongside existing read and publication evidence. |
 
 Representative raw payloads from the Design repository's generated files; these are not measured hosted transfer sizes:
 
@@ -91,7 +91,7 @@ Today, Artifact Server often has to rediscover the first by inspecting files, wh
 
 Establish separate library and prototype baselines before changing either path. Prioritize a bounded compression improvement if measurements confirm the gap. Evaluate caching and origin reuse separately; they can change access semantics and are not prerequisites for the catalog work.
 
-**Capture useful evidence without publishing credentials or private content.** Measure authorized cold and warm library and ExtractionKit journeys against `artifacts.backend.app`. Record request counts by route class, transfer and decoded bytes, response encoding/cache headers, available server timing, first useful paint, and an explicit prototype-ready signal. Record the tested version, deployment revision, browser, device/network settings, cache state, and repeated samples. Keep raw HARs and traces outside Git in restricted local storage. Playwright's default HAR recording includes content; omitting bodies alone does not remove sensitive headers or URLs. Commit only a sanitized report with timings and sizes, stripping cookies, authorization headers, bootstrap and lease URLs/tokens (including capability-bearing hostnames), and private request/response content. See [Playwright HAR options](https://playwright.dev/docs/api/class-browser#browser-new-context-option-record-har). Add a browser-delivery section to [FINDINGS.md](project/performance/FINDINGS.md).
+**Capture useful evidence without publishing credentials or private content.** Measure authorized cold and warm library and ExtractionKit journeys against `artifacts.backend.app`. Record request counts by route class, transfer and decoded bytes, response encoding/cache headers, available server timing, first useful paint, and an explicit prototype-ready signal. Record the tested version, deployment revision, browser, device/network settings, cache state, and repeated samples. Keep raw HARs and traces outside Git in restricted local storage. Playwright's default HAR recording includes content; omitting bodies alone does not remove sensitive headers or URLs. Commit only a sanitized report with timings and sizes, stripping cookies, authorization headers, bootstrap and lease URLs/tokens (including capability-bearing hostnames), and private request/response content. See [Playwright HAR options](https://playwright.dev/docs/api/class-browser#browser-new-context-option-record-har). Add a browser-delivery section to [FINDINGS.md](../../../project/performance/FINDINGS.md).
 
 **Compress eligible full responses without buffering arbitrary artifacts.** The current wrapper calls `arrayBuffer()` before compression and assumes bodies are bounded in-memory assets. Simply removing its rangeable-response exclusion would buffer blob streams, increasing memory use and delaying first bytes under concurrency. Choose a streaming implementation with backpressure and cancellation, bounded precompressed variants keyed by digest and encoding, or a measured proxy configuration. Keep authorization ahead of private delivery. Preserve canonical stored bytes and hashes; encoded transfer variants are derivatives. Test `Accept-Encoding` negotiation including identity/refusal cases, `Vary`, representation validators, `HEAD`, `304`, `Range`/`If-Range`, `206`/`416`, disconnects, and large concurrent reads. Removing `Accept-Ranges` alone does not define correct range negotiation. Verify any Traefik middleware on the content-host route; keep the Workers deployment's edge-compression behavior independently qualified.
 
@@ -119,7 +119,7 @@ Implementation direction:
 - Apply authorization before returning results, counts, or thumbnails.
 - Reuse ART-009/ART-011 infrastructure and extend the DSN-005 library contract for server-side preview pagination, authorization, and recovery; retain existing conformance promises.
 
-There is also a correctness improvement in both repositories. Artifact Server's page-change detection compares the HTML file's digest, so a shared stylesheet, fixture, or DS update can change the rendered page without changing that digest. Design's `targetAssetDigest` conservatively hashes all rendering assets in a target, including `ds-arkcase/`; this may invalidate more thumbnails than necessary but avoids missing unknown dependencies. The current server limitation is visible in [gallery date calculation](apps/web/src/review/library/design-library.ts).
+There is also a correctness improvement in both repositories. Artifact Server's page-change detection compares the HTML file's digest, so a shared stylesheet, fixture, or DS update can change the rendered page without changing that digest. Design's `targetAssetDigest` conservatively hashes all rendering assets in a target, including `ds-arkcase/`; this may invalidate more thumbnails than necessary but avoids missing unknown dependencies. The current server limitation is visible in [gallery date calculation](../../../apps/web/src/review/library/design-library.ts).
 
 Have the producer emit dependency metadata from its build graph or maintained descriptor, covering scripts, stylesheets, images, fonts, fixture data, dynamic imports, and other render inputs. The server manifest contains paths, hashes, sizes, and media types, not dependency edges: it cannot infer that graph by itself. Validate declared references against the immutable manifest and compute the fingerprint from verified digests plus renderer, scenario, viewport, and theme inputs. Pin external dependencies where possible and identify remaining external variability. Retain conservative target-wide invalidation when dependency coverage is incomplete, especially for legacy exports. Do not present an incomplete script/style scan as a complete rendering fingerprint.
 
@@ -143,13 +143,13 @@ Extend publication metadata with stable identities:
 | `sourceRef` | The source revision and authored location |
 | `renderFingerprint` | The exact rendering inputs |
 
-Store route fragments and validated scenario parameters separately from file paths. The current [preview schema](src/manifest/preview-index.ts) expects HTML paths, rejects unknown fields, and disallows duplicate preview paths. Those rules are tested fail-closed under DSN-003-F and DSN-004-F, so do not loosen them. Add a separate views document with its own version alongside the preview index, so existing publications and their conformance IDs stay untouched.
+Store route fragments and validated scenario parameters separately from file paths. The current [preview schema](../../../src/manifest/preview-index.ts) expects HTML paths, rejects unknown fields, and disallows duplicate preview paths. Those rules are tested fail-closed under DSN-003-F and DSN-004-F, so do not loosen them. Add a separate views document with its own version alongside the preview index, so existing publications and their conformance IDs stay untouched.
 
-Generate this metadata from the existing [Design project descriptors](../Dev/Design/workspace/projects/manifest.js). They already know artboards, configurations, scenarios, fixtures, and Storybook IDs; avoid maintaining a competing inventory manually.
+Generate this metadata from the existing [Design project descriptors](../../../../Dev/Design/workspace/projects/manifest.js). They already know artboards, configurations, scenarios, fixtures, and Storybook IDs; avoid maintaining a competing inventory manually.
 
 ## 3. Support native React selectively, with a portable fallback
 
-The native integration already copies source components, contracts, tokens, and provenance into Artifact Server. Extend the [current sync contract](apps/web/src/arkcase/README.md).
+The native integration already copies source components, contracts, tokens, and provenance into Artifact Server. Extend the [current sync contract](../../../apps/web/src/arkcase/README.md).
 
 For React-authored designs, add generated ES-module entry points and lazy-load the selected screen or component. Use one compatible React runtime per rendering environment. React's [`lazy` API](https://react.dev/reference/react/lazy) supports that loading model.
 
@@ -193,7 +193,7 @@ An annotation should preserve:
 
 For example, "Forms, scenario 5, validation panel, minimum-length field" is more useful than a CSS selector alone.
 
-The current [annotation protocol](apps/web/src/review-frame/protocol.ts) already supports selectors, element text, normalized points, and additional targets. Extend it compatibly. The [W3C annotation model](https://www.w3.org/TR/annotation-model/) provides useful conventions for text and fragment selectors.
+The current [annotation protocol](../../../apps/web/src/review-frame/protocol.ts) already supports selectors, element text, normalized points, and additional targets. Extend it compatibly. The [W3C annotation model](https://www.w3.org/TR/annotation-model/) provides useful conventions for text and fragment selectors.
 
 Keep the original annotation attached to its original version. Across versions, offer a proposed placement with confidence and an explicit "location unavailable" state when uncertain.
 
@@ -217,9 +217,9 @@ Practical optimizations:
 - Use thumbnails in libraries and activity lists, with live rendering on demand.
 - Measure compression and caching at the actual serving boundary.
 
-The [DS generator](../Dev/Design/scripts/build_ds_bundle.mjs) currently specifies `minify: false`. An in-memory experiment reduced its output from **1.74 MB to 1.01 MB**, or approximately **349 KB to 257 KB with gzip**. No generated bundle was changed. This helps, but loading only necessary components is the larger architectural improvement.
+The [DS generator](../../../../Dev/Design/scripts/build_ds_bundle.mjs) currently specifies `minify: false`. An in-memory experiment reduced its output from **1.74 MB to 1.01 MB**, or approximately **349 KB to 257 KB with gzip**. No generated bundle was changed. This helps, but loading only necessary components is the larger architectural improvement.
 
-Artifact Server's [Node compression wrapper](src/http/node-response-compression.ts) deliberately excludes range-capable artifact streams. The inspected ingress values suggest an additional compression gap, but authenticated content-host transfer encoding remains unmeasured. Step 0 specifies verification and a bounded implementation approach.
+Artifact Server's [Node compression wrapper](../../../src/http/node-response-compression.ts) deliberately excludes range-capable artifact streams. The inspected ingress values suggest an additional compression gap, but authenticated content-host transfer encoding remains unmeasured. Step 0 specifies verification and a bounded implementation approach.
 
 Shared assets can reduce repeated browser downloads only when their URLs, authorization, and cache policy permit reuse. Storage deduplication alone does not achieve that. Private assets must retain their access restrictions. See the shared-asset note under step 0 for why this is deferred.
 
@@ -239,7 +239,7 @@ Shared assets can reduce repeated browser downloads only when their URLs, author
 | `court-of-claims` | Same technical approach, preserving its deliberate exclusion from current publish groups |
 | NY Courts | Register existing fragment routes as views; retain its lightweight vanilla-JS runtime initially |
 
-NY Courts currently has no preview index, so the library loader omits it. It is a useful test that the new catalog works for non-React applications too. Its current source is documented in [the template guide](../Dev/NYCourts/design/templates/README.md).
+NY Courts currently has no preview index, so the library loader omits it. It is a useful test that the new catalog works for non-React applications too. Its current source is documented in [the template guide](../../../../Dev/NYCourts/design/templates/README.md).
 
 Keep the two Court-related artifacts distinct. NYCourts' `AGENTS.md` prohibits publishing the high-fidelity `court-of-claims` prototype in the Design repository. NYCourts' `artifact-server.sh` publishes the separate `design/templates` tree to the existing NY Courts artifact. Those policies are not inherently contradictory. The AGENTS statement that Design's publish groups still include `court-of-claims` is stale and should be corrected separately. It does not block authorized indexing of the already-published NY Courts templates or authorize republishing the restricted prototype.
 

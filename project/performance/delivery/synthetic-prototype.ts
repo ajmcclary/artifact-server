@@ -2,7 +2,7 @@ import {mkdir, writeFile} from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Sizes follow the ExtractionKit files named in PLAN.md: the DS bundle, the icon
+ * Sizes follow the ExtractionKit files named in the archived PLAN.md (docs/archive/planning-2026-10-08): the DS bundle, the icon
  * CSS and three eagerly loaded data scripts. The text is seeded and JSON-like, so
  * it compresses like code but not like the real fixtures. The entry is not
  * `index.html` because the publish client builds a gallery only without one.

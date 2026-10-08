@@ -173,7 +173,7 @@ Repository engineering rules live in [AGENTS.md](./AGENTS.md).
 
 The [`project`](./project) directory contains specifications, conformance evidence, performance records, prototypes, and research. Start with:
 
-- [Next steps and implementation order](./NEXT-STEPS.md)
+- [Roadmap: open work and owner decisions](./ROADMAP.md)
 - [Engineering research intake and reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
 - [Product specification](./project/spec/artifact-server-product-spec.html)
 - [Conformance ledger](./project/spec/conformance.yml)

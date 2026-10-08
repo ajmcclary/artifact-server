@@ -176,7 +176,7 @@ replay an old, unbound create attempt.
 A conflict on commit means the current pointer moved; inspect the new current
 version before choosing a new publication intent. Scoped upload URLs accept
 binary bytes at the application origin; they are not provider-native signed
-uploads (that remains [T11](../NEXT-STEPS.md)). Do not delete staged server
+uploads (that remains [T11](../ROADMAP.md#open-tasks)). Do not delete staged server
 data manually to recover a client operation.
 
 ## Publish named groups

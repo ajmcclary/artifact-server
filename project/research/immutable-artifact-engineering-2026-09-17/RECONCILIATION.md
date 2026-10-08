@@ -4,7 +4,7 @@ This integration checks the supplied dossier against code commit
 `572e28f4beef971b94c9864408f5c067ad499ba1` and selected primary documentation on
 September 17, 2026. It distinguishes existing behavior, implementation work,
 experiments, policy decisions, and corrections. The [source manifest](./source-manifest.json)
-preserves originals; [NEXT-STEPS.md](../../../NEXT-STEPS.md) assigns work.
+preserves originals; [NEXT-STEPS.md](../../../docs/archive/planning-2026-10-08/NEXT-STEPS.md) assigns work.
 
 ## Present implementation and disposition
 

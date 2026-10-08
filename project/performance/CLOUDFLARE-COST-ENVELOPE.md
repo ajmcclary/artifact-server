@@ -20,7 +20,7 @@ measured on this machine (Apple M1 Max, darwin arm64, Node 24.15.0, commit
 | Publication size distribution (bytes) | 40 × 16 KiB publications; file-client 48 × 4 KiB directory + one 2 MiB file | `project/evidence/local-performance-baseline.json` |
 | Files per publication distribution | 1-file and 48-file fixtures measured; 3,301-version Git backlog probed on local D1 | local baselines + `project/evidence/git-history-d1-backlog.json` |
 | Retained bytes (total / per project) | 15,540,592 bytes across 291 files in the bounded local baseline; on the live account 0 bytes (0 D1 databases, one R2 bucket with 0 objects) as of 2026-09-26 | `project/evidence/local-performance-baseline.json` `storage`; `project/evidence/cloudflare-api-rtt.json` `inventory` |
-| Backup count and frequency | disclosed-unknown — the account is probe-only with no production workload or backup schedule; recorded per the T24 default ("use synthetic/local fixtures and disclose unknown production capacity/cost", NEXT-STEPS.md) | operator/account state, 2026-09-26 |
+| Backup count and frequency | disclosed-unknown — the account is probe-only with no production workload or backup schedule; recorded per the T24 default ("use synthetic/local fixtures and disclose unknown production capacity/cost", docs/archive/planning-2026-10-08/NEXT-STEPS.md) | operator/account state, 2026-09-26 |
 | Visible review hours per day | disclosed-unknown — no production workload exists on the account; recorded per the T24 default | operator/account state, 2026-09-26 |
 | Mutation rate (publications / hour) | disclosed-unknown — no production workload exists on the account; recorded per the T24 default | operator/account state, 2026-09-26 |
 | Concurrent client count | measured synthetic 1/10/25/50/100 users | `project/evidence/local-capacity-baseline.json` |
@@ -199,7 +199,7 @@ performed about 170 API calls and no Worker invocations, and stayed far inside
 every free allowance. Backup count/frequency, visible review hours, and
 mutation rates have no production source — the account is probe-only — and are
 recorded in the worksheet as disclosed-unknown per the T24 default in
-NEXT-STEPS.md rather than left as open questions.
+ROADMAP.md rather than left as open questions.
 
 On 2026-09-25 two bounded live runs stayed inside this envelope. The R2
 sealed-promotion probe (`project/evidence/r2-s3-promotion-probe.json`) ran tens

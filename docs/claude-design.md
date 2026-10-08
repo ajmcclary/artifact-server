@@ -133,7 +133,7 @@ updating detection. Published bytes do not freeze assets loaded from external
 URLs, and the server does not silently vendor missing dependencies.
 
 Producer-side thumbnail capture lives in the publishing repository; frozen
-collections remain in [T19](../NEXT-STEPS.md) and T24. They must
+collections remain in [T19](../ROADMAP.md#open-tasks) and T24. They must
 preserve entry precedence and source bytes; changes to generated index content
 apply to new publications. A project overview that follows current versions is
 a moving view, not an immutable multi-artifact snapshot.

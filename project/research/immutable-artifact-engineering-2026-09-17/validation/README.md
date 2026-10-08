@@ -24,4 +24,4 @@ comparison and does not resolve the earlier Node 26.5 review's observations.
 No runtime source, dependency version, production deployment or provider account
 was changed. These local/container test results do not qualify all live cloud or
 agent-host cases and do not close the implementation tasks in
-[NEXT-STEPS.md](../../../../NEXT-STEPS.md).
+[NEXT-STEPS.md](../../../../docs/archive/planning-2026-10-08/NEXT-STEPS.md).

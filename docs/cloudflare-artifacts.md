@@ -25,7 +25,7 @@ An isolated eight-version probe selected version 8 first. Primary saved versions
 remain authoritative and unaffected; do not use the moving Git branch as proof
 of chronological backfill or latest-version completion.
 
-[T03](../NEXT-STEPS.md) tracks ordering, bounded reconciliation, multi-worker
+[T03](../ROADMAP.md#published-git-history-cloudflare-artifacts) tracks ordering, bounded reconciliation, multi-worker
 ownership and stale-lease recovery. The [research intake](../project/research/immutable-artifact-engineering-2026-09-17/README.md)
 retains the probe and distinguishes it from live provider qualification. Existing
 normal clone/copy evidence does not close those failure and scale cases. Check

@@ -2,7 +2,7 @@
 
 These are bounded diagnostics, not capacity or stress tests. They exercise the same publication and browser-content paths used by real clients.
 
-The [research-derived measurement plan](../../NEXT-STEPS.md#t01-establish-attributable-and-comparable-measurements)
+The [research-derived measurement plan](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md#t01-establish-attributable-and-comparable-measurements)
 defines the next experiments and stage attribution. The
 [research reconciliation](../research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md)
 records source limitations and provider-specific qualifications. Preserve the

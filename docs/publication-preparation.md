@@ -1,6 +1,6 @@
 # Bounded, resumable publication preparation
 
-Design record for T09 slice 1 (`NEXT-STEPS.md`, September 2026). Specifies how
+Design record for T09 slice 1 (`docs/archive/planning-2026-10-08/NEXT-STEPS.md`, September 2026). Specifies how
 a bounded runtime — the Cloudflare Worker being the forcing case — verifies and
 installs a publication's files across multiple resumable passes while keeping
 final publication visibility atomic and singular. Specified as PUB-019 and

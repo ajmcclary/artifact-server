@@ -1,8 +1,8 @@
 # Next steps
 
 Updated October 2, 2026. This is the implementation backlog resulting from
-the [engineering dossier intake](./project/research/immutable-artifact-engineering-2026-09-17/README.md)
-and [repository reconciliation](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
+the [engineering dossier intake](../../../project/research/immutable-artifact-engineering-2026-09-17/README.md)
+and [repository reconciliation](../../../project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md).
 The code inspected was `572e28f4beef971b94c9864408f5c067ad499ba1`.
 
 The research and this plan do not mean the features below are implemented.
@@ -11,8 +11,8 @@ their remaining gaps recorded. T10's bounded uncommitted-cleanup slice is done;
 its successful-staging policy and provider qualification remain open. All other
 tasks (T03, T10–T11, T14–T16, T19–T27) are open. Task IDs are planning
 identifiers, not new
-conformance IDs. The [ledger](./project/spec/conformance.yml) remains the index
-of product promises and proof; [AGENTS.md](./AGENTS.md) remains binding.
+conformance IDs. The [ledger](../../../project/spec/conformance.yml) remains the index
+of product promises and proof; [AGENTS.md](../../../AGENTS.md) remains binding.
 
 Keep TypeScript/Effect, narrow provider ports, immutable versions, explicit
 publish conflicts, application-owned authorization, local-only linked files,
@@ -85,7 +85,7 @@ gate.
 
 ### T01 Establish attributable and comparable measurements
 
-- **Current:** [performance harnesses](./project/performance/README.md) measure
+- **Current:** [performance harnesses](../../../project/performance/README.md) measure
   bounded local and two-process workloads. Prior Node 26.5 observations include
   204 ms max event-loop delay and about 708 MiB peak capacity RSS; these do not
   establish a leak or regression against Node 24.15. Historical numbers belong
@@ -102,7 +102,7 @@ gate.
   to `plan`, `staging`, `commit`, or `other` legs and records per-leg request
   count, bytes sent, bytes received, total, p50, p95, mean, and maximum
   milliseconds without logging bodies, tokens, or signed URLs. A
-  [workload/account worksheet](./project/performance/WORKLOAD-WORKSHEET.md)
+  [workload/account worksheet](../../../project/performance/WORKLOAD-WORKSHEET.md)
   captures provider plan, region, RTT, proxy topology, sizes, counts, retained
   bytes, backups, review hours, mutation rates, concurrency, durability, pool
   sizes, fixture identity, and warm/cold state. The D1 Git-history harness
@@ -116,10 +116,10 @@ gate.
   and the local baseline attributes every file-client request to the `plan`,
   `staging`, `commit` or `other` leg with per-leg counts, bytes and latency
   percentiles — without logging bodies, tokens or signed URLs. The
-  [workload/account worksheet](./project/performance/WORKLOAD-WORKSHEET.md)
+  [workload/account worksheet](../../../project/performance/WORKLOAD-WORKSHEET.md)
   captures missing operating facts and is filled for the Workers + D1 + R2
   target in
-  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  [CLOUDFLARE-COST-ENVELOPE.md](../../../project/performance/CLOUDFLARE-COST-ENVELOPE.md).
   Controlled repetitions with reported uncertainty are recorded: three local
   and three external-storage baseline repetitions (about ±4% spread), five
   Git-history backlog repetitions across SQLite, pinned Postgres and local D1,
@@ -158,9 +158,9 @@ gate.
 
 ### T02 Enforce create-only immutable installation across providers
 
-- **Current:** [S3](./src/storage/s3-object-storage.ts) and
-  [GCS](./src/storage/gcs-object-storage.ts) lack destination create-only
-  preconditions; [R2](./deploy/cloudflare/src/r2-object-storage.ts) already uses
+- **Current:** [S3](../../../src/storage/s3-object-storage.ts) and
+  [GCS](../../../src/storage/gcs-object-storage.ts) lack destination create-only
+  preconditions; [R2](../../../deploy/cloudflare/src/r2-object-storage.ts) already uses
   a conditional create. Existing bad-declaration tests preserve original bytes.
 - **Progress, September 21:** the S3 and GCS blob adapters now match the R2 and
   Azure semantics: a proven existing blob is inspected and reused after the
@@ -175,7 +175,7 @@ gate.
   existing blobs failing closed.
 - **Live-provider progress, September 23:** `pnpm verify:aws-s3` passed against
   AWS with a disposable, self-cleaned probe bucket; the JSON reporter is
-  [s3-aws-probe.json](./project/evidence/s3-aws-probe.json). A GCS bucket-scoped
+  [s3-aws-probe.json](../../../project/evidence/s3-aws-probe.json). A GCS bucket-scoped
   service account also produced the native `ifGenerationMatch: 0` collision
   response, exact readback and cleanup against the configured probe bucket.
   The GCS probe is now repeatable and durable: `pnpm verify:gcs`
@@ -184,7 +184,7 @@ gate.
   them) passed against the configured probe bucket, proving first-write
   create-only generations, collision rejection, resumable-scale exact readback,
   rewritable staging slots, false-size-declaration rejection and cleanup. The
-  JSON reporter is [gcs-gcp-probe.json](./project/evidence/gcs-gcp-probe.json).
+  JSON reporter is [gcs-gcp-probe.json](../../../project/evidence/gcs-gcp-probe.json).
   Both advertised providers now have attached live create-only evidence.
 - **Closed, September 24:** normal and hostile outcomes are demonstrated and
   the remaining gaps are recorded. Identical and conflicting concurrent writes,
@@ -193,8 +193,8 @@ gate.
   and Azure adapters; a proven existing blob is reused after its bytes are
   re-proved through the stream verifier, with no repeated object-generation
   installation. Live evidence is attached for both advertised remote providers:
-  AWS ([s3-aws-probe.json](./project/evidence/s3-aws-probe.json)) and GCS
-  ([gcs-gcp-probe.json](./project/evidence/gcs-gcp-probe.json)), each a
+  AWS ([s3-aws-probe.json](../../../project/evidence/s3-aws-probe.json)) and GCS
+  ([gcs-gcp-probe.json](../../../project/evidence/gcs-gcp-probe.json)), each a
   disposable, self-cleaned probe from the separately approved September 23
   account qualification. Gates V/H/O/E/X/P passed at the recorded commits; the
   L gate is the two probe reports. Remaining deployment gaps: none for the
@@ -220,11 +220,11 @@ gate.
   until Cloudflare grants the entitlement and the dedicated namespace can be
   verified. Treat this as approval for the bounded qualification shape, not for
   an unbounded load or quota-pressure run.
-- **Starting evidence:** the [retained probe](./project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json)
+- **Starting evidence:** the [retained probe](../../../project/research/immutable-artifact-engineering-2026-09-17/review-evidence/git-order-probe.json)
   claimed version 8 first. SQLite/Postgres enablement inserts all missing jobs
   inside one foreground transaction; D1 has an unbounded insert-select. Claims
-  order equal-time jobs by ID. See [mirror](./src/git-history/git-history-mirror.ts)
-  and [Postgres repository](./src/storage/postgres-artifact-repository.ts).
+  order equal-time jobs by ID. See [mirror](../../../src/git-history/git-history-mirror.ts)
+  and [Postgres repository](../../../src/storage/postgres-artifact-repository.ts).
 - **Progress, September 17:** SQLite, Postgres and D1 now claim only versions
   whose earlier versions have recorded mappings. Enabling a project saves the
   setting without inserting the entire backfill; each worker claim queues at
@@ -299,17 +299,17 @@ gate.
 - **Repetition progress, September 24:** five sequential repetitions of the
   3,301-version, 30-pass shapes ran on one idle machine (Apple M1 Max, Node
   24.15.0, commit `b531db1`). SQLite claim medians
-  ([rep1](./project/evidence/git-history-backlog-rep1.json) through
-  [rep5](./project/evidence/git-history-backlog-rep5.json)): 7.59–7.88 ms
+  ([rep1](../../../project/evidence/git-history-backlog-rep1.json) through
+  [rep5](../../../project/evidence/git-history-backlog-rep5.json)): 7.59–7.88 ms
   many-artifacts (median 7.63 ms) and 2.84–2.96 ms deep-history (median
   2.92 ms), about ±4% spread. Pinned Postgres claim medians
-  ([rep1](./project/evidence/git-history-postgres-backlog-rep1.json) through
-  [rep5](./project/evidence/git-history-postgres-backlog-rep5.json)):
+  ([rep1](../../../project/evidence/git-history-postgres-backlog-rep1.json) through
+  [rep5](../../../project/evidence/git-history-postgres-backlog-rep5.json)):
   52.19–62.88 ms many-artifacts (median 54.41 ms) and 15.76–17.04 ms
   deep-history (median 16.37 ms); the first deep-history pass holds steady at
   761–802 ms across every repetition. Local Wrangler D1 claim medians
-  ([rep1](./project/evidence/git-history-d1-backlog-rep1.json) through
-  [rep5](./project/evidence/git-history-d1-backlog-rep5.json)): 43.89–50.97 ms
+  ([rep1](../../../project/evidence/git-history-d1-backlog-rep1.json) through
+  [rep5](../../../project/evidence/git-history-d1-backlog-rep5.json)): 43.89–50.97 ms
   many-artifacts (median 48.24 ms) and 41.32–51.45 ms deep-history (median
   43.35 ms). These five samples bound gross run-to-run variance but do not
   support tail claims, and all fifteen reports record the full measurement
@@ -318,7 +318,7 @@ gate.
   the Cloudflare Artifacts namespace entitlement is still unavailable.
 - **D1 multi-worker progress, September 26:** the local D1 multi-worker proof
   landed as
-  [git-history-multi-worker.test.ts](./deploy/cloudflare/tests/git-history-multi-worker.test.ts),
+  [git-history-multi-worker.test.ts](../../../deploy/cloudflare/tests/git-history-multi-worker.test.ts),
   run by `pnpm check:cloudflare`. Two repository handles and two real
   `makeGitHistoryMirrorWorker` instances race over one Wrangler local D1
   binding. Concurrent claim storms never hand the same job to both workers,
@@ -344,7 +344,7 @@ gate.
   a controlled speed claim.
 - **Live-provider progress, October 6:** the bounded Node/Postgres product
   suite (`pnpm qualify:cloudflare-artifacts:product`,
-  [test](./tests/integration/cloudflare-artifacts-product.live.test.ts))
+  [test](../../../tests/integration/cloudflare-artifacts-product.live.test.ts))
   passed 9/9 at `2b25347` against `artifact-server-test-qualification` on
   account `ee625e5e88a18eea4402075704d78f9f`, using compiled
   external-storage server processes on disposable pinned Postgres and MinIO.
@@ -360,7 +360,7 @@ gate.
   resuming; and the operator purge refusing while history is enabled, then
   deleting exactly this installation's four repositories. Fifteen versions
   were mirrored; the namespace held zero repositories before and after. See
-  the [passing report](./project/evidence/cloudflare-artifacts-node-postgres-qualification-2026-10-06T1419Z.json).
+  the [passing report](../../../project/evidence/cloudflare-artifacts-node-postgres-qualification-2026-10-06T1419Z.json).
   Two earlier attempts are retained as failures: one never reached the
   provider (unmigrated schema), and one failed only its purge leg because the
   suite purged while history was still enabled, after which the exact-name
@@ -388,7 +388,7 @@ gate.
 
 ### T04 Batch final Postgres manifest insertion
 
-- **Current:** `#insertVersion` in the [repository](./src/storage/postgres-artifact-repository.ts)
+- **Current:** `#insertVersion` in the [repository](../../../src/storage/postgres-artifact-repository.ts)
   performs one insert per entry; upload-plan batching is already implemented.
 - **Progress, September 21:** `#insertVersion` now writes manifest entries with
   one bounded `INSERT ... SELECT` over `jsonb_to_recordset` (three parameters
@@ -456,13 +456,13 @@ gate.
   conflict/idempotency behavior and transaction-stage failures are covered by
   the external-storage runtime suite against pinned Postgres/MinIO. Controlled
   measurements: three local-container repetitions
-  ([external-storage-baseline-rep1.json](./project/evidence/external-storage-baseline-rep1.json),
-  [rep2](./project/evidence/external-storage-baseline-rep2.json),
-  [rep3](./project/evidence/external-storage-baseline-rep3.json)) and three
+  ([external-storage-baseline-rep1.json](../../../project/evidence/external-storage-baseline-rep1.json),
+  [rep2](../../../project/evidence/external-storage-baseline-rep2.json),
+  [rep3](../../../project/evidence/external-storage-baseline-rep3.json)) and three
   managed Neon repetitions
-  ([neon-rep1](./project/evidence/external-storage-baseline-neon-rep1.json),
-  [neon-rep2](./project/evidence/external-storage-baseline-neon-rep2.json),
-  [neon-rep3](./project/evidence/external-storage-baseline-neon-rep3.json)),
+  ([neon-rep1](../../../project/evidence/external-storage-baseline-neon-rep1.json),
+  [neon-rep2](../../../project/evidence/external-storage-baseline-neon-rep2.json),
+  [neon-rep3](../../../project/evidence/external-storage-baseline-neon-rep3.json)),
   Node 24.15.0, with per-version statement counts structural and commit-leg
   timings in the reports; no ≥10% speed claim is made. Gates V/H/E/X/P passed
   at the recorded commits. Remaining gaps: a dedicated lock-duration probe was
@@ -479,8 +479,8 @@ gate.
 
 ### T05 Reconcile publication operations and resume verified files
 
-- **Current:** [CLI journal](./src/cli/publication-operation-store.ts) preserves
-  operation identity, but [file client](./src/client/file-publication-client.ts)
+- **Current:** [CLI journal](../../../src/cli/publication-operation-store.ts) preserves
+  operation identity, but [file client](../../../src/client/file-publication-client.ts)
   creates a new upload and sends every file before commit replay.
 - **Progress, September 21:** staged uploads can now bind the durable
   publication idempotency key (`staged_uploads.idempotency_key`, partial unique
@@ -521,7 +521,7 @@ gate.
   connection is paired with a private, versioned, encrypted AWS bucket and the
   least-privilege `artifact-server-runtime` profile. Native S3 create-only,
   collision, exact-readback and cleanup checks passed; see
-  [aws-runtime-storage.json](./project/evidence/aws-runtime-storage.json). The
+  [aws-runtime-storage.json](../../../project/evidence/aws-runtime-storage.json). The
   end-to-end deployed-runtime resume test has not run. A fresh Cloudflare
   runtime-stage probe deployed and cleaned its Worker/D1/R2 resources but its
   health, readiness, unauthenticated and upload requests returned HTTP 503, so
@@ -540,7 +540,7 @@ gate.
   commit response after the server processed it) replayed as
   `status: "committed"`, `replayed: true` with the same single version and no
   retransfer. Evidence:
-  [deployed-runtime-resume.json](./project/evidence/deployed-runtime-resume.json)
+  [deployed-runtime-resume.json](../../../project/evidence/deployed-runtime-resume.json)
   (2/2 passing at HEAD; three earlier failed attempts — an operator-environment
   provider clash and two test-schema bugs, no product defects — are preserved
   as `deployed-runtime-resume.failed-20260923-*.json`). Remaining open:
@@ -567,7 +567,7 @@ gate.
   verified file and committed exactly one version, and a dropped commit
   response replayed as `status: "committed"`, `replayed: true` with no
   retransfer
-  ([deployed-runtime-resume.json](./project/evidence/deployed-runtime-resume.json)).
+  ([deployed-runtime-resume.json](../../../project/evidence/deployed-runtime-resume.json)).
   MCP-surface recovery is now satisfied: `artifact_create_upload` accepts an
   optional `idempotencyKey` with pre-commit resumed replay, post-commit
   committed replay and `IDEMPOTENCY_CONFLICT` on manifest change (MCP-023,
@@ -586,7 +586,7 @@ gate.
   commit replay that returned 200 with the same publication — the Worker
   committed-replay clause of the remaining deployment gap is now proven
   through the real workers.dev HTTP boundary on D1/R2
-  ([cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  ([cloudflare-runtime.json](../../../project/evidence/cloudflare-runtime.json)).
   Still unproven on Workers: mid-publication resume with per-file `verified`
   flags (the SIGKILL deployed-runtime-resume suite is Node-only), and the
   Cloudflare Artifacts namespace entitlement remains unavailable.
@@ -605,7 +605,7 @@ gate.
 
 ### T06 Make committed review changes converge across clients
 
-- **Current:** [timestamp polling](./apps/web/src/components/comments/comment-poll.ts)
+- **Current:** [timestamp polling](../../../apps/web/src/components/comments/comment-poll.ts)
   merges changes and leaves removed/filter-excluded threads stale.
 - **Progress, September 21:** artifacts now carry a `comment_revision` counter
   incremented inside the same transaction as every listing-visible change
@@ -651,7 +651,7 @@ gate.
   (`project/performance/run-comment-polling-managed.ts`) drove the same
   200-thread artifact against the compiled external-storage server on the
   managed Neon database plus the private AWS bucket
-  ([comment-polling-baseline-neon.json](./project/evidence/comment-polling-baseline-neon.json),
+  ([comment-polling-baseline-neon.json](../../../project/evidence/comment-polling-baseline-neon.json),
   Node 24.15.0): matching-revision short-circuit polls cost p95 268.12 ms,
   stale-revision authoritative pages p95 405.87 ms, and a five-second
   contention phase (eight pollers plus one create/delete mutator) completed 4
@@ -662,7 +662,7 @@ gate.
   external-storage runtime suite. The refactored local harness reproduced
   consistent local numbers (short-circuit p95 0.94 ms, stale page p95 2.37 ms,
   627 contention mutations; refreshed
-  [comment-polling-baseline.json](./project/evidence/comment-polling-baseline.json)).
+  [comment-polling-baseline.json](../../../project/evidence/comment-polling-baseline.json)).
   T06's measurement and Postgres-coverage gaps are now closed.
 - **Closed, September 24:** normal and hostile outcomes are demonstrated and
   the remaining gaps are recorded. The `comment_revision` counter increments
@@ -672,12 +672,12 @@ gate.
   the authoritative filtered page, so deletions and dispatch removals converge.
   Two browser contexts converge after create/delete on Chromium, Firefox and
   WebKit (the September 23 three-engine run recorded 45/45, 0 flaky at
-  `4f21086`; [browser.json](./project/evidence/browser.json) is regenerated by
+  `4f21086`; [browser.json](../../../project/evidence/browser.json) is regenerated by
   each browser run, so the file records the latest run rather than retaining
   that artifact). Polling cost and hot-project contention are measured locally and
   against the managed Neon database
-  ([comment-polling-baseline.json](./project/evidence/comment-polling-baseline.json),
-  [comment-polling-baseline-neon.json](./project/evidence/comment-polling-baseline-neon.json)),
+  ([comment-polling-baseline.json](../../../project/evidence/comment-polling-baseline.json),
+  [comment-polling-baseline-neon.json](../../../project/evidence/comment-polling-baseline-neon.json)),
   with ample headroom under the 7-second visible-tab poll interval and
   concurrent revision increments converging without error; Postgres revision
   behavior is exercised beyond the external-storage runtime suite through the
@@ -698,8 +698,8 @@ gate.
 
 ### T07 Make browser evidence failure-safe and qualify critical engines
 
-- **Current:** [test scripts](./package.json) skip normalization when Playwright
-  fails; [configuration](./playwright.config.ts) defaults to Chromium. Full CI
+- **Current:** [test scripts](../../../package.json) skip normalization when Playwright
+  fails; [configuration](../../../playwright.config.ts) defaults to Chromium. Full CI
   evidence upload also needs failure handling.
 - **Do:** finalize a unique current-run result on setup/launch/test/report-copy
   failure, preserve the original exit code, and fail closed on missing/truncated
@@ -803,7 +803,7 @@ gate.
   (CMT-014/016/018/023) passes locally on Chromium, Firefox and WebKit
   (September 23 three-engine run: 45/45, 0 failed, 0 flaky at `4f21086`,
   engine `chromium+firefox+webkit@1.62.1`;
-  [browser.json](./project/evidence/browser.json) is regenerated by each
+  [browser.json](../../../project/evidence/browser.json) is regenerated by each
   browser run, so the file records the latest run rather than retaining that
   artifact) and in CI — the
   full-gate dispatch on `main` at `4f21086` (run 35879627083) completed
@@ -818,7 +818,7 @@ gate.
 - **Envelope completion, September 26:** the remaining envelope facts are
   resolved. A bounded, read-mostly live run
   (`deploy/cloudflare/scripts/measure-api-rtt.mjs`; evidence
-  [cloudflare-api-rtt.json](./project/evidence/cloudflare-api-rtt.json) and
+  [cloudflare-api-rtt.json](../../../project/evidence/cloudflare-api-rtt.json) and
   `deploy/cloudflare/evidence/api-rtt-2026-09-26T18-38-03-542Z.json`) measured
   isolated per-call RTT (50 samples per leg after 3 warm-ups, this machine,
   Node 24.15.0: Cloudflare REST API p50 203.7 / p95 265.2 ms, D1 query API
@@ -838,7 +838,7 @@ gate.
   ("use synthetic/local fixtures and disclose unknown production
   capacity/cost").
 - **Closed, September 26:** the bounded worksheet and qualification report in
-  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md)
+  [CLOUDFLARE-COST-ENVELOPE.md](../../../project/performance/CLOUDFLARE-COST-ENVELOPE.md)
   identify the supported envelope (a light team's eight-hour workday review
   fits Workers Free; sustained 24-hour multi-tab review requires Workers
   Paid) and reject the unsupported many-file assumption (a 3,301-file
@@ -864,7 +864,7 @@ gate.
   Node+Postgres+R2. Record hard failures versus overage behavior and capability
   reporting. Use current official pricing, not a free-trial assumption.
 - **Progress, September 22:** the read-only slice is done in
-  [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md):
+  [CLOUDFLARE-COST-ENVELOPE.md](../../../project/performance/CLOUDFLARE-COST-ENVELOPE.md):
   a completed worksheet separating measured local facts (publication sizes,
   retained bytes, the 1/10/25/50/100-user capacity matrix, and the local-D1
   Git-backlog probe) from official Cloudflare pricing and limits dated
@@ -884,7 +884,7 @@ gate.
   $0.36/million, with zero Internet egress fees. The account probe matched the
   exact account, created the expected Worker/D1/R2 shape, repeated with no drift,
   and cleaned every exact probe resource without changing non-probe inventory.
-  [cloudflare-account-probe.json](./project/evidence/cloudflare-account-probe.json)
+  [cloudflare-account-probe.json](../../../project/evidence/cloudflare-account-probe.json)
   records hashes and checks; the worksheet now records the plan. Remaining:
   actual retained bytes, backups, review hours, mutation rates, isolated RTT and
   any observed hard-fail or overage behavior. The runtime 503 is diagnosed in
@@ -920,7 +920,7 @@ gate.
   Worker was destroyed, the exact D1/R2 probe resources were retained then
   deleted, and the non-probe inventories were unchanged (evidence
   `deploy/cloudflare/evidence/account-probe-2026-09-25T22-22-35-066Z.json`;
-  durable summary [cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  durable summary [cloudflare-runtime.json](../../../project/evidence/cloudflare-runtime.json)).
   Three harness repairs were needed first, all probe-side and none product:
   alchemy `2.0.0-beta.79` (bumped September 23 in `ec47d2a`, after the last
   successful probe) replaced `alchemy state stages --stack` with
@@ -949,7 +949,7 @@ gate.
 - **Slice 1 progress, September 27:** resumable, chunked publication
   preparation is implemented and specified as PUB-019/PUB-020
   (`behavior_verified`; design record
-  [publication-preparation.md](./docs/publication-preparation.md)). Preparation
+  [publication-preparation.md](../../../docs/publication-preparation.md)). Preparation
   is product behavior over narrow ports on all three stores (SQLite schema 17,
   Postgres migration 0016, D1 schema 14): `staged_uploads` carries a fenced
   single-owner claim (`preparation_state`, `preparation_attempts`,
@@ -966,7 +966,7 @@ gate.
   `filesPerPass: 5`, sized to the Workers Free 50-subrequest / 50-D1-query
   envelope with headroom; Node runtimes keep single-request behavior. A bounded
   local Wrangler-D1 probe
-  ([d1-final-batch-limits.test.ts](./deploy/cloudflare/tests/d1-final-batch-limits.test.ts))
+  ([d1-final-batch-limits.test.ts](../../../deploy/cloudflare/tests/d1-final-batch-limits.test.ts))
   found no batch ceiling up to the 10,000-file cap locally but showed the
   chunked final batch would exceed the Workers Free 50-query invocation limit
   at 1,000 files, so Postgres and D1 write an invisible
@@ -1013,7 +1013,7 @@ gate.
   insert-or-ignore slices. Partial prepared rows are durable progress
   because the manifest is immutable per upload. A deterministic two-handle
   D1 test
-  ([d1-prepared-manifest-fencing.test.ts](./deploy/cloudflare/tests/d1-prepared-manifest-fencing.test.ts))
+  ([d1-prepared-manifest-fencing.test.ts](../../../deploy/cloudflare/tests/d1-prepared-manifest-fencing.test.ts))
   pauses a stale owner across a successor takeover and proves the stale
   slice write is fenced while the successor's rows survive byte-identical,
   and that a fresh repository instance resumes mid-preparation and converges
@@ -1021,7 +1021,7 @@ gate.
   `preparedEntriesPerPass: 1` through the real 202 loop including across a
   process restart with the PUB-019/020 claims unchanged. The design record's
   "one fenced transaction" note now describes the per-store reality
-  ([publication-preparation.md](./docs/publication-preparation.md)). Local
+  ([publication-preparation.md](../../../docs/publication-preparation.md)). Local
   gates (`pnpm check` including `check:cloudflare`, full conformance suite)
   passed at the slice commit; the full iteration/smoke/external-storage
   gates run at slice handoff. Remaining gaps: live Worker multi-pass commit
@@ -1038,22 +1038,22 @@ gate.
   the 201 commit, replays the commit for a 200 naming the same version, and
   lists the artifact. `qualifyRuntime` takes an injectable fetch and the
   exact probe code is validated locally against the real Worker bundle
-  ([account-probe-runtime.test.ts](./deploy/cloudflare/tests/account-probe-runtime.test.ts),
+  ([account-probe-runtime.test.ts](../../../deploy/cloudflare/tests/account-probe-runtime.test.ts),
   passes `[5, 10]` observed locally). Live byte read-through is out of
   scope: version content is served from a per-version token subdomain of
   the content domain, which does not resolve for the private-ingress probe
   deployment, so byte proof stays with the local Worker suite and the
   phase-11 qualification. The estimated footprint (~30 Worker requests,
   <100 D1 rows written, ~26 R2 Class A + 13 Class B operations) is recorded
-  in [CLOUDFLARE-COST-ENVELOPE.md](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  in [CLOUDFLARE-COST-ENVELOPE.md](../../../project/performance/CLOUDFLARE-COST-ENVELOPE.md).
   Remaining before the metered run: refresh the dated plan/allowance/overage
   snapshot from the account dashboard (last observed 2026-09-23) and obtain
   explicit authorization for this specific probe.
 - **Live Worker qualification, September 28:** the operator re-confirmed the
   Workers Free / R2 $0-base allowance snapshot and authorized the specific
   probe, which then passed end to end
-  ([account-probe-2026-09-28T14-21-43-151Z.json](./deploy/cloudflare/evidence/account-probe-2026-09-28T14-21-43-151Z.json),
-  summarized in [cloudflare-runtime.json](./project/evidence/cloudflare-runtime.json)).
+  ([account-probe-2026-09-28T14-21-43-151Z.json](../../../deploy/cloudflare/evidence/account-probe-2026-09-28T14-21-43-151Z.json),
+  summarized in [cloudflare-runtime.json](../../../project/evidence/cloudflare-runtime.json)).
   On the deployed Worker the 12-file upload produced two live 202
   `preparing` responses (installed 5, then 10 of 12) through the real
   workers.dev boundary before one atomic 201 commit; the same idempotency
@@ -1134,7 +1134,7 @@ gate.
   decision (T24), and the lost-commit-replay-after-cleanup clause of "Done
   when" is unchanged because no newly permitted cleanup exists yet.
 - **Combined OPS-006-B proof, September 28:** one acceptance run
-  ([ops-006-retention.test.ts](./tests/conformance/ops-006-retention.test.ts))
+  ([ops-006-retention.test.ts](../../../tests/conformance/ops-006-retention.test.ts))
   now combines publication, a concurrent publish race, restore, restart and
   retention beyond staging expiry. Through the real HTTP boundary with a
   controlled clock it publishes two artifacts, races a concurrent
@@ -1147,7 +1147,7 @@ gate.
   after each transition. The ledger's OPS-006 entry is now
   `behavior_verified` with the combined run recorded locally; the combined
   run remains unrun on cloudflare, aws and gcp.
-- **Current:** [cleanup](./src/application/expired-staging-cleanup.ts) bounds upload
+- **Current:** [cleanup](../../../src/application/expired-staging-cleanup.ts) bounds upload
   count, file count and wall-clock time per pass with durable continuation, and
   claims an expired upload (`cleanup_claimed_at`) before removing its objects so
   a racing preparation claim is refused in every store; successful
@@ -1207,13 +1207,13 @@ gate.
   convergence, a lost CopyObject response through a socket-destroying
   loopback proxy, and the post-rejection stream fallback. The bounded live
   probe (`pnpm verify:aws-s3-promotion`,
-  [aws-s3-promotion-probe.json](./project/evidence/aws-s3-promotion-probe.json))
+  [aws-s3-promotion-probe.json](../../../project/evidence/aws-s3-promotion-probe.json))
   passed 3/3 against the existing runtime bucket: AWS S3 enforces both
   preconditions, a 9 MiB multipart sealed promote serves exact bytes and
   converges same-digest races create-only (a raw overwrite attempt is 412
   with the original bytes intact), and a replaced staged source fails closed;
   every run prefix cleaned to zero objects (recorded in
-  [aws-runtime-storage.json](./project/evidence/aws-runtime-storage.json)).
+  [aws-runtime-storage.json](../../../project/evidence/aws-runtime-storage.json)).
   Remaining open: GCS generations, Azure, and the R2 copy/Worker surfaces.
 - **GCS qualification, September 25:** sealed rewrite promotion is
   implemented and qualified on real GCS. The GCS blobs adapter gained
@@ -1239,7 +1239,7 @@ gate.
   concurrent convergence, lost and repeatedly faulted rewrite responses
   through loopback proxies, and the post-rejection stream fallback. The
   bounded live probe (`pnpm verify:gcs-promotion`,
-  [gcs-promotion-probe.json](./project/evidence/gcs-promotion-probe.json))
+  [gcs-promotion-probe.json](../../../project/evidence/gcs-promotion-probe.json))
   passed 3/3 against the configured probe bucket with the bucket-scoped
   service account: real GCS enforces both preconditions, an 11 MiB
   resumable-scale sealed promote serves exact bytes and converges same-digest
@@ -1260,8 +1260,8 @@ gate.
   same-digest create-only convergence, staged-object readback, false-size
   rejection and exact run-prefix cleanup; the retained bucket returned to zero
   objects and zero bytes. The redacted provider record is
-  [r2-runtime-storage.json](./project/evidence/r2-runtime-storage.json), and the
-  test result is [r2-s3-probe.json](./project/evidence/r2-s3-probe.json). This
+  [r2-runtime-storage.json](../../../project/evidence/r2-runtime-storage.json), and the
+  test result is [r2-s3-probe.json](../../../project/evidence/r2-s3-probe.json). This
   qualifies the existing verified-stream path through R2's S3-compatible API;
   it does not enable native promotion or qualify the Worker binding surface.
   The focused live probe and `pnpm verify:iteration` both passed after the
@@ -1270,7 +1270,7 @@ gate.
   does **not** enforce the sealed-promotion preconditions. The new bounded live
   probe (`pnpm verify:r2-s3-promotion`,
   `tests/integration/r2-s3-promotion.probe.test.ts`,
-  [r2-s3-promotion-probe.json](./project/evidence/r2-s3-promotion-probe.json))
+  [r2-s3-promotion-probe.json](../../../project/evidence/r2-s3-promotion-probe.json))
   ran `probeS3SealedPromotion` against the dedicated qualification bucket:
   R2's `CopyObject` does not reject an `If-None-Match: *` destination
   overwrite or a bogus `CopySourceIfMatch` with 412, so the capability probe
@@ -1279,8 +1279,8 @@ gate.
   readiness while honestly withholding `promote` and leaving zero scratch
   objects. Consequence: the S3-compatible adapter against R2 never exposes
   `promote`; every commit uses the proven verified-stream path qualified in
-  [r2-s3-probe.json](./project/evidence/r2-s3-probe.json). The verdict is
-  recorded in [r2-runtime-storage.json](./project/evidence/r2-runtime-storage.json).
+  [r2-s3-probe.json](../../../project/evidence/r2-s3-probe.json). The verdict is
+  recorded in [r2-runtime-storage.json](../../../project/evidence/r2-runtime-storage.json).
   This closes the R2 S3 copy surface question with a documented negative.
   The Worker binding surface is qualified by the September 25 runtime-stage
   account probe (see the T08 re-qualification note): the live Worker served
@@ -1347,10 +1347,10 @@ gate.
   verified stream path whenever the adapter has no proven promotion for that
   source. The core `BlobStore` port gained an optional `promote` method; the
   commit path (`storeFiles` in
-  [publish-artifact](./src/application/publish-artifact.ts)) tries promotion
+  [publish-artifact](../../../src/application/publish-artifact.ts)) tries promotion
   for staged sources and degrades any promotion failure to the proven
   verified-stream path rather than failing the commit. The local adapter
-  ([LocalPromotingBlobStore](./src/storage/local-promoting-blob-store.ts))
+  ([LocalPromotingBlobStore](../../../src/storage/local-promoting-blob-store.ts))
   promotes by hard link: it re-hashes the staged inode through one open
   handle, links create-only (`EEXIST` falls back to the existing verified
   reuse), and compares post-link inode identity so a staged slot renamed
@@ -1363,10 +1363,10 @@ gate.
   (S3/GCS/Azure/R2) have no `promote` yet — every commit there takes the
   verified stream fallback, so their existing suites cover the fallback
   clause. Paired same-machine measurement (Node 24.15.0,
-  [before](./project/evidence/local-baseline-promotion-before.json),
-  [after rep1](./project/evidence/local-baseline-promotion-after-rep1.json),
-  [rep2](./project/evidence/local-baseline-promotion-after-rep2.json),
-  [rep3](./project/evidence/local-baseline-promotion-after-rep3.json); the
+  [before](../../../project/evidence/local-baseline-promotion-before.json),
+  [after rep1](../../../project/evidence/local-baseline-promotion-after-rep1.json),
+  [rep2](../../../project/evidence/local-baseline-promotion-after-rep2.json),
+  [rep3](../../../project/evidence/local-baseline-promotion-after-rep3.json); the
   September 23 before-repetitions bound the baseline further): the named
   48-file directory workload moved from p95 859.81–908.60 ms to
   632.30–653.61 ms (about −25% end-to-end, over the ≥10% bar) with the
@@ -1439,7 +1439,7 @@ gate.
   `implementing` in the ledger by decision: the transport is unadopted, and
   their proof_gap notes record both the passing claims and the below-bar
   verdict. The paired harness
-  ([batch-staging-comparison.json](./project/evidence/batch-staging-comparison.json))
+  ([batch-staging-comparison.json](../../../project/evidence/batch-staging-comparison.json))
   shows the staging leg about 75% cheaper but the end-to-end delta below the
   ≥10% bar (about +7% at 48 × 4 KiB, about 0% at 1,000 files) because the
   commit-time staged-to-blob copy dominates at scale — the same attribution
@@ -1486,7 +1486,7 @@ gate.
   (L gate), and Cloudflare Worker surface qualification.
 - **Measurement progress, September 24:** a new bounded harness
   (`pnpm perf:mcp-server-construction`,
-  [mcp-server-construction-baseline.json](./project/evidence/mcp-server-construction-baseline.json))
+  [mcp-server-construction-baseline.json](../../../project/evidence/mcp-server-construction-baseline.json))
   measures the modern MCP HTTP boundary at 0, 100 and 1,000 seeded artifacts
   (local SQLite, Node 24.15.0, commit `b531db1`, 50 samples per method per
   size). Every request is a fresh stateless POST, so each sample pays one full
@@ -1551,11 +1551,11 @@ gate.
   After a server restart, a fresh Claude process replayed its commit with the
   same version; a fresh Codex process recovered its already-committed upload
   plan by idempotency key without another PUT. The redacted exact-client record
-  is [mcp-client-workflow-2026-09-28.json](./project/evidence/mcp-client-workflow-2026-09-28.json);
-  the [client matrix](./project/evidence/mcp-current-clients-2026-09-28.json)
+  is [mcp-client-workflow-2026-09-28.json](../../../project/evidence/mcp-client-workflow-2026-09-28.json);
+  the [client matrix](../../../project/evidence/mcp-current-clients-2026-09-28.json)
   distinguishes these local workflows from hosted qualification. The full
   `pnpm verify:iteration` gate passed on Node 24.15.0
-  ([run summary](./project/evidence/mcp-t15-iteration-2026-09-28.json)). T15 remains
+  ([run summary](../../../project/evidence/mcp-t15-iteration-2026-09-28.json)). T15 remains
   open: the live Worker MCP probe is blocked because this session's Alchemy
   `default` profile has no Cloudflare provider, Cursor Agent still needs its
   product login or API key for model calls, and this VS Code installation has
@@ -1572,8 +1572,8 @@ gate.
   or foreign coordinates and unauthenticated refusal. Pinned Postgres, local
   Wrangler-D1, the Worker `/mcp` boundary and the exact account probe pass
   their focused cases. V/H/E/X and the Cloudflare package gate passed; the
-  [evidence](./project/evidence/mcp-manifest-page-2026-09-28.json) records the
-  limits. [Claude Code and Codex CLI](./project/evidence/mcp-manifest-hosts-2026-09-28.json)
+  [evidence](../../../project/evidence/mcp-manifest-page-2026-09-28.json) records the
+  limits. [Claude Code and Codex CLI](../../../project/evidence/mcp-manifest-hosts-2026-09-28.json)
   then traversed the same exact local manifest with the new tool and matched
   its digest and paths. The updated probe has not run on a deployed Worker.
 - **Do next:** rerun the bounded MCP Worker probe after refreshing the
@@ -1589,8 +1589,8 @@ gate.
   `probe-` Worker, D1 and R2 names were verified absent. The older Wrangler
   OAuth grant cannot read Worker versions, so the probe must use the scoped
   Alchemy grant for both Alchemy and Wrangler calls. See the
-  [dated preflight](./project/evidence/cloudflare-mcp-paid-preflight-2026-09-28.json)
-  and [cost envelope](./project/performance/CLOUDFLARE-COST-ENVELOPE.md).
+  [dated preflight](../../../project/evidence/cloudflare-mcp-paid-preflight-2026-09-28.json)
+  and [cost envelope](../../../project/performance/CLOUDFLARE-COST-ENVELOPE.md).
   The first live run was authorized against this changed Paid-plan basis; its
   result is recorded below.
 - **First Paid-plan live probe, September 28:** the exact private
@@ -1601,7 +1601,7 @@ gate.
   resources. Non-probe inventories were unchanged. MCP qualification failed:
   unauthenticated and invalid-token `/mcp` requests returned 403 instead of
   401, before discovery or tool calls. The
-  [retained failure](./project/evidence/cloudflare-mcp-paid-failed-attempt-2026-09-28.json)
+  [retained failure](../../../project/evidence/cloudflare-mcp-paid-failed-attempt-2026-09-28.json)
   keeps runtime and cleanup separate. A local regression now drives the
   account probe through a workers.dev hostname and reproduces that 403. The
   qualification-only request rewrite now aligns `Host` with the configured
@@ -1609,13 +1609,13 @@ gate.
   and account-probe tests pass. A fresh metered retry remains unrun.
 - **Retry preflight, September 28:** the full `pnpm verify:iteration` gate
   passed after the workers.dev Host fix (441 main, 70 Cloudflare, 37 browser
-  tests; [run summary](./project/evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json)).
+  tests; [run summary](../../../project/evidence/cloudflare-mcp-host-fix-iteration-2026-09-28.json)).
   The scoped OAuth grant refreshed, and the exact stage, Worker, D1 database
   and R2 bucket remain absent. The dashboard still shows $0.00 billable usage,
   but the first run's account-wide D1 written-row counter rose by about 355,
   including possible unrelated work and index writes, so the earlier
   under-150-row estimate is not a sound retry bound. The
-  [fresh preflight](./project/evidence/cloudflare-mcp-retry-preflight-2026-09-28.json)
+  [fresh preflight](../../../project/evidence/cloudflare-mcp-retry-preflight-2026-09-28.json)
   uses a conservative under-250 Worker request, under-1,000 D1 written-row,
   under-100 R2 Class A and under-100 Class B planning envelope. A metered
   retry has not yet run or been authorized against this revised envelope.
@@ -1649,7 +1649,7 @@ gate.
   custom event definitions. Agent Auth is a separate gated product showing
   `Request access`; it is not required for the existing integration and was
   left untouched. The redacted record is
-  [workos-production-configuration.json](./project/evidence/workos-production-configuration.json).
+  [workos-production-configuration.json](../../../project/evidence/workos-production-configuration.json).
 - **Production Codex MCP progress, September 25:** WorkOS Connect now has CIMD
   enabled while DCR remains disabled, and the exact
   `https://artifacts.backend.app/mcp` resource indicator is configured as the
@@ -1668,9 +1668,9 @@ gate.
   behavior. Hosted-provider lifecycle qualification therefore remains open.
 - **Matrix progress, September 24:** `pnpm test:oidc` passed 4/4 against the
   pinned Keycloak image (admitted sign-in, unadmitted refusal at browser and
-  MCP, resource-bound token at MCP; [oidc-keycloak.json](./project/evidence/oidc-keycloak.json)),
+  MCP, resource-bound token at MCP; [oidc-keycloak.json](../../../project/evidence/oidc-keycloak.json)),
   and the first named-client/deployment matrix is recorded at
-  [identity-qualification-matrix.json](./project/evidence/identity-qualification-matrix.json):
+  [identity-qualification-matrix.json](../../../project/evidence/identity-qualification-matrix.json):
   pass/fail/untested per provider and client with exact versions, including the
   dated August 16 WorkOS rows. The September 25 inventory adds the selected
   existing Production environment and resolves the credential/Audit-access
@@ -1679,10 +1679,10 @@ gate.
   and re-qualification of the other dated client rows at current versions
   remain open.
 - **Matrix refresh, September 27:**
-  [identity-qualification-matrix.json](./project/evidence/identity-qualification-matrix.json)
+  [identity-qualification-matrix.json](../../../project/evidence/identity-qualification-matrix.json)
   is re-recorded at commit `9ba8339`. `pnpm test:oidc` re-passed 4/4 against
   the pinned Keycloak image today
-  ([oidc-keycloak.json](./project/evidence/oidc-keycloak.json)), so the
+  ([oidc-keycloak.json](../../../project/evidence/oidc-keycloak.json)), so the
   Keycloak provider rows are current rather than dated. The client rows now
   name the currently installed versions — Codex CLI 0.155.1 (unchanged, still
   the only identity-qualified current client), Claude Code 2.1.283 installed
@@ -1709,7 +1709,7 @@ gate.
 ### T17 Complete live bridge qualification without changing citizenship
 
 - **Pi live completion, September 25:** Pi 0.84.4 passed 6/6
-  ([pi-live.json](./project/evidence/pi-live.json), `pnpm test:pi-live`). The
+  ([pi-live.json](../../../project/evidence/pi-live.json), `pnpm test:pi-live`). The
   new PI-LIVE 4 proves a destroyed `delivered` report requeues at lease
   expiry, redelivers byte-identically and settles `delivered` with exactly one
   report reaching the server; PI-LIVE 5 replays a claim and observes
@@ -1749,18 +1749,18 @@ gate.
 - **Host progress, September 24:** Pi 0.84.4, OpenCode 1.18.32, omp 18.2.11 and
   Claude Code 2.1.281 each have an opt-in live suite that drives the real host
   against a real Artifact Server with a scripted offline model. Pi passed 3/3
-  ([pi-live.json](./project/evidence/pi-live.json)). omp passed 3/3 — round
+  ([pi-live.json](../../../project/evidence/pi-live.json)). omp passed 3/3 — round
   trip, FIFO drain, and session rebind against omp 18.2.11
-  ([omp-live.json](./project/evidence/omp-live.json), `pnpm test:omp-live`).
+  ([omp-live.json](../../../project/evidence/omp-live.json), `pnpm test:omp-live`).
   OpenCode passed 3/3 — round trip, FIFO drain, and fail-open against an
   unreachable origin against OpenCode 1.18.32
-  ([opencode-live.json](./project/evidence/opencode-live.json),
+  ([opencode-live.json](../../../project/evidence/opencode-live.json),
   `pnpm test:opencode-live`). Claude Code passed its bounded round trip
   (`CLAUDE-LIVE 1`: the channel registers the session, the dispatch is
   `delivered`, the model closes the thread through `artifact_comments`, and
   the dispatch reads `addressed`) against Claude Code 2.1.281 with no metered
   provider usage
-  ([claude-live.json](./project/evidence/claude-live.json),
+  ([claude-live.json](../../../project/evidence/claude-live.json),
   `pnpm test:claude-live`). Remaining unproven against live hosts: compaction
   holds, host refusal, lost acknowledgement, duplicate lease delivery and the
   1–30-second jitter cap stay structural coverage, labeled as such in each
@@ -1770,7 +1770,7 @@ gate.
   sockets before they reach the server and replays recorded claim bodies, so
   the remaining citizenship behaviors are proven against real hosts.
   OpenCode 1.18.32 passed 7/7
-  ([opencode-live.json](./project/evidence/opencode-live.json)): the new
+  ([opencode-live.json](../../../project/evidence/opencode-live.json)): the new
   OPENCODE-LIVE 4 times registration retries against a blackhole origin inside
   the 1–30-second jitter cap, OPENCODE-LIVE 5 proves a lost `delivered`
   acknowledgement requeues at lease expiry and settles `delivered` with
@@ -1779,11 +1779,11 @@ gate.
   second report refused 409, never `failed`), and OPENCODE-LIVE 7 drives real
   auto-compaction (manual compact is unavailable in 1.18.32) and proves a
   claimed bundle is held until compaction completes. omp 18.2.11 passed 6/6
-  ([omp-live.json](./project/evidence/omp-live.json)) with the same lost
+  ([omp-live.json](../../../project/evidence/omp-live.json)) with the same lost
   acknowledgement and duplicate claim proofs plus OMP-LIVE 6, a real
   `/compact` hold (the session must exceed `compaction.keepRecentTokens`).
   Claude Code 2.1.282 passed 3/3
-  ([claude-live.json](./project/evidence/claude-live.json)) with lost
+  ([claude-live.json](../../../project/evidence/claude-live.json)) with lost
   acknowledgement and duplicate claim proofs; compaction holds are not
   applicable to claude-channel (no signal crosses the stdio boundary).
   Duplicate lease delivery is now recorded as at-least-once admission — the
@@ -1854,18 +1854,18 @@ gate.
   proven at real boundaries, and the remaining gaps are recorded. Pool
   close-once at shutdown is proven twice: the local SQLite runtime
   (`tests/lifecycle/storage-shutdown.test.ts`,
-  [storage-shutdown.json](./project/evidence/storage-shutdown.json)) shows
+  [storage-shutdown.json](../../../project/evidence/storage-shutdown.json)) shows
   `node:sqlite` `DatabaseSync` refusing a second close and any post-close use
   with `ERR_INVALID_STATE` (a double-run release finalizer would fail loudly),
   repeated `ManagedRuntime` disposal resolving quietly, post-shutdown requests
   rejecting with `ManagedRuntime disposed`, and a restarted server on the same
   data directory reading the published artifact back; the pinned-Postgres pool
   (`tests/integration/postgres-pool-shutdown.test.ts`,
-  [postgres-pool-shutdown.json](./project/evidence/postgres-pool-shutdown.json))
+  [postgres-pool-shutdown.json](../../../project/evidence/postgres-pool-shutdown.json))
   drains `pg_stat_activity` to zero after `close()`, resolves a second close
   without reconnecting, and rejects post-close use. Span linkage is measured
   by a new opt-in harness (`pnpm perf:observability-span-linkage`,
-  [observability-span-linkage.json](./project/evidence/observability-span-linkage.json))
+  [observability-span-linkage.json](../../../project/evidence/observability-span-linkage.json))
   driving real authenticated requests against a real OTLP collector: the main
   runtime's request span chain is continuous with no orphan spans, while
   Postgres persistence work exports **no spans at all** — a stronger statement
@@ -1873,7 +1873,7 @@ gate.
   `ManagedRuntime` is built without the OTLP exporter layer — and an inbound
   W3C `traceparent` is not honored. Archive CRC throughput is measured by a
   new bounded harness (`pnpm perf:archive-crc-throughput`,
-  [archive-crc-throughput.json](./project/evidence/archive-crc-throughput.json)):
+  [archive-crc-throughput.json](../../../project/evidence/archive-crc-throughput.json)):
   the stored-compression ZIP route streams a 64 MiB blob at 156.2 MiB/s mean
   versus 804.5 MiB/s for the raw version file route (ratio about 0.19), so the
   byte-at-a-time CRC-32 plus ZIP framing is the dominant archive cost and the
@@ -2064,8 +2064,8 @@ gate.
 
 ### T27 Close linked-file capture and local-boundary proof gaps
 
-- **Current:** [local source engine](./src/local/linked-source-engine.ts) observes
-  descriptor fingerprints and spools verified capture bytes; [linked policy](./src/application/linked-artifacts.ts)
+- **Current:** [local source engine](../../../src/local/linked-source-engine.ts) observes
+  descriptor fingerprints and spools verified capture bytes; [linked policy](../../../src/application/linked-artifacts.ts)
   supports unchanged-source replay and comment-time implicit capture. The ledger
   still names missing genuine mid-read drift and deployment-absence evidence.
 - **Do:** use the existing observation hooks and real HTTP/MCP boundaries to
@@ -2185,5 +2185,5 @@ Keep vendor prices/limits dated and linked to primary sources. Do not edit the
 preserved dossier to hide errors; append corrections to the reconciliation.
 
 The research's 33 uncertainty IDs all map to tasks in the
-[reconciliation register](./project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md#all-research-uncertainties-mapped-to-work).
+[reconciliation register](../../../project/research/immutable-artifact-engineering-2026-09-17/RECONCILIATION.md#all-research-uncertainties-mapped-to-work).
 No implementation task is closed by this documentation import.

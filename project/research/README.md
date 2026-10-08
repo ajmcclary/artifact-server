@@ -10,8 +10,8 @@ marked proved.
 - [Immutable artifact engineering dossier intake](./immutable-artifact-engineering-2026-09-17/README.md)
   preserves the supplied Word and Markdown reports, source hashes, prior local
   review observations, and a repository-specific reconciliation.
-- [Next steps](../../NEXT-STEPS.md) is the actionable backlog derived from that
-  reconciliation. Its task IDs are planning identifiers, not conformance IDs.
+- The [archived backlog](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md) derived its tasks from that
+  reconciliation; open tasks now live in the root [roadmap](../../ROADMAP.md). Its task IDs are planning identifiers, not conformance IDs.
 - [Performance findings](../performance/FINDINGS.md) remains the performance risk
   register; timing claims need controlled before/after measurements.
 

@@ -820,7 +820,7 @@ requirements:
       failure: {id: PUB-015-F, description: "Reusing an operation key with a changed manifest conflicts without creating a second upload, and another principal's key binding stays invisible."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP tests cover partial-staging resume, committed replay without staging, changed-manifest conflict, expiry re-creation, and invalid-key rejection; the file client proves verified files are not re-PUT and a committed key short-circuits before any transfer, and the process-level CLI restart test recovers a lost commit response through the committed lookup without re-sending files. Store-level key binding, uniqueness, and cross-principal invisibility are covered on SQLite and D1, and on Postgres including a genuine pre-0013 in-place upgrade, alongside the external-storage runtime suite. Deployed-runtime resume is recorded at project/evidence/deployed-runtime-resume.json (a compiled external-storage server against managed Neon Postgres and a private AWS bucket resumed a SIGKILL-interrupted publication without retransmitting the verified file and replayed a dropped commit response as the already-committed publication with no retransfer). MCP-surface recovery is behavior-verified under MCP-023. Cloudflare Worker resume remains open under NEXT-STEPS.md T05 — the deployed Worker runtime returned HTTP 503 during the September 23 probe and the Cloudflare Artifacts entitlement is unavailable.
+    proof_gap: Local HTTP tests cover partial-staging resume, committed replay without staging, changed-manifest conflict, expiry re-creation, and invalid-key rejection; the file client proves verified files are not re-PUT and a committed key short-circuits before any transfer, and the process-level CLI restart test recovers a lost commit response through the committed lookup without re-sending files. Store-level key binding, uniqueness, and cross-principal invisibility are covered on SQLite and D1, and on Postgres including a genuine pre-0013 in-place upgrade, alongside the external-storage runtime suite. Deployed-runtime resume is recorded at project/evidence/deployed-runtime-resume.json (a compiled external-storage server against managed Neon Postgres and a private AWS bucket resumed a SIGKILL-interrupted publication without retransmitting the verified file and replayed a dropped commit response as the already-committed publication with no retransfer). MCP-surface recovery is behavior-verified under MCP-023. Cloudflare Worker resume remains open under T05 (ROADMAP.md) — the deployed Worker runtime returned HTTP 503 during the September 23 probe and the Cloudflare Artifacts entitlement is unavailable.
     depends_on: [PUB-001, PUB-006, PUB-014]
     evidence:
       - deployment: local
@@ -1926,7 +1926,7 @@ requirements:
       failure: {id: GIT-008-F, description: "Crash and restart project reconciliation and race it with a new publish without losing a version, duplicating a commit mapping, exhausting foreground work, copying another project, or changing primary data."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local tests prove bounded ordered backfill, fairness, lease renewal and fencing, takeover, and crash recovery against SQLite, Postgres, local D1, and disposable Git remotes. The October 6 live single_server run proved oldest-first backfill, a worker killed during a provider push, and two racing processes against Cloudflare Artifacts. Deployed-D1 multi-worker proof and controlled repeated live backlog measurements remain open under NEXT-STEPS.md T03."
+    proof_gap: "Local tests prove bounded ordered backfill, fairness, lease renewal and fencing, takeover, and crash recovery against SQLite, Postgres, local D1, and disposable Git remotes. The October 6 live single_server run proved oldest-first backfill, a worker killed during a provider push, and two racing processes against Cloudflare Artifacts. Deployed-D1 multi-worker proof and controlled repeated live backlog measurements remain open under T03 (ROADMAP.md)."
     depends_on: [GIT-002, GIT-007]
     evidence:
       - deployment: local
@@ -3583,7 +3583,7 @@ requirements:
       failure: {id: CMT-023-F, description: "Negative, fractional, or missing revision query values are rejected, and an unknown artifact returns not found."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local SQLite HTTP conformance tests, D1 store-level tests, a two-context Chromium convergence run, and the Postgres external-storage runtime suite pass. Deployed-team HTTP evidence and hot-project polling-cost measurements remain unrecorded under NEXT-STEPS.md T06.
+    proof_gap: Local SQLite HTTP conformance tests, D1 store-level tests, a two-context Chromium convergence run, and the Postgres external-storage runtime suite pass. Deployed-team HTTP evidence and hot-project polling-cost measurements remain unrecorded under T06 (ROADMAP.md).
     depends_on: [CMT-001, CMT-012, DSP-003]
     evidence:
       - deployment: local

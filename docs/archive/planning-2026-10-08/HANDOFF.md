@@ -2,7 +2,7 @@
 
 Written October 7, 2026, and updated October 8 after the hosted Forms run. artifacts.backend.app runs image `sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad` (Artifact Server `d7f6f63`, Workspace `0d3c75622`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `5abcad7`. The deployment was rechecked on October 8 before the hosted run. Recheck both before relying on anything below.
 
-Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
+Read [AGENTS.md](../../../AGENTS.md) first; its rules override anything here.
 
 ## Hosted Forms suite passed (October 8, image `sha256:f9bfa8f5…`, Artifact Server `b2e373b`)
 
@@ -101,7 +101,7 @@ The hostile cases stay on the fixture. A local rehearsal (the same spec against 
 ## Still open
 
 1. **Restore on the live page?** Design's correction above: Forms answers `as-page-restore` in Interactive preview, so Review could restore a scenario without reloading into Annotate. That needs the owner to relax CMT-022 further (Review posting to the live page), plus a spec amendment, journeys and a rule for pages that never answer.
-2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
+2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](../../../docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
 3. **Open owner decisions from October 6, rechecked against the code on October 7 and unchanged:**
    - **Browser `auth login` 404 (CLI-001).** No production entry point sets `apiOAuthResource`, and ADR 0028 left it unset on purpose. The CLI already says to use `--api-key-stdin`; `docs/cli.md` still describes a browser login.
    - **Not-found vs denied (MCP-009).** Reads look up the artifact before checking read permission. A service principal with project access but no read permission therefore sees 404 for a missing artifact and 403 for an existing one.
