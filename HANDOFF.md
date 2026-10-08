@@ -1,6 +1,6 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026, and updated after the late deploys. artifacts.backend.app runs image `sha256:6b4edff2864b65ac5993d7a802c1d13a19262cda6f4ab03550f1318baafa9d26` (Artifact Server `fcc8cc4`, Workspace `3297cbb2d`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `5abcad7`. Recheck both before relying on anything below.
+Written October 7, 2026, and updated after the late deploys. artifacts.backend.app runs image `sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad` (Artifact Server `d7f6f63`, Workspace `0d3c75622`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `5abcad7`. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
 
@@ -20,7 +20,7 @@ The trade-off the owner chose: turning Annotate on reloads the page into the san
 
 **Annotate reopens the scenario reached on the live page (owner approved relaxing CMT-022's no-bridge rule).** Review listens, read-only, to the Interactive preview frame: an unprompted `as-page-state` naming a scenario its views declare, from that frame's own content origin, becomes the requested scenario (`liveScenarioFrom` in `scenario-model.ts`, the listener in `preview-canvas.tsx`). The picker and URL follow the live page, and Annotate restores that scenario. Review never posts to the live page, so a scenario link still opens the live page at its default; turning Annotate on restores the linked scenario. Leaving Annotate clears what the sandbox had confirmed (`clearOnScreen`). Forms' adapter already posts to `window.parent` with `"*"`; Design was asked to keep that.
 
-## Design's reply (`5abcad7`): Forms v17 re-pinned (October 7, late, not deployed; suite only)
+## Design's reply (`5abcad7`): Forms v17 re-pinned (October 7, late, deployed from `d7f6f63`; suite and docs only)
 
 Design answered the "Next for Design" list in its `HANDOFF.md` ("Next for Artifact Server"):
 - **Unprompted live reports, confirmed.** Canonical `arkcase/project/dc-support/support.js` installs `installReviewAdapter` from `init()`. It posts to `window.parent` with `"*"` whenever the page has a parent, and a scenario-marker change posts `as-page-state` with `requestId: null`. Only scenario changes are reported, and the unprompted `state.props` is `{}`. A Design journey locks this in for a live page in a cross-origin frame.
