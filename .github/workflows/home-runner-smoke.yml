@@ -67,6 +67,8 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.15.0
+      - name: Subdomains of localhost resolve to loopback for Node
+        run: node -e "require('node:dns').lookup('home-runner-check.localhost', (error, address) => { if (error) throw error; console.log(address); })"
       - name: Install Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:

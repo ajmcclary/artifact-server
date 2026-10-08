@@ -10,7 +10,15 @@ readonly artifactserver_compose_sha256="40343e21ca777173e69cff5dbafeb37c6f81f3b0
 # Libraries GitHub-hosted runners carry and the image lacks: pnpm's standalone
 # installer links libatomic, and setup-ruby's prebuilt Ruby links libyaml.
 sudo apt-get update -qq
-sudo apt-get install -y -qq --no-install-recommends libatomic1 libyaml-0-2
+sudo apt-get install -y -qq --no-install-recommends libatomic1 libyaml-0-2 libnss-myhostname
+
+# Resolve *.localhost to loopback the way GitHub's Ubuntu runners do. Browsers
+# do this themselves; Node's resolver (Playwright's request client, the CLI)
+# relies on nss-myhostname.
+if ! grep -qE '^hosts:.*\bmyhostname\b' /etc/nsswitch.conf; then
+  sudo sed -i -E 's/^(hosts:.*)$/\1 myhostname/' /etc/nsswitch.conf
+fi
+getent hosts home-runner-check.localhost
 
 # setup-ruby's prebuilt Rubies only run from the hosted runners' tool cache path.
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/hostedtoolcache
