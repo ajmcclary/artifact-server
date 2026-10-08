@@ -6,7 +6,6 @@ import {
 } from "@modelcontextprotocol/server";
 import {Clock, Effect, Exit, Redacted, type Tracer} from "effect";
 import { type Context, Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {routePath} from "hono/route";
 import { z } from "zod";
@@ -172,6 +171,7 @@ import {
 import {cacheablePreviewLeaseStatuses, previewLeaseCacheControl} from "./preview-lease-cache.js";
 import {artifactServerFailureResponse} from "./artifact-http-failure.js";
 import {attachmentContentDisposition} from "./content-disposition.js";
+import {declaredBodyLimit} from "./declared-body-limit.js";
 import {observeHttpRequest} from "../observability/application-observability.js";
 import {summarizeFailureCause} from "../observability/failure-cause-summary.js";
 import {
@@ -655,7 +655,7 @@ export function createHttpApp(
     versionDocuments,
   });
   const inviteLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
-  const boundedJsonBody = bodyLimit({
+  const boundedJsonBody = declaredBodyLimit({
     maxSize: maximumJsonRequestBytes,
     onError: (context) =>
       context.json(
@@ -668,7 +668,7 @@ export function createHttpApp(
         413,
       ),
   });
-  const boundedUploadPlanBody = bodyLimit({
+  const boundedUploadPlanBody = declaredBodyLimit({
     maxSize: maximumUploadPlanRequestBytes,
     onError: (context) =>
       context.json(
@@ -681,7 +681,7 @@ export function createHttpApp(
         413,
       ),
   });
-  const boundedMcpBody = bodyLimit({
+  const boundedMcpBody = declaredBodyLimit({
     maxSize: maximumUploadPlanRequestBytes,
     onError: (context) =>
       context.json(
