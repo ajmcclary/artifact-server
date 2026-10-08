@@ -2798,7 +2798,7 @@ requirements:
       failure: {id: MCP-009-F, description: "MCP cannot list, read, publish, restore, change visibility, or delete beyond the caller's normal authority."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "MCP-009-B/F prove identical outcomes for 12 callers across 16 artifact and project operations over MCP and HTTP, and that refused MCP calls change nothing and reveal no more than HTTP, on the local runtime. Comment, Git-history, linked-file, and project rename/archive tools are outside the matrix; browser cookie sessions and non-local deployments are not exercised. Both surfaces distinguish not-found from denied for a caller with project access but no read permission."
+    proof_gap: "MCP-009-B/F prove identical outcomes for 12 callers across 16 artifact and project operations over MCP and HTTP, and that refused MCP calls change nothing and reveal no more than HTTP, on the local runtime. Comment, Git-history, linked-file, and project rename/archive tools are outside the matrix; browser cookie sessions and non-local deployments are not exercised. A caller who reaches the project but may not read, or may not manage, is refused before any artifact lookup, so real and fabricated artifacts answer identically on both surfaces for reads and refused writes."
     depends_on: [AUTH-008]
     evidence:
       - deployment: local

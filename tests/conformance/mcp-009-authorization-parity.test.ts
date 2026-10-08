@@ -120,7 +120,10 @@ const expectedAllowed: ReadonlyMap<CallerLabel, ReadonlySet<Operation>> = new Ma
   ["anonymous", new Set<Operation>()],
 ]);
 
-/** Callers that reach the project, so a deleted artifact reads as missing. */
+/**
+ * Callers that reach the project. Only those that may also read artifacts see
+ * a deleted artifact as missing; the rest are refused before any lookup.
+ */
 const projectReachingCallers: ReadonlySet<CallerLabel> = new Set([
   "installation-key",
   "human-administrator",
@@ -418,12 +421,36 @@ describe("MCP and HTTP share one authorization layer", () => {
     );
     expect(probes.filter((probe) => probe.leaksTarget || probe.mcp.real === allowed))
       .toEqual([]);
-    // Callers outside the project's authority cannot tell a real artifact from
-    // a fabricated one on either surface.
-    expect(probes
-      .filter((probe) => !projectReachingCallers.has(probe.caller))
-      .filter((probe) => probe.mcp.real !== probe.mcp.fabricated))
-      .toEqual([]);
+    // A caller who cannot read cannot tell a real artifact from a fabricated
+    // one on either surface, even when it reaches the project.
+    expect(probes.filter((probe) =>
+      probe.mcp.real !== probe.mcp.fabricated ||
+      probe.http.real !== probe.http.fabricated
+    )).toEqual([]);
+
+    // The same holds for refused writes: aiming them at a fabricated artifact
+    // is refused exactly as aiming them at the real one was.
+    const fabricatedTarget: Target = {...target, artifactId: fabricatedArtifactId};
+    const fabricatedAttempts = attempts.filter(({caller, mutation}) =>
+      nonReaders.includes(caller) && mutation.operation !== "publish.new-artifact" &&
+      mutation.operation !== "project.create"
+    );
+    expect(fabricatedAttempts.length).toBeGreaterThan(0);
+    const fabricatedRefusals = await inSequence(
+      fabricatedAttempts,
+      async ({caller, mutation}) => {
+        const fabricated = mcpMutations(fabricatedTarget)
+          .find((candidate) => candidate.operation === mutation.operation);
+        if (fabricated === undefined) throw new Error(`No ${mutation.operation} mutation.`);
+        const result = await fabricated.run(callerToken(caller));
+        return {caller, operation: mutation.operation, outcome: result.outcome};
+      },
+    );
+    expect(fabricatedRefusals).toEqual(fabricatedAttempts.map(({caller, mutation}) => ({
+      caller,
+      operation: mutation.operation,
+      outcome: caller === "anonymous" ? unauthenticated : denied,
+    })));
 
     // Read authority is not mutation authority: a reader can see the target
     // over MCP but its refused writes above left the record untouched.
@@ -1028,7 +1055,10 @@ function mcpIdempotencyKey(): string {
 function expectedOutcome(label: CallerLabel, operation: Operation): string {
   if (label === "anonymous") return unauthenticated;
   if (operation === "artifact.get-deleted") {
-    return projectReachingCallers.has(label) ? notFound : denied;
+    return projectReachingCallers.has(label) &&
+        expectedAllowed.get(label)?.has("artifact.get") === true
+      ? notFound
+      : denied;
   }
   return expectedAllowed.get(label)?.has(operation) === true ? allowed : denied;
 }

@@ -206,6 +206,7 @@ function makeCompareArtifactService(
           principal: command.principal,
           projectId: command.projectId,
         });
+      yield* authorization.requireArtifactRead(command.principal);
       const artifact = yield* dependencies.repository.findArtifact(
         project.id,
         command.artifactId,
@@ -215,7 +216,6 @@ function makeCompareArtifactService(
           message: "The artifact does not exist.",
         });
       }
-      yield* authorization.requireArtifactRead(command.principal);
       const [from, to] = yield* Effect.all([
         requireVersion(project.id, artifact.id, command.fromVersionId),
         requireVersion(project.id, artifact.id, command.toVersionId),
