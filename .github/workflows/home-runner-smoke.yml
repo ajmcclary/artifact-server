@@ -84,6 +84,13 @@ jobs:
           node-version: 24.15.0
       - name: Subdomains of localhost resolve to loopback for Node
         run: node -e "require('node:dns').lookup('home-runner-check.localhost', (error, address) => { if (error) throw error; console.log(address); })"
+      - name: pnpm uses one store for the workspace and TMPDIR
+        run: |
+          workspace_store=$(pnpm store path)
+          temporary_store=$(cd "$TMPDIR" && pnpm store path)
+          echo "workspace: $workspace_store"
+          echo "TMPDIR ($TMPDIR): $temporary_store"
+          test "$workspace_store" = "$temporary_store"
       - name: Install Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:

@@ -34,3 +34,11 @@ if ! docker compose version >/dev/null 2>&1; then
   install -m 0755 "$artifactserver_download" "$artifactserver_plugins/docker-compose"
 fi
 docker compose version
+
+# pnpm keeps one content store per filesystem. The workspace sits on the
+# runner's work volume while /tmp is the container's own filesystem, so the
+# release package staged under TMPDIR installs --offline from an empty store.
+# Keep temporary files on the work volume, as GitHub-hosted runners do.
+if [[ -n "${GITHUB_ENV:-}" && -n "${RUNNER_TEMP:-}" ]]; then
+  echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+fi
