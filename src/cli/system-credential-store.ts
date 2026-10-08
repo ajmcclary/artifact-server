@@ -1,38 +1,19 @@
 import {spawn} from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 
-import {Context, Effect, Redacted, Schema} from "effect";
+import {Context, Effect, Redacted} from "effect";
+
+import {
+  CliCredentialStoreError,
+  type CliCredentialStoreOperations,
+} from "./cli-credential-store-port.js";
+import {sealedCredentialStore} from "./sealed-credential-store.js";
+
+export {CliCredentialStoreError, type CliCredentialStoreOperations};
 
 const maximumHelperOutputBytes = 1_000_000;
 const missingExitCode = 2;
-
-/** Expected failure while reading or changing a user credential store. */
-export class CliCredentialStoreError extends Schema.TaggedError<CliCredentialStoreError>()(
-  "CliCredentialStoreError",
-  {
-    message: Schema.String,
-    operation: Schema.Literals(["delete", "read", "write"]),
-    reason: Schema.Literals([
-      "backend_unavailable",
-      "credential_missing",
-      "operation_failed",
-    ]),
-  },
-) {}
-
-/** Secret persistence required by authenticated CLI profiles. */
-export interface CliCredentialStoreOperations {
-  readonly delete: (
-    account: string,
-  ) => Effect.Effect<boolean, CliCredentialStoreError>;
-  readonly read: (
-    account: string,
-  ) => Effect.Effect<Redacted.Redacted, CliCredentialStoreError>;
-  readonly write: (
-    account: string,
-    secret: Redacted.Redacted,
-  ) => Effect.Effect<void, CliCredentialStoreError>;
-}
 
 /** Operating-system credential storage used by the Artifact Server CLI. */
 export class CliCredentialStore extends Context.Service<
@@ -124,7 +105,27 @@ function credentialHelperInput(
   });
 }
 
+/**
+ * `security add-generic-password -w` reads at most 128 characters from stdin,
+ * too few for an OAuth grant, so the Keychain keeps only each credential's
+ * short sealing key and the credential is sealed in a user-only file.
+ */
 function macOsCredentialStore(
+  environment: NodeJS.ProcessEnv,
+): CliCredentialStoreOperations {
+  return sealedCredentialStore({
+    directory: path.join(
+      environment["HOME"] ?? os.homedir(),
+      "Library",
+      "Application Support",
+      "artifactserver",
+      "credentials",
+    ),
+    keys: macOsKeychainStore(environment),
+  });
+}
+
+function macOsKeychainStore(
   environment: NodeJS.ProcessEnv,
 ): CliCredentialStoreOperations {
   return {

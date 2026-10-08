@@ -3118,7 +3118,10 @@ v12-7f3a.content.example.net</code></pre>
                   connect</code> registers MCP in an AI client. <code>artifactserver auth login
                   &lt;server&gt;</code> signs the command-line program into an exact server origin,
                   opens browser approval when supported, and stores the renewable credential in
-                  the operating-system credential store. Local mode uses private user-only state
+                  the operating-system credential store. On macOS, whose Keychain command
+                  accepts at most 128 characters, the Keychain holds a per-credential sealing
+                  key and the credential is sealed with it (AES-256-GCM) in a user-only file.
+                  Local mode uses private user-only state
                   without browser login or a visible key. CI uses a scoped service credential from
                   its secret manager.
                 </p>

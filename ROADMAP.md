@@ -289,16 +289,13 @@ deferred.
 attachment feature. LNK-001 and LNK-007 need route-level absence proof on
 deployed AWS and GCP instances.
 
-**CLI credential storage on macOS (CLI-001).** `security add-generic-password
--w` reads at most 128 characters from stdin, so the keychain store refuses any
-longer credential (its read-back check fails closed). That includes every
-browser OAuth grant and the hosted agent key's profile, which is why the
-DSN-011 suite reads `BACKEND_AGENT_KEY` from the ignored `.env` instead.
-`security -i` breaks lines at 4,096 characters (about 2,000 secret bytes, hex
-encoded), so it is not a fix. A credential must never reach process arguments.
-Choose a storage design (for example, a short wrapping key in the keychain and
-the sealed credential in a 0600 file) and prove it with a credential longer
-than 4 KB. `auth status` also still shows an unreachable server as `invalid`.
+**CLI credential storage (CLI-001, remaining).** macOS now seals credentials
+behind a short Keychain key, proved through the credential-helper boundary.
+Still open: an opt-in check against the real Keychain (only with the owner's
+approval; never probe `security` on the owner's machine), Windows Credential
+Manager's 2,560-byte blob limit (about 1,280 characters, likely too small for
+an OAuth grant), moving the hosted agent key from `.env` to a CLI profile, and
+`auth status` still showing an unreachable server as `invalid`.
 
 **Activity, Projects and Admin.** Record team-deployment browser evidence for
 ACT-005, ACT-006 and ADM-008.

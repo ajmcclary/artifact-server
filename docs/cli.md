@@ -96,6 +96,8 @@ artifactserver auth login https://artifacts.example.com --name team --api-key-st
 
 `auth status` verifies saved profiles and never prints credentials. It exits `2` when any profile is invalid.
 
+Saved credentials live in the operating-system credential store: Secret Service on Linux and Credential Manager on Windows. On macOS the Keychain's command-line tool accepts at most 128 characters, so the Keychain holds a short per-credential key and the credential itself is sealed with it in `~/Library/Application Support/artifactserver/credentials/` (directory `0700`, files `0600`). A sealed file is useless without its Keychain key, and `auth logout` removes both. A profile saved before this change keeps working and is sealed the next time it is renewed or saved.
+
 ## Publish another version
 
 The CLI automatically remembers each successful publication outside your source folder.
