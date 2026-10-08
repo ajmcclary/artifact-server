@@ -4,6 +4,21 @@ name: Home runner smoke
 # gate before ci.yml's full tier is pointed at it. Manual dispatch from main only.
 on:
   workflow_dispatch:
+    inputs:
+      playwright_grep:
+        description: Optional. Also run browser tests matching this title, five times per engine, and upload their traces
+        required: false
+        default: ""
+        type: string
+      playwright_project:
+        description: Engine for playwright_grep
+        required: false
+        default: webkit
+        type: choice
+        options:
+          - chromium
+          - firefox
+          - webkit
 
 permissions:
   contents: read
@@ -79,3 +94,22 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium
+      - name: Run the requested browser tests
+        if: inputs.playwright_grep != ''
+        env:
+          BROWSER_CRITICAL_ENGINES: all
+          PLAYWRIGHT_GREP: ${{ inputs.playwright_grep }}
+          PLAYWRIGHT_PROJECT: ${{ inputs.playwright_project }}
+        run: |
+          pnpm exec playwright install --with-deps "$PLAYWRIGHT_PROJECT"
+          pnpm build
+          pnpm exec playwright test --grep "$PLAYWRIGHT_GREP" --project "$PLAYWRIGHT_PROJECT" \
+            --repeat-each 5 --trace on --reporter line
+      - name: Upload browser traces
+        if: ${{ !cancelled() && inputs.playwright_grep != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: home-runner-browser-traces-${{ github.run_id }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
