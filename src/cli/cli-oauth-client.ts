@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   auth,
   discoverOAuthServerInfo,
+  OAuthError,
   type OAuthClientInformationContext,
   type OAuthClientMetadata,
   type OAuthClientProvider,
@@ -144,11 +145,23 @@ export const refreshCliOAuthCredential = Effect.fn("CliOAuth.refresh")(
         }
         return provider.storedCredential();
       },
-      catch: () => new CliAuthenticationError({
-        message:
-          "The Artifact Server browser grant could not be renewed. Run artifactserver auth login again.",
-        reason: "credential_revoked",
-      }),
+      // The SDK swallows a network failure or server_error during refresh and
+      // falls through to a browser redirect, so only a grant the authorization
+      // server refused, or a missing refresh token, means a new login.
+      catch: (cause) =>
+        provider.grantRefused
+          || credential.tokens.refresh_token === undefined
+          || (cause instanceof OAuthError && cause.code !== "server_error")
+          ? new CliAuthenticationError({
+            message:
+              "The Artifact Server browser grant could not be renewed. Run artifactserver auth login again.",
+            reason: "credential_revoked",
+          })
+          : new CliAuthenticationError({
+            message:
+              `Artifact Server at ${origin} could not renew the browser grant right now. Try again shortly.`,
+            reason: "server_unavailable",
+          }),
     });
   },
 );
@@ -242,6 +255,7 @@ class ArtifactServerOAuthProvider implements OAuthClientProvider {
   #clientInformation: StoredOAuthClientInformation | undefined;
   #codeVerifier: string | undefined;
   #discoveryState: OAuthDiscoveryState | undefined;
+  #grantRefused = false;
   #tokens: StoredOAuthTokens | undefined;
   #tokensSavedAt: string | undefined;
 
@@ -324,9 +338,17 @@ class ArtifactServerOAuthProvider implements OAuthClientProvider {
     return this.#discoveryState;
   }
 
+  /** True once the authorization server refused the saved client or grant. */
+  get grantRefused(): boolean {
+    return this.#grantRefused;
+  }
+
   invalidateCredentials(
     scope: "all" | "client" | "tokens" | "verifier" | "discovery",
   ): void {
+    if (scope === "all" || scope === "client" || scope === "tokens") {
+      this.#grantRefused = true;
+    }
     if (scope === "all" || scope === "client") this.#clientInformation = undefined;
     if (scope === "all" || scope === "tokens") this.#tokens = undefined;
     if (scope === "all" || scope === "verifier") this.#codeVerifier = undefined;

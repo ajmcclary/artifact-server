@@ -26,7 +26,10 @@ import {z} from "zod";
 
 import type {BearerCredentialVerifier} from
   "../../src/application/authentication.js";
-import {revokeCliOAuthCredential} from "../../src/cli/cli-oauth-client.js";
+import {
+  refreshCliOAuthCredential,
+  revokeCliOAuthCredential,
+} from "../../src/cli/cli-oauth-client.js";
 import {oauthCredential} from "../../src/cli/cli-profile-credential.js";
 import {AuthenticationRequired} from "../../src/core/errors.js";
 import {
@@ -572,6 +575,29 @@ describe("authenticated CLI profiles and remote publication", () => {
       expect(issuer.observations.revocationCount).toBe(1);
     } finally {
       await Promise.all([issuer.stop(), alternate.stop()]);
+    }
+  });
+
+  test("CLI OAuth renewal reports a failing or unreachable server as unavailable and only a refused grant as revoked", async () => {
+    const issuer = await startOAuthFixture();
+    const unreachable = await startOAuthFixture();
+    await unreachable.stop();
+    try {
+      // The token endpoint is down: the grant may still be good, so renewal
+      // must not tell the user it was revoked.
+      issuer.failTokenEndpointWith(503);
+      expect(await renewalFailure(issuer.origin, "oauth-refresh-one")).toBe("server_unavailable");
+      expect(issuer.observations.refreshCount).toBe(1);
+      expect(await renewalFailure(unreachable.origin, "oauth-refresh-one"))
+        .toBe("server_unavailable");
+
+      // The authorization server refuses the grant, or none was saved.
+      issuer.failTokenEndpointWith(null);
+      expect(await renewalFailure(issuer.origin, "refused-refresh")).toBe("credential_revoked");
+      expect(await renewalFailure(issuer.origin, null)).toBe("credential_revoked");
+      expect(issuer.observations.authorizationCount).toBe(0);
+    } finally {
+      await issuer.stop();
     }
   });
 
@@ -1395,6 +1421,7 @@ interface OAuthFixture {
   readonly origin: string;
   advertiseAuthorizationServer(origin: string): void;
   advertiseWrongResource(): void;
+  failTokenEndpointWith(status: number | null): void;
   redirectRevocationTo(origin: string | null): void;
   stop(): Promise<void>;
 }
@@ -1414,6 +1441,7 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
   let wrongResource = false;
   let advertisedAuthorizationServer: string | null = null;
   let revocationRedirect: string | null = null;
+  let tokenEndpointFailure: number | null = null;
   let codeChallenge: string | null = null;
   let expectedRedirect: string | null = null;
   let origin = "";
@@ -1506,6 +1534,11 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
       }
       if (grantType === "refresh_token") {
         observations.refreshCount += 1;
+        if (tokenEndpointFailure !== null) {
+          response.writeHead(tokenEndpointFailure, {"Content-Type": "text/plain"})
+            .end("upstream unavailable");
+          return;
+        }
         if (body.get("refresh_token") !== "oauth-refresh-one") {
           sendJson(response, 400, {error: "invalid_grant"});
           return;
@@ -1578,6 +1611,9 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
     advertiseWrongResource: () => {
       wrongResource = true;
     },
+    failTokenEndpointWith: (status) => {
+      tokenEndpointFailure = status;
+    },
     observations,
     origin,
     redirectRevocationTo: (value) => {
@@ -1585,6 +1621,25 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
     },
     stop: () => closeHttp(server),
   };
+}
+
+/** Force one synthetic browser grant to renew and return why it could not. */
+function renewalFailure(origin: string, refreshToken: string | null): Promise<string> {
+  const credential = oauthCredential({
+    clientInformation: {client_id: "synthetic-client", issuer: origin},
+    redirectUrl: `${origin}/callback`,
+    tokens: refreshToken === null
+      ? {access_token: "synthetic-access", issuer: origin, token_type: "Bearer"}
+      : {
+        access_token: "synthetic-access",
+        issuer: origin,
+        refresh_token: refreshToken,
+        token_type: "Bearer",
+      },
+  });
+  return Effect.runPromise(Effect.flip(
+    refreshCliOAuthCredential(origin, credential, process.env, true),
+  )).then((error) => error.reason);
 }
 
 function readTextBody(
