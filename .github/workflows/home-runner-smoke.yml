@@ -71,8 +71,8 @@ jobs:
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: "3.3"
-      - name: Ruby runs
-        run: ruby -e 'puts RUBY_VERSION'
+      - name: Ruby runs with a UTF-8 default encoding
+        run: ruby -e 'puts RUBY_VERSION; exit(Encoding.default_external == Encoding::UTF_8)'
       - name: Playwright system dependencies install
         run: |
           pnpm install --frozen-lockfile
