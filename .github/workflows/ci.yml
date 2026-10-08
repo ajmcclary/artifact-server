@@ -36,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ inputs.tier }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ inputs.tier }}-${{ inputs.runner || 'github' }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
