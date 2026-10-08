@@ -23,6 +23,12 @@ artifacts.backend.app runs image
 and Argo reports Synced and Healthy. Design (`~/Dev/Design`) is at `5abcad7`.
 Recheck both before relying on this.
 
+`pnpm verify:iteration` last passed in full on `0faa4f1`. The commits after it
+(through the macOS sealed-credential fix) were pushed on October 8 without a
+full gate because sustained machine load (load average above 200) made the
+process-spawning tests time out; every suite they touch passed when run alone.
+Run the full gate first in the next iteration.
+
 Deploying follows GitOps: take the digest only from `image.yml`'s "Print digest"
 step, then pin it in `~/Workspace` at
 `deployments/argocd/application-artifact-server.yaml` and
