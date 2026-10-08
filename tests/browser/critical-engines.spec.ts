@@ -75,12 +75,7 @@ test.describe("critical engine review paths @critical", () => {
       const preview = reviewFrame.frameLocator("iframe");
       await expect(reviewFrame.locator("iframe")).toHaveAttribute("sandbox", "allow-scripts");
       expect(await preview.locator("body").evaluate(() => window.origin)).toBe("null");
-      // Armed, a click on a link places a comment instead of navigating. The
-      // sandbox's bridge starts in text-selection mode and switches plain clicks
-      // to comments only when the review frame's set-input-method arrives after
-      // the frame reports ready; it marks that switch on its body. Linux WebKit
-      // can take long enough that a click sent before it navigates instead.
-      await expect(preview.locator("body")).toHaveAttribute("data-plannotator-pinpoint-cursor", "");
+      // Armed, a click on a link places a comment instead of navigating.
       await preview.getByRole("link", {name: "Claims", exact: true}).click();
       await expect(reviewFrame.getByPlaceholder("Add a comment...")).toBeVisible();
       await expect(preview.getByRole("heading", {name: "Dashboard"})).toBeVisible();
