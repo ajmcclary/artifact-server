@@ -739,3 +739,31 @@ Annotate mode could not be checked on either version: its `srcdoc` sandbox's con
 The cold ready ranges overlap (3176–5762 ms against 4115–5507 ms), and so do the warm ones (1523–2453 ms against 1343–1609 ms), so this run shows no ready-time improvement, only the smaller transfer and decoded size.
 
 **Follow-up on `ek-data-design-record.js`.** The default open still decodes 11.07 MiB. The eager ExtractionKit data modules (`ek-data-library.js`, `ek-data-evaluation.js`, `ek-data-design-runs.js` and `ek-data-design-record.js`) account for 6,162,397 bytes of that. `ek-data-design-record.js` alone is 5,912,642 bytes, 96% of the eager data and 51% of everything the open decodes. Ready time no longer tracks decoded bytes: removing 37% of them moved the cold median by 182 ms inside overlapping ranges. In every after sample that file finished downloading before `ds-bundle.js` and `icons.css`, which start at the same moment. The moment content fetches begin varied from 1.4 s to 3.4 s across samples, more than any byte effect. Hand-splitting the file is not recommended on this evidence. A split would not shorten the measured ready, which ends when content requests have been quiet for 500 ms and so never includes script parse or evaluation time. If the warm drop (median 1991 to 1475 ms, ranges overlapping by 86 ms) suggests a parse cost worth chasing, the next step is to measure, with a main-thread profile, how long the first Runs render spends evaluating that file. Only that profile could justify the owner-approved, hand-authored restructuring in Design that a split of this frozen source would require.
+
+## October 2026 ExtractionKit per-run design-record split (Design)
+
+Design split `ek-data-design-record.js` into a 1,488-byte index plus one module per run under `ek-data-design-record/` (15 files), loaded when a run's record is first drawn, and moved the viewer's base64 images to files under `assets/viewer/`. Measured October 8, 2026 with `pnpm perf:delivery` (Chromium 151, unthrottled, five samples per journey, Apple M1 Max, Node 24.11.1). Both hosted runs used artifacts.backend.app on image `sha256:16771d22064219fd3cb2bc54a7105ede0fdcf84bcdc9f3fdf19479c81a1c1813`, back to back between 18:15 and 18:19 UTC, each pinning one ExtractionKit version:
+
+- version 16 (`ver_1ddddfb8-b68e-4a39-a707-d2bd1324e79a`), the "after" version of the deferred-tiers run above, with the whole design record eager: `project/evidence/delivery-baseline-2026-10-08-hosted-before-ek-split.json`
+- version 22 (`ver_b39a0c2d-e5b9-44ba-90c1-2b5a4e9148b2`), Design `84f0a60`: `project/evidence/delivery-baseline-2026-10-08-hosted-after-ek-split.json`
+
+The after report records a dirty tree; the only uncommitted file was the before report written two minutes earlier.
+
+**The prototype URL now needs `path`.** Review opens an artifact with a preview gallery on that gallery, so the October 6 URL (artifact, project, version, `view=focus`) no longer opens the prototype. A first attempt with it timed out on every open at the harness's 120-second limit, with no lease minted, and was stopped without a report. Both runs here add `path=project/Prototype - ExtractionKit.dc.html`.
+
+| Run | Cache | Ready | First paint | Transferred | Decoded | Requests |
+|---|---|---|---|---|---|---|
+| before (version 16) | cold | 6152 ms (4116 ms–14275 ms) | 1128 ms | 1.56 MiB | 11.12 MiB | 61 |
+| before (version 16) | warm | 2183 ms (1885 ms–3431 ms) | 296 ms | 16.5 KiB | 10.79 MiB | 61 |
+| after (version 22) | cold | 10319 ms (7164 ms–10695 ms) | 1612 ms | 1.48 MiB | 5.59 MiB | 61 |
+| after (version 22) | warm | 1774 ms (1672 ms–4526 ms) | 356 ms | 19.5 KiB | 5.26 MiB | 60 |
+
+The Library journey, which neither version affects, measured 2.3 s cold and 1.6 s warm before, and 1.6 s and 1.5 s after.
+
+### What this shows and what it does not
+
+- **The default open decodes half as much.** Decoded bytes fell from 11.12 MiB to 5.59 MiB. The 5.53 MiB difference matches the design record's fall from 5,912,642 to 1,488 bytes. The private HAR captures show the same 38 content files on every cold open of both versions, with `ek-data-design-record.js` arriving as 623 bytes instead of 111,894, and no per-run module requested on the default open.
+- **Transfer barely moved.** The design record compressed to about 109 KiB, so the cold transfer fell only from 1.56 MiB to 1.48 MiB.
+- **Ready time did not improve, and the cold median is not a regression.** The cold ranges overlap (4.1–14.3 s against 7.2–10.7 s), and so do the warm ones (1.9–3.4 s against 1.7–4.5 s). In both runs nearly every content request's time is waiting for the first byte: 1–4.6 s per file regardless of size (the 623-byte index waited 2.6 s in one after sample, against 2.4 s for the old 112 KB file before), with receive times mostly under 0.1 s. Review's own start, before any lease request, also varied: the first content request began at a median of 1.8 s after navigation in the before run and 3.7 s in the after run, although that phase does not depend on the ExtractionKit version. Per-request latency on this host, recorded in the host-contention section above, sets cold ready here, not the bytes the page decodes.
+- **Version 22 differs in more than the split.** It loads React from its own `vendor/react/` files (on the lease origin) instead of cdnjs, so two more of the 38 files queue on the same server, and its shared `ds-bundle.js` grew from 1,743,497 to 1,807,547 bytes (about 272 to 285 KiB transferred) with new components. Neither change is isolated here.
+- **Ready still excludes parse and evaluation.** It ends when content requests have been quiet for 500 ms. The warm median fell from 2.18 s to 1.77 s with overlapping ranges; only a main-thread profile would show whether halving the decoded script shortens the first Runs render.
