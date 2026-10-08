@@ -22,11 +22,11 @@ import {publishPinnedCopy, readPinnedVersion, type VersionPin} from "./pinned-co
  * be made to misbehave.
  */
 
-/** Forms v16, published from Design `0a572ec`. Re-pin deliberately, never to "current". */
+/** Forms v17, published from Design `8c2edea`. Re-pin deliberately, never to "current". */
 const formsPin: VersionPin = {
   artifactId: "art_743d037f-dba7-4051-ad8f-4eda916a9661",
-  label: "Forms v16",
-  versionId: "ver_c4301bda-1d00-432b-8f19-8f9ca4483357",
+  label: "Forms v17",
+  versionId: "ver_5307bd25-2457-4aa2-8638-6ee4d3679396",
 };
 
 /** The little this suite knows about Forms beyond its views document; checked against it first. */
@@ -35,8 +35,11 @@ const forms = {
   regionLabel: "Min length",
   scenarioId: "5",
   scenarioLabel: "Inspector · Validation",
-  // The ScenarioBar's "Next scenario" from scenario 5.
+  // The ScenarioBar's "Next scenario" from scenario 5, whose rule editor names
+  // its add button and fills its field picker through camelCase props.
   nextScenarioId: "6",
+  ruleAddLabel: "Add Condition",
+  ruleField: "Review Required",
   viewId: "arkcase-forms/form-builder",
 } as const;
 
@@ -72,9 +75,8 @@ const violationPrefix = "hosted-qualification-csp-violation ";
 
 /**
  * Record every content security policy violation in every frame of a context,
- * with the document, directive and source that caused it. Forms' runtime first
- * tries `new Function` and falls back to inline evaluation when the review's
- * policy refuses it, so that one refusal is expected and not recorded.
+ * with the document, directive and source that caused it. Forms v17 no longer
+ * probes `new Function` on an `about:` page, so no refusal is expected.
  */
 async function watchPolicyViolations(context: BrowserContext, violations: string[]): Promise<void> {
   await context.addInitScript((prefix) => {
@@ -89,11 +91,7 @@ async function watchPolicyViolations(context: BrowserContext, violations: string
   }, violationPrefix);
   context.on("console", (message: ConsoleMessage) => {
     const text = message.text();
-    if (!text.startsWith(violationPrefix)) return;
-    const violation = z.object({blocked: z.string(), directive: z.string(), source: z.string()}).loose()
-      .parse(JSON.parse(text.slice(violationPrefix.length)));
-    const formsEvalFallback = violation.directive === "script-src" && violation.blocked === "eval" && violation.source.includes("/support.js:");
-    if (!formsEvalFallback) violations.push(text.slice(violationPrefix.length));
+    if (text.startsWith(violationPrefix)) violations.push(text.slice(violationPrefix.length));
   });
 }
 
@@ -175,20 +173,19 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     await expect(picker(page)).toHaveValue(forms.scenarioId);
   });
 
-  test("DSN-008-B: on Forms, the page's own ScenarioBar moves the review along", async () => {
-    // Forms v16's ScenarioBar does nothing inside an opaque-origin sandbox, with
-    // or without the review's CSP, though it works on an ordinary origin. Its
-    // buttons' handlers run, but the scenario never changes. Reported to Design;
-    // this test starts passing (and so fails as unexpected) once a re-pinned
-    // Forms fixes it.
-    test.fail(true, "Forms v16 ScenarioBar is inert in an opaque-origin sandbox (Design defect)");
+  test("DSN-008-B: on the annotation surface, Forms draws a restored scenario as it does live", async () => {
+    // The sandbox page is a srcdoc whose template the HTML parser lowercased;
+    // Forms v16 lost its imported components' camelCase props there, so scenario
+    // 6's rule editor drew empty. The armed surface owns page clicks, so this
+    // checks what the page draws rather than its ScenarioBar, which the live
+    // test above drives.
     const {page} = fixture;
-    await page.goto(`${href()}&scenario=${forms.scenarioId}`);
+    await page.goto(`${href()}&scenario=${forms.nextScenarioId}`);
     await startAnnotating(page);
-    await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.scenarioId, {timeout: 60_000});
-    await previewFrame(page).getByRole("region", {name: "Scenario review"}).getByRole("button", {name: "Next scenario"}).click();
-    await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.nextScenarioId, {timeout: 5_000});
-    await expect(picker(page)).toHaveValue(forms.nextScenarioId);
+    await expect(scenarioOnScreen(page)).toHaveAttribute("data-review-scenario", forms.nextScenarioId, {timeout: 60_000});
+    await expect(previewFrame(page).getByRole("button", {name: forms.ruleAddLabel, exact: true})).toBeVisible();
+    await expect(previewFrame(page).getByRole("combobox")
+      .filter({has: previewFrame(page).locator("option:checked", {hasText: forms.ruleField})})).toHaveCount(1);
   });
 
   test("DSN-008-B: rapid picker changes on Forms end on the last choice without a failure", async () => {
@@ -264,7 +261,7 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
     await expect(previewFrame(page).locator("[data-plannotator-marker]")).toHaveCount(1);
   });
 
-  test("Forms in the review sandbox draws no content security policy violation beyond its eval fallback", () => {
+  test("Forms draws no content security policy violation, live or in the review sandbox", () => {
     expect(violations).toEqual([]);
   });
 });

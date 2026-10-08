@@ -70,6 +70,8 @@ What it leaves open:
    - A capture in high contrast stores `view.state.theme: "high-contrast"`. Forms follows the reviewer's contrast preference in the sandbox (Design, `0a572ec`), so the suite uses `emulateMedia({contrast: "more"})`. Reopening it without that preference shows the reviewer's theme and says "Made in high contrast" (contract amendment 8).
 
    **Status (October 7 evening):** written as `tests/hosted/forms-review.hosted.spec.ts`. It passed a local rehearsal in Chromium and WebKit. The in-page ScenarioBar case is an expected failure, because of a Forms defect in opaque-origin sandboxes. Nothing hosted has run.
+
+   **Status (October 7, late):** re-pinned to Forms v17 (Design `8c2edea`), which fixes that defect. The ScenarioBar case moved to the live page: the armed annotation surface owns page clicks, so the sandbox case now checks that scenario 6 draws its rule editor. The CSP check allows no violation. A local rehearsal passed 16/16 in Chromium and WebKit. Nothing hosted has run.
 5. **What stays on the fixture.** The hostile DSN-008-F and DSN-009-F cases (no adapter, silent, liar, overlapping), because a real adapter cannot be made to misbehave.
 6. **Engines.** Design's manual checks run in Safari, so add a `webkit` project to `playwright.hosted.config.ts` for the Forms tests only.
 7. **Cleanup.** Delete the copy and its comments, as the fixture run does now.
