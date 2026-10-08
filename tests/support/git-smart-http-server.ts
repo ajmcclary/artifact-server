@@ -88,6 +88,14 @@ export async function startGitSmartHttpServer() {
         },
         stdio: ["pipe", "pipe", "pipe"],
       });
+      // git http-backend may exit without reading its request body (a GET
+      // never reads it), so a closed pipe is expected and the exit code and
+      // stdout decide the response. Without this listener the EPIPE escapes
+      // as an uncaught exception and fails the whole test run.
+      let stdinError: Error | null = null;
+      child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+        if (error.code !== "EPIPE") stdinError = error;
+      });
       child.stdin.end(body);
       const output: Buffer[] = [];
       const errors: Buffer[] = [];
@@ -97,7 +105,7 @@ export async function startGitSmartHttpServer() {
         child.once("error", reject);
         child.once("close", (code) => resolve(code ?? -1));
       });
-      if (exitCode !== 0) {
+      if (exitCode !== 0 || stdinError !== null) {
         response.writeHead(500).end(Buffer.concat(errors));
         return;
       }
