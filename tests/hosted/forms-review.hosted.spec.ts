@@ -4,6 +4,8 @@ import {z} from "zod";
 import {deleteThreadOverApi, listThreadsOverApi} from "../browser/comment-api.js";
 import {annotateSwitch, annotationFrame, interactiveFrame, openInspectorTab, previewFrame, reviewHref, startAnnotating} from "../browser/review-helpers.js";
 import type {PublishResponse} from "../support/publishing.js";
+import {proveBundleLocationParity} from "./hosted-bundle-delivery.js";
+import {hostedAgentConfigured, hostedAgentConnection, hostedAgentSetup} from "./hosted-connection.js";
 import {
   deleteHostedArtifact,
   getHostedJson,
@@ -19,7 +21,9 @@ import {publishPinnedCopy, readPinnedVersion, type VersionPin} from "./pinned-co
  * Forms version into a disposable artifact of its own, so it never writes to
  * Design's artifact, and deletes the copy and its comments when it finishes.
  * The hostile restore cases stay on the fixture, since a real adapter cannot
- * be made to misbehave.
+ * be made to misbehave. The DSN-011 bundle delivery uses the region comment
+ * this suite makes, and a dedicated agent principal of the owner's, never the
+ * operator's own mailbox.
  */
 
 /** Forms v17, published from Design `8c2edea`. Re-pin deliberately, never to "current". */
@@ -263,5 +267,21 @@ test.describe.serial("Forms itself on a hosted deployment", () => {
 
   test("Forms draws no content security policy violation, live or in the review sandbox", () => {
     expect(violations).toEqual([]);
+  });
+
+  test("DSN-011-B: a hosted Forms comment reaches a mailbox and a native bridge with the same location line", async ({browserName}) => {
+    test.skip(browserName !== "chromium", "Bundle delivery involves no browser; it runs once, in Chromium.");
+    test.skip(!hostedAgentConfigured(), hostedAgentSetup);
+    const [threadId] = createdThreads;
+    if (threadId === undefined) throw new Error("The DSN-009-B region comment this test delivers was not made.");
+    const agent = await hostedAgentConnection();
+    const proof = await proveBundleLocationParity(
+      fixture,
+      {installation: {apiToken: agent.apiToken}, server: {baseUrl: agent.baseUrl}},
+      {artifactId: published.artifact.id, projectId: published.artifact.projectId, runTag: fixture.runTag, threadId},
+    );
+    expect(proof.location.startsWith(
+      `at ${forms.scenarioLabel} (scenario ${forms.scenarioId}) · region ${forms.regionId} "${forms.regionLabel}" · source `,
+    ), proof.location).toBe(true);
   });
 });

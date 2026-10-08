@@ -3,7 +3,21 @@
 # deployed Artifact Server. It signs in with the operator's existing CLI profile
 # for that origin and never prints the credential. It publishes a disposable
 # scenario fixture and, per engine, a copy of a pinned Forms version it reads
-# from that origin, then deletes each with its comments. It registers no agent.
+# from that origin, then deletes each with its comments. It never registers an
+# agent under the operator's key.
+#
+# Setup for DSN-011 hosted delivery. The DSN-011-B test registers an MCP mailbox
+# and a native bridge under a dedicated agent principal, so the operator's own
+# mailbox is never touched. Once, a human administrator creates in the admin
+# console a service API key not bound to a member, with agent:connect and
+# artifact:read only and an expiry. The suite reads it from the CLI profile
+# directory named by ARTIFACT_SERVER_HOSTED_AGENT_PROFILE_DATA, or else from
+# BACKEND_AGENT_KEY (the hosted Playwright config takes only that variable from
+# the repository's ignored .env, mode 0600). With neither set the test skips; it
+# never falls back to the operator's key. The operator must be able to send
+# dispatches: a browser (OAuth) sign-in, or a key holding artifact:manage:any.
+# A thread sits in one dispatch at a time, so the run reopens the comment once
+# between the two sends; its dispatch and activity records outlive the artifact.
 set -euo pipefail
 
 artifactserver_repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
