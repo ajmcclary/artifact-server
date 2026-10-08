@@ -119,7 +119,10 @@ test.describe("Admin console", () => {
 
       // Phones choose the area from a Select in the head.
       await page.setViewportSize({height: 800, width: 390});
-      await page.getByLabel("Administration area").selectOption({label: "API keys"});
+      // Exact: the desktop rail is labelled "Administration areas", and right
+      // after the resize a substring match can resolve to it before the phone
+      // Select renders; selectOption then fails at once instead of waiting.
+      await page.getByLabel("Administration area", {exact: true}).selectOption({label: "API keys"});
       await expect(page).toHaveURL(/\/review\/settings\/api-keys$/u);
       await expect.poll(() => page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
