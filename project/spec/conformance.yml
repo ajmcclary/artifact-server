@@ -1337,7 +1337,7 @@ requirements:
       failure: {id: DSN-011-F, description: "Hostile scenario labels, region labels and source paths reach the agent sanitized; a comment without a valid view block renders exactly as before."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Mailbox and patched native-bridge renders carry the same location line byte for byte locally, read view blocks as strictly as the review client, and replace control characters; artifact_version_context passes locally and inside the DSN-007/DSN-010 hosted run, which does not claim DSN-011. Hosted bundle delivery is unrecorded: a principal has exactly one mailbox, so the operator's key cannot exercise it without renaming that mailbox. It needs a dedicated agent principal or a live native bridge reading a hosted Forms comment."
+    proof_gap: "Mailbox and patched native-bridge renders carry the same location line byte for byte locally, read view blocks as strictly as the review client, and replace control characters; artifact_version_context passes locally and inside the DSN-007/DSN-010 hosted run. On artifacts.backend.app (kubernetes, image sha256:16771d22064219fd, 2026-10-08) a dedicated agent principal holding only agent:connect and artifact:read registered an MCP mailbox and a native bridge; the operator dispatched the region comment on a hash-checked copy of Forms v17 to each, both dispatches reached delivered, and both renders carried the same location line in the same place, identical except for each side's comment-tool lines (Chromium run; the delivery involves no browser). The comment is reopened between the two sends because a thread sits in one dispatch at a time. DSN-011-F is proved locally only; single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [DSN-009, DSN-010, DSP-011, BRP-002]
     evidence:
       - deployment: local
@@ -1345,6 +1345,11 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-07T15:00:34.951Z"
+      - deployment: kubernetes
+        tests: [DSN-011-B]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1741Z.json
+        recorded_at: "2026-10-08T17:46:44.570Z"
 
   - id: AUD-001
     kind: security

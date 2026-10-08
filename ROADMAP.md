@@ -18,8 +18,8 @@ kept so older evidence and ledger text still resolve. They are not conformance I
 ## Current deployment
 
 artifacts.backend.app runs image
-`sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad`
-(Artifact Server `d7f6f63`, Workspace `0d3c75622`); all four server pods run it
+`sha256:16771d22064219fd3cb2bc54a7105ede0fdcf84bcdc9f3fdf19479c81a1c1813`
+(Artifact Server `0faa4f1`, Workspace `f1561efb1`); all four server pods run it
 and Argo reports Synced and Healthy. Design (`~/Dev/Design`) is at `5abcad7`.
 Recheck both before relying on this.
 
@@ -45,6 +45,13 @@ Details are in the archive and the ledger.
   the one Annotate switch. Annotate reopens the scenario reached on the live
   page. Contract amendments 1–9 are in
   [the pilot contract](docs/superpowers/specs/2026-10-06-forms-review-pilot-contract-design.md).
+- **Hosted bundle delivery (DSN-011-B).** On October 8 a dedicated agent
+  principal received a hosted Forms comment through an MCP mailbox and a
+  native bridge with the same location line; the suite passed 23/23 with one
+  intended WebKit skip (`project/evidence/hosted-design-review-2026-10-08T1741Z.json`).
+- **Authorization and CLI.** A caller without read or manage authority can no
+  longer tell real artifacts from missing ones (MCP-009), and CLI renewal
+  reports an unavailable server instead of a revoked grant (CLI-001).
 - **Uploads.** Interrupted bodies are resumable `UPLOAD_INTERRUPTED`, CLI
   retries are added, and exported telemetry is redacted (PUB-021, PUB-022).
 - **Invite links,** and the Activity, Projects and Admin console.
@@ -57,10 +64,9 @@ Details are in the archive and the ledger.
 | # | Decision | Context |
 |---|---|---|
 | 1 | **Restore on the live page?** Forms answers `as-page-restore` in Interactive preview, so Review could restore a scenario without reloading into Annotate. | Review would have to post to the live page, which CMT-022 forbids. It needs a spec amendment, journeys, and a rule for pages that never answer. Until then, Forms' default-on-load handling of `?scenario=` is fine. |
-| 2 | **DSN-011 hosted bundle delivery:** a dedicated agent principal (recommended) or a live native bridge. | [Plan](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment. |
-| 3 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
-| 4 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
-| 5 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
+| 2 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
+| 3 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
+| 4 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
 
 ### Product choices (T24)
 
@@ -282,6 +288,17 @@ deferred.
 **T27 Linked files (remaining).** LNK-005 waits on the undecided GATE-014
 attachment feature. LNK-001 and LNK-007 need route-level absence proof on
 deployed AWS and GCP instances.
+
+**CLI credential storage on macOS (CLI-001).** `security add-generic-password
+-w` reads at most 128 characters from stdin, so the keychain store refuses any
+longer credential (its read-back check fails closed). That includes every
+browser OAuth grant and the hosted agent key's profile, which is why the
+DSN-011 suite reads `BACKEND_AGENT_KEY` from the ignored `.env` instead.
+`security -i` breaks lines at 4,096 characters (about 2,000 secret bytes, hex
+encoded), so it is not a fix. A credential must never reach process arguments.
+Choose a storage design (for example, a short wrapping key in the keychain and
+the sealed credential in a 0600 file) and prove it with a credential longer
+than 4 KB. `auth status` also still shows an unreachable server as `invalid`.
 
 **Activity, Projects and Admin.** Record team-deployment browser evidence for
 ACT-005, ACT-006 and ADM-008.
