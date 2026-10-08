@@ -302,6 +302,30 @@ describe("browser evidence finalizer", () => {
     return directory;
   }
 
+  test("a test that passes in one engine and is skipped in another is recorded as passed", async () => {
+    const directory = await makeCaseDirectory();
+    const base = buildReport({expected: 1, ok: true, skipped: 1, status: "expected", unexpected: 0, flaky: 0});
+    const [suite] = base.suites;
+    const [spec] = suite?.specs ?? [];
+    if (suite === undefined || spec === undefined) throw new Error("The report fixture has no spec.");
+    const report: PlaywrightReportFixture = {
+      ...base,
+      config: {...base.config, projects: [{name: "chromium"}, {name: "webkit"}]},
+      suites: [{
+        ...suite,
+        specs: [{...spec, tests: [...spec.tests, {results: [], status: "skipped"}]}],
+      }],
+    };
+
+    const run = await runFinalizer(directory, {report});
+
+    expect(run.exitCode).toBe(0);
+    expect(run.evidence?.testResults[0]?.assertionResults[0]?.status).toBe("passed");
+    expect(run.evidence?.testResults[0]?.status).toBe("passed");
+    expect(run.evidence?.numFailedTestSuites).toBe(0);
+    expect(run.evidence?.numPendingTests).toBe(1);
+  });
+
   test("GATE-016-F: a missing or truncated report writes failing evidence and exits non-zero", async () => {
     // Each case starts with a passing prior run on disk, so a stale pass is
     // what would remain if finalization failed open.

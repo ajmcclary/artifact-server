@@ -198,8 +198,12 @@ function collectAssertions(
   for (const spec of suite.specs) {
     const results = spec.tests.flatMap((test) => test.results);
     const attempts = results.length;
-    const passed = spec.ok && spec.tests.every((test) => test.status === "expected");
+    // A test skipped in one engine (a project it does not apply to) and passed
+    // in another has passed; it is pending only when every engine skipped it.
     const pending = spec.tests.every((test) => test.status === "skipped");
+    const passed = spec.ok && spec.tests.every((test) =>
+      test.status === "expected" || test.status === "skipped"
+    );
     const assertions = byFile.get(spec.file) ?? [];
     assertions.push({
       ancestorTitles: nextAncestors,
@@ -235,9 +239,9 @@ function buildEvidenceFromReport(
     message: "",
     name: path.resolve("tests/browser", file),
     startTime: Date.parse(report.stats.startTime),
-    status: assertionResults.every((assertion) => assertion.status === "passed")
-      ? "passed"
-      : "failed",
+    status: assertionResults.some((assertion) => assertion.status === "failed")
+      ? "failed"
+      : "passed",
   }));
 
   const passedSuites = testResults.filter((result) => result.status === "passed").length;
