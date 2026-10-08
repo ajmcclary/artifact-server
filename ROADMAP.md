@@ -296,12 +296,14 @@ attachment feature. LNK-001 and LNK-007 need route-level absence proof on
 deployed AWS and GCP instances.
 
 **CLI credential storage (CLI-001, remaining).** macOS now seals credentials
-behind a short Keychain key, proved through the credential-helper boundary.
-Still open: an opt-in check against the real Keychain (only with the owner's
-approval; never probe `security` on the owner's machine), Windows Credential
-Manager's 2,560-byte blob limit (about 1,280 characters, likely too small for
-an OAuth grant), moving the hosted agent key from `.env` to a CLI profile, and
-`auth status` still showing an unreachable server as `invalid`.
+behind a short Keychain key. On October 8 a 6,038-character credential
+round-tripped through the real login Keychain by hand, and the hosted agent
+key moved to the CLI profile `~/.config/artifact-server/hosted-agent`; set
+`ARTIFACT_SERVER_HOSTED_AGENT_PROFILE_DATA` to it for the hosted suite. Never
+probe `security` on the owner's machine without approval. Still open: Windows
+Credential Manager's 2,560-byte blob limit (about 1,280 characters, likely too
+small for an OAuth grant), and `auth status` still showing an unreachable
+server as `invalid`.
 
 **Activity, Projects and Admin.** Record team-deployment browser evidence for
 ACT-005, ACT-006 and ADM-008.
