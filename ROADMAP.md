@@ -60,10 +60,8 @@ Details are in the archive and the ledger.
 | 2 | **DSN-011 hosted bundle delivery:** a dedicated agent principal (recommended) or a live native bridge. | [Plan](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment. |
 | 3 | **Candidate publication model:** a separate candidate artifact, or a staged version that does not advance current. | Today a publish advances current in the same transaction. Pick one and record new acceptance IDs before automatic publication. Source acceptance and output promotion must stay distinct actions. |
 | 4 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
-| 5 | **Not-found vs denied (MCP-009).** | Reads look up the artifact before checking read permission, so a principal with project access but no read permission sees 404 for a missing artifact and 403 for an existing one. |
-| 6 | **CLI renewal errors (CLI-001).** | `refreshCliOAuthCredential` maps every failure, including a network failure or a 5xx, to `credential_revoked`. It is reachable only where the API OAuth resource is wired. |
-| 7 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
-| 8 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
+| 5 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
+| 6 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
 
 ### Product choices (T24)
 
