@@ -1,8 +1,16 @@
 diff --git a/components/html-viewer/HtmlViewer.tsx b/components/html-viewer/HtmlViewer.tsx
-index 337065dc0d49079e806fd9e09abadf8aec4bd36e..683a4eb60014411e1f305dfcbcf335bb0b0301ce 100644
+index 337065dc0d49079e806fd9e09abadf8aec4bd36e..76868efc8b2df7f568e72122cf61b456dacc3bc6 100644
 --- a/components/html-viewer/HtmlViewer.tsx
 +++ b/components/html-viewer/HtmlViewer.tsx
-@@ -375,6 +375,21 @@ export const HtmlViewer = forwardRef<ViewerHandle, HtmlViewerProps>(
+@@ -3,6 +3,7 @@ import {
+   useCallback,
+   useEffect,
+   useImperativeHandle,
++  useLayoutEffect,
+   useMemo,
+   useRef,
+   useState,
+@@ -375,6 +376,21 @@ export const HtmlViewer = forwardRef<ViewerHandle, HtmlViewerProps>(
  
      const multiSelectActive = !readOnly && !!hook.commentPopover && hook.draftTargets.length > 0;
  
@@ -24,6 +32,22 @@ index 337065dc0d49079e806fd9e09abadf8aec4bd36e..683a4eb60014411e1f305dfcbcf335bb
      // Track Shift while a multi-select draft composer is open; releasing it
      // (or losing window focus) always restores the composer.
      useEffect(() => {
+@@ -420,7 +436,14 @@ export const HtmlViewer = forwardRef<ViewerHandle, HtmlViewerProps>(
+       }));
+     }, [hook.draftTargets]);
+ 
+-    useEffect(() => {
++    // Layout effect, not a passive one: the bridge posts its single `ready` on
++    // the iframe's DOMContentLoaded and never repeats it. A passive effect runs
++    // after paint, and an engine that parses the srcdoc first (Linux WebKit)
++    // delivered `ready` to a window with no listener, so iframeReadyVersion
++    // stayed 0, set-input-method was never sent, and the sandbox never armed
++    // click-to-comment. A layout effect attaches during commit, before any task
++    // from the new iframe can run.
++    useLayoutEffect(() => {
+       function handler(e: MessageEvent<unknown>) {
+         if (e.source !== iframeRef.current?.contentWindow) return;
+         // Live sessions verify origin + token before reading anything.
 diff --git a/components/html-viewer/bridge-script.ts b/components/html-viewer/bridge-script.ts
 index 939c91888ae5d5ce64d996acc58fc497da36b599..6ad0a9e70f2b37e4710094cf3b1a38ad6b42ec57 100644
 --- a/components/html-viewer/bridge-script.ts
