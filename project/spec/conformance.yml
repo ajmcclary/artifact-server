@@ -1216,7 +1216,7 @@ requirements:
       failure: {id: DSN-007-F, description: "Report malformed JSON, non-UTF-8 bytes, oversized files, unknown fields, unsupported versions, malformed or duplicate ids, non-HTML, missing, escaping or case-mismatched paths, two views on one path, out-of-range sizes, control characters, non-primitive props, unknown default scenarios and parameter props reused by scenarios as invalid or unsupported-version, without failing the version's other reads; never cache a storage failure."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local evidence and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass. The hosted run publishes its own views document with scenarios and a parameter, reads it over HTTP and MCP, repeats the read, reads a version without the file as absent, and reports an invalid document beside a working file read; the rest of the hostile matrix is proved locally only. single_server, cloudflare, aws and gcp have no evidence. Design's Forms v13 also reads valid on that host, from Design's own manual check, which is not recorded evidence."
+    proof_gap: "Local evidence and the hosted runs on artifacts.backend.app (kubernetes) pass; the latest is image sha256:f9bfa8f5c31d, 2026-10-08. The hosted run publishes its own views document with scenarios and a parameter, reads it over HTTP and MCP, repeats the read, reads a version without the file as absent, and reports an invalid document beside a working file read. It also publishes a hash-checked copy of Design's Forms v17 and reads its views as valid over HTTP, in Chromium and WebKit. The rest of the hostile matrix is proved locally only. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [MAN-001]
     evidence:
       - deployment: local
@@ -1229,6 +1229,11 @@ requirements:
         result: pass
         run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
         recorded_at: "2026-10-07T15:44:47.841Z"
+      - deployment: kubernetes
+        tests: [DSN-007-B, DSN-007-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1455Z.json
+        recorded_at: "2026-10-08T14:59:14.068Z"
 
   - id: DSN-008
     kind: behavior
@@ -1240,7 +1245,7 @@ requirements:
       failure: {id: DSN-008-F, description: "Report a page without an adapter as unsupported, a page that never confirms as timed out, and a page confirming another scenario as failed; ignore page messages from other windows, oversized or malformed messages and scenarios outside the views document; keep the page as it was after any failure."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local Chromium journeys (Firefox and WebKit on the critical path) and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass against the fixture page adapter; a cold runtime, a late hello and a superseded restore are proved locally. No automated run drives Design's Forms adapter: it is covered only by Design's manual Safari check on Forms v13 (2026-10-07). No hosted run uses Firefox or WebKit. Design's pageVersion 1 adapter still ends a superseded restore with reason timeout, which the frame treats as superseded. single_server, cloudflare, aws and gcp have no evidence."
+    proof_gap: "Local Chromium journeys (Firefox and WebKit on the critical path) and the hosted runs on artifacts.backend.app (kubernetes) pass; the latest is image sha256:f9bfa8f5c31d, 2026-10-08. Against the fixture page adapter the hosted run proves the picker, a scenario link, an in-page change and the hostile pages (Chromium only). Against a hash-checked copy of Design's Forms v17 it proves, in Chromium and WebKit, the picker, a scenario link, rapid picker changes ending on the last choice without a failure, a cold context's hello, and scenario 6 drawn in full on the annotation surface. A late hello and a superseded restore are proved locally only, and no hosted run uses Firefox. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [DSN-007, CMT-014, CMT-018, CMT-022]
     evidence:
       - deployment: local
@@ -1253,6 +1258,11 @@ requirements:
         result: pass
         run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
         recorded_at: "2026-10-07T15:44:47.841Z"
+      - deployment: kubernetes
+        tests: [DSN-008-B, DSN-008-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1455Z.json
+        recorded_at: "2026-10-08T14:59:14.068Z"
 
   - id: DSN-009
     kind: behavior
@@ -1264,7 +1274,7 @@ requirements:
       failure: {id: DSN-009-F, description: "Show location unavailable with its reason, and place no marker, after a failed restore and for a missing or duplicated region; treat an invalid view block as absent; preserve unknown anchor fields through web and MCP anchor replacement; store region labels stripped of bidirectional and zero-width characters."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local Chromium journeys and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass: a region comment placed through the review UI stores its view block and reopens in its scenario, and missing and duplicated regions and a failed restore say the location is unavailable. Design's Forms comment on Min length is covered only by Design's manual Safari check on Forms v13 (2026-10-07). No hosted run uses Firefox or WebKit. single_server, cloudflare, aws and gcp have no evidence."
+    proof_gap: "Local Chromium journeys and the hosted runs on artifacts.backend.app (kubernetes) pass; the latest is image sha256:f9bfa8f5c31d, 2026-10-08. On the fixture a region comment placed through the review UI stores its view block and reopens in its scenario, and missing and duplicated regions and a failed restore say the location is unavailable (Chromium only). On a hash-checked copy of Design's Forms v17, in Chromium and WebKit, a comment on the Min length region captured in high contrast stores its scenario, region and theme, and reopens in its scenario with one marker, saying \"Made in high contrast\". The hostile cases are not run on Forms, and no hosted run uses Firefox. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [DSN-008, CMT-003, CMT-016]
     evidence:
       - deployment: local
@@ -1282,6 +1292,11 @@ requirements:
         result: pass
         run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
         recorded_at: "2026-10-07T15:44:47.841Z"
+      - deployment: kubernetes
+        tests: [DSN-009-B, DSN-009-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1455Z.json
+        recorded_at: "2026-10-08T14:59:14.068Z"
 
   - id: DSN-010
     kind: behavior
@@ -1293,7 +1308,7 @@ requirements:
       failure: {id: DSN-010-F, description: "Report changed and missing outputs as mismatch with their paths; report malformed, escaping, over-limit, duplicate-output and credential-bearing records as invalid and unknown versions as unsupported-version; none of these affects the version's other reads."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local evidence and the hosted run on artifacts.backend.app (kubernetes, image sha256:20712096d76b, 2026-10-07) pass, including a changed output reported as a mismatch and MCP context reads. Review Details shows the authored commit and the manifest digest, but not the history mirror commit, so the three identities are not yet shown side by side. Design's own record for Forms v13 reads verified on that host (commit 2c38adb), from Design's manual check, which is not recorded evidence. single_server, cloudflare, aws and gcp have no evidence."
+    proof_gap: "Local evidence and the hosted runs on artifacts.backend.app (kubernetes) pass; the latest is image sha256:f9bfa8f5c31d, 2026-10-08. They include a changed output reported as a mismatch and MCP context reads, and Design's own record on a hash-checked copy of Forms v17 reads verified and clean with no mismatches. Review Details shows the authored commit and the manifest digest, but not the history mirror commit, so the three identities are not yet shown side by side. single_server, cloudflare, aws and gcp have no evidence."
     depends_on: [MAN-001]
     evidence:
       - deployment: local
@@ -1306,6 +1321,11 @@ requirements:
         result: pass
         run: project/evidence/hosted-design-review-2026-10-07T1544Z.json
         recorded_at: "2026-10-07T15:44:47.841Z"
+      - deployment: kubernetes
+        tests: [DSN-010-B, DSN-010-F]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1455Z.json
+        recorded_at: "2026-10-08T14:59:14.068Z"
 
   - id: DSN-011
     kind: behavior
@@ -3539,7 +3559,7 @@ requirements:
       failure: {id: CMT-022-F, description: "Interactive artifact code cannot access the application document or comment API, private and historical previews cannot bypass the expiring exact-version lease, and Interactive preview has no annotation-bridge authority: Review accepts only an unprompted change to a declared scenario, only from the live frame on its own content origin, and a message from any other document or naming an undeclared scenario moves nothing."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local Chromium browser evidence proves public current and private versions, and focused WebKit tests pass; the full iteration gate is blocked by unrelated CLI failures, and the deployed-browser matrix remains unrecorded.
+    proof_gap: "Local Chromium browser evidence proves public current and private versions, and focused WebKit tests pass; the full iteration gate is blocked by unrelated CLI failures. On artifacts.backend.app (kubernetes, image sha256:f9bfa8f5c31d, 2026-10-08) a scenario link to a copy of Design's Forms v17 opens live with Annotate off and no annotation frame, and Forms' own ScenarioBar moves the page there, in Chromium and WebKit; the rest of the deployed-browser matrix and every CMT-022-F case remain unrecorded."
     depends_on: [CMT-014, CMT-018, SEC-001]
     evidence:
       - deployment: local
@@ -3547,6 +3567,11 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+      - deployment: kubernetes
+        tests: [CMT-022-B]
+        result: pass
+        run: project/evidence/hosted-design-review-2026-10-08T1455Z.json
+        recorded_at: "2026-10-08T14:59:14.068Z"
 
   - id: CMT-023
     kind: behavior

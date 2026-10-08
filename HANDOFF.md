@@ -1,8 +1,14 @@
 # Handoff: Artifact Server after the Forms review pilot close-out
 
-Written October 7, 2026, and updated after the late deploys. artifacts.backend.app runs image `sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad` (Artifact Server `d7f6f63`, Workspace `0d3c75622`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `5abcad7`. Recheck both before relying on anything below.
+Written October 7, 2026, and updated October 8 after the hosted Forms run. artifacts.backend.app runs image `sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad` (Artifact Server `d7f6f63`, Workspace `0d3c75622`): all four server pods run it, Argo reports Synced and Healthy, and the served `review-BIBlQIRE.js` matches the local build. It carries the live-first Review with one Annotate switch, the live scenario carryover, repository failure redaction in spans, and the batch upload owner check. Design (`~/Dev/Design`) is at `5abcad7`. The deployment was rechecked on October 8 before the hosted run. Recheck both before relying on anything below.
 
 Read [AGENTS.md](AGENTS.md) first; its rules override anything here.
+
+## Hosted Forms suite passed (October 8, image `sha256:f9bfa8f5…`, Artifact Server `b2e373b`)
+
+The owner approved the run. `ARTIFACT_SERVER_HOSTED_REVISION=sha256:f9bfa8f5c31d708b2b607197e452607ef73364a613e1f382a6168cfeded019ad pnpm qualify:hosted:design-review` passed 22/22 in 3.8 minutes: 6 fixture tests in Chromium and 8 Forms v17 tests in each of Chromium and WebKit. Each spec's `afterAll` deleted its disposable artifact and comments. The evidence, `project/evidence/hosted-design-review-2026-10-08T1455Z.json`, is attached to DSN-007 … DSN-010 (B and F) and to CMT-022-B as `kubernetes`. Each proof gap now names what the Forms run proves, so none of them points to Design's manual Forms v13 check anymore. CMT-022 claims only the Forms live-open and ScenarioBar check; its other deployed-browser cases and CMT-022-F are still unrecorded. Every requirement stays `behavior_verified`: single_server, cloudflare, aws and gcp have no evidence, and no hosted run uses Firefox.
+
+Contract amendment 9 (`b2e373b`, spec only): a page adapter leaves malformed region ids out of `as-page-regions`, and malformed prop names out of `state.props`, because the frame validates each page message whole.
 
 ## Review never opens in Annotate (October 7, late, deployed from `a44e55e`)
 
@@ -94,10 +100,9 @@ The hostile cases stay on the fixture. A local rehearsal (the same spec against 
 
 ## Still open
 
-1. **Hosted run of the Forms suite.** The suite pins Forms v17 and rehearsed 16/16 locally; the run itself needs the owner's approval. Run `ARTIFACT_SERVER_HOSTED_REVISION=<digest> pnpm qualify:hosted:design-review`, then attach the evidence to DSN-007 … DSN-010 and update DSN-009's proof gap, which still says Forms is covered only by Design's manual check.
-2. **Restore on the live page?** Design's correction above: Forms answers `as-page-restore` in Interactive preview, so Review could restore a scenario without reloading into Annotate. That needs the owner to relax CMT-022 further (Review posting to the live page), plus a spec amendment, journeys and a rule for pages that never answer.
-3. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
-4. **Open owner decisions from October 6, rechecked against the code on October 7 and unchanged:**
+1. **Restore on the live page?** Design's correction above: Forms answers `as-page-restore` in Interactive preview, so Review could restore a scenario without reloading into Annotate. That needs the owner to relax CMT-022 further (Review posting to the live page), plus a spec amendment, journeys and a rule for pages that never answer.
+2. **DSN-011 hosted bundle delivery.** An owner decision between a dedicated agent principal (recommended) and a live native bridge. See [docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md](docs/superpowers/plans/2026-10-07-hosted-dsn-011-and-forms-adapter.md). If it lands, the dispatch can use the Forms suite's comment.
+3. **Open owner decisions from October 6, rechecked against the code on October 7 and unchanged:**
    - **Browser `auth login` 404 (CLI-001).** No production entry point sets `apiOAuthResource`, and ADR 0028 left it unset on purpose. The CLI already says to use `--api-key-stdin`; `docs/cli.md` still describes a browser login.
    - **Not-found vs denied (MCP-009).** Reads look up the artifact before checking read permission. A service principal with project access but no read permission therefore sees 404 for a missing artifact and 403 for an existing one.
    - **CLI renewal errors (CLI-001).** `refreshCliOAuthCredential` maps every failure, including a network failure or a 5xx, to `credential_revoked`. It is only reachable where the API OAuth resource is wired.
@@ -107,10 +112,10 @@ The hostile cases stay on the fixture. A local rehearsal (the same spec against 
 
 Design is at `5abcad7`. Nothing here needs a schema re-pin.
 
-1. **v17 is re-pinned and its fixes hold here.** On Artifact Server's annotation surface, scenario 6's rule editor draws in full, and no frame reports a CSP violation, live or sandboxed. No Design change is needed.
+1. **v17 passed hosted on October 8, in Chromium and WebKit.** On artifacts.backend.app's annotation surface, scenario 6's rule editor draws in full, the ScenarioBar works on the live page, and no frame reports a CSP violation, live or sandboxed. No Design change is needed.
 2. **Annotate owns page clicks.** The armed surface suppresses a page click in pinpoint mode to place a comment, so no page control (the ScenarioBar included) works while annotating. That is by design: the reviewer turns the pencil off to use the page. Design's sandbox journeys stay the proof of the fix itself.
 3. **Keep posting unprompted `as-page-state` to `window.parent` with `"*"`.** Review's live-scenario carryover depends on it.
-4. **Live restore is not adopted yet** (owner decision, "Still open" item 2). Until it is, Review never posts to the live page, and Forms' default-on-load behavior for `?scenario=` is fine.
+4. **Live restore is not adopted yet** (owner decision, "Still open" item 1). Until it is, Review never posts to the live page, and Forms' default-on-load behavior for `?scenario=` is fine.
 5. **The `style-src` refusal** did not reproduce under Chromium or WebKit on hosted v16. If it appears again in Safari, log `securitypolicyviolation` events (document, `effectiveDirective`, `sourceFile`) to name the frame.
 
 ## Decided
