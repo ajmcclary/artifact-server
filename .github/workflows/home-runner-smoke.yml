@@ -49,6 +49,8 @@ jobs:
           echo "== cgroup"
           stat -fc %T /sys/fs/cgroup || true
           node=home-smoke-control-plane
+          echo "== containerd (inside the kind node)"
+          docker exec "$node" journalctl -u containerd --no-pager 2>&1 | grep -iE "cri|plugin|error|fail|warn" | tail -40 || true
           echo "== node containers"
           docker exec "$node" crictl ps -a 2>&1 | tail -20 || true
           echo "== kubelet"
