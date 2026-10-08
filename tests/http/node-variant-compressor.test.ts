@@ -42,7 +42,11 @@ describe("node Brotli variant compressor", () => {
   });
 
   test("foundation: stops and cancels the source once the output passes the limit", async () => {
-    const chunks = Array.from({length: 64}, () => new Uint8Array(randomBytes(64 * 1_024)));
+    // 16 MiB of incompressible input. Brotli at quality 9 with a 4 MiB window
+    // buffers megabytes before it emits output, so a 4 MiB source could be read
+    // to its end before the output passed the limit, leaving nothing to cancel.
+    // The stop came after 1.3 to 4 MiB in 200 runs, well short of this source.
+    const chunks = Array.from({length: 256}, () => new Uint8Array(randomBytes(64 * 1_024)));
     const source = trackedSource(chunks);
     const compressed = await nodeBrotliVariantCompressor.compress(source.stream, 256 * 1_024);
     expect(compressed).toBeNull();
