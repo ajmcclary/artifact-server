@@ -14,6 +14,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: docker/setup-buildx-action@v3
+        with:
+          # BuildKit itself would otherwise come from Docker Hub.
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
 
       - uses: docker/login-action@v3
         with:
@@ -30,9 +33,11 @@ jobs:
           tags: ghcr.io/ajmcclary/artifact-server:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Docker Hub rate-limits anonymous pulls from shared runner IPs; the
-          # same digest-pinned base comes byte-identical from Google's mirror.
+          # Docker Hub rate-limits and has outages for shared runner IPs; the
+          # same digest-pinned frontend and base come byte-identical from
+          # Google's mirror.
           build-args: |
+            BUILDKIT_SYNTAX=mirror.gcr.io/docker/dockerfile:1.18@sha256:dabfc0969b935b2080555ace70ee69a5261af8a8f1b4df97b9e7fbcf6722eddf
             NODE_IMAGE=mirror.gcr.io/library/node:24.12.0-bookworm-slim@sha256:7326fb2dbdce998edd72140946851be64ef4a643e8715e138ca467e8e9d92c99
             IMAGE_REVISION=${{ github.sha }}
             IMAGE_SOURCE=https://github.com/ajmcclary/artifact-server
