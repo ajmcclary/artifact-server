@@ -305,7 +305,9 @@ export async function fetchVersion(
 /**
  * Extract the login handshake cookie a browser replays at `/auth/callback`.
  */
-export function loginHandshakeCookie(loginResponse: Response): string {
+export function loginHandshakeCookie(
+  loginResponse: {readonly headers: {getSetCookie(): string[]}},
+): string {
   const cookie = loginResponse.headers.getSetCookie().find((value) =>
     value.startsWith("artifact_login=") ||
     value.startsWith("__Host-artifact_login=")
