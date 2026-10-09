@@ -4,6 +4,7 @@ import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
 
 import {Redacted} from "effect";
+import {fetch as undiciFetch} from "undici";
 import {afterAll, beforeAll, describe, expect, test} from "vitest";
 import {z} from "zod";
 
@@ -16,23 +17,31 @@ import {
   reserveLoopbackPort,
   startTestServer,
 } from "../support/runtime-harness.js";
+import {
+  type KeycloakEnvironment,
+  keycloakRealm,
+  provisionKeycloakRealm,
+  type ProvisionedRealm,
+  redirectTarget,
+  requestPasswordToken,
+  signInAtKeycloak,
+} from "../support/keycloak-realm.js";
 
-const realmName = "artifact-server";
-const oidcClientId = "artifact-server-integration";
-const mcpClientId = "artifact-server-mcp-integration";
-const mcpClientSecret = "keycloak-integration-only-mcp-secret";
-const unboundClientId = "artifact-server-unbound-integration";
-const unboundClientSecret = "keycloak-integration-only-unbound-secret";
-const oidcClientSecret = "keycloak-integration-only-client-secret";
-const oidcScopes = "openid email profile";
+const {
+  mcpClientId,
+  mcpClientSecret,
+  name: realmName,
+  oidcClientId,
+  oidcClientSecret,
+  scopes: oidcScopes,
+  unboundClientId,
+  unboundClientSecret,
+} = keycloakRealm;
 const admittedEmail = "admitted@example.test";
 const admittedPassword = "admitted-keycloak-integration-only";
 const strangerEmail = "stranger@example.test";
 const strangerPassword = "stranger-keycloak-integration-only";
-const loginFormPattern =
-  /<form[^>]*id="kc-form-login"[^>]*action="([^"]+)"/u;
 
-const adminTokenSchema = z.object({access_token: z.string().min(1)});
 const sessionResponseSchema = z.object({
   authenticationMethod: z.literal("session"),
   principal: z.object({
@@ -66,69 +75,6 @@ const loginAttemptRowSchema = z.object({
 });
 const countRowSchema = z.object({total: z.number().int().nonnegative()});
 
-interface KeycloakEnvironment {
-  readonly adminPassword: string;
-  readonly adminUser: string;
-  readonly baseUrl: string;
-}
-
-interface KeycloakCredentials {
-  readonly password: string;
-  readonly username: string;
-}
-
-interface ProvisionedRealm {
-  readonly admittedSubject: string;
-  readonly issuer: string;
-  readonly strangerSubject: string;
-}
-
-interface KeycloakRealmRepresentation {
-  readonly enabled: boolean;
-  readonly realm: string;
-}
-
-interface KeycloakProtocolMapperRepresentation {
-  readonly config: Readonly<Record<string, string>>;
-  readonly name: string;
-  readonly protocol: string;
-  readonly protocolMapper: string;
-}
-
-interface KeycloakClientRepresentation {
-  readonly attributes: {readonly "pkce.code.challenge.method": string};
-  readonly clientId: string;
-  readonly protocolMappers?: readonly KeycloakProtocolMapperRepresentation[];
-  readonly directAccessGrantsEnabled: boolean;
-  readonly enabled: boolean;
-  readonly protocol: string;
-  readonly publicClient: boolean;
-  readonly redirectUris: readonly string[];
-  readonly secret: string;
-  readonly serviceAccountsEnabled: boolean;
-  readonly standardFlowEnabled: boolean;
-  readonly webOrigins: readonly string[];
-}
-
-interface KeycloakUserRepresentation {
-  readonly credentials: readonly {
-    readonly temporary: boolean;
-    readonly type: string;
-    readonly value: string;
-  }[];
-  readonly email: string;
-  readonly emailVerified: boolean;
-  readonly enabled: boolean;
-  readonly firstName: string;
-  readonly lastName: string;
-  readonly username: string;
-}
-
-type KeycloakRepresentation =
-  | KeycloakClientRepresentation
-  | KeycloakRealmRepresentation
-  | KeycloakUserRepresentation;
-
 interface RunningApplication {
   readonly baseUrl: string;
   readonly dataDirectory: string;
@@ -138,13 +84,30 @@ interface RunningApplication {
 describe.sequential("Keycloak generic OIDC browser login", () => {
   let keycloak: KeycloakEnvironment;
   let realm: ProvisionedRealm;
+  let admittedSubject: string;
   let application: RunningApplication;
 
   beforeAll(async () => {
     keycloak = readKeycloakEnvironment();
     const port = await reserveLoopbackPort();
     const applicationOrigin = `http://127.0.0.1:${port}`;
-    realm = await provisionKeycloakRealm(keycloak, applicationOrigin);
+    realm = await provisionKeycloakRealm(keycloak, applicationOrigin, [
+      {
+        email: admittedEmail,
+        firstName: "Ada",
+        lastName: "Lovelace",
+        password: admittedPassword,
+        username: admittedEmail,
+      },
+      {
+        email: strangerEmail,
+        firstName: "Grace",
+        lastName: "Hopper",
+        password: strangerPassword,
+        username: strangerEmail,
+      },
+    ]);
+    admittedSubject = realm.subjects.get(admittedEmail) ?? "";
     application = await startApplicationProcess(realm.issuer, applicationOrigin, port);
   });
 
@@ -180,7 +143,7 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
     expect(attempts[0]?.nonce).toBe(query.get("nonce"));
     expect(attempts[0]?.consumed_at).toBeNull();
 
-    const callbackUrl = await signInAtKeycloak(authorizationUrl, {
+    const callbackUrl = await signInAtKeycloak(keycloak, authorizationUrl, {
       password: admittedPassword,
       username: admittedEmail,
     });
@@ -222,7 +185,7 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
       email: admittedEmail,
       member_id: principal.id,
       provider: `oidc:${realm.issuer}`,
-      subject: realm.admittedSubject,
+      subject: admittedSubject,
     }]);
     const consumed = loginAttempts(application.dataDirectory);
     expect(consumed).toHaveLength(1);
@@ -236,7 +199,7 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
     expect(login.status).toBe(302);
     const authorizationUrl = redirectTarget(login, "/auth/login");
 
-    const callbackUrl = await signInAtKeycloak(authorizationUrl, {
+    const callbackUrl = await signInAtKeycloak(keycloak, authorizationUrl, {
       password: strangerPassword,
       username: strangerEmail,
     });
@@ -250,13 +213,13 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
       .toBe("IDENTITY_ADMISSION_DENIED");
 
     expect(externalIdentities(application.dataDirectory).map((row) => row.subject))
-      .toEqual([realm.admittedSubject]);
+      .toEqual([admittedSubject]);
     expect(rowCount(application.dataDirectory, "installation_members")).toBe(1);
     expect(rowCount(application.dataDirectory, "application_sessions")).toBe(1);
   });
 
   test("a real Keycloak access token bound to /mcp authorizes the MCP endpoint", async () => {
-    const bound = await requestPasswordToken(realm.issuer, mcpClientId, mcpClientSecret, {
+    const bound = await requestPasswordToken(keycloak, realm.issuer, mcpClientId, mcpClientSecret, {
       password: admittedPassword,
       username: admittedEmail,
     });
@@ -265,6 +228,7 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
     expect(await readMcpToolNames(authorized)).toContain("artifact_capabilities");
 
     const unbound = await requestPasswordToken(
+      keycloak,
       realm.issuer,
       unboundClientId,
       unboundClientSecret,
@@ -293,7 +257,7 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
   });
 
   test("a Keycloak identity that was never admitted is refused at MCP too", async () => {
-    const stranger = await requestPasswordToken(realm.issuer, mcpClientId, mcpClientSecret, {
+    const stranger = await requestPasswordToken(keycloak, realm.issuer, mcpClientId, mcpClientSecret, {
       password: strangerPassword,
       username: strangerEmail,
     });
@@ -302,36 +266,6 @@ describe.sequential("Keycloak generic OIDC browser login", () => {
     expect(rowCount(application.dataDirectory, "installation_members")).toBe(1);
   });
 });
-
-async function requestPasswordToken(
-  issuer: string,
-  clientId: string,
-  clientSecret: string,
-  credentials: KeycloakCredentials,
-): Promise<string> {
-  const response = await fetch(
-    `${issuer}/protocol/openid-connect/token`,
-    {
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "password",
-        password: credentials.password,
-        scope: "openid email profile",
-        username: credentials.username,
-      }),
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      method: "POST",
-    },
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Keycloak refused the password grant: ${response.status} ${await response.text()}`,
-    );
-  }
-  return z.object({access_token: z.string().min(1)})
-    .parse(await response.json()).access_token;
-}
 
 function callMcp(
   baseUrl: string,
@@ -377,252 +311,7 @@ function readKeycloakEnvironment(): KeycloakEnvironment {
   ) {
     throw new Error("Run this test through pnpm test:oidc.");
   }
-  return {adminPassword, adminUser, baseUrl};
-}
-
-async function provisionKeycloakRealm(
-  environment: KeycloakEnvironment,
-  applicationOrigin: string,
-): Promise<ProvisionedRealm> {
-  const token = await requestAdminToken(environment);
-  await adminRequest(environment, token, "POST", "/admin/realms", {
-    enabled: true,
-    realm: realmName,
-  });
-  await adminRequest(
-    environment,
-    token,
-    "POST",
-    `/admin/realms/${realmName}/clients`,
-    {
-      attributes: {"pkce.code.challenge.method": "S256"},
-      clientId: oidcClientId,
-      directAccessGrantsEnabled: false,
-      enabled: true,
-      protocol: "openid-connect",
-      publicClient: false,
-      redirectUris: [`${applicationOrigin}/auth/callback`],
-      secret: oidcClientSecret,
-      serviceAccountsEnabled: false,
-      standardFlowEnabled: true,
-      webOrigins: [applicationOrigin],
-    },
-  );
-  await adminRequest(
-    environment,
-    token,
-    "POST",
-    `/admin/realms/${realmName}/clients`,
-    {
-      attributes: {"pkce.code.challenge.method": "S256"},
-      clientId: mcpClientId,
-      directAccessGrantsEnabled: true,
-      enabled: true,
-      protocol: "openid-connect",
-      protocolMappers: [{
-        config: {
-          "access.token.claim": "true",
-          "id.token.claim": "false",
-          "included.custom.audience": `${applicationOrigin}/mcp`,
-        },
-        name: "mcp audience",
-        protocol: "openid-connect",
-        protocolMapper: "oidc-audience-mapper",
-      }],
-      publicClient: false,
-      redirectUris: [`${applicationOrigin}/auth/callback`],
-      secret: mcpClientSecret,
-      serviceAccountsEnabled: false,
-      standardFlowEnabled: true,
-      webOrigins: [applicationOrigin],
-    },
-  );
-  await adminRequest(
-    environment,
-    token,
-    "POST",
-    `/admin/realms/${realmName}/clients`,
-    {
-      attributes: {"pkce.code.challenge.method": "S256"},
-      clientId: unboundClientId,
-      directAccessGrantsEnabled: true,
-      enabled: true,
-      protocol: "openid-connect",
-      publicClient: false,
-      redirectUris: [`${applicationOrigin}/auth/callback`],
-      secret: unboundClientSecret,
-      serviceAccountsEnabled: false,
-      standardFlowEnabled: true,
-      webOrigins: [applicationOrigin],
-    },
-  );
-  const admittedSubject = await createKeycloakUser(environment, token, {
-    email: admittedEmail,
-    firstName: "Ada",
-    lastName: "Lovelace",
-    password: admittedPassword,
-    username: admittedEmail,
-  });
-  const strangerSubject = await createKeycloakUser(environment, token, {
-    email: strangerEmail,
-    firstName: "Grace",
-    lastName: "Hopper",
-    password: strangerPassword,
-    username: strangerEmail,
-  });
-  return {
-    admittedSubject,
-    issuer: `${environment.baseUrl}/realms/${realmName}`,
-    strangerSubject,
-  };
-}
-
-async function requestAdminToken(
-  environment: KeycloakEnvironment,
-): Promise<string> {
-  const response = await fetch(
-    `${environment.baseUrl}/realms/master/protocol/openid-connect/token`,
-    {
-      body: new URLSearchParams({
-        client_id: "admin-cli",
-        grant_type: "password",
-        password: environment.adminPassword,
-        username: environment.adminUser,
-      }),
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      method: "POST",
-    },
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Keycloak refused the administrator token: HTTP ${response.status}`,
-    );
-  }
-  return adminTokenSchema.parse(await response.json()).access_token;
-}
-
-async function createKeycloakUser(
-  environment: KeycloakEnvironment,
-  token: string,
-  person: {
-    readonly email: string;
-    readonly firstName: string;
-    readonly lastName: string;
-    readonly password: string;
-    readonly username: string;
-  },
-): Promise<string> {
-  const created = await adminRequest(
-    environment,
-    token,
-    "POST",
-    `/admin/realms/${realmName}/users`,
-    {
-      credentials: [{
-        temporary: false,
-        type: "password",
-        value: person.password,
-      }],
-      email: person.email,
-      emailVerified: true,
-      enabled: true,
-      firstName: person.firstName,
-      lastName: person.lastName,
-      username: person.username,
-    },
-  );
-  const location = created.headers.get("location");
-  if (location === null) {
-    throw new Error("Keycloak created a user without a location header.");
-  }
-  const subject = location.split("/").pop();
-  if (subject === undefined || subject === "") {
-    throw new Error("Keycloak returned an unusable user location.");
-  }
-  return subject;
-}
-
-async function adminRequest(
-  environment: KeycloakEnvironment,
-  token: string,
-  method: string,
-  resourcePath: string,
-  body: KeycloakRepresentation,
-): Promise<Response> {
-  const response = await fetch(`${environment.baseUrl}${resourcePath}`, {
-    body: JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    method,
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Keycloak refused ${method} ${resourcePath}: HTTP ${response.status} ${await response.text()}`,
-    );
-  }
-  return response;
-}
-
-async function signInAtKeycloak(
-  authorizationUrl: URL,
-  credentials: KeycloakCredentials,
-): Promise<URL> {
-  const cookies = new Map<string, string>();
-  const page = await fetch(authorizationUrl, {
-    headers: {Cookie: cookieHeader(cookies)},
-    redirect: "manual",
-  });
-  storeCookies(cookies, page.headers.getSetCookie());
-  if (page.status !== 200) {
-    throw new Error(
-      `The Keycloak login page answered HTTP ${page.status}.`,
-    );
-  }
-  const action = loginFormPattern.exec(await page.text())?.[1];
-  if (action === undefined) {
-    throw new Error("The Keycloak login page did not contain a login form.");
-  }
-  const submitted = await fetch(action.replaceAll("&amp;", "&"), {
-    body: new URLSearchParams({
-      credentialId: "",
-      password: credentials.password,
-      username: credentials.username,
-    }),
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Cookie: cookieHeader(cookies),
-    },
-    method: "POST",
-    redirect: "manual",
-  });
-  storeCookies(cookies, submitted.headers.getSetCookie());
-  if (submitted.status !== 302) {
-    throw new Error(
-      `Keycloak did not accept the credentials: HTTP ${submitted.status}`,
-    );
-  }
-  return redirectTarget(submitted, "the Keycloak login form");
-}
-
-function storeCookies(
-  cookies: Map<string, string>,
-  setCookieHeaders: readonly string[],
-): void {
-  for (const header of setCookieHeaders) {
-    const pair = header.split(";", 1)[0] ?? "";
-    const separator = pair.indexOf("=");
-    if (separator <= 0) continue;
-    const name = pair.slice(0, separator);
-    const value = pair.slice(separator + 1);
-    if (value === "") cookies.delete(name);
-    else cookies.set(name, value);
-  }
-}
-
-function cookieHeader(cookies: ReadonlyMap<string, string>): string {
-  return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  return {adminPassword, adminUser, baseUrl, fetch: undiciFetch};
 }
 
 function applicationCookieHeader(setCookieHeaders: readonly string[]): string {
@@ -635,16 +324,6 @@ function applicationCookieHeader(setCookieHeaders: readonly string[]): string {
     throw new Error("The login response did not issue both application cookies.");
   }
   return pairs.join("; ");
-}
-
-function redirectTarget(response: Response, step: string): URL {
-  const location = response.headers.get("location");
-  if (location === null) {
-    throw new Error(
-      `${step} answered ${response.status} without a redirect location.`,
-    );
-  }
-  return new URL(location);
 }
 
 async function startApplicationProcess(
