@@ -35,15 +35,20 @@ export interface ReplicaClient {
 
 /**
  * Address one packaged replica as the HTTPS management origin it serves:
- * the request travels as plain HTTP to that replica's port while keeping the
- * management Host, the way the TLS gateway in front of it would send it.
+ * the request travels as plain HTTP to that replica's port with the
+ * management Host and `X-Forwarded-Proto: https`, the way the TLS gateway in
+ * front of it sends it. Any other host arrives as a direct request would,
+ * without a forwarded protocol.
  */
 export function replicaClient(port: number, host = applicationHost): ReplicaClient {
   const target = `http://127.0.0.1:${port}`;
+  const gatewayHeaders = host === applicationHost
+    ? ["host", host, "x-forwarded-proto", "https"]
+    : ["host", host];
   const dispatcher: Dispatcher = new Agent().compose((dispatch) => (options, handler) =>
     dispatch({
       ...options,
-      headers: [...headerListWithoutHost(options.headers), "host", host],
+      headers: [...headerListWithoutHost(options.headers), ...gatewayHeaders],
       origin: target,
     }, handler));
   return {
@@ -59,13 +64,14 @@ export function replicaClient(port: number, host = applicationHost): ReplicaClie
   };
 }
 
-/** Flatten every undici header shape into `[name, value, …]` without Host. */
+/** Flatten every undici header shape into `[name, value, …]` without Host or forwarded protocol. */
 function headerListWithoutHost(
   headers: Dispatcher.DispatchOptions["headers"],
 ): string[] {
   const list: string[] = [];
   const add = (name: string, value: string | string[] | undefined): void => {
-    if (value === undefined || name.toLowerCase() === "host") return;
+    const lowered = name.toLowerCase();
+    if (value === undefined || lowered === "host" || lowered === "x-forwarded-proto") return;
     for (const item of Array.isArray(value) ? value : [value]) list.push(name, item);
   };
   if (headers === undefined || headers === null) return list;

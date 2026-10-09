@@ -143,6 +143,42 @@ export async function externalComposeRuntime(
     );
   };
 
+  /** Wait until every replica has exited or restarted without ever reporting ready. */
+  const observeReplicaRefusal = async (
+    environment: NodeJS.ProcessEnv,
+    extraFile?: string,
+  ): Promise<string> => {
+    const options = extraFile === undefined ? {environment} : {environment, extraFile};
+    const ids = await containerIds(environment);
+    if (ids.length === 0) throw new Error("No replica was created for the refused configuration.");
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      // Every replica must fail; polling them is the observation under test.
+      // eslint-disable-next-line no-await-in-loop
+      const states = await Promise.all(ids.map(async (id) => {
+        const inspected = await command("docker", [
+          "inspect", "--format", "{{.State.Status}} {{.RestartCount}}", id,
+        ]);
+        const [status = "", restarts = "0"] = inspected.stdout.trim().split(" ");
+        return {failed: status === "exited" || Number(restarts) > 0, ready: await readinessOf(id)};
+      }));
+      if (states.some((state) => state.ready)) {
+        throw new Error("A refused configuration reported ready.");
+      }
+      if (states.every((state) => state.failed)) break;
+      if (Date.now() > deadline) {
+        throw new Error("A refused configuration neither exited nor restarted.");
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const logs = await Promise.all(ids.map((id) =>
+      command("docker", ["logs", id], {allowFailure: true, sensitive})
+    ));
+    await compose(["down"], options);
+    return logs.map((log) => `${log.stdout}\n${log.stderr}`).join("\n");
+  };
+
   return {
     bootstrapAdministrator,
     deployment: "single_server",
@@ -173,34 +209,22 @@ export async function externalComposeRuntime(
         ["up", "--detach", "--scale", `artifact-server=${replicaCount}`, "artifact-server"],
         {environment, extraFile: overrideFile},
       );
-      const ids = await containerIds(environment);
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        // Every replica must fail; polling them is the observation under test.
-        // eslint-disable-next-line no-await-in-loop
-        const states = await Promise.all(ids.map(async (id) => {
-          const inspected = await command("docker", [
-            "inspect", "--format", "{{.State.Status}} {{.RestartCount}}", id,
-          ]);
-          const [status = "", restarts = "0"] = inspected.stdout.trim().split(" ");
-          return {failed: status === "exited" || Number(restarts) > 0, ready: await readinessOf(id)};
-        }));
-        if (states.some((state) => state.ready)) {
-          throw new Error("A refused configuration reported ready.");
-        }
-        if (states.every((state) => state.failed)) break;
-        if (Date.now() > deadline) {
-          throw new Error("A refused configuration neither exited nor restarted.");
-        }
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-      const logs = await Promise.all(ids.map((id) =>
-        command("docker", ["logs", id], {allowFailure: true, sensitive})
-      ));
-      await compose(["down"], {environment, extraFile: overrideFile});
+      const message = await observeReplicaRefusal(environment, overrideFile);
       await rm(overrideFile, {force: true});
-      return {kind: "process", message: logs.map((log) => `${log.stdout}\n${log.stderr}`).join("\n")};
+      return {kind: "process", message};
+    },
+    async expectLegacyApiTokenRefused(token) {
+      const legacyFile = path.join(workDirectory, "legacy-api-token");
+      await writeFile(legacyFile, `${token}\n`, {mode: 0o644});
+      // The secret file path is read by Compose, not passed into the container.
+      const environment = {...baseEnvironment, ARTIFACT_SERVER_API_TOKEN_SECRET_FILE: legacyFile};
+      await compose(
+        ["up", "--detach", "--scale", `artifact-server=${replicaCount}`, "artifact-server"],
+        {environment},
+      );
+      const message = await observeReplicaRefusal(environment);
+      await rm(legacyFile, {force: true});
+      return {kind: "process", message};
     },
     async externalIdentityCount(email) {
       // psql does not interpolate variables in --command; both values are

@@ -49,6 +49,12 @@ const outsider = {
   email: "outsider@example.test",
   password: "outsider-keycloak-integration-only",
 };
+const artifactPageSchema = z.object({
+  artifacts: z.array(z.object({
+    artifact: z.object({id: z.string()}).loose(),
+    links: z.object({artifact: z.string()}).loose(),
+  }).loose()),
+}).loose();
 const sessionSchema = z.object({
   principal: z.object({id: z.string(), kind: z.literal("human")}).loose(),
 }).loose();
@@ -59,6 +65,23 @@ const issuedKeySchema = z.object({
   token: z.string().startsWith("as_key_"),
 }).loose();
 const threadSchema = z.object({thread: z.object({id: z.string()}).loose()}).loose();
+const versionListSchema = z.object({
+  versions: z.array(z.object({
+    version: z.object({id: z.string(), publisherPrincipalId: z.string()}).loose(),
+  }).loose()),
+}).loose();
+const commentPageSchema = z.object({
+  items: z.array(z.object({
+    author: z.object({principalId: z.string()}).loose(),
+    id: z.string(),
+  }).loose()),
+}).loose();
+const activityPageSchema = z.object({
+  items: z.array(z.object({
+    artifact: z.object({id: z.string()}).loose().nullable(),
+    thread: z.object({id: z.string()}).loose().optional(),
+  }).loose()),
+}).loose();
 const memberListSchema = z.object({
   members: z.array(z.object({id: z.string(), status: z.string()}).loose()),
 }).loose();
@@ -201,20 +224,28 @@ describe.sequential(
         expect({exchange: exchange.status, name: stray.name, bearer: bearer.status})
           .toEqual({exchange: 404, name: stray.name, bearer: 401});
       }
-      expect((await first.fetch("/api/v1/artifacts", {
-        headers: {Authorization: "Bearer legacy-installation-bearer-with-sufficient-entropy"},
-      })).status).toBe(401);
 
       // Rejecting other hosts is the ingress's job; behind it, a hostile Host
-      // still cannot change the installation or storage scope a request sees,
-      // and MCP answers only for the management host.
+      // still reaches the same installation and storage scope, and MCP answers
+      // only for the management host.
+      const published = await publishThroughReplica(first, runtime.serviceKey, "host scope proof");
       const foreign = replicaClient(first.port, "evil.example");
       const serviceHeaders = {Authorization: `Bearer ${runtime.serviceKey}`};
-      const [managementList, foreignList] = await Promise.all([
-        first.fetch("/api/v1/artifacts", {headers: serviceHeaders}).then((response) => response.json()),
-        foreign.fetch("/api/v1/artifacts", {headers: serviceHeaders}).then((response) => response.json()),
+      const [managementPage, foreignPage] = await Promise.all([
+        first.fetch("/api/v1/artifacts", {headers: serviceHeaders}).then(async (response) =>
+          artifactPageSchema.parse(await response.json())
+        ),
+        foreign.fetch("/api/v1/artifacts", {headers: serviceHeaders}).then(async (response) =>
+          artifactPageSchema.parse(await response.json())
+        ),
       ]);
-      expect(foreignList).toEqual(managementList);
+      const managementIds = managementPage.artifacts.map((entry) => entry.artifact.id);
+      expect(managementIds).toContain(published.artifactId);
+      expect(foreignPage.artifacts.map((entry) => entry.artifact.id)).toEqual(managementIds);
+      // Behind the gateway, links name the trusted management origin.
+      expect(managementPage.artifacts[0]?.links.artifact.startsWith(`${packagedApplicationOrigin}/`))
+        .toBe(true);
+      expect((await callMcp(first, {token: runtime.serviceKey})).status).toBe(200);
       expect((await callMcp(foreign, {token: runtime.serviceKey})).status).not.toBe(200);
 
       await runtime.stop();
@@ -241,6 +272,16 @@ describe.sequential(
         ? `unconfigurable ${localBootstrap.variable}`
         : localBootstrap.message).toMatch(
         /^unconfigurable ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN$|A private-team server does not accept ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN/u,
+      );
+      // A legacy installation bearer never becomes request authority: the
+      // process refuses to start with one as its API bootstrap credential.
+      const legacyBearer = await runtime.expectLegacyApiTokenRefused(
+        "legacy-installation-bearer-with-sufficient-entropy",
+      );
+      // Packaged configuration parsing rejects the non-managed format before the
+      // runtime's own bootstrap-key check would.
+      expect(refusalText(legacyBearer)).toMatch(
+        /ARTIFACT_SERVER_API_TOKEN has an invalid value\.|A private-team API bootstrap credential must use the managed as_key_ format\./u,
       );
       await runtime.start();
       expect((await firstReplica().fetch("/api/v1/artifacts", {
@@ -482,6 +523,7 @@ async function waitForRefusal(
   }
 }
 
+/** The member's artifact, version, comment, and own activity survive deactivation, still attributed to them. */
 async function expectWorkPreserved(
   client: ReplicaClient,
   administrator: SessionCookies,
@@ -489,16 +531,28 @@ async function expectWorkPreserved(
   memberId: string,
 ): Promise<void> {
   const headers = {Cookie: administrator.header};
-  const artifact = await client.fetch(`/api/v1/artifacts/${work.artifactId}`, {headers});
-  expect(artifact.status).toBe(200);
-  const comments = JSON.stringify(
-    await (await client.fetch(`/api/v1/artifacts/${work.artifactId}/comments`, {headers})).json(),
-  );
-  expect(comments).toContain(work.threadId);
-  expect(comments).toContain(memberId);
-  const activity = JSON.stringify(
-    await (await client.fetch("/api/v1/activity", {headers})).json(),
-  );
-  expect(activity).toContain(memberId);
-  expect(activity).toContain(work.artifactId);
+  expect((await client.fetch(`/api/v1/artifacts/${work.artifactId}`, {headers})).status).toBe(200);
+
+  const versions = versionListSchema.parse(await (await client.fetch(
+    `/api/v1/artifacts/${work.artifactId}/versions`,
+    {headers},
+  )).json()).versions.map((entry) => entry.version);
+  expect(versions.find((version) => version.id === work.versionId)?.publisherPrincipalId)
+    .toBe(memberId);
+
+  const threads = commentPageSchema.parse(await (await client.fetch(
+    `/api/v1/artifacts/${work.artifactId}/comments`,
+    {headers},
+  )).json()).items;
+  expect(threads.find((thread) => thread.id === work.threadId)?.author.principalId)
+    .toBe(memberId);
+
+  // Filtering by actor ID leaves only entries the member wrote themselves.
+  const ownActivity = activityPageSchema.parse(await (await client.fetch(
+    `/api/v1/activity?person=${encodeURIComponent(memberId)}`,
+    {headers},
+  )).json()).items;
+  expect(ownActivity.some((entry) => entry.artifact?.id === work.artifactId && entry.thread === undefined))
+    .toBe(true);
+  expect(ownActivity.some((entry) => entry.thread?.id === work.threadId)).toBe(true);
 }

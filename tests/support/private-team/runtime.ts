@@ -29,6 +29,11 @@ export interface PrivateTeamRuntime {
   expectStartupRefused(
     overrides: Readonly<Record<string, string | null>>,
   ): Promise<StartupRefusal>;
+  /**
+   * Start with a legacy, non-managed installation bearer as the API bootstrap
+   * credential and resolve with the refusal; restores the managed key after.
+   */
+  expectLegacyApiTokenRefused(token: string): Promise<StartupRefusal>;
   /** Provider bindings recorded for an email, read from the runtime's own store. */
   externalIdentityCount(email: string): Promise<number>;
   /** Start, or restart, with the valid private-team configuration. */

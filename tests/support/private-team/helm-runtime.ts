@@ -68,6 +68,10 @@ const chartValueForVariable = new Map<string, keyof IdentityValues>([
   ["ARTIFACT_SERVER_WORKOS_ISSUER", "workosIssuer"],
 ]);
 
+function crashedPod(pod: ApplicationPod): boolean {
+  return (pod.status.containerStatuses ?? []).some((status) => status.restartCount > 0);
+}
+
 function isReadyPod(pod: ApplicationPod): boolean {
   return pod.status.conditions?.some((condition) =>
     condition.type === "Ready" && condition.status === "True"
@@ -359,6 +363,35 @@ export async function helmRuntime(identity: PrivateTeamIdentity): Promise<Privat
         return {kind: "chart", message: `${rendered.stdout}\n${rendered.stderr}`};
       }
       throw new Error("The chart rendered a refused identity configuration.");
+    },
+    async expectLegacyApiTokenRefused(token) {
+      await uninstall();
+      const setToken = (value: string) => kubectl([
+        "--namespace", namespace, "patch", "secret", secretName,
+        "--type", "merge", "--patch", JSON.stringify({stringData: {"api-token": value}}),
+      ]);
+      await setToken(token);
+      try {
+        await install(oidcValues, false);
+        const deadline = Date.now() + 180_000;
+        let pods = await applicationPods();
+        // Every pod must crash without ever reporting ready.
+        while (pods.length === 0 || !pods.every(crashedPod)) {
+          if (pods.some(isReadyPod)) throw new Error("A pod became ready with a legacy API token.");
+          if (Date.now() > deadline) throw new Error("The legacy API token did not make every pod crash.");
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          // eslint-disable-next-line no-await-in-loop
+          pods = await applicationPods();
+        }
+        const logs = await Promise.all(pods.map((pod) =>
+          kubectl(["--namespace", namespace, "logs", pod.metadata.name, "--previous"], true)
+        ));
+        return {kind: "process", message: logs.map((log) => `${log.stdout}\n${log.stderr}`).join("\n")};
+      } finally {
+        await uninstall();
+        await setToken(apiToken);
+      }
     },
     async externalIdentityCount(email) {
       if (!sqlLiteralSafe.test(email)) throw new Error("The identity lookup received an unexpected character.");

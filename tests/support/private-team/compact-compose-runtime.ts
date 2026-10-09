@@ -120,6 +120,39 @@ export async function compactComposeRuntime(
 
   const replicas: readonly ReplicaClient[] = [replicaClient(port)];
 
+  /** Start the service and wait until it has exited or restarted without ever reporting ready. */
+  const observeRefusal = async (
+    environment: NodeJS.ProcessEnv,
+    extraFile?: string,
+  ): Promise<string> => {
+    const options = extraFile === undefined ? {environment} : {environment, extraFile};
+    await compose(["up", "--detach", "artifact-server"], options);
+    const id = await containerId();
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      // Polling the container is the observation under test.
+      // eslint-disable-next-line no-await-in-loop
+      const inspected = await command("docker", [
+        "inspect", "--format", "{{json .State.Status}} {{.RestartCount}}", id,
+      ]);
+      const [status = "", restartCount = "0"] = inspected.stdout.trim().split(" ");
+      const state = containerStateSchema.parse({restartCount, status: JSON.parse(status)});
+      // eslint-disable-next-line no-await-in-loop
+      const ready = await fetch(`http://127.0.0.1:${port}/ready`).then(
+        (response) => response.status === 200,
+        () => false,
+      );
+      if (ready) throw new Error("A refused configuration reported ready.");
+      if (state.status === "exited" || state.restartCount > 0) break;
+      if (Date.now() > deadline) throw new Error("The refused configuration neither exited nor restarted.");
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const logs = await command("docker", ["logs", id], {allowFailure: true, sensitive});
+    await compose(["down"], options);
+    return `${logs.stdout}\n${logs.stderr}`;
+  };
+
   return {
     bootstrapAdministrator,
     deployment: "single_server",
@@ -147,32 +180,22 @@ export async function compactComposeRuntime(
         ...added.map((name) => `      - ${name}`),
         "",
       ].join("\n"));
-      await compose(["up", "--detach", "artifact-server"], {environment, extraFile: overrideFile});
-      const id = await containerId();
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        // Polling the container is the observation under test.
-        // eslint-disable-next-line no-await-in-loop
-        const inspected = await command("docker", [
-          "inspect", "--format", "{{json .State.Status}} {{.RestartCount}}", id,
-        ]);
-        const [status = "", restartCount = "0"] = inspected.stdout.trim().split(" ");
-        const state = containerStateSchema.parse({restartCount, status: JSON.parse(status)});
-        // eslint-disable-next-line no-await-in-loop
-        const ready = await fetch(`http://127.0.0.1:${port}/ready`).then(
-          (response) => response.status === 200,
-          () => false,
-        );
-        if (ready) throw new Error("A refused configuration reported ready.");
-        if (state.status === "exited" || state.restartCount > 0) break;
-        if (Date.now() > deadline) throw new Error("The refused configuration neither exited nor restarted.");
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-      const logs = await command("docker", ["logs", id], {allowFailure: true, sensitive});
-      await compose(["down"], {environment, extraFile: overrideFile});
+      const message = await observeRefusal(environment, overrideFile);
       await rm(overrideFile, {force: true});
-      return {kind: "process", message: `${logs.stdout}\n${logs.stderr}`};
+      return {kind: "process", message};
+    },
+    async expectLegacyApiTokenRefused(token) {
+      // The compact installation keeps its bootstrap credential on the data volume.
+      await shellInVolume(
+        `cp -p ${dataDirectory}/secrets/api-token ${dataDirectory}/secrets/api-token.managed && printf %s '${token}' > ${dataDirectory}/secrets/api-token`,
+      );
+      try {
+        return {kind: "process", message: await observeRefusal(baseEnvironment)};
+      } finally {
+        await shellInVolume(
+          `mv ${dataDirectory}/secrets/api-token.managed ${dataDirectory}/secrets/api-token`,
+        );
+      }
     },
     async externalIdentityCount(email) {
       const script = [
