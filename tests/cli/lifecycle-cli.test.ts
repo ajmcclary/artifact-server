@@ -127,21 +127,6 @@ describe("Artifact Server lifecycle CLI", () => {
         "Hosted WorkOS authentication requires",
       );
       expect(incompleteWorkOs.output).not.toContain("workos-secret-value");
-      const localBootstrapValue = "local-bootstrap-credential-".padEnd(43, "x");
-      const localBootstrap = await runCli([
-        "config",
-        "check",
-        "--mode",
-        "compact",
-        "--data",
-        dataDirectory,
-      ], {
-        ...environment,
-        ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN: localBootstrapValue,
-      });
-      expect(localBootstrap.exitCode).not.toBe(0);
-      expect(localBootstrap.output).toContain("ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN");
-      expect(localBootstrap.output).not.toContain(localBootstrapValue);
       await chmod(path.join(dataDirectory, "secrets/api-token"), 0o644);
       const permissiveSecret = await runCli([
         "config",
@@ -492,6 +477,38 @@ describe("Artifact Server lifecycle CLI", () => {
         field: "ARTIFACT_SERVER_LINKED_FILES",
         reason: "invalid_value",
       });
+    } finally {
+      await rm(parent, {force: true, recursive: true});
+    }
+  }, 30_000);
+
+  test("private-team configuration refuses a local browser-bootstrap credential without echoing it", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "artifact-server-lifecycle-"));
+    const dataDirectory = path.join(parent, "data");
+    try {
+      expect((await runCli([
+        "init",
+        "--admin-email",
+        "admin@example.test",
+        "--data",
+        dataDirectory,
+      ])).exitCode).toBe(0);
+      const localBootstrapValue = "local-bootstrap-credential-".padEnd(43, "x");
+      const localBootstrap = await runCli([
+        "config",
+        "check",
+        "--mode",
+        "compact",
+        "--data",
+        dataDirectory,
+      ], compactEnvironment({
+        ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN: localBootstrapValue,
+        ARTIFACT_SERVER_OIDC_CLIENT_ID: "lifecycle-configuration-client",
+        ARTIFACT_SERVER_OIDC_ISSUER: "https://identity.example.test",
+      }));
+      expect(localBootstrap.exitCode).not.toBe(0);
+      expect(localBootstrap.output).toContain("ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN");
+      expect(localBootstrap.output).not.toContain(localBootstrapValue);
     } finally {
       await rm(parent, {force: true, recursive: true});
     }
