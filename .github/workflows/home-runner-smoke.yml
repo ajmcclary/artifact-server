@@ -43,7 +43,7 @@ jobs:
       - name: Tools the full gate takes from the runner are present
         run: |
           missing=()
-          for tool in curl git jq openssl sudo unzip; do
+          for tool in curl git jq kubectl openssl sudo unzip; do
             command -v "$tool" >/dev/null || missing+=("$tool")
           done
           docker compose version >/dev/null 2>&1 || missing+=("docker compose")

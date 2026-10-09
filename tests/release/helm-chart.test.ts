@@ -120,7 +120,8 @@ const disruptionBudgetSchema = z.object({
 });
 const eventListSchema = z.object({items: z.array(z.object({reason: z.string()}))});
 const commandErrorSchema = z.object({
-  code: z.number().optional(),
+  // A missing executable reports a string code such as ENOENT.
+  code: z.union([z.number(), z.string()]).optional(),
   killed: z.boolean().optional(),
   stderr: z.string().optional(),
   stdout: z.string().optional(),
@@ -1124,8 +1125,11 @@ function command(
           return;
         }
         const parsed = commandErrorSchema.safeParse(error);
+        const code = parsed.success ? parsed.data.code : undefined;
+        const exitCode = z.number().safeParse(code);
+        const spawnFailure = z.string().safeParse(code);
         const result = {
-          exitCode: parsed.success ? parsed.data.code ?? 1 : 1,
+          exitCode: exitCode.success ? exitCode.data : 1,
           stderr: parsed.success ? parsed.data.stderr ?? stderr : stderr,
           stdout: parsed.success ? parsed.data.stdout ?? stdout : stdout,
         };
@@ -1134,7 +1138,7 @@ function command(
           return;
         }
         reject(new Error(
-          `${executable} ${args.join(" ")} failed (${result.exitCode}): ${result.stderr}`,
+          `${executable} ${args.join(" ")} failed (${spawnFailure.success ? spawnFailure.data : result.exitCode}): ${result.stderr}`,
         ));
       },
     );

@@ -6,6 +6,8 @@ set -euo pipefail
 
 readonly artifactserver_compose_version="v5.6.0"
 readonly artifactserver_compose_sha256="40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a"
+readonly artifactserver_kubectl_version="v1.35.9"
+readonly artifactserver_kubectl_sha256="3cfeaf80be482b435b0aa214aff6e0b2c312ee23c0ff20810c75517b6004c6eb"
 
 # Libraries GitHub-hosted runners carry and the image lacks: pnpm's standalone
 # installer links libatomic, and setup-ruby's prebuilt Ruby links libyaml.
@@ -34,6 +36,18 @@ if ! docker compose version >/dev/null 2>&1; then
   install -m 0755 "$artifactserver_download" "$artifactserver_plugins/docker-compose"
 fi
 docker compose version
+
+# The Helm chart test drives its kind cluster with kubectl, which GitHub-hosted
+# runners carry and the actions-runner image does not.
+if ! command -v kubectl >/dev/null 2>&1; then
+  artifactserver_kubectl=$(mktemp)
+  curl -fsSL --retry 3 -o "$artifactserver_kubectl" \
+    "https://dl.k8s.io/release/${artifactserver_kubectl_version}/bin/linux/amd64/kubectl"
+  echo "${artifactserver_kubectl_sha256}  ${artifactserver_kubectl}" | sha256sum --check --quiet
+  sudo install -m 0755 "$artifactserver_kubectl" /usr/local/bin/kubectl
+  rm -f "$artifactserver_kubectl"
+fi
+kubectl version --client
 
 # pnpm keeps one content store per filesystem. The workspace sits on the
 # runner's work volume while /tmp is the container's own filesystem, so the
