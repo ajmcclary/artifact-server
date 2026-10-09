@@ -1,6 +1,6 @@
 version: 1
 product: Artifact Server
-updated: "2026-10-07"
+updated: "2026-10-09"
 evidence_root: "../.."
 
 source:
@@ -2464,10 +2464,25 @@ requirements:
       behavior: {id: AUTH-025-B, description: "Start compact and external-storage team runtimes with one complete OIDC or WorkOS configuration, bootstrap the configured administrator through that provider, and authenticate non-browser clients only with managed keys or a compatible external OAuth verifier."}
       failure: {id: AUTH-025-F, description: "Missing or multiple identity providers, a configured local bootstrap credential, the local-owner session route, the generated compact bootstrap credential, and the legacy installation bearer each fail startup or authentication without granting request authority."}
     deployments: [single_server, kubernetes]
-    status: implementing
-    proof_gap: The Node runtime test proves provider discovery, missing-provider startup refusal, local-owner route absence, managed-key authority, and legacy-bearer refusal in private-team mode, and the real Keycloak suite proves the OIDC round trip. Compact Compose, external-storage Compose, and Kubernetes startup plus the compatible external OAuth verifier matrix remain unproved.
+    status: behavior_verified
+    proof_gap: "tests/release/private-team-access.test.ts proves both tests on compact Compose, two-replica external-storage Compose, and two-replica Helm against a real Keycloak over TLS: provider bootstrap of the administrator, managed-key and /mcp-bound provider-token authority, refusal of a session cookie and an unbound token at MCP, outsider refusal, startup refusal for no provider, two providers, ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN, and a legacy-format API bootstrap credential, and an ignored migrated browser-bootstrap file. Unproved: a WorkOS-configured packaged startup (generic OIDC evidence cannot stand in for it), and on Helm the local bootstrap credential is shown unconfigurable through the chart rather than refused by the process. Behind no ingress a foreign Host reaches the same installation scope but is reflected into response links; the spec assigns host rejection to the ingress."
     depends_on: [AUTH-009, AUTH-019, AUTH-021]
-    evidence: []
+    evidence:
+      - deployment: single_server
+        tests: [AUTH-025-B, AUTH-025-F]
+        result: pass
+        run: project/evidence/compact-compose.json
+        recorded_at: "2026-10-09T19:58:17.552Z"
+      - deployment: single_server
+        tests: [AUTH-025-B, AUTH-025-F]
+        result: pass
+        run: project/evidence/external-storage-compose.json
+        recorded_at: "2026-10-09T20:01:19.659Z"
+      - deployment: kubernetes
+        tests: [AUTH-025-B, AUTH-025-F]
+        result: pass
+        run: project/evidence/helm-kubernetes.json
+        recorded_at: "2026-10-09T20:03:16.656Z"
 
   - id: AUTH-026
     kind: behavior
@@ -2497,10 +2512,19 @@ requirements:
       behavior: {id: AUTH-027-B, description: "Authenticate one member through the identity provider, an existing application session, and a member-owned managed key; deactivate the member; observe immediate same-process refusal and cross-replica refusal within the cache bound while the member's artifacts, actions, comments, and attribution remain."}
       failure: {id: AUTH-027-F, description: "A deactivated member cannot create a new provider binding or session, renew an existing session, use a member-owned key, or regain access through stale cached authority after the bound; unrelated service principals and durable attributed records are not removed."}
     deployments: [single_server, kubernetes]
-    status: implementing
-    proof_gap: The local acceptance tests prove immediate refusal of a deactivated member's session and member-owned key, preserve the installation service principal, and bound a warmed cross-process session decision through the authentication cache. Provider relogin, cross-replica managed-key expiry, and explicit preservation checks for every attributed record remain unproved.
+    status: verified
     depends_on: [AUTH-008, AUTH-009, AUTH-022, AUTH-025]
-    evidence: []
+    evidence:
+      - deployment: single_server
+        tests: [AUTH-027-B, AUTH-027-F]
+        result: pass
+        run: project/evidence/external-storage-compose.json
+        recorded_at: "2026-10-09T20:01:19.659Z"
+      - deployment: kubernetes
+        tests: [AUTH-027-B, AUTH-027-F]
+        result: pass
+        run: project/evidence/helm-kubernetes.json
+        recorded_at: "2026-10-09T20:03:16.656Z"
 
   - id: AUTH-028
     kind: constraint
