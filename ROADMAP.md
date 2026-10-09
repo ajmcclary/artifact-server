@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated October 8, 2026. This is the one place for open work, waiting owner
+Updated October 9, 2026. This is the one place for open work, waiting owner
 decisions and the current deployment. It replaces `NEXT.md`, `NEXT-STEPS.md`,
 `PLAN.md` and `HANDOFF.md`, which are kept verbatim in
 [docs/archive/planning-2026-10-08/](docs/archive/planning-2026-10-08/README.md)
@@ -18,27 +18,47 @@ kept so older evidence and ledger text still resolve. They are not conformance I
 ## Current deployment
 
 artifacts.backend.app runs image
-`sha256:16771d22064219fd3cb2bc54a7105ede0fdcf84bcdc9f3fdf19479c81a1c1813`
-(Artifact Server `0faa4f1`, Workspace `f1561efb1`); all four server pods run it
-and Argo reports Synced and Healthy. Design (`~/Dev/Design`) is at `5abcad7`.
-Recheck both before relying on this.
+`sha256:319c1d7e9ac12fdf496d65c87332060bdc54e0f638e56bdd36d838c89917411c`
+(Artifact Server `27fd3a0`, Workspace `9ffbf00ac`, deployed October 9); all four
+server pods run it and Argo reports Synced and Healthy. The Design checkout
+(`~/Dev/Design`) is at `5704154`. Recheck both before relying on this.
 
-`pnpm verify:iteration` last passed in full on `0faa4f1`. The commits after it
-(through the macOS sealed-credential fix) were pushed on October 8 without a
-full gate because sustained machine load (load average above 200) made the
-process-spawning tests time out; every suite they touch passed when run alone.
-Run the full gate first in the next iteration.
+`pnpm verify:iteration` passed on October 9 on the private-team branch, whose
+code matches `main` apart from the image workflow and ledger. The unit stage
+needed reruns past two load-timeout flakes in process-spawning CLI tests
+(`lifecycle-cli` "foundation" and `local-cli` "credential-free URL"); every
+later stage then passed in one run. The home-runner CI gate on `bb3269d` passed
+on rerun after a first attempt in which the whole unit stage ran about twice as
+slowly as usual.
 
 Deploying follows GitOps: take the digest only from `image.yml`'s "Print digest"
 step, then pin it in `~/Workspace` at
 `deployments/argocd/application-artifact-server.yaml` and
 `deployments/clusters/vps/artifact-server/helm-values.yaml`. Argo reverts a
-direct `kubectl` change.
+direct `kubectl` change. Since `27fd3a0`, `image.yml` pulls BuildKit, the
+Dockerfile frontend and the Node base through `mirror.gcr.io` (same digests),
+because Docker Hub 429s and an outage failed four GitHub-hosted builds.
 
 ### Closed since late September
 
 Details are in the archive and the ledger.
 
+- **Private-team deployment proof (October 9).** AUTH-025 and AUTH-027 now pass
+  on compact Compose, two-replica external-storage Compose and two-replica Helm
+  against a real Keycloak over TLS
+  (`tests/release/private-team-access.test.ts`). AUTH-027 is the ledger's first
+  `verified` row; a deactivated member is refused at once by the handling
+  replica and within the 30-second cache bound (about 31 s observed) by the
+  other. AUTH-025 is `behavior_verified`; its gaps are below under T16.
+  Compose (`compose.identity-ca.yaml`) and Helm
+  (`identity.trustedCertificateAuthorities`) can now trust a private
+  identity-provider CA. Private-team startup refuses
+  `ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN`, and `compact-backup.sh` restarts the
+  existing container so operator overlays survive a backup.
+- **Staging cleanup claim (October 9).** Concurrent cleanup passes no longer
+  claim the same expired upload; an interrupted pass releases its claim, and a
+  crashed one goes stale after one settle delay. This fixed an intermittent
+  Windows `EPERM` failure in PUB-009-B.
 - **Delivery.** Stored Brotli variants (CNT-011) and reusable 12-hour private
   preview leases (CNT-012). ExtractionKit's data tiers load on demand (Design).
 - **Library.** One authorized server request (DSN-006). Hosted cold open went
@@ -73,6 +93,7 @@ Details are in the archive and the ledger.
 | 2 | **Browser `auth login` 404 (CLI-001).** | No production entry point sets `apiOAuthResource` (ADR 0028 left it unset on purpose). The CLI points to `--api-key-stdin`, but `docs/cli.md` still describes a browser login. |
 | 3 | **Cloudflare Artifacts Gate 3:** deployment authorization for production configuration. | See [Published Git history](#published-git-history-cloudflare-artifacts). |
 | 4 | **MCP tool catalog endpoint** to back an admin tool-group table. | Activity, Projects and Admin follow-up. |
+| 5 | **Reject unknown hosts in the application too?** A request that reaches a replica directly with a foreign `Host` is served the same installation, with that host reflected into response links. | The spec makes the ingress reject other hosts, and the backend listener must not be public, so this is defense in depth. MCP already answers only for the management host. Recorded in AUTH-025's proof gap. |
 
 ### Product choices (T24)
 
@@ -225,7 +246,8 @@ a requirement to `verified`.
 ### Open tasks
 
 **T10 Staging lifecycle (remaining).** Uncommitted cleanup is bounded and
-claim-fenced, and OPS-006-B passes locally. Still to do: specify
+claim-fenced, the claim is exclusive between live passes, and OPS-006-B passes
+locally. Still to do: specify
 successful-staging reclamation (decided with T24, separate from replay, backups
 and active preparations), amend PUB-009/OPS-006, abort abandoned multipart work
 through the adapter, and rerun OPS-006-B on cloudflare, aws and gcp when those
@@ -257,12 +279,15 @@ Profile catalog counts, substring search, manifest lookup and pool waits.
   available.
 
 **T16 Identity lifecycle.** The production WorkOS inventory, Codex CIMD PKCE
-login/logout/reconnect, and Keycloak `pnpm test:oidc` 4/4 are done
-([matrix](project/evidence/identity-qualification-matrix.json)). Still open, and
-approval-gated: key rotation, provider-side revocation, server API-key rotation,
-cross-replica deactivation, and re-qualifying the August 16 client rows at
-current versions. *Contracts* AUTH-001/008/017/019–029, MCP-010–013/017–019,
-GATE-005.
+login/logout/reconnect, Keycloak `pnpm test:oidc` 4/4, and packaged
+private-team access and cross-replica deactivation (AUTH-025/027) are done
+([matrix](project/evidence/identity-qualification-matrix.json)). Still open:
+- AUTH-025: a WorkOS-configured packaged startup (OIDC evidence cannot stand in
+  for it); on Helm the local bootstrap credential is only shown unconfigurable
+  through the chart, not refused by the process; and decision 5 above.
+- Approval-gated: key rotation, provider-side revocation, server API-key
+  rotation, and re-qualifying the August 16 client rows at current versions.
+*Contracts* AUTH-001/008/017/019–029, MCP-010–013/017–019, GATE-005.
 
 **T19 Design navigation (remaining).**
 - Frozen shareable collections (T24).
@@ -307,6 +332,29 @@ server as `invalid`.
 
 **Activity, Projects and Admin.** Record team-deployment browser evidence for
 ACT-005, ACT-006 and ADM-008.
+
+**CI.**
+- The macOS portability job reaches its 12-minute limit in "Verify portable
+  code paths" on every recent run, so macOS has had no complete CI run. Find
+  the slow step before raising the limit.
+- The home-runner Linux gate can run about twice as slowly as usual (October 9,
+  first attempt on `bb3269d`). Check `kubectl top node` and Music Intelligence
+  training before rerunning.
+- The Helm stage now creates a second kind cluster for the private-team suite
+  (about 2 extra minutes).
+
+**Private-team proof follow-ups (from the October 9 review, minor).**
+- The Helm driver's `kubectl port-forward` omits `--context`, and its
+  `discovery_failed` check passes if log retrieval returns nothing.
+- The Helm driver leaves the Postgres container's anonymous volume behind.
+- `scripts/with-private-team-identity.sh` keeps polling after Ctrl-C, and its
+  port choice can race.
+- The chart reads `trustedCertificateAuthorities.configMapName` without a guard
+  on one line (a `null` value gives a nil-pointer render error), and its README
+  should say that a CA change needs a rollout.
+- The Helm private-team pods can share a node under `ScheduleAnyway`; the driver
+  fails safely but can flake.
+- The new `ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN` refusal is in no operator doc.
 
 ### Live-provider gaps left by closed tasks
 
