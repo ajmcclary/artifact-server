@@ -3100,14 +3100,27 @@ export function createD1ArtifactRepository(
       uploadId: string,
       expiredBefore: string,
       now: string,
+      staleClaimBefore: string,
     ): Promise<boolean> => {
       const result = await database.prepare(`
         UPDATE staged_uploads
         SET cleanup_claimed_at = ?
         WHERE id = ? AND status = 'open' AND expires_at <= ?
           AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
-      `).bind(now, uploadId, expiredBefore, now).run();
+          AND (cleanup_claimed_at IS NULL OR cleanup_claimed_at <= ?)
+      `).bind(now, uploadId, expiredBefore, now, staleClaimBefore).run();
       return result.meta.changes === 1;
+    },
+    releaseStagedUploadCleanupClaim: async (
+      uploadId: string,
+      claimedAt: string,
+      staleClaimBefore: string,
+    ): Promise<void> => {
+      await database.prepare(`
+        UPDATE staged_uploads
+        SET cleanup_claimed_at = ?
+        WHERE id = ? AND status = 'open' AND cleanup_claimed_at = ?
+      `).bind(staleClaimBefore, uploadId, claimedAt).run();
     },
     listExpiredStagedUploads: async (
       expiredBefore: string,

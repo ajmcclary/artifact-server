@@ -1,4 +1,4 @@
-import {Context, DateTime, Effect, Layer, Result} from "effect";
+import {Context, DateTime, Effect, Exit, Layer, Result} from "effect";
 
 import type {ApplicationClock} from "./application-clock.js";
 import {
@@ -35,6 +35,7 @@ export interface ExpiredStagingCleanupRepository {
     uploadId: string,
     expiredBefore: string,
     now: string,
+    staleClaimBefore: string,
   ) => Effect.Effect<boolean, ArtifactRepositoryFailure>;
   readonly listExpiredStagedUploads: (
     expiredBefore: string,
@@ -52,6 +53,11 @@ export interface ExpiredStagingCleanupRepository {
     expiredBefore: string,
     now: string,
   ) => Effect.Effect<boolean, ArtifactRepositoryFailure>;
+  readonly releaseStagedUploadCleanupClaim: (
+    uploadId: string,
+    claimedAt: string,
+    staleClaimBefore: string,
+  ) => Effect.Effect<void, ArtifactRepositoryFailure>;
 }
 
 /** Staging-object operation required by cleanup. */
@@ -122,16 +128,13 @@ const validateBudget = (
 function makeExpiredStagingCleanupService(
   dependencies: ExpiredStagingCleanupDependencies,
 ): ExpiredStagingCleanupOperations {
-  const cleanOne = Effect.fn("ExpiredStagingCleanupService.cleanOne")(
+  const removeClaimed = Effect.fnUntraced(
     function*(
       upload: ExpiredStagedUpload,
       expiredBefore: string,
       now: string,
       budget: {filesRemaining: number},
     ) {
-      const claimed = yield* dependencies.repository
-        .claimExpiredStagedUploadForCleanup(upload.id, expiredBefore, now);
-      if (!claimed) return "claim-rejected" as const;
       for (const file of upload.files) {
         if (budget.filesRemaining <= 0) {
           return "budget-exhausted" as const;
@@ -149,6 +152,37 @@ function makeExpiredStagingCleanupService(
         upload.id,
         expiredBefore,
         now,
+      );
+    },
+  );
+
+  const cleanOne = Effect.fn("ExpiredStagingCleanupService.cleanOne")(
+    function*(
+      upload: ExpiredStagedUpload,
+      expiredBefore: string,
+      now: string,
+      budget: {filesRemaining: number},
+    ) {
+      // A claim held for a whole settle delay is presumed abandoned by a
+      // crashed pass; until then it keeps concurrent passes away.
+      const claimed = yield* dependencies.repository
+        .claimExpiredStagedUploadForCleanup(
+          upload.id,
+          expiredBefore,
+          now,
+          expiredBefore,
+        );
+      if (!claimed) return "claim-rejected" as const;
+      // A pass that stops short hands the upload straight to the next pass.
+      const release = dependencies.repository
+        .releaseStagedUploadCleanupClaim(upload.id, now, expiredBefore)
+        .pipe(Effect.ignore);
+      return yield* removeClaimed(upload, expiredBefore, now, budget).pipe(
+        Effect.onExit((exit) =>
+          Exit.isSuccess(exit) && exit.value !== "budget-exhausted"
+            ? Effect.void
+            : release
+        ),
       );
     },
   );

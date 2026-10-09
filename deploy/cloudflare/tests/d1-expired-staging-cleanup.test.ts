@@ -25,6 +25,8 @@ const uploadCreatedAt = "2026-09-21T00:00:00.000Z";
 const uploadExpiresAt = "2026-09-21T01:00:00.000Z";
 const cleanupExpiredBefore = "2026-09-21T01:00:00.000Z";
 const cleanupNow = "2026-09-21T01:05:00.000Z";
+// A cleanup claim made at or before this instant is abandoned: one settle delay before cleanupNow.
+const cleanupStaleClaimBefore = "2026-09-21T01:00:00.000Z";
 const liveLease = "2026-09-21T02:05:00.000Z";
 
 function manifestFixture(name: string) {
@@ -85,6 +87,7 @@ describe("D1 expired staging cleanup claim", () => {
         command.id,
         cleanupExpiredBefore,
         cleanupNow,
+        cleanupStaleClaimBefore,
       );
       expect(claimed).toBe(false);
       const removed = await store.removeExpiredStagedUpload(
@@ -117,6 +120,7 @@ describe("D1 expired staging cleanup claim", () => {
         command.id,
         cleanupExpiredBefore,
         cleanupNow,
+        cleanupStaleClaimBefore,
       );
       expect(claimed).toBe(true);
 
@@ -148,7 +152,7 @@ describe("D1 expired staging cleanup claim", () => {
     }
   });
 
-  it("an interrupted cleanup keeps excluding preparation and a retry finishes", async () => {
+  it("an interrupted cleanup excludes preparation and other passes until its claim is stale", async () => {
     const proxy = await openLocalD1();
     const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
     const installationId = "d1-cleanup-retry";
@@ -165,6 +169,7 @@ describe("D1 expired staging cleanup claim", () => {
         command.id,
         cleanupExpiredBefore,
         cleanupNow,
+        cleanupStaleClaimBefore,
       );
       expect(claimed).toBe(true);
       // The pass is interrupted here: no rows removed, claim durable.
@@ -175,11 +180,22 @@ describe("D1 expired staging cleanup claim", () => {
       );
       expect(racing).toBeNull();
 
+      // Another pass cannot take over a claim that is still live.
+      const concurrentClaim = await store.claimExpiredStagedUploadForCleanup(
+        command.id,
+        cleanupExpiredBefore,
+        cleanupNow,
+        cleanupStaleClaimBefore,
+      );
+      expect(concurrentClaim).toBe(false);
+
+      // One settle delay after the interrupted claim, a retry takes it over.
       const retryNow = "2026-09-21T01:10:00.000Z";
       const retryClaim = await store.claimExpiredStagedUploadForCleanup(
         command.id,
         cleanupExpiredBefore,
         retryNow,
+        cleanupNow,
       );
       expect(retryClaim).toBe(true);
       const removed = await store.removeExpiredStagedUpload(

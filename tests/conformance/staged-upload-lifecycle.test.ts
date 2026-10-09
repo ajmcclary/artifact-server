@@ -378,6 +378,10 @@ describe("staged upload lifecycle", () => {
     ]);
     expect(concurrent.reduce((sum, report) => sum + report.deleted, 0)).toBe(1);
     expect(concurrent.reduce((sum, report) => sum + report.failed, 0)).toBe(0);
+    // A live claim is exclusive, so the losing pass never touches the objects
+    // the winner is removing.
+    expect(concurrent.reduce((sum, report) => sum + report.claimRejected, 0)).toBe(1);
+    expect(concurrent.reduce((sum, report) => sum + report.alreadyAbsent, 0)).toBe(0);
     await expect(repository.findStagedUpload(
       expired.projectId,
       expired.id,

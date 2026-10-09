@@ -962,12 +962,26 @@ export interface StagedUploadRepository {
    * never match that state, so a successful claim excludes preparation for the
    * whole removal; a failed claim means an active preparation lease appeared
    * after selection and cleanup must leave the upload untouched.
+   *
+   * The claim is exclusive: another pass's claim refuses it unless that claim
+   * was made at or before `staleClaimBefore`, so concurrent passes never
+   * remove the same objects while an interrupted pass is still retried.
    */
   claimExpiredStagedUploadForCleanup(
     uploadId: string,
     expiredBefore: string,
     now: string,
+    staleClaimBefore: string,
   ): Promise<boolean>;
+  /**
+   * Hand a cleanup claim this pass still holds to the next pass without
+   * reopening preparation: the claim stays set but becomes stale at once.
+   */
+  releaseStagedUploadCleanupClaim(
+    uploadId: string,
+    claimedAt: string,
+    staleClaimBefore: string,
+  ): Promise<void>;
   listExpiredStagedUploads(
     expiredBefore: string,
     now: string,

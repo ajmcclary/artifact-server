@@ -187,7 +187,13 @@ export interface StagedUploadRepositoryPort {
     uploadId: string,
     expiredBefore: string,
     now: string,
+    staleClaimBefore: string,
   ): Effect.Effect<boolean, ArtifactRepositoryFailure>;
+  releaseStagedUploadCleanupClaim(
+    uploadId: string,
+    claimedAt: string,
+    staleClaimBefore: string,
+  ): Effect.Effect<void, ArtifactRepositoryFailure>;
   listExpiredStagedUploads(
     expiredBefore: string,
     now: string,

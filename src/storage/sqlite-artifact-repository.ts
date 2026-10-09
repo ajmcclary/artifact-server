@@ -2935,6 +2935,7 @@ export class SqliteArtifactRepository implements
     uploadId: string,
     expiredBefore: string,
     now: string,
+    staleClaimBefore: string,
   ): Promise<boolean> {
     return Promise.resolve().then(() => {
       const claimed = this.#database.prepare(`
@@ -2942,8 +2943,24 @@ export class SqliteArtifactRepository implements
         SET cleanup_claimed_at = ?
         WHERE id = ? AND status = 'open' AND expires_at <= ?
           AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ?)
-      `).run(now, uploadId, expiredBefore, now);
+          AND (cleanup_claimed_at IS NULL OR cleanup_claimed_at <= ?)
+      `).run(now, uploadId, expiredBefore, now, staleClaimBefore);
       return claimed.changes === 1;
+    });
+  }
+
+  releaseStagedUploadCleanupClaim(
+    uploadId: string,
+    claimedAt: string,
+    staleClaimBefore: string,
+  ): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.#database.prepare(`
+        UPDATE staged_uploads
+        SET cleanup_claimed_at = ?
+        WHERE id = ? AND status = 'open' AND cleanup_claimed_at = ?
+      `).run(staleClaimBefore, uploadId, claimedAt);
+      return undefined;
     });
   }
 

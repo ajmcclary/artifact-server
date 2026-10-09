@@ -2816,6 +2816,7 @@ export class PostgresArtifactRepository implements
     uploadId: string,
     expiredBefore: string,
     now: string,
+    staleClaimBefore: string,
   ): Promise<boolean> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen(function*() {
@@ -2825,8 +2826,24 @@ export class PostgresArtifactRepository implements
         WHERE installation_id = ${installationId} AND id = ${uploadId}
           AND status = 'open' AND expires_at <= ${expiredBefore}
           AND (preparation_lease_expires_at IS NULL OR preparation_lease_expires_at <= ${now})
+          AND (cleanup_claimed_at IS NULL OR cleanup_claimed_at <= ${staleClaimBefore})
         RETURNING id`;
       return claimed.length === 1;
+    }));
+  }
+
+  async releaseStagedUploadCleanupClaim(
+    uploadId: string,
+    claimedAt: string,
+    staleClaimBefore: string,
+  ): Promise<void> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql`UPDATE staged_uploads
+        SET cleanup_claimed_at = ${staleClaimBefore}
+        WHERE installation_id = ${installationId} AND id = ${uploadId}
+          AND status = 'open' AND cleanup_claimed_at = ${claimedAt}`;
     }));
   }
 

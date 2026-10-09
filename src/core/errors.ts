@@ -477,6 +477,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "observeAgentDispatchAddressed",
       "recordAgentActivity",
       "registerAgent",
+      "releaseStagedUploadCleanupClaim",
       "removeExpiredStagedFile",
       "removeExpiredStagedUpload",
       "restoreVersion",

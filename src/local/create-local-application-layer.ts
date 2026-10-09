@@ -455,15 +455,33 @@ export function createApplicationLayer(
         ),
         catch: (cause) => repositoryFailure("findStagedUploadFileSlot", cause),
       }),
-      claimExpiredStagedUploadForCleanup: (uploadId, expiredBefore, now) =>
+      claimExpiredStagedUploadForCleanup: (
+        uploadId,
+        expiredBefore,
+        now,
+        staleClaimBefore,
+      ) =>
         Effect.tryPromise({
           try: () => adapters.repository.claimExpiredStagedUploadForCleanup(
             uploadId,
             expiredBefore,
             now,
+            staleClaimBefore,
           ),
           catch: (cause) => repositoryFailure(
             "claimExpiredStagedUploadForCleanup",
+            cause,
+          ),
+        }),
+      releaseStagedUploadCleanupClaim: (uploadId, claimedAt, staleClaimBefore) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.releaseStagedUploadCleanupClaim(
+            uploadId,
+            claimedAt,
+            staleClaimBefore,
+          ),
+          catch: (cause) => repositoryFailure(
+            "releaseStagedUploadCleanupClaim",
             cause,
           ),
         }),
