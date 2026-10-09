@@ -72,6 +72,22 @@ export async function loadOidcConfiguration(
 }
 
 /**
+ * Refuse a local browser-bootstrap credential on a private-team server.
+ *
+ * Team browser login goes only through the configured provider, so a leftover
+ * local-owner credential must stop startup rather than sit unused beside it.
+ */
+export function assertNoLocalBootstrapCredential(
+  environment: NodeJS.ProcessEnv,
+): void {
+  const value = environment["ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN"];
+  if (value === undefined || value.trim() === "") return;
+  throw new Error(
+    "A private-team server does not accept ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN; browser login goes through the configured OIDC or WorkOS provider.",
+  );
+}
+
+/**
  * Refuse an installation that configures WorkOS and generic OIDC together.
  *
  * Presence of any variable in either family selects that provider, matching the

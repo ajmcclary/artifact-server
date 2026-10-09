@@ -127,6 +127,21 @@ describe("Artifact Server lifecycle CLI", () => {
         "Hosted WorkOS authentication requires",
       );
       expect(incompleteWorkOs.output).not.toContain("workos-secret-value");
+      const localBootstrapValue = "local-bootstrap-credential-".padEnd(43, "x");
+      const localBootstrap = await runCli([
+        "config",
+        "check",
+        "--mode",
+        "compact",
+        "--data",
+        dataDirectory,
+      ], {
+        ...environment,
+        ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN: localBootstrapValue,
+      });
+      expect(localBootstrap.exitCode).not.toBe(0);
+      expect(localBootstrap.output).toContain("ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN");
+      expect(localBootstrap.output).not.toContain(localBootstrapValue);
       await chmod(path.join(dataDirectory, "secrets/api-token"), 0o644);
       const permissiveSecret = await runCli([
         "config",

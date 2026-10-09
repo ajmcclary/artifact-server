@@ -82,7 +82,7 @@ describe("installation identity and access", () => {
     await removeTestInstallation(installation);
   });
 
-  test("AUTH-027-B AUTH-027-F: bootstrap membership and managed keys fail closed", async () => {
+  test("bootstrap membership and managed keys fail closed", async () => {
     const rejected = await fetch(`${server.baseUrl}/auth/local`, {
       headers: {Authorization: `Bearer ${"x".repeat(43)}`},
       method: "POST",
@@ -674,7 +674,7 @@ describe("installation identity and access", () => {
     });
   });
 
-  test("AUTH-025-B AUTH-025-F AUTH-026-F: private-team mode advertises its provider and has no local browser bootstrap route", async () => {
+  test("AUTH-026-F: private-team mode advertises its provider and has no local browser bootstrap route", async () => {
     await server.stop();
     const provider = new TestIdentityProvider({
       displayName: "Team administrator",

@@ -24,8 +24,11 @@ export ARTIFACT_SERVER_COMPOSE_FILE="$artifactserver_repository/packaging/compos
 export ARTIFACT_SERVER_COMPOSE_IMAGE="$artifactserver_test_image"
 export ARTIFACT_SERVER_COMPOSE_REVISION="$artifactserver_revision"
 
-pnpm exec vitest run \
-  --config tests/configs/vitest.compose.config.ts \
-  --reporter=default \
-  --reporter=json \
-  --outputFile.json=project/evidence/compact-compose.json
+export ARTIFACT_SERVER_PRIVATE_TEAM_TARGET=compact-compose
+
+"$artifactserver_repository/scripts/with-private-team-identity.sh" \
+  pnpm exec vitest run \
+    --config tests/configs/vitest.compose.config.ts \
+    --reporter=default \
+    --reporter=json \
+    --outputFile.json=project/evidence/compact-compose.json

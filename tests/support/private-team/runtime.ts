@@ -1,4 +1,5 @@
 import type {ReplicaClient} from "./application-client.js";
+import type {PrivateTeamIdentity} from "./identity-environment.js";
 
 export type PrivateTeamTarget = "compact-compose" | "external-compose" | "helm";
 
@@ -11,6 +12,8 @@ export interface PrivateTeamRuntime {
   /** The installation's managed `as_key_` machine credential. */
   readonly serviceKey: string;
   readonly target: PrivateTeamTarget;
+  /** Stop everything and delete the runtime's durable state and scratch files. */
+  destroy(): Promise<void>;
   /**
    * Start with environment overrides (null removes a variable) and resolve with
    * the refusal text once it is clear no replica will ever report ready.
@@ -25,4 +28,19 @@ export interface PrivateTeamRuntime {
   stop(): Promise<void>;
   /** Credentials present on disk for this runtime that must never authenticate. */
   strayCredentials(): Promise<readonly {readonly name: string; readonly token: string}[]>;
+}
+
+/** Choose the packaged runtime named by ARTIFACT_SERVER_PRIVATE_TEAM_TARGET. */
+export async function selectPrivateTeamRuntime(
+  identity: PrivateTeamIdentity,
+): Promise<PrivateTeamRuntime> {
+  const target = process.env["ARTIFACT_SERVER_PRIVATE_TEAM_TARGET"];
+  switch (target) {
+    case "compact-compose":
+      return (await import("./compact-compose-runtime.js")).compactComposeRuntime(identity);
+    default:
+      throw new Error(
+        `ARTIFACT_SERVER_PRIVATE_TEAM_TARGET must name a packaged runtime; got ${String(target)}.`,
+      );
+  }
 }

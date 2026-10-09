@@ -55,6 +55,7 @@ import {runCliEffect} from "./run-cli-effect.js";
 import {waitForProcessSignal} from "./wait-for-process-signal.js";
 import {
   assertAtMostOneBrowserLoginProvider,
+  assertNoLocalBootstrapCredential,
   loadOidcConfiguration,
   type OidcConfiguration,
 } from "./oidc-configuration.js";
@@ -338,6 +339,7 @@ function configureExternalStorageStart(
       const parsed = await parseExternalConfiguration(options.host, options.port);
       writeGitHistoryConfigurationWarnings(parsed.gitHistory);
       assertAtMostOneBrowserLoginProvider(process.env);
+      assertNoLocalBootstrapCredential(process.env);
       const workOs = await loadWorkOsConfiguration(process.env);
       const oidc = await loadOidcConfiguration(process.env);
       const hostedAuthentication = workOs === null
@@ -403,6 +405,7 @@ async function startCompactServer(
 ) {
   writeGitHistoryConfigurationWarnings(configuration.gitHistory);
   assertAtMostOneBrowserLoginProvider(process.env);
+  assertNoLocalBootstrapCredential(process.env);
   const workOs = await loadWorkOsConfiguration({
     ...process.env,
     ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL:
@@ -558,6 +561,7 @@ async function summarizeConfiguration(
   configuration: CompactRuntimeConfiguration | ExternalStorageRuntimeConfiguration,
 ) {
   assertAtMostOneBrowserLoginProvider(process.env);
+  assertNoLocalBootstrapCredential(process.env);
   const workOs = await loadWorkOsConfiguration({
     ...process.env,
     ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL:
