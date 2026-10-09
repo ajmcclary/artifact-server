@@ -1,14 +1,14 @@
 {
   "arch": "arm64",
   "availableParallelism": 10,
-  "capturedAt": "2026-10-08T17:16:11.914Z",
-  "commit": "e85644bd76f816606e33c5bb57e4c8f2b8c3afa8",
+  "capturedAt": "2026-10-09T19:55:19.358Z",
+  "commit": "347dc23297bf55703d48208c7a55eb4abc934f2b",
   "cpu": "Apple M1 Max",
   "details": {
     "probe": "storage-shutdown",
     "scope": "local-sqlite-runtime"
   },
-  "lockfileDigest": "2ae4c1884bfc4493b9103f250712ac07eee71d4ddb2316111b8506f54900888f",
+  "lockfileDigest": "94aa3b91c53f82baee99767c6197677d0e2296a9ee448938b9183a951b182be7",
   "node": "v24.15.0",
   "operatingSystem": "darwin 27.2.0",
   "platform": "darwin",
