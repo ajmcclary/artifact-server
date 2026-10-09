@@ -225,6 +225,19 @@ export async function createKeycloakUser(
   return subject;
 }
 
+/** Delete one Keycloak user, as an identity-provider administrator would. */
+export async function deleteKeycloakUser(
+  environment: KeycloakEnvironment,
+  subject: string,
+): Promise<void> {
+  await adminRequest(
+    environment,
+    await requestAdminToken(environment),
+    "DELETE",
+    `/admin/realms/${keycloakRealm.name}/users/${encodeURIComponent(subject)}`,
+  );
+}
+
 /** Obtain an access token through the password grant of one client. */
 export async function requestPasswordToken(
   environment: KeycloakEnvironment,
@@ -343,16 +356,16 @@ async function adminRequest(
   token: string,
   method: string,
   resourcePath: string,
-  body: KeycloakRepresentation,
+  body?: KeycloakRepresentation,
 ): Promise<Response> {
-  const response = await environment.fetch(`${environment.baseUrl}${resourcePath}`, {
-    body: JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    method,
-  });
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  const url = `${environment.baseUrl}${resourcePath}`;
+  const response = body === undefined
+    ? await environment.fetch(url, {headers, method})
+    : await environment.fetch(url, {body: JSON.stringify(body), headers, method});
   if (!response.ok) {
     throw new Error(
       `Keycloak refused ${method} ${resourcePath}: HTTP ${response.status} ${await response.text()}`,

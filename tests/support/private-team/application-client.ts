@@ -1,3 +1,5 @@
+import {createHash} from "node:crypto";
+
 import {
   Agent,
   type Dispatcher,
@@ -6,6 +8,7 @@ import {
   type RequestInit,
   type Response,
 } from "undici";
+import {z} from "zod";
 
 import {signInAtKeycloak} from "../keycloak-realm.js";
 import {loginHandshakeCookie} from "../runtime-harness.js";
@@ -137,4 +140,65 @@ export async function signInThroughProvider(
   return client.fetch(callback.toString(), {
     headers: {Cookie: loginHandshakeCookie(login)},
   });
+}
+
+const uploadPlanSchema = z.object({
+  commitUrl: z.url(),
+  files: z.array(z.object({path: z.string(), uploadUrl: z.url()}).loose()),
+}).loose();
+const committedSchema = z.object({
+  artifact: z.object({id: z.string()}).loose(),
+  version: z.object({id: z.string()}).loose(),
+}).loose();
+
+/** Publish one text file through a replica's staged upload flow with a bearer key. */
+export async function publishThroughReplica(
+  client: ReplicaClient,
+  token: string,
+  content: string,
+): Promise<{readonly artifactId: string; readonly versionId: string}> {
+  const bytes = new TextEncoder().encode(content);
+  const authorization = `Bearer ${token}`;
+  const planned = await client.fetch("/api/v1/uploads", {
+    body: JSON.stringify({
+      entryPath: "proof.txt",
+      files: [{
+        mediaType: "text/plain",
+        path: "proof.txt",
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        size: bytes.byteLength,
+      }],
+      routingMode: "static",
+    }),
+    headers: {Authorization: authorization, "Content-Type": "application/json"},
+    method: "POST",
+  });
+  if (planned.status !== 201 && planned.status !== 200) {
+    throw new Error(`The upload plan answered ${planned.status}: ${await planned.text()}`);
+  }
+  const plan = uploadPlanSchema.parse(await planned.json());
+  for (const file of plan.files) {
+    // One file; the loop keeps the plan's own list authoritative.
+    // eslint-disable-next-line no-await-in-loop
+    const uploaded = await client.fetch(file.uploadUrl, {
+      body: bytes,
+      headers: {Authorization: authorization},
+      method: "PUT",
+    });
+    if (!uploaded.ok) throw new Error(`The file upload answered ${uploaded.status}.`);
+  }
+  const committed = await client.fetch(plan.commitUrl, {
+    body: JSON.stringify({
+      target: {accessSetting: "account_required", kind: "new_artifact", name: "Member proof"},
+    }),
+    headers: {
+      Authorization: authorization,
+      "Content-Type": "application/json",
+      "Idempotency-Key": `member-proof-${createHash("sha256").update(content).digest("hex").slice(0, 16)}`,
+    },
+    method: "POST",
+  });
+  if (!committed.ok) throw new Error(`The commit answered ${committed.status}: ${await committed.text()}`);
+  const body = committedSchema.parse(await committed.json());
+  return {artifactId: body.artifact.id, versionId: body.version.id};
 }

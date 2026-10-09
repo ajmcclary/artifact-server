@@ -172,7 +172,7 @@ export async function compactComposeRuntime(
       const logs = await command("docker", ["logs", id], {allowFailure: true, sensitive});
       await compose(["down"], {environment, extraFile: overrideFile});
       await rm(overrideFile, {force: true});
-      return `${logs.stdout}\n${logs.stderr}`;
+      return {kind: "process", message: `${logs.stdout}\n${logs.stderr}`};
     },
     async externalIdentityCount(email) {
       const script = [

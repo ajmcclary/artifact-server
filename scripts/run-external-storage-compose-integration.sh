@@ -27,7 +27,13 @@ export ARTIFACT_SERVER_EXTERNAL_COMPOSE_TEST_FILE="$artifactserver_repository/te
 export ARTIFACT_SERVER_EXTERNAL_COMPOSE_IMAGE="$artifactserver_test_image"
 export ARTIFACT_SERVER_EXTERNAL_COMPOSE_REVISION="$artifactserver_revision"
 
+export ARTIFACT_SERVER_PRIVATE_TEAM_TARGET=external-compose
+
+# Keycloak joins the provider network the replicas already use, so the
+# issuer hostname resolves inside every application container.
 exec "$artifactserver_repository/scripts/with-external-storage-test-providers.sh" \
+  bash -c 'ARTIFACT_SERVER_TEST_IDENTITY_NETWORK="$ARTIFACT_SERVER_TEST_DOCKER_NETWORK" exec "$0" "$@"' \
+  "$artifactserver_repository/scripts/with-private-team-identity.sh" \
   pnpm exec vitest run \
     --config tests/configs/vitest.external-storage-compose.config.ts \
     --reporter=default \

@@ -2,15 +2,20 @@ import {afterAll, beforeAll, describe, expect, test} from "vitest";
 import {z} from "zod";
 
 import {
+  createKeycloakUser,
+  deleteKeycloakUser,
   keycloakRealm,
   provisionKeycloakRealm,
   requestPasswordToken,
 } from "../support/keycloak-realm.js";
 import {
   issuedSession,
+  mutationHeaders,
   packagedApplicationOrigin,
+  publishThroughReplica,
   type ReplicaClient,
   replicaClient,
+  type SessionCookies,
   sessionCookies,
   signInThroughProvider,
 } from "../support/private-team/application-client.js";
@@ -21,6 +26,7 @@ import {
 import {
   type PrivateTeamRuntime,
   selectPrivateTeamRuntime,
+  type StartupRefusal,
 } from "../support/private-team/runtime.js";
 
 /**
@@ -28,6 +34,12 @@ import {
  * includes this file and names its runtime in ARTIFACT_SERVER_PRIVATE_TEAM_TARGET;
  * the evidence report it writes is that deployment's proof.
  */
+/** AUTH-022: another replica may serve a cached decision for at most 30 seconds. */
+const cacheBoundMilliseconds = 30_000;
+/** Polling interval plus request time; refusal must still land within the bound. */
+const cacheBoundSlackMilliseconds = 3_000;
+// Decided at collection time, before any runtime exists: only compact Compose is single-replica.
+const multiReplica = process.env["ARTIFACT_SERVER_PRIVATE_TEAM_TARGET"] !== "compact-compose";
 const member = {
   displayName: "Team Member",
   email: "member@example.test",
@@ -41,14 +53,30 @@ const sessionSchema = z.object({
   principal: z.object({id: z.string(), kind: z.literal("human")}).loose(),
 }).loose();
 const failureSchema = z.object({error: z.object({code: z.string()}).loose()}).loose();
+const admittedSchema = z.object({member: z.object({id: z.string()}).loose()}).loose();
+const issuedKeySchema = z.object({
+  apiKey: z.object({id: z.string(), principalId: z.string()}).loose(),
+  token: z.string().startsWith("as_key_"),
+}).loose();
+const threadSchema = z.object({thread: z.object({id: z.string()}).loose()}).loose();
+const memberListSchema = z.object({
+  members: z.array(z.object({id: z.string(), status: z.string()}).loose()),
+}).loose();
 
 let identity: PrivateTeamIdentity;
 let runtime: PrivateTeamRuntime;
+let providerSubjects: ReadonlyMap<string, string> = new Map();
+let deactivatedMember: {
+  readonly id: string;
+  readonly key: string;
+  readonly session: string;
+  readonly work: MemberWork;
+} | null = null;
 
 beforeAll(async () => {
   identity = await readPrivateTeamIdentity();
   runtime = await selectPrivateTeamRuntime(identity);
-  await provisionKeycloakRealm(identity.keycloak, packagedApplicationOrigin, [
+  providerSubjects = (await provisionKeycloakRealm(identity.keycloak, packagedApplicationOrigin, [
     {
       email: runtime.bootstrapAdministrator.email,
       firstName: "Ada",
@@ -70,7 +98,7 @@ beforeAll(async () => {
       password: outsider.password,
       username: outsider.email,
     },
-  ]);
+  ])).subjects;
   await runtime.start();
 }, 600_000);
 
@@ -196,27 +224,173 @@ describe.sequential(
         ARTIFACT_SERVER_OIDC_ISSUER: null,
         ARTIFACT_SERVER_OIDC_SCOPES: null,
       });
-      expect(noProvider).toContain(
-        "A private-team server requires exactly one OIDC or WorkOS browser-login provider.",
+      // The process and the Helm chart word the same refusal differently.
+      expect(refusalText(noProvider)).toMatch(
+        /A private-team server requires exactly one OIDC or WorkOS browser-login provider\.|private-team deployments require exactly one browser-login provider/u,
       );
       const twoProviders = await runtime.expectStartupRefused({
         ARTIFACT_SERVER_WORKOS_CLIENT_ID: "client_conflicting_provider",
         ARTIFACT_SERVER_WORKOS_ISSUER: "https://api.workos.com",
       });
-      expect(twoProviders).toContain("One installation has one browser-login provider");
+      expect(refusalText(twoProviders)).toMatch(/one installation has one browser-login provider/iu);
       const localBootstrap = await runtime.expectStartupRefused({
         ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN: "local-bootstrap-credential-".padEnd(43, "x"),
       });
-      expect(localBootstrap).toContain(
-        "A private-team server does not accept ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN",
+      // Either the process refuses the variable, or the package cannot deliver it at all.
+      expect(localBootstrap.kind === "unconfigurable"
+        ? `unconfigurable ${localBootstrap.variable}`
+        : localBootstrap.message).toMatch(
+        /^unconfigurable ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN$|A private-team server does not accept ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN/u,
       );
       await runtime.start();
       expect((await firstReplica().fetch("/api/v1/artifacts", {
         headers: {Authorization: `Bearer ${runtime.serviceKey}`},
       })).status).toBe(200);
     });
+
+    test.runIf(multiReplica)("AUTH-027-B: deactivation stops provider login, sessions, and member keys on every replica within the cache bound", async () => {
+      const [first, second] = twoReplicas();
+      const administrator = sessionCookies((await signInThroughProvider(first, identity, {
+        password: runtime.bootstrapAdministrator.password,
+        username: runtime.bootstrapAdministrator.email,
+      })).headers.getSetCookie());
+
+      const admittedResponse = await first.fetch("/api/v1/members", {
+        body: JSON.stringify({displayName: member.displayName, email: member.email}),
+        headers: mutationHeaders(administrator),
+        method: "POST",
+      });
+      expect(admittedResponse.status).toBe(201);
+      const admitted = admittedSchema.parse(await admittedResponse.json()).member;
+      const memberLogin = await signInThroughProvider(first, identity, {
+        password: member.password,
+        username: member.email,
+      });
+      expect(memberLogin.status).toBe(303);
+      const memberSession = sessionCookies(memberLogin.headers.getSetCookie());
+      const issued = await first.fetch("/api/v1/api-keys", {
+        body: JSON.stringify({
+          capabilities: ["artifact:read", "artifact:create", "comment:write"],
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          memberId: admitted.id,
+          name: "Member automation key",
+        }),
+        headers: mutationHeaders(administrator),
+        method: "POST",
+      });
+      expect(issued.status).toBe(201);
+      const memberKey = issuedKeySchema.parse(await issued.json());
+      expect(memberKey.apiKey.principalId).toBe(admitted.id);
+
+      // The member leaves durable, attributed work behind.
+      const work = await publishAndComment(first, memberKey.token);
+
+      // Warm both credentials on both replicas.
+      for (const replica of [first, second]) {
+        // eslint-disable-next-line no-await-in-loop
+        expect(await credentialStatuses(replica, memberSession.header, memberKey.token))
+          .toEqual({key: 200, session: 200});
+      }
+
+      expect((await first.fetch(`/api/v1/members/${admitted.id}/deactivate`, {
+        headers: mutationHeaders(administrator),
+        method: "POST",
+      })).status).toBe(200);
+      const deactivatedAt = Date.now();
+
+      // The handling process refuses at once.
+      expect(await credentialStatuses(first, memberSession.header, memberKey.token))
+        .toEqual({key: 401, session: 401});
+
+      // The other replica refuses within the documented authentication-cache bound.
+      const refusedAt = await waitForRefusal(
+        second,
+        memberSession.header,
+        memberKey.token,
+        deactivatedAt + cacheBoundMilliseconds + cacheBoundSlackMilliseconds,
+      );
+      expect(refusedAt - deactivatedAt)
+        .toBeLessThanOrEqual(cacheBoundMilliseconds + cacheBoundSlackMilliseconds);
+
+      // Provider login is refused without a session or a second binding.
+      const relogin = await signInThroughProvider(second, identity, {
+        password: member.password,
+        username: member.email,
+      });
+      expect(relogin.status).toBeGreaterThanOrEqual(400);
+      expect(issuedSession(relogin)).toBe(false);
+      expect(await runtime.externalIdentityCount(member.email)).toBe(1);
+
+      await expectWorkPreserved(second, administrator, work, admitted.id);
+      deactivatedMember = {id: admitted.id, key: memberKey.token, session: memberSession.header, work};
+    });
+
+    test.runIf(multiReplica)("AUTH-027-F: a deactivated member regains nothing through new bindings, old sessions, keys, or stale caches, and nothing attributed is removed", async () => {
+      const [first, second] = twoReplicas();
+      if (deactivatedMember === null) throw new Error("AUTH-027-B must run first.");
+      const administrator = sessionCookies((await signInThroughProvider(second, identity, {
+        password: runtime.bootstrapAdministrator.password,
+        username: runtime.bootstrapAdministrator.email,
+      })).headers.getSetCookie());
+
+      // The provider account is deleted and recreated with the same email, so
+      // it arrives with a new subject; it still cannot bind to the member.
+      const originalSubject = providerSubjects.get(member.email);
+      if (originalSubject === undefined) throw new Error("The member was never provisioned.");
+      await deleteKeycloakUser(identity.keycloak, originalSubject);
+      const recreatedSubject = await createKeycloakUser(identity.keycloak, {
+        email: member.email,
+        firstName: "Team",
+        lastName: "Member",
+        password: "recreated-keycloak-integration-only",
+        username: member.email,
+      });
+      expect(recreatedSubject).not.toBe(originalSubject);
+      const secondAccount = await signInThroughProvider(first, identity, {
+        password: "recreated-keycloak-integration-only",
+        username: member.email,
+      });
+      expect(secondAccount.status).toBeGreaterThanOrEqual(400);
+      expect(issuedSession(secondAccount)).toBe(false);
+      expect(await runtime.externalIdentityCount(member.email)).toBe(1);
+
+      // Long past the bound, nothing the member held authenticates on either
+      // replica, no request mints a replacement session, and the service
+      // principal and the member's records remain.
+      for (const replica of [first, second]) {
+        // eslint-disable-next-line no-await-in-loop
+        const session = await replica.fetch("/api/v1/session", {
+          headers: {Cookie: deactivatedMember.session},
+        });
+        expect(session.status).toBe(401);
+        expect(issuedSession(session)).toBe(false);
+        // eslint-disable-next-line no-await-in-loop
+        expect((await replica.fetch("/api/v1/artifacts", {
+          headers: {Authorization: `Bearer ${deactivatedMember.key}`},
+        })).status).toBe(401);
+        // eslint-disable-next-line no-await-in-loop
+        expect((await replica.fetch("/api/v1/artifacts", {
+          headers: {Authorization: `Bearer ${runtime.serviceKey}`},
+        })).status).toBe(200);
+        // eslint-disable-next-line no-await-in-loop
+        const members = memberListSchema.parse(await (await replica.fetch("/api/v1/members", {
+          headers: {Cookie: administrator.header},
+        })).json()).members;
+        expect(members.find((entry) => entry.id === deactivatedMember?.id)?.status)
+          .toBe("inactive");
+        // eslint-disable-next-line no-await-in-loop
+        await expectWorkPreserved(replica, administrator, deactivatedMember.work, deactivatedMember.id);
+      }
+    });
   },
 );
+
+function refusalText(refusal: StartupRefusal): string {
+  if (refusal.kind === "unconfigurable") {
+    throw new Error(`${refusal.variable} was expected to be configurable on ${runtime.target}.`);
+  }
+  return refusal.message;
+}
 
 function firstReplica(): ReplicaClient {
   const [first] = runtime.replicas;
@@ -239,4 +413,92 @@ function callMcp(
     headers,
     method: "POST",
   });
+}
+
+function twoReplicas(): readonly [ReplicaClient, ReplicaClient] {
+  const [first, second] = runtime.replicas;
+  if (first === undefined || second === undefined) {
+    throw new Error("This acceptance test needs two replicas.");
+  }
+  if (first.port === second.port) throw new Error("Both clients reach the same replica.");
+  return [first, second];
+}
+
+interface MemberWork {
+  readonly artifactId: string;
+  readonly threadId: string;
+  readonly versionId: string;
+}
+
+async function publishAndComment(client: ReplicaClient, token: string): Promise<MemberWork> {
+  const published = await publishThroughReplica(client, token, "member-owned proof");
+  const thread = await client.fetch(
+    `/api/v1/artifacts/${published.artifactId}/versions/${published.versionId}/comments`,
+    {
+      body: JSON.stringify({body: "member-authored comment"}),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "auth-027-member-comment",
+      },
+      method: "POST",
+    },
+  );
+  expect(thread.status).toBe(201);
+  const threadId = threadSchema.parse(await thread.json()).thread.id;
+  return {...published, threadId};
+}
+
+async function credentialStatuses(
+  client: ReplicaClient,
+  sessionHeader: string,
+  token: string,
+): Promise<{readonly key: number; readonly session: number}> {
+  const [session, key] = await Promise.all([
+    client.fetch("/api/v1/session", {headers: {Cookie: sessionHeader}}),
+    client.fetch("/api/v1/artifacts", {headers: {Authorization: `Bearer ${token}`}}),
+  ]);
+  return {key: key.status, session: session.status};
+}
+
+async function waitForRefusal(
+  client: ReplicaClient,
+  sessionHeader: string,
+  token: string,
+  deadline: number,
+): Promise<number> {
+  for (;;) {
+    // Polling is the behavior under test: refusal must arrive inside the bound.
+    // eslint-disable-next-line no-await-in-loop
+    const statuses = await credentialStatuses(client, sessionHeader, token);
+    if (statuses.session === 401 && statuses.key === 401) return Date.now();
+    if (Date.now() > deadline) {
+      throw new Error(
+        `Replica ${client.endpoint} still accepted the deactivated member at the bound: ${JSON.stringify(statuses)}.`,
+      );
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+}
+
+async function expectWorkPreserved(
+  client: ReplicaClient,
+  administrator: SessionCookies,
+  work: MemberWork,
+  memberId: string,
+): Promise<void> {
+  const headers = {Cookie: administrator.header};
+  const artifact = await client.fetch(`/api/v1/artifacts/${work.artifactId}`, {headers});
+  expect(artifact.status).toBe(200);
+  const comments = JSON.stringify(
+    await (await client.fetch(`/api/v1/artifacts/${work.artifactId}/comments`, {headers})).json(),
+  );
+  expect(comments).toContain(work.threadId);
+  expect(comments).toContain(memberId);
+  const activity = JSON.stringify(
+    await (await client.fetch("/api/v1/activity", {headers})).json(),
+  );
+  expect(activity).toContain(memberId);
+  expect(activity).toContain(work.artifactId);
 }

@@ -3,6 +3,14 @@ import type {PrivateTeamIdentity} from "./identity-environment.js";
 
 export type PrivateTeamTarget = "compact-compose" | "external-compose" | "helm";
 
+/**
+ * How a deployment refused a configuration: the process exited, the package
+ * refused to render it, or the package offers no way to set it at all.
+ */
+export type StartupRefusal =
+  | {readonly kind: "chart" | "process"; readonly message: string}
+  | {readonly kind: "unconfigurable"; readonly variable: string};
+
 /** One packaged private-team deployment the shared acceptance suite can drive. */
 export interface PrivateTeamRuntime {
   readonly bootstrapAdministrator: {readonly email: string; readonly password: string};
@@ -16,9 +24,11 @@ export interface PrivateTeamRuntime {
   destroy(): Promise<void>;
   /**
    * Start with environment overrides (null removes a variable) and resolve with
-   * the refusal text once it is clear no replica will ever report ready.
+   * the refusal once it is clear no replica will ever report ready.
    */
-  expectStartupRefused(overrides: Readonly<Record<string, string | null>>): Promise<string>;
+  expectStartupRefused(
+    overrides: Readonly<Record<string, string | null>>,
+  ): Promise<StartupRefusal>;
   /** Provider bindings recorded for an email, read from the runtime's own store. */
   externalIdentityCount(email: string): Promise<number>;
   /** Start, or restart, with the valid private-team configuration. */
@@ -38,6 +48,8 @@ export async function selectPrivateTeamRuntime(
   switch (target) {
     case "compact-compose":
       return (await import("./compact-compose-runtime.js")).compactComposeRuntime(identity);
+    case "external-compose":
+      return (await import("./external-compose-runtime.js")).externalComposeRuntime(identity);
     default:
       throw new Error(
         `ARTIFACT_SERVER_PRIVATE_TEAM_TARGET must name a packaged runtime; got ${String(target)}.`,
