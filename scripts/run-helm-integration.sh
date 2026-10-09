@@ -23,6 +23,9 @@ readonly artifactserver_minio_volume="${artifactserver_minio_container}-data"
 cleanup() {
   docker unpause "$artifactserver_postgres_container" "$artifactserver_minio_container" >/dev/null 2>&1 || true
   kind delete cluster --name "$artifactserver_cluster_name" >/dev/null 2>&1 || true
+  # The private-team suite runs its own cluster and providers beside this one.
+  kind delete cluster --name "${artifactserver_cluster_name}-team" >/dev/null 2>&1 || true
+  docker rm --force "${artifactserver_cluster_name}-team-postgres" "${artifactserver_cluster_name}-team-minio" >/dev/null 2>&1 || true
   docker rm --force "$artifactserver_postgres_container" "$artifactserver_minio_container" >/dev/null 2>&1 || true
   docker volume rm --force "$artifactserver_postgres_volume" "$artifactserver_minio_volume" >/dev/null 2>&1 || true
   docker image rm --force "$artifactserver_test_image" >/dev/null 2>&1 || true
@@ -46,8 +49,11 @@ export ARTIFACT_SERVER_HELM_POSTGRES_VOLUME="$artifactserver_postgres_volume"
 export ARTIFACT_SERVER_HELM_MINIO_CONTAINER="$artifactserver_minio_container"
 export ARTIFACT_SERVER_HELM_MINIO_VOLUME="$artifactserver_minio_volume"
 
-pnpm exec vitest run \
-  --config tests/configs/vitest.helm.config.ts \
-  --reporter=default \
-  --reporter=json \
-  --outputFile.json=project/evidence/helm-kubernetes.json
+export ARTIFACT_SERVER_PRIVATE_TEAM_TARGET=helm
+
+"$artifactserver_repository/scripts/with-private-team-identity.sh" \
+  pnpm exec vitest run \
+    --config tests/configs/vitest.helm.config.ts \
+    --reporter=default \
+    --reporter=json \
+    --outputFile.json=project/evidence/helm-kubernetes.json

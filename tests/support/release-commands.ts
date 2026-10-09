@@ -3,7 +3,8 @@ import {createServer} from "node:net";
 
 import {z} from "zod";
 
-const commandFailureSchema = z.object({code: z.coerce.number().int().optional()});
+// A missing executable reports a string code such as ENOENT instead of an exit status.
+const commandFailureSchema = z.object({code: z.union([z.number().int(), z.string()]).optional()});
 const addressSchema = z.object({port: z.number().int().positive()});
 
 export interface CommandResult {
@@ -36,14 +37,13 @@ export function command(
       env: options.environment ?? process.env,
       maxBuffer: 16 * 1024 * 1024,
     }, (error, stdout, stderr) => {
-      const parsedFailure = commandFailureSchema.safeParse(error);
-      const exitCode = parsedFailure.success
-        ? parsedFailure.data.code ?? 1
-        : error === null ? 0 : 1;
+      const code = commandFailureSchema.safeParse(error).data?.code;
+      const exitStatus = z.number().int().safeParse(code);
+      const exitCode = error === null ? 0 : exitStatus.success ? exitStatus.data : 1;
       const result = {exitCode, stderr: redact(stderr), stdout: redact(stdout)};
       if (error !== null && options.allowFailure !== true) {
         reject(new Error(
-          `${executable} ${arguments_.join(" ")} failed (${exitCode}): ${result.stderr}`,
+          `${executable} ${arguments_.join(" ")} failed (${code ?? exitCode}): ${result.stderr}`,
         ));
         return;
       }

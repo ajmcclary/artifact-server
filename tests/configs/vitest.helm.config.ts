@@ -4,7 +4,10 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     hookTimeout: 600_000,
-    include: ["tests/release/helm-chart.test.ts"],
+    include: [
+      "tests/release/helm-chart.test.ts",
+      "tests/release/private-team-access.test.ts",
+    ],
     testTimeout: 900_000,
   },
 });

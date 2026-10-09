@@ -50,6 +50,8 @@ export async function selectPrivateTeamRuntime(
       return (await import("./compact-compose-runtime.js")).compactComposeRuntime(identity);
     case "external-compose":
       return (await import("./external-compose-runtime.js")).externalComposeRuntime(identity);
+    case "helm":
+      return (await import("./helm-runtime.js")).helmRuntime(identity);
     default:
       throw new Error(
         `ARTIFACT_SERVER_PRIVATE_TEAM_TARGET must name a packaged runtime; got ${String(target)}.`,
