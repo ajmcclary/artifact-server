@@ -34,7 +34,9 @@ fi
 
 artifactserver_restart() {
   if [[ "$artifactserver_was_running" == "true" ]]; then
-    artifactserver_compose up --detach --wait artifact-server >/dev/null
+    # Restart the stopped container as it was created, so operator overlays
+    # such as compose.identity-ca.yaml stay applied.
+    artifactserver_compose start --wait artifact-server >/dev/null
   fi
 }
 trap artifactserver_restart EXIT

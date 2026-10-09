@@ -406,6 +406,38 @@ describe.sequential("Compact Compose release", () => {
     expect(await isReady(incompleteIdentity.port)).toBe(false);
   });
 
+  test("a backup restarts the server with the operator's identity CA overlay intact", async () => {
+    const project = await createProject("compact-backup-ca");
+    const workspace = await temporaryDirectory("artifact-server-compose-ca-");
+    const caFile = path.join(workspace, "identity-ca.pem");
+    await writeFile(caFile, "operator identity CA bundle\n", {mode: 0o644});
+    const environment = {...project.environment, ARTIFACT_SERVER_IDENTITY_CA_FILE: caFile};
+    const withOverlay = (arguments_: readonly string[]) => command("docker", [
+      "compose",
+      "--file", composeFile,
+      "--file", path.join(repositoryRoot, "packaging/compose/compose.identity-ca.yaml"),
+      ...arguments_,
+    ], environment);
+    await initialize(project);
+    await withOverlay(["up", "--detach", "--wait", "--wait-timeout", "30", "artifact-server"]);
+    await waitForReady(project.port);
+    const trustsCa = async (): Promise<boolean> => {
+      const inspected = await command("docker", [
+        "inspect", "--format", "{{json .Config.Env}}", await serviceContainerId(project),
+      ]);
+      return z.array(z.string()).parse(JSON.parse(inspected.stdout))
+        .includes("NODE_EXTRA_CA_CERTS=/etc/artifact-server/identity-ca.pem");
+    };
+    expect(await trustsCa()).toBe(true);
+
+    await command("bash", [
+      backupScript,
+      path.join(workspace, "backup"),
+    ], environment);
+    await waitForReady(project.port);
+    expect(await trustsCa()).toBe(true);
+  });
+
   test("OPS-003-F: restore rejects corruption, incomplete backups, running targets, and nonempty volumes", async () => {
     const source = await createProject("compact-backup-source");
     await initialize(source);
