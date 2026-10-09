@@ -40,6 +40,11 @@ jobs:
         run: docker info --format '{{json .DriverStatus}}' | grep -F 'io.containerd.snapshotter.v1'
       - name: Prepare the home runner
         run: scripts/prepare-home-runner.sh
+      - name: Docker Hub pulls go through the in-cluster cache
+        run: |
+          docker info --format '{{json .RegistryConfig.Mirrors}}'
+          docker pull busybox:1.37.0
+          curl -fsS http://dockerhub-cache.arc-runners.svc.cluster.local:5000/v2/_catalog | grep -F '"library/busybox"'
       - name: Tools the full gate takes from the runner are present
         run: |
           missing=()
