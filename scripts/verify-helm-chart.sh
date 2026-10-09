@@ -109,6 +109,32 @@ expect_render_failure "podLabels cannot replace the chart-owned label" \
   "${artifactserver_values[@]}" \
   --set-string podLabels.app\\.kubernetes\\.io/component=other
 
+# A private-CA identity provider is trusted only when the operator names a ConfigMap.
+artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+  --kube-version 1.36.0 "${artifactserver_values[@]}")
+if [[ "$artifactserver_rendered" == *NODE_EXTRA_CA_CERTS* ]]; then
+  echo "The chart trusts an identity CA nobody configured." >&2
+  exit 1
+fi
+artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+  --kube-version 1.36.0 "${artifactserver_values[@]}" \
+  --set identity.trustedCertificateAuthorities.configMapName=identity-ca)
+for artifactserver_expected_line in \
+  'name: NODE_EXTRA_CA_CERTS' \
+  'value: "/etc/artifact-server/identity-ca/ca.crt"' \
+  'mountPath: /etc/artifact-server/identity-ca' \
+  'name: "identity-ca"'; do
+  if [[ "$artifactserver_rendered" != *"$artifactserver_expected_line"* ]]; then
+    echo "The trusted identity CA rendering lacks: $artifactserver_expected_line" >&2
+    exit 1
+  fi
+done
+
+expect_render_failure "trustedCertificateAuthorities" \
+  "${artifactserver_values[@]}" \
+  --set identity.trustedCertificateAuthorities.configMapName=identity-ca \
+  --set identity.trustedCertificateAuthorities.key=../escape
+
 mkdir -p -- "$artifactserver_repository/release"
 helm package "$artifactserver_chart" \
   --destination "$artifactserver_repository/release" >/dev/null

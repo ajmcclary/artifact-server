@@ -1,0 +1,11 @@
+# Trust a private certificate authority for the identity provider.
+# Add after the other files: docker compose -f compose.yaml [...] -f compose.identity-ca.yaml up
+services:
+  artifact-server:
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/artifact-server/identity-ca.pem
+    volumes:
+      - type: bind
+        source: ${ARTIFACT_SERVER_IDENTITY_CA_FILE:?Set ARTIFACT_SERVER_IDENTITY_CA_FILE to the identity provider CA bundle}
+        target: /etc/artifact-server/identity-ca.pem
+        read_only: true

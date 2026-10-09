@@ -85,6 +85,12 @@ spec:
             - "8787"
           env:
             {{- include "artifact-server.runtimeEnvironment" . | nindent 12 }}
+            {{- with .Values.identity.trustedCertificateAuthorities }}
+            {{- if .configMapName }}
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/artifact-server/identity-ca/{{ .key }}"
+            {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8787
@@ -120,6 +126,11 @@ spec:
               readOnly: true
             - name: temporary
               mountPath: /tmp
+            {{- if .Values.identity.trustedCertificateAuthorities.configMapName }}
+            - name: identity-ca
+              mountPath: /etc/artifact-server/identity-ca
+              readOnly: true
+            {{- end }}
       volumes:
         - name: runtime-secrets
           secret:
@@ -131,3 +142,14 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 64Mi
+        {{- with .Values.identity.trustedCertificateAuthorities }}
+        {{- if .configMapName }}
+        - name: identity-ca
+          configMap:
+            name: {{ .configMapName | quote }}
+            defaultMode: 292
+            items:
+              - key: {{ .key | quote }}
+                path: {{ .key | quote }}
+        {{- end }}
+        {{- end }}

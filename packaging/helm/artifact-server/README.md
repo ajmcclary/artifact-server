@@ -145,6 +145,13 @@ or an RFC 8707 resource indicator.
 One installation has one browser-login provider. The chart rejects values that
 configure neither provider or configure WorkOS and OIDC together.
 
+When the provider's HTTPS certificate is issued by your own certificate
+authority, put the PEM bundle in a ConfigMap and set
+`identity.trustedCertificateAuthorities.configMapName` to its name
+(`identity.trustedCertificateAuthorities.key` defaults to `ca.crt`). The chart
+mounts it read-only and points `NODE_EXTRA_CA_CERTS` at it, which adds those
+authorities to the default trust store rather than replacing it.
+
 ## NetworkPolicy
 
 NetworkPolicy is disabled by default. Standard Kubernetes policies cannot allow

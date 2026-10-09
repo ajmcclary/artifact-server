@@ -137,7 +137,16 @@
         "workosIssuer": {"type": "string"},
         "oidcClientId": {"type": "string"},
         "oidcIssuer": {"type": "string"},
-        "oidcScopes": {"type": "string"}
+        "oidcScopes": {"type": "string"},
+        "trustedCertificateAuthorities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["configMapName", "key"],
+          "properties": {
+            "configMapName": {"type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"},
+            "key": {"type": "string", "maxLength": 253, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+          }
+        }
       }
     },
     "serviceAccount": {

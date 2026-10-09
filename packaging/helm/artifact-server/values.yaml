@@ -45,6 +45,11 @@ identity:
   oidcClientId: ""
   oidcIssuer: ""
   oidcScopes: ""
+  # Trust a private certificate authority for the identity provider. Name a
+  # ConfigMap holding the PEM bundle; it adds to the default trust store.
+  trustedCertificateAuthorities:
+    configMapName: ""
+    key: ca.crt
 
 serviceAccount:
   create: true

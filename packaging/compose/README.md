@@ -161,6 +161,15 @@ One installation has one browser-login provider. Setting any
 `ARTIFACT_SERVER_WORKOS_` variable together with any `ARTIFACT_SERVER_OIDC_`
 variable makes startup fail, and so does partial OIDC configuration.
 
+### Identity provider with a private CA
+
+When the provider's HTTPS certificate is issued by your own certificate
+authority, add `compose.identity-ca.yaml` as the last `-f` file and set
+`ARTIFACT_SERVER_IDENTITY_CA_FILE` to the PEM bundle on the host. The overlay
+mounts the bundle read-only and points `NODE_EXTRA_CA_CERTS` at it, which adds
+those authorities to the default trust store rather than replacing it. Without
+it, discovery fails and the server logs `discovery_failed`.
+
 ## Limits
 
 - Exactly one Artifact Server application process is supported.
