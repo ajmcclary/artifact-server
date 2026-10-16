@@ -351,6 +351,18 @@ server as `invalid`.
 **Activity, Projects and Admin.** Record team-deployment browser evidence for
 ACT-005, ACT-006 and ADM-008.
 
+**Artifact rename events in Activity.** Surface the existing `rename` audit
+action in the Activity feed; it is currently excluded by the feed's kind mapping.
+Show who renamed the artifact, when, and **old name → new name**, with a link to
+the same artifact and its project. Capture both names when the rename commits so
+later renames cannot rewrite the event's history. Cover renames from the API,
+MCP, CLI and Details editor. Each successful rename produces one event; retries,
+idempotent replays and failed requests produce no additional event. Preserve
+existing access rules and make the event work with project, type, people and
+search filters. Add normal and hostile API/feed/browser acceptance tests across
+SQLite, Postgres and D1, with durable evidence. *Contracts* ART-012/013/014,
+ACT-001/003/005/008. *Gates* V/B, plus E for Postgres persistence changes.
+
 **CI.**
 - The macOS portability job reaches its 12-minute limit in "Verify portable
   code paths" on every recent run, so macOS has had no complete CI run. Find
