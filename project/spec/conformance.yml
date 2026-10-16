@@ -443,7 +443,7 @@ requirements:
       failure: {id: ART-012-F, description: "Empty, overlong, ill-formed Unicode, control-character and format-character names and unknown input fields are refused without a partial metadata change, version or audit action."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Kubernetes migration, rollout, compiled surface delivery and anonymous rename refusal are recorded in project/evidence/artifact-rename-deployment-2026-10-16.json. The owner reported a successful live rename on October 16. Full hosted success, failure and replay cases and complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remain unrecorded.
     depends_on: [ART-001, ART-004, ART-009, AUD-001]
     evidence:
       - deployment: local
@@ -468,7 +468,7 @@ requirements:
       failure: {id: ART-013-F, description: "Anonymous, read-only, cross-project, archived-project, tombstoned and unknown-artifact requests, stale name/version expectations and conflicting idempotency input cannot rename or disclose inaccessible artifacts."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Kubernetes migration, rollout, compiled surface delivery and anonymous rename refusal are recorded in project/evidence/artifact-rename-deployment-2026-10-16.json. The owner reported a successful live rename on October 16. Full hosted success, failure and replay cases and complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remain unrecorded.
     depends_on: [ART-012, AUTH-008, AUTH-009, MCP-009]
     evidence:
       - deployment: local
@@ -493,7 +493,7 @@ requirements:
       failure: {id: ART-014-F, description: "MCP and CLI report invalid input and stale expectations without mutation; an obsolete explicit publish name fails without rebinding, and a failed Details edit preserves input and permits retry, and Cancel restores the current name."}
     deployments: *all
     status: behavior_verified
-    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Kubernetes migration, rollout, compiled surface delivery and anonymous rename refusal are recorded in project/evidence/artifact-rename-deployment-2026-10-16.json. The owner reported a successful live rename on October 16. Full hosted success, failure and replay cases and complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remain unrecorded.
     depends_on: [ART-012, ART-013, CLI-001, MCP-009]
     evidence:
       - deployment: local

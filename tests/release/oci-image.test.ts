@@ -12,10 +12,9 @@ import {z} from "zod";
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const apiToken =
   `as_key_key_${randomUUID()}_${randomBytes(32).toString("base64url")}`;
-const browserToken = "oci-browser-token-abcdefghijklmnopqrstuvwxyz012345";
 const applicationOrigin = "https://artifacts.example.com";
 const contentDomain = "content.example.net";
-const sensitiveValues = new Set([apiToken, browserToken]);
+const sensitiveValues = new Set([apiToken]);
 const runtimeResources = {
   containers: new Set<string>(),
   directories: new Set<string>(),
@@ -422,7 +421,6 @@ function externalRuntimeEnvironment(input: {
     ARTIFACT_SERVER_CONTENT_DOMAIN: contentDomain,
     ARTIFACT_SERVER_DATABASE_URL: input.providers.dockerDatabaseUrl,
     ARTIFACT_SERVER_INSTALLATION_ID: input.installationId,
-    ARTIFACT_SERVER_LOCAL_BOOTSTRAP_TOKEN: browserToken,
     ARTIFACT_SERVER_OIDC_CLIENT_ID: "oci-image-integration",
     ARTIFACT_SERVER_OIDC_ISSUER: "https://identity.example.test",
     ARTIFACT_SERVER_ORIGIN: applicationOrigin,

@@ -1,0 +1,122 @@
+{
+  "recordedAt": "2026-10-16T22:06:55.065521+00:00",
+  "runtimeSourceRevision": "eb1ab7196a60355a3fcf86a821a02bb346e052c7",
+  "implementationRevision": "ff2d3cf26bf28fa07aa2b4f6467d3ac5f779a63c",
+  "image": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+  "imageWorkflow": {
+    "url": "https://github.com/ajmcclary/artifact-server/actions/runs/38972805647",
+    "digestSource": "Print digest step",
+    "conclusion": "success"
+  },
+  "workspacePinCommit": "de5b9db9b8205eae9d9ea4d4e683083d586aa4d5",
+  "gitops": {
+    "application": "artifact-server",
+    "sync": "Synced",
+    "health": "Healthy",
+    "operation": "Succeeded",
+    "rootRevision": "de5b9db9b8205eae9d9ea4d4e683083d586aa4d5"
+  },
+  "migration": {
+    "job": "artifact-server-migrate",
+    "hookPhase": "Succeeded",
+    "status": {
+      "compatibility": "current",
+      "currentVersion": 23,
+      "requiredVersion": 23
+    }
+  },
+  "deployment": {
+    "namespace": "artifact-server",
+    "replicas": 4,
+    "readyReplicas": 4,
+    "availableReplicas": 4,
+    "pods": [
+      {
+        "name": "artifact-server-5f5757958c-2b2g9",
+        "image": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "imageId": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "restartCount": 0
+      },
+      {
+        "name": "artifact-server-5f5757958c-8wz6w",
+        "image": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "imageId": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "restartCount": 0
+      },
+      {
+        "name": "artifact-server-5f5757958c-lwrwp",
+        "image": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "imageId": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "restartCount": 0
+      },
+      {
+        "name": "artifact-server-5f5757958c-vcxhn",
+        "image": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "imageId": "ghcr.io/ajmcclary/artifact-server@sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+        "restartCount": 0
+      }
+    ]
+  },
+  "compiledSurfaces": {
+    "imageRevisionMatches": true,
+    "renameCliHelp": "Observed rename <artifact> <name> with expected-name, expected-version and idempotency-key flags.",
+    "mcpCatalogContainsArtifactRename": true
+  },
+  "http": {
+    "recordedAt": "2026-10-16T22:05:48.727755+00:00",
+    "origin": "https://artifacts.backend.app",
+    "health": {
+      "status": "ok"
+    },
+    "ready": {
+      "components": {
+        "configuration": {
+          "latencyMilliseconds": 0,
+          "status": "ready"
+        },
+        "database": {
+          "latencyMilliseconds": 91.16144599999825,
+          "status": "ready"
+        },
+        "migrations": {
+          "latencyMilliseconds": 150.5917530000006,
+          "status": "ready"
+        },
+        "objectStorage": {
+          "latencyMilliseconds": 129.34510299999965,
+          "status": "ready"
+        }
+      },
+      "status": "ready",
+      "lifecycle": "ready"
+    },
+    "servedDetailsEditor": {
+      "path": "/assets/review-CfhxoOmP.js",
+      "sha256": "d946720f4622dc3d174ea8cd33b2494fccb95a9cf27e6ee8d0743445de79b457",
+      "labels": [
+        "Artifact name",
+        "Save name",
+        "Reload current details"
+      ]
+    },
+    "unauthenticatedRename": {
+      "status": 401,
+      "code": "AUTHENTICATION_REQUIRED"
+    },
+    "scope": "Read-only delivery and authorization refusal checks; no artifact data was renamed and no authenticated hosted browser interaction was exercised."
+  },
+  "qualificationLimits": [
+    "The owner confirms a successful live rename. Full hosted browser, concurrency, replay and hostile-case evidence remains unrecorded.",
+    "Complete deployed Cloudflare, AWS and GCP rename conformance remains unrecorded."
+  ],
+  "workspaceIsolation": "The published pin commit changes only the two deployment files. Five pre-existing local Claudius commits and in-progress edits were preserved; a local merge incorporates the remote pin without publishing the unrelated work.",
+  "ownerReportedVerification": {
+    "recordedAt": "2026-10-16T22:07:45.805750+00:00",
+    "messages": [
+      "i did a rename",
+      "It worked"
+    ],
+    "result": "Owner confirms a successful live rename.",
+    "scope": "The exact artifact, new name, client surface and replay/failure cases were not captured."
+  }
+}

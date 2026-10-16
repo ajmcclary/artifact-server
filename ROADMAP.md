@@ -17,32 +17,37 @@ kept so older evidence and ledger text still resolve. They are not conformance I
 
 ## Next priority
 
-- **Release artifact renaming.** API, MCP (`artifact_rename`), CLI (`rename`)
-  and editable Details side-panel implementation is complete, with local behavior and hostile-test
-  evidence attached to ART-012 … ART-014 in the ledger. Postgres and local D1
-  regressions cover conditional writes and replay; deployed qualification remains
-  open. Ship the tested build through GitOps, then apply the requested Apple
-  Systems project renames by stable artifact ID: **Apple Systems Design System →
-  Design System** and **Apple Systems Projects → Projects**. They have not been
-  applied to production by this implementation task. Update publisher commands or
-  groups that explicitly repeat an old creation name; remembered ID bindings
-  continue to work without `--name`.
+- **Reconcile publisher names after renaming.** The planned Apple Systems names
+  are **Apple Systems Design System → Design System** and **Apple Systems
+  Projects → Projects**. The owner confirmed a successful live rename on
+  October 16; its exact artifact and new name were not recorded here. Recheck
+  current names before applying another change by stable artifact ID. Update
+  publisher commands or groups that explicitly repeat an old creation name;
+  remembered ID bindings continue to work without `--name`. The feature is
+  deployed across API, MCP (`artifact_rename`), CLI (`rename`) and an editable
+  name in the Details side panel. ART-012 … ART-014 retain their recorded
+  qualification gaps in the ledger.
 
 ## Current deployment
 
 artifacts.backend.app runs image
-`sha256:319c1d7e9ac12fdf496d65c87332060bdc54e0f638e56bdd36d838c89917411c`
-(Artifact Server `27fd3a0`, Workspace `9ffbf00ac`, deployed October 9); all four
-server pods run it and Argo reports Synced and Healthy. The Design checkout
-(`~/Dev/Design`) is at `5704154`. Recheck both before relying on this.
+`sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68`
+(Artifact Server `eb1ab71`, Workspace pin `de5b9db9b`, deployed October 16).
+All four server replicas are ready on that image, Postgres schema 23 is current,
+and ArgoCD reports Synced and Healthy. Health, readiness, compiled CLI/MCP
+surfaces, served Details editor code and anonymous rename refusal passed;
+the owner also confirmed a successful live rename. Full hosted success,
+failure and replay coverage remains unqualified. See the
+[deployment record](project/evidence/artifact-rename-deployment-2026-10-16.json).
 
-`pnpm verify:iteration` passed on October 9 on the private-team branch, whose
-code matches `main` apart from the image workflow and ledger. The unit stage
-needed reruns past two load-timeout flakes in process-spawning CLI tests
-(`lifecycle-cli` "foundation" and `local-cli` "credential-free URL"); every
-later stage then passed in one run. The home-runner CI gate on `bb3269d` passed
-on rerun after a first attempt in which the whole unit stage ran about twice as
-slowly as usual.
+`pnpm verify:iteration` passed on October 16 for rename implementation `ff2d3cf`,
+including 149 browser tests and the packaged private-team suites. Smoke and the
+bounded external-storage performance check also passed. The release then
+refreshed the checksum of AWS's public RDS certificate bundle after upstream
+bytes changed; all three OCI image checks passed with the refreshed pin. The
+OCI external-storage fixture's obsolete, unused local browser token was removed
+because private-team startup correctly refuses it; API publication and
+replacement checks remain intact.
 
 Deploying follows GitOps: take the digest only from `image.yml`'s "Print digest"
 step, then pin it in `~/Workspace` at

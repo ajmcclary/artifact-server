@@ -42,8 +42,27 @@
     "d1": 19
   },
   "remainingProofGaps": [
-    "Production rename mutations and hosted browser behavior have not been qualified.",
+    "The owner confirms a successful live rename; complete hosted success, failure, concurrency and replay coverage remains unqualified.",
     "Cloudflare, AWS and GCP full deployed rename surfaces remain unqualified; local providers and containers do not establish live-provider qualification."
   ],
-  "verificationLogSha256": "3a22daabdca5998fff6f58102284014b6c663265d00fc75ea89fa02251161459"
+  "verificationLogSha256": "3a22daabdca5998fff6f58102284014b6c663265d00fc75ea89fa02251161459",
+  "releaseFollowup": {
+    "runtimeRevision": "eb1ab7196a60355a3fcf86a821a02bb346e052c7",
+    "checks": {
+      "pnpm test:oci-image": {
+        "exitCode": 0,
+        "tests": 3,
+        "evidence": "project/evidence/oci-image.json"
+      },
+      "pnpm lint": {
+        "exitCode": 0
+      },
+      "pnpm typecheck": {
+        "exitCode": 0
+      }
+    },
+    "certificatePinEvidence": "project/evidence/aws-rds-trust-bundle-2026-10-16.json",
+    "fixtureCorrection": "The extra OCI check exposed an unused local browser bootstrap token in the private-team external-storage fixture. Remove that obsolete setting; retain publication, byte delivery, replacement and shutdown assertions.",
+    "deploymentEvidence": "project/evidence/artifact-rename-deployment-2026-10-16.json"
+  }
 }
