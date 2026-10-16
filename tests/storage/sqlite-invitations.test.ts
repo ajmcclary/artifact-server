@@ -3,6 +3,7 @@ import {mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import {DatabaseSync} from "node:sqlite";
+import {requiredSqliteSchemaVersion} from "../../src/storage/sqlite-schema.js";
 
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
@@ -178,7 +179,7 @@ describe("SQLite invitation migration", () => {
         try {
           expect(check.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
           expect(z.object({user_version: z.number()}).parse(check.prepare("PRAGMA user_version").get()).user_version)
-            .toBe(21);
+            .toBe(requiredSqliteSchemaVersion);
         } finally {
           check.close();
         }

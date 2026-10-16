@@ -42,7 +42,7 @@ describe("Library items", () => {
   it("DSN-005: keeps repeated paths distinct per artifact, names project and gallery, and pins media to the loaded version", () => {
     const items = libraryItems(sources, (source, path) => `/media/${source.artifactId}/${source.versionId}/${path}`);
     expect(items.map((candidate) => [candidate.id, candidate.project, candidate.gallery, candidate.kind, candidate.thumbnailUrl])).toEqual([
-      [libraryItemId("art_a", "project/App.dc.html"), "Compensation", "Workers' Compensation", "prototype", "/media/art_a/ver_a2/preview-thumbnails/app.webp"],
+      [libraryItemId("art_a", "project/App.dc.html"), "Compensation", "workers-compensation", "prototype", "/media/art_a/ver_a2/preview-thumbnails/app.webp"],
       [libraryItemId("art_b", "project/App.dc.html"), "Claims", "Court of Claims", "document", null],
     ]);
     expect([items[0]?.createdAt, items[0]?.activityAt]).toEqual([100, 300]);
@@ -54,7 +54,7 @@ describe("Library items", () => {
     const items = libraryItems(sources, (source, path) => `/media/${source.artifactId}/${source.versionId}/${path}`);
     expect(titled(filterLibrary(items, "", [], ["Claims"]))).toEqual(["Court of Claims"]);
     expect(titled(filterLibrary(items, "", [], ["Claims", "Compensation"]))).toHaveLength(2);
-    expect(titled(filterLibrary(items, "", ["prototype"], ["Claims", "Compensation"]))).toEqual(["Workers' Compensation"]);
+    expect(titled(filterLibrary(items, "", ["prototype"], ["Claims", "Compensation"]))).toEqual(["workers-compensation"]);
     expect(filterLibrary(items, "", ["prototype"], ["Claims"])).toEqual([]);
     expect(filterLibrary(items, "workers", [], ["Claims"])).toEqual([]);
     // An empty project list allows every project.

@@ -861,6 +861,44 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     await oidcProvider.stop();
   });
 
+  test("Postgres rename serializes across processes and replays after restart without replacing later metadata", async () => {
+    const identity = {apiToken: managedTestKey("rename-runtime"), installationId: "postgres-rename-runtime"};
+    const migrated = await runExternalCli(["migrate", "apply"], {
+      ARTIFACT_SERVER_DATABASE_URL: environment.databaseUrl,
+      ARTIFACT_SERVER_INSTALLATION_ID: identity.installationId,
+    });
+    expect(migrated).toMatchObject({exitCode: 0});
+    const [first, second] = await Promise.all([
+      startExternalStorageProcess(environment, identity), startExternalStorageProcess(environment, identity),
+    ]);
+    const initial = await publishNew(first.baseUrl, identity.apiToken, {
+      name: "Before", content: "<h1>Preserved rename bytes</h1>", idempotencyKey: randomUUID(),
+    });
+    const rename = (baseUrl: string, expectedName: string, name: string, key: string) => mutateArtifact(
+      baseUrl, identity.apiToken, `/api/v1/artifacts/${initial.body.artifact.id}/name`, "PATCH", key,
+      {expectedCurrentVersionId: initial.body.version.id, expectedName, name},
+    );
+    const firstKey = randomUUID();
+    const secondKey = randomUUID();
+    const attempts = await Promise.all([rename(first.baseUrl, "Before", "First", firstKey), rename(second.baseUrl, "Before", "Second", secondKey)]);
+    expect(attempts.map((response) => response.status).toSorted((a, b) => a - b)).toEqual([200, 409]);
+    const firstWon = attempts[0]?.status === 200;
+    const winningName = firstWon ? "First" : "Second";
+    const winningKey = firstWon ? firstKey : secondKey;
+    expect((await rename(second.baseUrl, winningName, "Latest", randomUUID())).status).toBe(200);
+    await Promise.all([first.stop(), second.stop()]);
+    const restarted = await startExternalStorageProcess(environment, identity);
+    const replayed = await rename(restarted.baseUrl, "Before", winningName, winningKey);
+    expect(replayed.status).toBe(200);
+    expect(await replayed.json()).toMatchObject({artifact: {id: initial.body.artifact.id, name: winningName}, replayed: true});
+    const listed = await listArtifacts(restarted.baseUrl, identity.apiToken);
+    expect(listed.body.artifacts).toEqual([expect.objectContaining({artifact: expect.objectContaining({name: "Latest", currentVersionId: initial.body.version.id})})]);
+    expect((await rename(restarted.baseUrl, "Latest", "Changed replay", winningKey)).status).toBe(409);
+    const content = await fetchContentThroughServer(restarted.baseUrl, initial.body.links.version);
+    expect(content.status).toBe(200);
+    expect(await content.text()).toBe("<h1>Preserved rename bytes</h1>");
+  });
+
   test("PUB-011-B PUB-011-F: independent external-storage processes accept uploaded bytes, reject remote sources, serialize writes, restart, and isolate installations", async () => {
     expect.hasAssertions();
     const [first, second] = await Promise.all([
@@ -3243,6 +3281,7 @@ function patchCommentThread(
 }
 
 type ArtifactMutationBody =
+  | {readonly expectedCurrentVersionId: string; readonly expectedName: string; readonly name: string}
   | {readonly expectedCurrentVersionId: string}
   | {
     readonly accessSetting: "account_required" | "public_link";

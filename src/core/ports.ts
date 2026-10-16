@@ -192,6 +192,21 @@ export interface ChangeArtifactAccessSetting {
   readonly projectId: string;
 }
 
+/** Values used to atomically rename artifact metadata. */
+export interface RenameArtifact {
+  readonly actor: ActorSnapshot;
+  readonly artifactId: string;
+  readonly authorizedByPrincipalId: string | null;
+  readonly createdAt: string;
+  readonly expectedCurrentVersionId: string;
+  readonly expectedName: string;
+  readonly idempotencyKey: string;
+  readonly inputDigest: string;
+  readonly name: string;
+  readonly principalId: string;
+  readonly projectId: string;
+}
+
 /** Values used to atomically replace one artifact's complete tag set. */
 export interface ChangeArtifactTags {
   /** Display-name snapshot recorded with the action (ACT-001). */
@@ -818,6 +833,7 @@ export interface ArtifactRepository {
   commitVersion(command: CommitArtifactVersion): Promise<PublishedVersion>;
   changeAccessSetting(command: ChangeArtifactAccessSetting): Promise<ArtifactState>;
   changeTags(command: ChangeArtifactTags): Promise<ArtifactState>;
+  renameArtifact(command: RenameArtifact): Promise<ArtifactState>;
   deleteArtifact(command: DeleteArtifact): Promise<ArtifactDeletion>;
   findArtifact(projectId: string, artifactId: string): Promise<ArtifactRecord | null>;
   findArtifactForAdministration(

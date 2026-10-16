@@ -21,7 +21,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 18;
+export const requiredD1SchemaVersion = 19;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -672,6 +672,7 @@ export async function migrateD1(
   await addInstallationInvitesIfMissing(database);
   await widenMemberAdmissionIfNeeded(database);
   await widenActionKindsIfNeeded(database);
+  await widenRenameIdempotencyIfNeeded(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -1030,4 +1031,20 @@ async function widenRegisteredAgentsIfNeeded(
     widenRegisteredAgentsStatements.map((statement) =>
       database.prepare(statement)),
   );
+}
+
+async function widenRenameIdempotencyIfNeeded(database: D1Database): Promise<void> {
+  const sql = await database.prepare(
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'idempotency_records'",
+  ).first<string>("sql");
+  if (sql === null || sql.includes("'rename'")) return;
+  const widened = sql.replace(/CREATE TABLE(?: IF NOT EXISTS)? "?idempotency_records"?/iu,
+    "CREATE TABLE idempotency_records_renamed").replace("'delete'", "'rename', 'delete'");
+  await database.batch([
+    database.prepare(widened),
+    database.prepare(`INSERT INTO idempotency_records_renamed
+      SELECT * FROM idempotency_records`),
+    database.prepare("DROP TABLE idempotency_records"),
+    database.prepare("ALTER TABLE idempotency_records_renamed RENAME TO idempotency_records"),
+  ]);
 }

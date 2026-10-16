@@ -351,6 +351,7 @@ export interface ArtifactAction {
     | "capture"
     | "change_access"
     | "change_tags"
+    | "rename"
     | "comment_create"
     | "comment_delete"
     | "comment_reopen"
@@ -450,6 +451,7 @@ const actionSchema: z.ZodType<ArtifactAction> = z.object({
     "capture",
     "change_access",
     "change_tags",
+    "rename",
     "comment_create",
     "comment_delete",
     "comment_reopen",
@@ -1185,6 +1187,22 @@ export const api = {
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}/access?${projectQuery(projectId)}`,
     {
       body: JSON.stringify({ accessSetting, expectedCurrentVersionId }),
+      headers: mutationHeaders(idempotencyKey),
+      method: "PATCH",
+    },
+  ),
+  renameArtifact: (
+    projectId: string,
+    artifactId: string,
+    expectedCurrentVersionId: string,
+    expectedName: string,
+    name: string,
+    idempotencyKey: string,
+  ) => request(
+    artifactStateSchema,
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/name?${projectQuery(projectId)}`,
+    {
+      body: JSON.stringify({expectedCurrentVersionId, expectedName, name}),
       headers: mutationHeaders(idempotencyKey),
       method: "PATCH",
     },

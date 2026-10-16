@@ -35,6 +35,11 @@ export type LibraryState =
 // Kept for the session so browser Back returns to the same moving view without refetching.
 const loadedLibraries = new Map<string, LoadedLibrary>();
 
+/** A metadata mutation invalidates the cached moving view before the next visit. */
+export function invalidateDesignLibrary(): void {
+  loadedLibraries.clear();
+}
+
 /** Read the server-assembled Library; null once `wanted` turns false. */
 async function loadLibrary(wanted: () => boolean): Promise<LoadedLibrary | null> {
   const response = await api.library();

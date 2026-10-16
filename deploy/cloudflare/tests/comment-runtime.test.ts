@@ -101,6 +101,56 @@ afterAll(async () => {
 });
 
 describe("Cloudflare D1 comments", () => {
+  it("renames through D1 with atomic stale-name guards, search and durable replay", async () => {
+    const renameDirectory = await mkdtemp(join(tmpdir(), "artifact-rename-d1-"));
+    let target = await startWorker(renameDirectory);
+    try {
+    const published = await publishArtifact(target, "rename-d1-publish");
+    await target.stop();
+    const predecessor = new DatabaseSync(await findD1DatabaseFile(renameDirectory));
+    try {
+      const {sql} = z.object({sql: z.string()}).parse(predecessor.prepare(
+        "SELECT sql FROM sqlite_schema WHERE name = 'idempotency_records'",
+      ).get());
+      const oldSchema = sql.replace(/CREATE TABLE(?: IF NOT EXISTS)? "?idempotency_records"?/iu,
+        "CREATE TABLE idempotency_records_previous").replace(", 'rename'", "");
+      predecessor.exec(`BEGIN; ${oldSchema};
+        INSERT INTO idempotency_records_previous SELECT * FROM idempotency_records;
+        DROP TABLE idempotency_records;
+        ALTER TABLE idempotency_records_previous RENAME TO idempotency_records;
+        UPDATE artifact_server_schema SET version = 18 WHERE component = 'runtime'; COMMIT;`);
+    } finally { predecessor.close(); }
+    target = await startWorker(renameDirectory);
+    const originalReplay = await publishArtifact(target, "rename-d1-publish", 200);
+    expect(originalReplay).toEqual(published);
+    const url = `${origin}/api/v1/artifacts/${published.artifact.id}/name`;
+    const rename = (expectedName: string, name: string, key: string) => target.fetch(url, {
+      method: "PATCH", headers: mutationHeaders(key),
+      body: JSON.stringify({expectedCurrentVersionId: published.version.id, expectedName, name}),
+    });
+    const attempts = await Promise.all([rename("Comment target", "First", "rename-d1-first-001"), rename("Comment target", "Second", "rename-d1-second-001")]);
+    expect(attempts.map((response) => response.status).toSorted((a, b) => a - b)).toEqual([200, 409]);
+    const firstWon = attempts[0]?.status === 200;
+    const winningName = firstWon ? "First" : "Second";
+    const winningKey = firstWon ? "rename-d1-first-001" : "rename-d1-second-001";
+    expect((await rename(winningName, "Latest D1", "rename-d1-latest")).status).toBe(200);
+    await target.stop(); target = await startWorker(renameDirectory);
+    const replay = await rename("Comment target", winningName, winningKey);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({artifact: {name: winningName}, replayed: true});
+    const current = await target.fetch(`${origin}/api/v1/artifacts/${published.artifact.id}`, {headers: bearerHeaders()});
+    expect(await current.json()).toMatchObject({artifact: {name: "Latest D1", currentVersionId: published.version.id}});
+    const search = await target.fetch(`${origin}/api/v1/artifacts?search=Latest%20D1`, {headers: bearerHeaders()});
+    expect(await search.json()).toMatchObject({artifacts: [expect.objectContaining({artifact: expect.objectContaining({id: published.artifact.id})})]});
+    const actions = await target.fetch(`${origin}/api/v1/artifacts/${published.artifact.id}/actions`, {headers: bearerHeaders()});
+    expect(actionListSchema.parse(await actions.json()).actions.filter((action) => action.action === "rename")).toHaveLength(2);
+    expect((await rename("Latest D1", "Conflicting key", winningKey)).status).toBe(409);
+    } finally {
+      await target.stop();
+      await rm(renameDirectory, {recursive: true, force: true});
+    }
+  });
+
   it("records the whole comment lifecycle and keeps it across a restart", async () => {
     const published = await publishArtifact(worker, "comment-lifecycle-publish");
     const artifactId = published.artifact.id;
@@ -592,6 +642,7 @@ async function findD1DatabaseFile(directory: string): Promise<string> {
 async function publishArtifact(
   target: Unstable_DevWorker,
   idempotencyKey: string,
+  expectedStatus: 200 | 201 = 201,
 ) {
   const bytes = new TextEncoder().encode("<h1>Comment target</h1>");
   const createUpload = await target.fetch(`${origin}/api/v1/uploads`, {
@@ -628,7 +679,7 @@ async function publishArtifact(
     method: "POST",
   });
   const committedText = await committed.text();
-  if (committed.status !== 201) {
+  if (committed.status !== expectedStatus) {
     throw new Error(
       `Publishing the comment target failed with ${committed.status}: ${committedText}`,
     );

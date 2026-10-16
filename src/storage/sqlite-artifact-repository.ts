@@ -92,6 +92,7 @@ import type {
   CancelAgentDispatch,
   ChangeArtifactAccessSetting,
   ChangeArtifactTags,
+  RenameArtifact,
   ClearCommentThreads,
   CommentRepository,
   CreateAgentDispatch,
@@ -228,6 +229,7 @@ const artifactActionKindSchema = z.enum([
   artifactActionKinds.capture,
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
+  artifactActionKinds.rename,
   artifactActionKinds.commentCreate,
   artifactActionKinds.commentDelete,
   artifactActionKinds.commentReopen,
@@ -289,6 +291,7 @@ const idempotencyRowSchema = z.object({
   operation: z.enum([
     "change_access",
     "change_tags",
+    "rename",
     "delete",
     "publish",
     "restore",
@@ -1890,6 +1893,40 @@ export class SqliteArtifactRepository implements
     );
   }
 
+  renameArtifact(command: RenameArtifact): Promise<ArtifactState> {
+    return Promise.resolve().then(() => this.#transaction(() => {
+      const replayed = this.#findIdempotentManagementResult(
+        command.projectId, "rename", command.idempotencyKey, command.inputDigest,
+      );
+      if (replayed !== null) return {...replayed, artifact: {...replayed.artifact, name: command.name}};
+      const artifact = this.#readArtifact(command.projectId, command.artifactId);
+      this.#assertExpectedCurrentVersion(artifact, command.expectedCurrentVersionId);
+      const update = this.#database.prepare(`
+        UPDATE artifacts SET name = ?, search_name = ?
+        WHERE project_id = ? AND id = ? AND name = ?
+          AND current_version_id = ? AND deleted_at IS NULL
+      `).run(command.name, normalizeArtifactSearchText(command.name), command.projectId,
+        command.artifactId, command.expectedName, command.expectedCurrentVersionId);
+      if (update.changes !== 1) throw changedDuringManagement();
+      this.#insertAction({
+        action: artifactActionKinds.rename,
+        actor: command.actor,
+        artifactId: command.artifactId,
+        authorizedByPrincipalId: command.authorizedByPrincipalId,
+        createdAt: command.createdAt,
+        idempotencyKey: command.idempotencyKey,
+        principalId: command.principalId,
+        projectId: command.projectId,
+        versionId: command.expectedCurrentVersionId,
+      });
+      this.#insertIdempotency(command.projectId, command.idempotencyKey,
+        command.inputDigest, command.artifactId, command.expectedCurrentVersionId,
+        command.createdAt, "rename", artifact.accessSetting);
+      return this.#readArtifactState(command.projectId, command.artifactId,
+        command.expectedCurrentVersionId, artifact.accessSetting, false);
+    }));
+  }
+
   changeTags(command: ChangeArtifactTags): Promise<ArtifactState> {
     return Promise.resolve().then(() =>
       this.#transaction(() => {
@@ -3325,7 +3362,7 @@ export class SqliteArtifactRepository implements
 
   #findIdempotentManagementResult(
     projectId: string,
-    operation: "change_access" | "restore",
+    operation: "change_access" | "rename" | "restore",
     idempotencyKey: string,
     inputDigest: string,
   ): ArtifactState | null {
@@ -3817,6 +3854,7 @@ export class SqliteArtifactRepository implements
     operation:
       | "change_access"
       | "change_tags"
+      | "rename"
       | "delete"
       | "publish"
       | "restore" = "publish",
@@ -5847,6 +5885,7 @@ export class SqliteArtifactRepository implements
     this.#addIdempotencyOperationColumnsIfMissing();
     this.#addTagIdempotencyOperationIfMissing();
     this.#addProjectScopeIfMissing(installationId);
+    this.#addRenameIdempotencyOperationIfMissing();
     if (previousSchemaVersion < 12) {
       this.#addArtifactSearchNameIfMissing();
     }
@@ -6232,6 +6271,33 @@ export class SqliteArtifactRepository implements
         ALTER TABLE idempotency_records_next RENAME TO idempotency_records;
       `);
     });
+  }
+
+  #addRenameIdempotencyOperationIfMissing(): void {
+    const {sql} = z.object({sql: z.string()}).parse(this.#database.prepare(
+      "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'idempotency_records'",
+    ).get());
+    if (sql.includes("'rename'")) return;
+    this.#transaction(() => this.#database.exec(`
+      CREATE TABLE idempotency_records_renamed (
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        idempotency_key TEXT NOT NULL,
+        input_digest TEXT NOT NULL,
+        artifact_id TEXT NOT NULL REFERENCES artifacts(id),
+        version_id TEXT NOT NULL REFERENCES versions(id),
+        operation TEXT NOT NULL DEFAULT 'publish'
+          CHECK (operation IN ('publish', 'restore', 'change_access', 'change_tags', 'rename', 'delete')),
+        access_setting TEXT CHECK (access_setting IS NULL OR access_setting IN ('account_required', 'public_link')),
+        tags_json TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, idempotency_key)
+      ) STRICT;
+      INSERT INTO idempotency_records_renamed SELECT project_id, idempotency_key,
+        input_digest, artifact_id, version_id, operation, access_setting, tags_json, created_at
+        FROM idempotency_records;
+      DROP TABLE idempotency_records;
+      ALTER TABLE idempotency_records_renamed RENAME TO idempotency_records;
+    `));
   }
 
   #addProjectScopeIfMissing(installationId: string): void {

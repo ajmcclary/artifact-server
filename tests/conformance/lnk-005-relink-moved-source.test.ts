@@ -128,6 +128,15 @@ describe("relinking one binding at a moved source file", () => {
     );
     expect(thread.thread.versionId).toBe(linked.version.id);
 
+    const bindingBeforeRename = await readArtifactBinding(linked.artifact.id);
+    const renamed = await fetch(new URL(`/api/v1/artifacts/${linked.artifact.id}/name`, requiredServer().baseUrl), {
+      method: "PATCH", headers: apiHeaders(installation, "linked-artifact-rename"),
+      body: JSON.stringify({expectedCurrentVersionId: linked.version.id,
+        expectedName: z.string().parse(linked.artifact["name"]), name: "Renamed linked source"}),
+    });
+    expect(renamed.status).toBe(200);
+    expect(await readArtifactBinding(linked.artifact.id)).toEqual(bindingBeforeRename);
+
     const movedDirectory = path.join(sourceRoot, "moved");
     await mkdir(movedDirectory);
     const movedPath = path.join(movedDirectory, "roadmap.md");

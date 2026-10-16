@@ -1034,6 +1034,19 @@ const addInstallationInvites = Effect.gen(function*() {
   for (const statement of statements) yield* sql.unsafe(statement);
 });
 
+const addArtifactRename = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe(`ALTER TABLE idempotency_records
+    DROP CONSTRAINT idempotency_records_operation_check,
+    ADD CONSTRAINT idempotency_records_operation_check
+      CHECK (operation IN ('publish', 'restore', 'change_access', 'change_tags', 'rename', 'delete'))`);
+  yield* sql.unsafe(`ALTER TABLE actions
+    DROP CONSTRAINT actions_action_check,
+    ADD CONSTRAINT actions_action_check CHECK (${actionRowChecks[0]}),
+    DROP CONSTRAINT actions_scope_check,
+    ADD CONSTRAINT actions_scope_check CHECK (${actionRowChecks[1]})`);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1057,10 +1070,11 @@ const migrationLoader = Migrator.fromRecord({
   "0020_content_variants": addContentVariants,
   "0021_login_attempt_invite": addLoginAttemptInvite,
   "0022_installation_invites": addInstallationInvites,
+  "0023_artifact_rename": addArtifactRename,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 22;
+export const requiredPostgresSchemaVersion = 23;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1181,6 +1195,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 22,
     name: "installation_invites",
+  }, {
+    migration_id: 23,
+    name: "artifact_rename",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

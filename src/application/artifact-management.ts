@@ -7,6 +7,7 @@ import {
   type AuthorizationOperations,
   AuthorizationService,
 } from "./authorization.js";
+import {parseRenamedArtifactName} from "./artifact-name.js";
 import { parseIdempotencyKey } from "./idempotency-key.js";
 import {
   normalizeArtifactTag,
@@ -26,6 +27,8 @@ import {
   type InvalidArtifactTags,
   type InvalidIdempotencyKey,
   InvalidPagination,
+  type InvalidArtifactName,
+  ProjectArchived,
   VersionNotFound,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
@@ -45,6 +48,7 @@ import type {
 import type {
   ChangeArtifactAccessSetting,
   ChangeArtifactTags,
+  RenameArtifact,
   DeleteArtifact,
   ListArtifactActions,
   ListArtifacts,
@@ -109,6 +113,14 @@ export interface ChangeArtifactTagsCommand extends ReadArtifactCommand {
   readonly tags: readonly string[];
 }
 
+/** Input for renaming one artifact without publishing. */
+export interface RenameArtifactCommand extends ReadArtifactCommand {
+  readonly expectedCurrentVersionId: string;
+  readonly expectedName: string;
+  readonly idempotencyKey: string;
+  readonly name: string;
+}
+
 /** Input for listing active artifacts visible to one principal. */
 export interface ListArtifactsCommand {
   readonly comments?: "all" | "with" | "without";
@@ -143,6 +155,9 @@ export interface ArtifactManagementRepository {
     | ArtifactNotFound
     | IdempotencyConflict
     | ArtifactRepositoryFailure
+  >;
+  readonly renameArtifact: (command: RenameArtifact) => Effect.Effect<
+    ArtifactState, ArtifactMutationConflict | ArtifactNotFound | IdempotencyConflict | ArtifactRepositoryFailure
   >;
   readonly changeTags: (
     command: ChangeArtifactTags,
@@ -228,6 +243,7 @@ export type ArtifactManagementFailure =
   | ArtifactMutationConflict
   | IdempotencyConflict
   | InvalidIdempotencyKey
+  | InvalidArtifactName
   | InvalidArtifactTags
   | InvalidPagination
   | AuthorizationDenied
@@ -238,6 +254,7 @@ interface ArtifactManagementOperations {
   readonly changeAccess: (
     command: ChangeArtifactAccessCommand,
   ) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
+  readonly renameArtifact: (command: RenameArtifactCommand) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
   readonly changeTags: (
     command: ChangeArtifactTagsCommand,
   ) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
@@ -617,6 +634,38 @@ function makeArtifactManagementService(
     },
   );
 
+  const renameArtifact = Effect.fn("ArtifactManagementService.renameArtifact")(
+    function*(command: RenameArtifactCommand) {
+      const project = yield* resolveProjectForRead(command.principal, command.projectId);
+      yield* authorization.requireArtifactManagement(command.principal);
+      const artifact = yield* requireArtifact(project.id, command.artifactId);
+      if (project.archivedAt !== null) return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      const name = yield* parseRenamedArtifactName(command.name);
+      const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
+      const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
+      return yield* dependencies.repository.renameArtifact({
+        artifactId: artifact.id,
+        actor: actorSnapshotOf(command.principal),
+        authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
+        createdAt,
+        expectedCurrentVersionId: command.expectedCurrentVersionId,
+        expectedName: command.expectedName,
+        idempotencyKey,
+        inputDigest: managementInputDigest({
+          artifactId: artifact.id,
+          expectedCurrentVersionId: command.expectedCurrentVersionId,
+          operation: "rename",
+          principalId: command.principal.id,
+          projectId: project.id,
+          value: JSON.stringify({expectedName: command.expectedName, name}),
+        }),
+        name,
+        principalId: command.principal.id,
+        projectId: project.id,
+      });
+    },
+  );
+
   const changeTags = Effect.fn("ArtifactManagementService.changeTags")(
     function*(command: ChangeArtifactTagsCommand) {
       const project = yield* resolveProjectForRead(
@@ -687,6 +736,7 @@ function makeArtifactManagementService(
   return ArtifactManagementService.of({
     changeAccess,
     changeTags,
+    renameArtifact,
     deleteArtifact,
     getArtifact,
     getVersion,
@@ -704,6 +754,7 @@ interface ManagementInputDigest {
   readonly expectedCurrentVersionId: string;
   readonly operation:
     | "change_access"
+    | "rename"
     | "change_tags"
     | "delete"
     | "restore";

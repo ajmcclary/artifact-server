@@ -59,7 +59,8 @@ export const activityLogPrerequisiteStubStatements: readonly string[] = [
     installation_id TEXT NOT NULL,
     project_id TEXT NOT NULL,
     idempotency_key TEXT NOT NULL,
-    operation TEXT NOT NULL,
+    operation TEXT NOT NULL
+      CHECK (operation IN ('publish', 'restore', 'change_access', 'change_tags', 'delete')),
     access_setting TEXT,
     PRIMARY KEY (installation_id, project_id, idempotency_key)
   )`,

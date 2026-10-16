@@ -138,7 +138,7 @@ describe("Postgres invitations", () => {
         ADD CONSTRAINT actions_action_check CHECK (${withoutInviteKinds(actionKindCheck ?? "")}),
         DROP CONSTRAINT actions_scope_check,
         ADD CONSTRAINT actions_scope_check CHECK (${withoutInviteKinds(scopeCheck ?? "")})`);
-      yield* sql.unsafe("DELETE FROM artifact_server_postgres_migrations WHERE migration_id = 22");
+      yield* sql.unsafe("DELETE FROM artifact_server_postgres_migrations WHERE migration_id >= 22");
     }));
     const actionsBefore = (await fixture.actions()).length;
     await database.close();

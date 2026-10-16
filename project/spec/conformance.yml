@@ -1,6 +1,6 @@
 version: 1
 product: Artifact Server
-updated: "2026-10-09"
+updated: "2026-10-16"
 evidence_root: "../.."
 
 source:
@@ -86,7 +86,7 @@ allowed_modules:
 required_source_sections:
   top: [PRD-001, PRD-002]
   product: [PRD-003]
-  artifact: [PRJ-001, PRJ-002, PRJ-003, PRJ-004, ART-001, ART-002, ART-003, ART-004, ART-005, ART-008]
+  artifact: [PRJ-001, PRJ-002, PRJ-003, PRJ-004, ART-001, ART-002, ART-003, ART-004, ART-005, ART-008, ART-012, ART-013, ART-014]
   experience: [CNT-001, CNT-002, VER-001, DIF-001, GIT-001]
   sharing: [AUTH-001, AUTH-002, AUTH-003, AUTH-004, AUTH-018]
   plannotator: [PLN-001, PLN-002, PLN-003, PLN-004, PLN-005, PLN-017]
@@ -432,6 +432,87 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-06T15:11:17.477Z"
+
+  - id: ART-012
+    kind: behavior
+    behavior: Renaming changes only an artifact's display name and normalized search name, preserving its identity, versions, bytes, comments, sharing, source binding, and stable and exact-version links. Names are well-formed Unicode, are trimmed, contain 1 to 200 UTF-16 code units, and contain no Unicode control or format characters.
+    owner: artifact-core
+    source: {file: artifact-server-product-spec.html, anchor: artifact}
+    acceptance:
+      behavior: {id: ART-012-B, description: "Rename a published artifact, find it by its new name, restart, and verify the name, version records, bytes, links, comments, tags, sharing and source binding remain correct."}
+      failure: {id: ART-012-F, description: "Empty, overlong, ill-formed Unicode, control-character and format-character names and unknown input fields are refused without a partial metadata change, version or audit action."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    depends_on: [ART-001, ART-004, ART-009, AUD-001]
+    evidence:
+      - deployment: local
+        tests: [ART-012-B, ART-012-F]
+        result: pass
+        run: project/evidence/artifact-rename-local.json
+        recorded_at: "2026-10-16T21:14:52.990Z"
+
+      - deployment: local
+        tests: [ART-012-B, ART-012-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-16T21:23:53.860Z"
+
+  - id: ART-013
+    kind: security
+    behavior: Rename requires existing artifact-management authority in the selected active project, checks the exact expected name and current version atomically, and records one attributed rename action per successful idempotency key. A replay returns the original renamed name without reapplying it.
+    owner: artifact-core
+    source: {file: artifact-server-product-spec.html, anchor: artifact}
+    acceptance:
+      behavior: {id: ART-013-B, description: "Race two renames from the same name and version and observe one winner; replay the winning key after another rename and a restart without changing the newer name or duplicating its action."}
+      failure: {id: ART-013-F, description: "Anonymous, read-only, cross-project, archived-project, tombstoned and unknown-artifact requests, stale name/version expectations and conflicting idempotency input cannot rename or disclose inaccessible artifacts."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    depends_on: [ART-012, AUTH-008, AUTH-009, MCP-009]
+    evidence:
+      - deployment: local
+        tests: [ART-013-B, ART-013-F]
+        result: pass
+        run: project/evidence/artifact-rename-local.json
+        recorded_at: "2026-10-16T21:14:52.990Z"
+
+      - deployment: local
+        tests: [ART-013-B, ART-013-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-16T21:23:53.860Z"
+
+  - id: ART-014
+    kind: behavior
+    behavior: HTTP, MCP, CLI and the selected artifact's Details side panel expose the same authorized rename operation. The editable name keeps entered text on failure, supports Save and Cancel, and refreshes server metadata on success; Library reads the renamed metadata on return. Remembered CLI publication remains bound by identity after renaming; an explicit obsolete publish name is refused rather than renaming or creating another artifact.
+    owner: artifact-core
+    source: {file: artifact-server-product-spec.html, anchor: artifact}
+    acceptance:
+      behavior: {id: ART-014-B, description: "Rename through MCP and CLI, publish again through the existing remembered binding, and edit the selected artifact name in Details after opening it from Library, while retaining the artifact and exact-version links."}
+      failure: {id: ART-014-F, description: "MCP and CLI report invalid input and stale expectations without mutation; an obsolete explicit publish name fails without rebinding, and a failed Details edit preserves input and permits retry, and Cancel restores the current name."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Local HTTP, MCP, CLI and browser suites prove rename behavior and failures. SQLite and D1 populated-schema upgrades and two-process Postgres conditional-write and replay regressions pass. Complete deployed single_server, kubernetes, cloudflare, aws and gcp surface evidence remains unrecorded.
+    depends_on: [ART-012, ART-013, CLI-001, MCP-009]
+    evidence:
+      - deployment: local
+        tests: [ART-014-B, ART-014-F]
+        result: pass
+        run: project/evidence/artifact-rename-local.json
+        recorded_at: "2026-10-16T21:14:52.990Z"
+
+      - deployment: local
+        tests: [ART-014-B, ART-014-F]
+        result: pass
+        run: project/evidence/artifact-rename-browser.json
+        recorded_at: "2026-10-16T21:23:09.094Z"
+
+      - deployment: local
+        tests: [ART-014-B, ART-014-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-16T21:23:53.860Z"
 
   - id: MAN-001
     kind: behavior
@@ -2827,7 +2908,7 @@ requirements:
       failure: {id: MCP-009-F, description: "MCP cannot list, read, publish, restore, change visibility, or delete beyond the caller's normal authority."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "MCP-009-B/F prove identical outcomes for 12 callers across 16 artifact and project operations over MCP and HTTP, and that refused MCP calls change nothing and reveal no more than HTTP, on the local runtime. Comment, Git-history, linked-file, and project rename/archive tools are outside the matrix; browser cookie sessions and non-local deployments are not exercised. A caller who reaches the project but may not read, or may not manage, is refused before any artifact lookup, so real and fabricated artifacts answer identically on both surfaces for reads and refused writes."
+    proof_gap: "MCP-009-B/F prove identical outcomes for 12 callers across 17 artifact and project operations over MCP and HTTP, and that refused MCP calls change nothing and reveal no more than HTTP, on the local runtime. Comment, Git-history, linked-file, and project rename/archive tools are outside the matrix; browser cookie sessions and non-local deployments are not exercised. A caller who reaches the project but may not read, or may not manage, is refused before any artifact lookup, so real and fabricated artifacts answer identically on both surfaces for reads and refused writes."
     depends_on: [AUTH-008]
     evidence:
       - deployment: local
@@ -2835,6 +2916,12 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-06T15:11:17.477Z"
+
+      - deployment: local
+        tests: [MCP-009-B, MCP-009-F]
+        result: pass
+        run: project/evidence/artifact-rename-local.json
+        recorded_at: "2026-10-16T21:14:52.990Z"
 
   - id: MCP-010
     kind: security

@@ -127,7 +127,7 @@ opens its raw immutable content. Agents should hand people the Review URL.
 | Projects | `project_list`, `project_create`, `project_rename`, `project_archive`, `project_unarchive` |
 | Artifacts | `artifact_list`, `artifact_get`, `artifact_manifest_page`, `artifact_open`, `artifact_version_list`, `artifact_diff` |
 | Publication | `artifact_create_upload`, `artifact_commit_upload` |
-| Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_restore_version`, `artifact_delete` |
+| Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_rename`, `artifact_restore_version`, `artifact_delete` |
 | Linked files | `artifact_link`, `artifact_relink`, `artifact_capture` |
 | Comments | `comment_list`, `comment_get`, `comment_create`, `comment_reply`, `comment_update`, `comment_resolve`, `comment_delete`, `comment_clear` |
 | Git history | `project_git_history_status`, `project_git_history_estimate`, `project_set_git_history`, `artifact_history_clone_token` |
@@ -181,3 +181,14 @@ In clients that expose installed skills as slash commands, publish finished work
 The agent returns the full-screen review link first so the recipient can view and comment on the exact version.
 
 Read the [MCP product baseline](../project/spec/artifact-server-mcp-baseline.md) for the protocol and authorization contracts.
+
+### Rename an artifact
+
+`artifact_rename` takes `artifactId`, `projectId`, `name`, `expectedName`,
+`expectedCurrentVersionId`, and `idempotencyKey`. Read the artifact first and pass
+its exact name and current version as expectations. The existing artifact-management
+capability applies. A stale name or version returns `ARTIFACT_MUTATION_CONFLICT`;
+reusing a key with different input returns `IDEMPOTENCY_CONFLICT`.
+Renaming changes display and search metadata, preserving versions, bytes, links,
+comments and sharing. A successful retry returns the original renamed name and
+never reapplies it over a later rename.

@@ -68,6 +68,7 @@ import {
 import {replaceHistoryEntry} from "./review-history.ts";
 import {EmptyProjectCanvas} from "./settings/empty-project.tsx";
 import {DesignLibraryScreen} from "./library/design-library-screen.tsx";
+import {invalidateDesignLibrary} from "./library/use-design-library.ts";
 import {ProjectsScreen} from "./projects/projects-screen.tsx";
 import {ActivityScreen} from "./activity/activity-screen.tsx";
 import {SettingsScreen} from "./settings/settings-screen.tsx";
@@ -697,6 +698,21 @@ function ProjectReview({
     }), "push");
     setSelectedPath(path);
   };
+  const changeArtifactName = async (name: string, expectedName: string,
+    expectedCurrentVersionId: string, idempotencyKey: string): Promise<void> => {
+    if (details === null) throw new Error("Select an artifact before renaming it.");
+    const changed = await api.renameArtifact(details.artifact.projectId, details.artifact.id,
+      expectedCurrentVersionId, expectedName, name, idempotencyKey);
+    updateArtifact(changed.artifact);
+    invalidateDesignLibrary();
+    announce("Artifact renamed.");
+  };
+  const reloadArtifactName = async (): Promise<ArtifactDetails["artifact"]> => {
+    if (details === null) throw new Error("Select an artifact before reloading it.");
+    const current = await api.artifact(details.artifact.projectId, details.artifact.id);
+    updateArtifact(current.artifact);
+    return current.artifact;
+  };
   const changeTags = async (tags: readonly string[]): Promise<void> => {
     if (details === null) return;
     const changed = await api.changeTags(
@@ -1162,6 +1178,8 @@ function ProjectReview({
       onDelete={tombstoneArtifact}
       onOpenLive={openLinkedArtifact}
       onTagsChange={changeTags}
+      onNameChange={changeArtifactName}
+      onNameReload={reloadArtifactName}
       provenance={provenance?.versionId === selectedVersionId ? provenance.outcome : null}
       reviewLink={exactReviewLink(selectedVersion, selectedPath)}
       version={selectedVersion}

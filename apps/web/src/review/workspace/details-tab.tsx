@@ -35,6 +35,8 @@ export interface DetailsTabProps {
   /** Deletes the artifact after the confirmation; resolves whether it was deleted. */
   readonly onDelete: () => Promise<boolean>;
   readonly onOpenLive: () => Promise<void>;
+  readonly onNameChange: (name: string, expectedName: string, expectedCurrentVersionId: string, idempotencyKey: string) => Promise<void>;
+  readonly onNameReload: () => Promise<ArtifactDetails["artifact"]>;
   readonly onTagsChange: (tags: readonly string[]) => Promise<void>;
   /** The version's source-provenance outcome, or null while it loads. */
   readonly provenance: ProvenanceOutcome | null;
@@ -55,7 +57,7 @@ const labelWidth = 104;
 
 /**
  * One scrolling column of sections, each under an 11px heading with a full-width rule
- * between them: this version, access, links, tags, hosting, the linked source,
+ * between them: artifact name, this version, access, links, tags, hosting, the linked source,
  * identifiers and, last, deleting the artifact.
  */
 export function DetailsTab({
@@ -68,6 +70,8 @@ export function DetailsTab({
   onDelete,
   onOpenLive,
   onTagsChange,
+  onNameChange,
+  onNameReload,
   provenance,
   reviewLink,
   version,
@@ -82,7 +86,11 @@ export function DetailsTab({
   const name = details.artifact.name;
   return (
     <div>
-      <PanelSection divided={false} title="This Version">
+      <PanelSection divided={false} title="Artifact">
+        <NameEditor artifact={details.artifact} canManage={canManage} key={details.artifact.id}
+          onChange={onNameChange} onReload={onNameReload} />
+      </PanelSection>
+      <PanelSection title="This Version">
         <FieldGrid
           fields={[
             {
@@ -202,6 +210,79 @@ export function DetailsTab({
       />
     </div>
   );
+}
+
+interface NameEditorProps {
+  readonly artifact: ArtifactDetails["artifact"];
+  readonly canManage: boolean;
+  readonly onChange: DetailsTabProps["onNameChange"];
+  readonly onReload: DetailsTabProps["onNameReload"];
+}
+
+function NameEditor({artifact, canManage, onChange, onReload}: NameEditorProps) {
+  const [draft, setDraft] = useState(artifact.name);
+  const [editing, setEditing] = useState(false);
+  const [base, setBase] = useState({name: artifact.name, versionId: artifact.currentVersionId});
+  const [key, setKey] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    if (!editing) {
+      setDraft(artifact.name);
+      setBase({name: artifact.name, versionId: artifact.currentVersionId});
+    }
+  }, [artifact.name, artifact.currentVersionId, editing]);
+  const cancel = (): void => {
+    setEditing(false);
+    setError(null);
+    setDraft(artifact.name);
+  };
+  const save = async (): Promise<void> => {
+    if (pending || !editing || draft.trim() === "" || draft.trim() === base.name) return;
+    setPending(true);
+    setError(null);
+    try {
+      await onChange(draft, base.name, base.versionId, key);
+      setEditing(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error("The artifact could not be renamed."));
+    } finally {
+      setPending(false);
+    }
+  };
+  const reload = async (): Promise<void> => {
+    if (pending) return;
+    setPending(true);
+    try {
+      const current = await onReload();
+      setBase({name: current.name, versionId: current.currentVersionId});
+      setKey(crypto.randomUUID());
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error("The artifact could not be reloaded."));
+    } finally {
+      setPending(false);
+    }
+  };
+  return <form style={stackStyle} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+    <Input disabled={!canManage || pending} label="Artifact name" size="sm" value={draft}
+      onChange={(event) => {
+        if (!editing) setBase({name: artifact.name, versionId: artifact.currentVersionId});
+        setEditing(true);
+        setDraft(event.currentTarget.value);
+        setKey(crypto.randomUUID());
+      }} />
+    {!editing ? null : <div style={buttonRowStyle}>
+      <Button disabled={!canManage || pending || draft.trim() === "" || draft.trim() === base.name} size="sm" type="submit">
+        {pending ? "Saving…" : "Save name"}
+      </Button>
+      <Button disabled={pending} onClick={cancel} outline size="sm" variant="secondary">Cancel</Button>
+    </div>}
+    {error === null ? null : <>
+      <Alert variant="danger">{error.message}</Alert>
+      <Button disabled={pending} onClick={() => void reload()} size="sm" variant="link">Reload current details</Button>
+    </>}
+  </form>;
 }
 
 interface AccessEditorProps {

@@ -496,6 +496,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "recordStagedFileInstalled",
       "releaseUploadPreparation",
       "renameProject",
+      "renameArtifact",
       "renewUploadPreparation",
       "setProjectArchive",
       "storeProjectGitHistorySetting",

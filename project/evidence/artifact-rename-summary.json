@@ -1,0 +1,49 @@
+{
+  "recordedAt": "2026-10-16T21:56:03.477875+00:00",
+  "scope": "ART-012, ART-013 and ART-014 artifact rename implementation with editable name in the Details side panel",
+  "sourceBaseRevision": "41c4226ce230e88050994a587aff6ea5e523fa94",
+  "sourceState": "Implementation and tests are committed together with this report; this record precedes that commit.",
+  "checks": {
+    "pnpm verify:iteration": {
+      "exitCode": 0,
+      "rootTests": 758,
+      "webUnitTests": 173,
+      "cloudflareTests": 86,
+      "browserTests": 149,
+      "externalStorageTests": 61,
+      "helmRuntimeTests": 6,
+      "oidcTests": 4
+    },
+    "pnpm smoke": {
+      "exitCode": 0,
+      "tests": 2
+    },
+    "pnpm verify:external-storage-performance": {
+      "exitCode": 0,
+      "evidence": "project/evidence/external-storage-performance-baseline.json"
+    },
+    "git diff --check": {
+      "exitCode": 0
+    }
+  },
+  "focusedEvidence": [
+    "project/evidence/artifact-rename-local.json",
+    "project/evidence/artifact-rename-d1.json",
+    "project/evidence/artifact-rename-browser.json"
+  ],
+  "performanceEvidence": [
+    "project/evidence/artifact-rename-performance-before.json",
+    "project/evidence/artifact-rename-performance-after.json",
+    "project/performance/FINDINGS.md"
+  ],
+  "schemaVersions": {
+    "sqlite": 22,
+    "postgres": 23,
+    "d1": 19
+  },
+  "remainingProofGaps": [
+    "Production rename mutations and hosted browser behavior have not been qualified.",
+    "Cloudflare, AWS and GCP full deployed rename surfaces remain unqualified; local providers and containers do not establish live-provider qualification."
+  ],
+  "verificationLogSha256": "3a22daabdca5998fff6f58102284014b6c663265d00fc75ea89fa02251161459"
+}

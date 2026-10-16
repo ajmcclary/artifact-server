@@ -58,7 +58,17 @@ The core records are:
 - **Version:** stable ID, artifact ID, version number, canonical manifest digest, entry file, routing mode, publisher, and created time.
 - **Manifest entry:** normalized path, byte length, media type, SHA-256 fingerprint, and file disposition.
 - **Blob:** immutable file bytes addressed internally by SHA-256 fingerprint.
-- **Action record:** publish, restore, access change, tag change, or deletion with the responsible principal and idempotency key when applicable.
+- **Action record:** publish, restore, access change, tag change, rename, or deletion with the responsible principal and idempotency key when applicable.
+
+Authorized artifact managers can rename an artifact without publishing. HTTP
+`PATCH /api/v1/artifacts/:artifactId/name`, MCP `artifact_rename`, CLI `rename`
+and the artifact Details side panel share the same application policy. Supply `name`, exact `expectedName`,
+and `expectedCurrentVersionId`, plus an idempotency key. Names are well-formed Unicode, are trimmed, contain
+1–200 UTF-16 code units, and contain no Unicode control or format characters.
+Name and normalized search text change atomically; IDs, versions, bytes, comments,
+sharing, tags and source bindings remain. Stale expectations and conflicting key
+reuse change nothing. A successful replay returns the original renamed name and
+never overwrites later metadata. Each successful key records one attributed rename action.
 
 Tags are optional artifact metadata for exact filtering. The server trims whitespace,
 normalizes Unicode, folds case, removes duplicates, sorts the result, and stores no more
@@ -377,6 +387,7 @@ artifact_create_upload
 artifact_commit_upload
 artifact_set_visibility
 artifact_set_tags
+artifact_rename
 artifact_version_list
 artifact_diff
 artifact_restore_version

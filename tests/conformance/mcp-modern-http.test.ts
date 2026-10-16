@@ -30,6 +30,8 @@ import {
   type TestInstallation,
 } from "../support/runtime-harness.js";
 
+import {publishNew} from "../support/publishing.js";
+
 const protocolVersion = "2026-07-28";
 const jsonRpcResultSchema = z.object({
   id: z.union([z.string(), z.number()]),
@@ -245,6 +247,7 @@ describe("modern MCP HTTP", () => {
       "artifact_commit_upload",
       "artifact_set_visibility",
       "artifact_set_tags",
+      "artifact_rename",
       "artifact_restore_version",
       "artifact_delete",
       "artifact_link",
@@ -1418,6 +1421,24 @@ describe("modern MCP HTTP", () => {
       {"Mcp-Name": "artifact_manifest_page"},
     );
     expect(unauthorized.status).toBe(401);
+  });
+
+  test("artifact rename shares metadata validation, authority and idempotent results", async () => {
+    const published = await publishNew(server, installation, {
+      name: "Before", accessSetting: "account_required", content: "rename bytes", idempotencyKey: crypto.randomUUID(),
+    });
+    const input = {artifactId: published.body.artifact.id, expectedCurrentVersionId: published.body.version.id,
+      expectedName: "Before", name: "After", idempotencyKey: crypto.randomUUID()};
+    const renamed = await callTool(server, installation.apiToken, {name: "artifact_rename", arguments: input});
+    expect(renamed.isError).not.toBe(true);
+    expect(renamed.structuredContent).toMatchObject({artifact: {id: published.body.artifact.id, name: "After"}, replayed: false});
+    const replay = await callTool(server, installation.apiToken, {name: "artifact_rename", arguments: input});
+    expect(replay.structuredContent).toMatchObject({artifact: {name: "After"}, replayed: true});
+    const invalid = await callTool(server, installation.apiToken, {name: "artifact_rename", arguments: {...input, name: "Bad\u202ename", idempotencyKey: crypto.randomUUID()}});
+    expect(invalid.isError).toBe(true);
+    const stale = await callTool(server, installation.apiToken, {name: "artifact_rename", arguments: {...input, name: "Stale", idempotencyKey: crypto.randomUUID()}});
+    expect(stale.isError).toBe(true);
+    expect(stale.content[0]?.text).toContain("ARTIFACT_MUTATION_CONFLICT");
   });
 
   test("MCP-023-B MCP-023-F: artifact_create_upload recovers a committed publication by idempotency key", async () => {

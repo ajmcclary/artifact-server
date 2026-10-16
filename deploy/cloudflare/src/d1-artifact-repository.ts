@@ -93,6 +93,7 @@ import type {
   CancelAgentDispatch,
   ChangeArtifactAccessSetting,
   ChangeArtifactTags,
+  RenameArtifact,
   ClearCommentThreads,
   CommentRepository,
   CommitArtifactVersion,
@@ -206,6 +207,7 @@ const preparationStateSchema = z.enum([
 const actionSchema = z.enum([
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
+  artifactActionKinds.rename,
   artifactActionKinds.commentCreate,
   artifactActionKinds.commentDelete,
   artifactActionKinds.commentReopen,
@@ -1250,7 +1252,7 @@ export function createD1ArtifactRepository(
   );
   const managementReplay = async (
     command: {readonly idempotencyKey: string; readonly inputDigest: string; readonly projectId: string},
-    operation: typeof artifactActionKinds.changeAccess | typeof artifactActionKinds.changeTags |
+    operation: typeof artifactActionKinds.rename | typeof artifactActionKinds.changeAccess | typeof artifactActionKinds.changeTags |
       typeof artifactActionKinds.restore,
   ): Promise<ArtifactState | null> => {
     const record = await readIdempotency(command.projectId, command.idempotencyKey);
@@ -1276,7 +1278,7 @@ export function createD1ArtifactRepository(
       readonly inputDigest: string;
       readonly projectId: string;
     },
-    operation: typeof artifactActionKinds.changeAccess |
+    operation: typeof artifactActionKinds.rename | typeof artifactActionKinds.changeAccess |
       typeof artifactActionKinds.changeTags |
       typeof artifactActionKinds.restore,
     statements: D1PreparedStatement[],
@@ -3532,6 +3534,28 @@ export function createD1ArtifactRepository(
           false,
           command.accessSetting,
         ));
+    },
+    renameArtifact: async (command: RenameArtifact) => {
+      const replayed = await managementReplay(command, artifactActionKinds.rename);
+      if (replayed !== null) return {...replayed, artifact: {...replayed.artifact, name: command.name}};
+      const artifact = await readArtifact(command.projectId, command.artifactId);
+      assertCurrent(artifact, command.expectedCurrentVersionId);
+      const changed = await applyManagementMutation(command, artifactActionKinds.rename, [
+        database.prepare(`UPDATE artifacts SET name = ?, search_name = ?
+          WHERE project_id = ? AND id = ? AND name = ?
+            AND current_version_id = ? AND deleted_at IS NULL
+        `).bind(command.name, normalizeArtifactSearchText(command.name), command.projectId,
+          command.artifactId, command.expectedName, command.expectedCurrentVersionId),
+        ...mutationGuardStatements(`rename-start:${command.projectId}:${command.idempotencyKey}`,
+          "SELECT 1 WHERE changes() = 1", []),
+        artifactAction(command, command.expectedCurrentVersionId, artifactActionKinds.rename),
+        idempotencyStatement(command, command.expectedCurrentVersionId,
+          artifactActionKinds.rename, artifact.accessSetting),
+        ...managementGuardStatements(command, artifactActionKinds.rename,
+          command.expectedCurrentVersionId, "a.deleted_at IS NULL AND a.name = ?", [command.name]),
+      ], () => artifactState(command.projectId, command.artifactId,
+        command.expectedCurrentVersionId, false, artifact.accessSetting));
+      return {...changed, artifact: {...changed.artifact, name: command.name}};
     },
     changeTags: async (command: ChangeArtifactTags) => {
       const replay = await managementReplay(command, artifactActionKinds.changeTags);

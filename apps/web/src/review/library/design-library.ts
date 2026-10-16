@@ -44,7 +44,7 @@ export function libraryItems(
       activityAt: dates?.activityAt ?? Number.NaN,
       createdAt: dates?.createdAt ?? Number.NaN,
       description: item.description,
-      gallery: source.indexTitle,
+      gallery: source.artifactName,
       id: libraryItemId(source.artifactId, item.path),
       kind: item.kind,
       path: item.path,

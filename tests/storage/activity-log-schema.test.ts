@@ -62,10 +62,11 @@ describe("activity log schema", () => {
       `INSERT INTO actions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(...values);
 
-  test("the kind groups partition every installation kind and history keeps the original 14", () => {
+  test("the kind groups partition every installation kind and history includes artifact rename", () => {
     expect([...projectScopedActionKinds, ...installationScopedActionKinds].toSorted())
       .toEqual(Object.values(installationActionKinds).toSorted());
-    expect(artifactHistoryActionKinds).toHaveLength(14);
+    expect(artifactHistoryActionKinds).toHaveLength(15);
+    expect(artifactHistoryActionKinds).toContain(artifactActionKinds.rename);
     expect(artifactHistoryActionKinds).not.toContain(artifactActionKinds.publicLinkEnable);
     expect(artifactHistoryActionKinds).not.toContain(artifactActionKinds.publicLinkDisable);
     expect(recoveredActionId("member_admit", "member_a")).toBe("recovered:member_admit:member_a");

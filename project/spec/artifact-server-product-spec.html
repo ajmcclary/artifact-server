@@ -1748,6 +1748,18 @@
                 server functions, or perform server-side rendering when a request arrives.
               </p>
               <p>
+                An authorized manager can rename an artifact through HTTP, MCP, CLI and its Details side panel.
+                Renaming changes its display name and normalized search name without republishing;
+                identity, immutable versions and bytes, comments, tags, sharing, source bindings and
+                stable and exact-version links remain unchanged. A name is well-formed Unicode, is trimmed, contains 1 to
+                200 UTF-16 code units, and contains no Unicode control or format characters.
+                The mutation checks the exact expected name and current version atomically and
+                records one attributed rename action per successful idempotency key. A retry with
+                the same input returns the original renamed name without overwriting later edits;
+                stale expectations or conflicting key reuse change nothing. Remembered CLI
+                publication remains bound by ID; an explicit obsolete publish name is refused.
+              </p>
+              <p>
                 An artifact can have up to 20 optional tags. The server trims whitespace,
                 normalizes Unicode and letter case, removes duplicates, and stores tags in a
                 stable order. Each stored tag contains 1 to 40 user-perceived characters and no

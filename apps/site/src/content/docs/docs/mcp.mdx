@@ -131,7 +131,7 @@ opens its raw immutable content. Agents give people the Review URL.
 | Projects | `project_list`, `project_create`, `project_rename`, `project_archive`, `project_unarchive` |
 | Artifacts | `artifact_list`, `artifact_get`, `artifact_open`, `artifact_version_list`, `artifact_diff` |
 | Publication | `artifact_create_upload`, `artifact_commit_upload` |
-| Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_restore_version`, `artifact_delete` |
+| Management | `artifact_set_visibility`, `artifact_set_tags`, `artifact_rename`, `artifact_restore_version`, `artifact_delete` |
 | Comments | `comment_list`, `comment_get`, `comment_create`, `comment_reply`, `comment_update`, `comment_resolve`, `comment_delete` |
 | Review dispatch | `dispatch_inbox`: claim review bundles sent to this agent from the review UI |
 | Git history planning | `project_git_history_status`, `project_git_history_estimate` |
@@ -164,3 +164,14 @@ The browser test suite verifies registration, comment changes, and tool removal.
 
 - [Publishing paths](/docs/publish/): CLI versus MCP versus HTTP.
 - [MCP product baseline](https://github.com/plannotator/artifact-server/blob/main/project/spec/artifact-server-mcp-baseline.md): protocol and authorization contracts.
+
+### Rename an artifact
+
+`artifact_rename` takes `artifactId`, `projectId`, `name`, `expectedName`,
+`expectedCurrentVersionId`, and `idempotencyKey`. Read the artifact first and pass
+its exact name and current version as expectations. The existing artifact-management
+capability applies. A stale name or version returns `ARTIFACT_MUTATION_CONFLICT`;
+reusing a key with different input returns `IDEMPOTENCY_CONFLICT`.
+Renaming changes display and search metadata, preserving versions, bytes, links,
+comments and sharing. A successful retry returns the original renamed name and
+never reapplies it over a later rename.

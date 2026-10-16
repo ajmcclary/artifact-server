@@ -56,3 +56,12 @@ Exact link v2 ───────────────→ immutable v2
 ```
 
 Retries use idempotency records so a repeated successful request resolves to the original version instead of creating a duplicate.
+
+## Rename without publishing
+
+Use `artifactserver rename art_example "Design System" --project prj_example --profile team`
+to change an existing artifact's name. This preserves versions, links and comments.
+The CLI reads the current name and version before the conditional update; stale
+edits fail without overwriting another change. Continue publishing the same source
+without an obsolete `--name`. From Library, open the artifact, choose **Details**, and edit **Artifact name**
+in place with **Save name** or **Cancel**. The gallery's published page titles remain unchanged.

@@ -17,13 +17,16 @@ kept so older evidence and ledger text still resolve. They are not conformance I
 
 ## Next priority
 
-- **Rename existing artifacts (added October 16).** Add authorized artifact
-  renaming through the API, MCP, CLI and Library UI. Update the display name and
-  search index without republishing or changing artifact IDs, immutable versions,
-  comments, sharing settings or remembered publication bindings. First requested
-  renames in the Apple Systems project: **Apple Systems Design System → Design
-  System** and **Apple Systems Projects → Projects**. Prove valid renames, input
-  validation, authorization and preservation of existing versions and links.
+- **Release artifact renaming.** API, MCP (`artifact_rename`), CLI (`rename`)
+  and editable Details side-panel implementation is complete, with local behavior and hostile-test
+  evidence attached to ART-012 … ART-014 in the ledger. Postgres and local D1
+  regressions cover conditional writes and replay; deployed qualification remains
+  open. Ship the tested build through GitOps, then apply the requested Apple
+  Systems project renames by stable artifact ID: **Apple Systems Design System →
+  Design System** and **Apple Systems Projects → Projects**. They have not been
+  applied to production by this implementation task. Update publisher commands or
+  groups that explicitly repeat an old creation name; remembered ID bindings
+  continue to work without `--name`.
 
 ## Current deployment
 

@@ -86,6 +86,7 @@ import type {
   CancelAgentDispatch,
   ChangeArtifactAccessSetting,
   ChangeArtifactTags,
+  RenameArtifact,
   ClearCommentThreads,
   CommentRepository,
   CommitArtifactVersion,
@@ -204,6 +205,7 @@ const preparationStateSchema = z.enum([
 const artifactActionKindSchema = z.enum([
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
+  artifactActionKinds.rename,
   artifactActionKinds.commentCreate,
   artifactActionKinds.commentDelete,
   artifactActionKinds.commentReopen,
@@ -337,6 +339,7 @@ const idempotencyRowSchema = z.object({
   operation: z.enum([
     "change_access",
     "change_tags",
+    "rename",
     "delete",
     "publish",
     "restore",
@@ -1761,6 +1764,36 @@ export class PostgresArtifactRepository implements
           AND deleted_at IS NULL
         RETURNING id`,
     );
+  }
+
+  async renameArtifact(command: RenameArtifact): Promise<ArtifactState> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        yield* lockIdempotency(sql, installationId, command.projectId, command.idempotencyKey);
+        const replayed = yield* this.#findIdempotentManagementResult(
+          command.projectId, "rename", command.idempotencyKey, command.inputDigest,
+        );
+        if (replayed !== null) return {...replayed, artifact: {...replayed.artifact, name: command.name}};
+        const artifact = yield* this.#readArtifact(command.projectId, command.artifactId, true);
+        yield* assertExpectedVersion(artifact, command.expectedCurrentVersionId);
+        if (artifact.name !== command.expectedName) return yield* changedDuringManagement();
+        yield* sql`UPDATE artifacts SET name = ${command.name},
+          search_name = ${normalizeArtifactSearchText(command.name)}
+          WHERE installation_id = ${installationId} AND project_id = ${command.projectId}
+            AND id = ${command.artifactId}`;
+        yield* this.#insertAction(command, artifactActionKinds.rename, command.expectedCurrentVersionId);
+        yield* this.#insertIdempotency({
+          accessSetting: artifact.accessSetting, artifactId: command.artifactId,
+          createdAt: command.createdAt, idempotencyKey: command.idempotencyKey,
+          inputDigest: command.inputDigest, operation: "rename", projectId: command.projectId, tagsJson: null,
+          versionId: command.expectedCurrentVersionId,
+        });
+        return yield* this.#readArtifactState(command.projectId, command.artifactId,
+          command.expectedCurrentVersionId, artifact.accessSetting, false);
+      }));
+    }));
   }
 
   async changeTags(command: ChangeArtifactTags): Promise<ArtifactState> {
@@ -4719,7 +4752,7 @@ export class PostgresArtifactRepository implements
 
   #findIdempotentManagementResult(
     projectId: string,
-    operation: "change_access" | "restore",
+    operation: "change_access" | "rename" | "restore",
     idempotencyKey: string,
     inputDigest: string,
   ): Effect.Effect<ArtifactState | null, unknown, SqlClient> {

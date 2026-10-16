@@ -76,6 +76,8 @@ export function actionLabel(value: ArtifactAction["action"]): string {
       return "Relinked source file";
     case "change_access":
       return "Changed access";
+    case "rename":
+      return "Renamed";
     case "change_tags":
       return "Replaced tags";
     case "comment_create":

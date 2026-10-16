@@ -275,6 +275,11 @@ const changeAccessSchema = z.object({
   accessSetting: accessSettingSchema,
   expectedCurrentVersionId: z.string().min(1).max(200),
 });
+const renameArtifactSchema = z.object({
+  expectedCurrentVersionId: z.string().min(1).max(200),
+  expectedName: z.string().max(200),
+  name: z.string(),
+}).strict();
 const changeTagsSchema = z.object({
   expectedCurrentVersionId: z.string().min(1).max(200),
   tags: artifactTagsSchema,
@@ -2462,6 +2467,36 @@ export function createHttpApp(
         dependencies.contentDomain,
         state,
       ));
+    },
+  );
+
+  app.patch(
+    "/api/v1/artifacts/:artifactId/name",
+    boundedJsonBody,
+    async (context) => {
+      const body = renameArtifactSchema.parse(await context.req.json());
+      const state = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.renameArtifact({
+            artifactId: context.req.param("artifactId"),
+            expectedCurrentVersionId: body.expectedCurrentVersionId,
+            idempotencyKey: requiredIdempotencyKey(
+              context.req.header("idempotency-key"),
+            ),
+            principal: context.get("principal"),
+            projectId: requestedProjectId(context),
+            expectedName: body.expectedName,
+            name: body.name,
+          })
+        ),
+      );
+      const requestUrl = responseApplicationUrl(context, dependencies);
+      const response = artifactStateResponse(requestUrl, dependencies.contentDomain, state);
+      return context.json({...response, links: {...response.links,
+        review: artifactReviewUrl(requestUrl, state.artifact.projectId, state.artifact.id, state.version.id),
+      }});
     },
   );
 

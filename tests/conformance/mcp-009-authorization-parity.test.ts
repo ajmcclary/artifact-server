@@ -52,6 +52,7 @@ const operations = [
   "publish.new-version",
   "visibility.change",
   "tags.change",
+  "artifact.rename",
   "version.restore",
   "artifact.delete",
 ] as const;
@@ -111,6 +112,7 @@ const expectedAllowed: ReadonlyMap<CallerLabel, ReadonlySet<Operation>> = new Ma
     ...readOperations,
     "visibility.change",
     "tags.change",
+  "artifact.rename",
     "version.restore",
     "artifact.delete",
   ])],
@@ -229,6 +231,7 @@ const mcpArtifactPageSchema = z.object({
   nextCursor: z.string().nullable(),
 }).loose();
 const artifactRecordSchema = z.object({
+  name: z.string(),
   accessSetting: z.enum(["account_required", "public_link"]),
   currentVersionId: z.string(),
   id: z.string(),
@@ -676,6 +679,7 @@ describe("MCP and HTTP share one authorization layer", () => {
         };
       }
       case "visibility.change":
+      case "artifact.rename":
       case "tags.change":
       case "version.restore":
       case "artifact.delete": {
@@ -709,6 +713,8 @@ describe("MCP and HTTP share one authorization layer", () => {
               accessSetting: "public_link",
               expectedCurrentVersionId,
             }, key);
+          case "artifact.rename":
+            return httpRequest(token, "PATCH", route("/name"), {expectedCurrentVersionId, expectedName: target.name, name: "Renamed"}, key);
           case "tags.change":
             return httpRequest(token, "PATCH", route("/tags"), {
               expectedCurrentVersionId,
@@ -735,6 +741,9 @@ describe("MCP and HTTP share one authorization layer", () => {
       projectId,
     };
     return [
+      {operation: "artifact.rename", run: (token) => mcpTool(token, "artifact_rename", {
+        ...common, expectedName: target.name, name: "Renamed", idempotencyKey: mcpIdempotencyKey(),
+      })},
       {
         operation: "visibility.change",
         run: (token) => mcpTool(token, "artifact_set_visibility", {
@@ -882,6 +891,7 @@ describe("MCP and HTTP share one authorization layer", () => {
     if (artifact.currentVersionId === target.secondVersionId) current = "second";
     return JSON.stringify({
       accessSetting: artifact.accessSetting,
+      renamed: artifact.name === "Renamed",
       current,
       tags: artifact.tags,
       versionCount: versionIds.length,

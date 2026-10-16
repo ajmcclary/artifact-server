@@ -10,6 +10,7 @@ Every command prints JSON on success. Do not add a `--json` flag; there is none.
 
 | Command | Purpose |
 | --- | --- |
+| `rename <artifact> <name>` | Rename an existing artifact without publishing. |
 | `publish <path>` | Publish one file or a finished directory. |
 | `link <path>` | Link a file on this machine as an artifact that tracks it. |
 | `auth login <server>` | Sign in to one exact origin and save a profile. |
@@ -313,3 +314,23 @@ artifactserver maintenance cleanup-staging --once --limit 100
 ## Claude Design exports
 
 Publish complete Claude Design System and Project directories, or portable design systems with `*.card.html` previews and `@dsCard` metadata, to publish a preview index automatically when no root `index.html` exists; the version opens on its first preview and Review shows the index as a gallery. An explicit `--entry` always wins. See [Claude Design exports](./claude-design.md) for supported layouts and boundaries.
+
+## Rename an artifact
+
+```sh
+artifactserver rename art_example "Design System" --project prj_example --profile team
+```
+
+The command reads the current name and version, then conditionally updates the
+name. Use `--expected-name` and `--expected-version` to supply a state you already
+reviewed. For a repeatable retry, supply both expectations and the same
+`--idempotency-key`; reuse requires identical input. Success prints the artifact,
+unchanged current version and links as JSON. Stale edits fail without changing anything.
+
+Renaming preserves the remembered publication binding. Continue publishing the
+same source without `--name`, or update an explicit `--name` to the new name.
+An obsolete explicit creation name is refused; it never creates a replacement artifact.
+From Library, open an artifact and choose **Details**. Managers can edit **Artifact name**
+in place, then **Save name** or **Cancel**. Failed edits preserve the entered text;
+**Reload current details** refreshes stale expectations before retrying. Returning
+to Library reads the updated name.

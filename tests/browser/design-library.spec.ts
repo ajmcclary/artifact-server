@@ -12,7 +12,7 @@ import {publishPath, type FilePublicationTarget} from "../../src/client/file-pub
 import {previewSourceFixture, writePreviewSourceFixture} from "../support/claude-design-fixture.js";
 import {ApiClient} from "../support/agent-dispatch.js";
 import {localLogin, startBrowserFixture, stopBrowserFixture, type BrowserFixture} from "./browser-fixture.js";
-import {interactiveFrame} from "./review-helpers.js";
+import {interactiveFrame, openInspectorTab} from "./review-helpers.js";
 
 // Every publish names its project: once a second project exists, the server asks which one.
 function publish(fixture: BrowserFixture, inputPath: string, target: FilePublicationTarget, entryPath?: string, projectId = "prj_default") {
@@ -269,5 +269,58 @@ test("DSN-006-B: the Library loads in one request with no per-gallery reads", as
   } finally {
     await stopBrowserFixture(fixture);
     await rm(directory, {force: true, recursive: true});
+  }
+});
+
+
+test("ART-014-B ART-014-F: Details edits the selected artifact name, preserves failed input and updates Library without changing the exact page", async ({browser}) => {
+  const fixture = await startBrowserFixture(browser);
+  const directory = await mkdtemp(path.join(tmpdir(), "details-rename-"));
+  try {
+    await writePreviewSourceFixture(directory);
+    const published = await publish(fixture, directory, named("Apple Systems Projects"));
+    await localLogin(fixture);
+    await fixture.page.getByRole("link", {exact: true, name: "Library"}).click();
+    const first = fixture.page.locator("a[data-gallery-path]").first();
+    await expect(first).toBeVisible();
+    const href = await first.getAttribute("href");
+    await expect(fixture.page.getByRole("button", {name: "Rename artifact", exact: true})).toHaveCount(0);
+    await first.click();
+    await openInspectorTab(fixture.page, "Details");
+    const exactPage = fixture.page.url();
+    const inspector = fixture.page.getByRole("complementary", {name: "Artifact inspector"});
+    const name = inspector.getByRole("textbox", {name: "Artifact name", exact: true});
+    await expect(name).toHaveValue("Apple Systems Projects");
+    await name.fill("Projects");
+    const changedElsewhere = await fetch(`${fixture.server.baseUrl}/api/v1/artifacts/${published.artifact.id}/name`, {
+      method: "PATCH", headers: {Authorization: `Bearer ${fixture.installation.apiToken}`,
+        "content-type": "application/json", "idempotency-key": randomUUID()},
+      body: JSON.stringify({expectedName: "Apple Systems Projects", expectedCurrentVersionId: published.version.id, name: "Concurrent name"}),
+    });
+    expect(changedElsewhere.status).toBe(200);
+    await inspector.getByRole("button", {name: "Save name", exact: true}).click();
+    await expect(inspector.getByRole("alert")).toBeVisible();
+    await expect(name).toHaveValue("Projects");
+    await inspector.getByRole("button", {name: "Reload current details"}).click();
+    await expect(inspector.getByRole("alert")).toHaveCount(0);
+    await expect(name).toHaveValue("Projects");
+    await inspector.screenshot({path: "test-results/browser/artifact-details-rename.png"});
+    await inspector.getByRole("button", {name: "Save name", exact: true}).click();
+    await expect(inspector.getByRole("button", {name: "Save name", exact: true})).toHaveCount(0);
+    await expect(name).toHaveValue("Projects");
+    await expect(fixture.page).toHaveURL(exactPage);
+    await name.fill("Unsaved name");
+    await inspector.getByRole("button", {name: "Cancel", exact: true}).click();
+    await expect(name).toHaveValue("Projects");
+    await fixture.page.getByRole("link", {exact: true, name: "Library"}).click();
+    await expect(first).toHaveAttribute("href", href ?? "");
+    const search = fixture.page.getByRole("searchbox", {name: "Search previews"});
+    await search.fill("Projects");
+    await expect(fixture.page.locator("a[data-gallery-path]")).toHaveCount(4);
+    await search.fill("Apple Systems");
+    await expect(fixture.page.locator("a[data-gallery-path]")).toHaveCount(0);
+  } finally {
+    await stopBrowserFixture(fixture);
+    await rm(directory, {recursive: true, force: true});
   }
 });

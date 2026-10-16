@@ -767,3 +767,26 @@ The Library journey, which neither version affects, measured 2.3 s cold and 1.6 
 - **Ready time did not improve, and the cold median is not a regression.** The cold ranges overlap (4.1–14.3 s against 7.2–10.7 s), and so do the warm ones (1.9–3.4 s against 1.7–4.5 s). In both runs nearly every content request's time is waiting for the first byte: 1–4.6 s per file regardless of size (the 623-byte index waited 2.6 s in one after sample, against 2.4 s for the old 112 KB file before), with receive times mostly under 0.1 s. Review's own start, before any lease request, also varied: the first content request began at a median of 1.8 s after navigation in the before run and 3.7 s in the after run, although that phase does not depend on the ExtractionKit version. Per-request latency on this host, recorded in the host-contention section above, sets cold ready here, not the bytes the page decodes.
 - **Version 22 differs in more than the split.** It loads React from its own `vendor/react/` files (on the lease origin) instead of cdnjs, so two more of the 38 files queue on the same server, and its shared `ds-bundle.js` grew from 1,743,497 to 1,807,547 bytes (about 272 to 285 KiB transferred) with new components. Neither change is isolated here.
 - **Ready still excludes parse and evaluation.** It ends when content requests have been quiet for 500 ms. The warm median fell from 2.18 s to 1.77 s with overlapping ranges; only a main-thread profile would show whether halving the decoded script shortens the first Runs render.
+
+## October 16, 2026 artifact rename regression check
+
+The paired local baseline used Node 24.15.0, the same Apple M1 Max and APFS
+storage, and identical workloads (40 publications, 120 reads, concurrency six).
+The before run used clean `41c4226`; the after run used the rename working tree.
+Reports: `project/evidence/artifact-rename-performance-before.json` and
+`project/evidence/artifact-rename-performance-after.json`.
+
+| p95 | Before | After |
+|---|---|---|
+| Publication | 26.57 ms | 26.95 ms |
+| Content read | 6.04 ms | 5.99 ms |
+| Artifact list | 19.74 ms | 13.93 ms |
+| MCP discovery | 106.36 ms | 117.11 ms |
+
+Publication and reads stayed close in this pair. MCP discovery increased by
+10.75 ms with the catalog now containing 36 tools. Both runs flagged an event-loop
+maximum above 100 ms. This single pair does not isolate the extra schema's cost
+from host variance; use the existing MCP server-construction probe and repeated
+controlled samples before setting a regression budget. These measurements cover
+existing publication/read workloads, rather than establishing a rename throughput
+or production-capacity claim. No timing gate or coverage threshold changed.

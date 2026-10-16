@@ -14,6 +14,7 @@ export const artifactActionKinds = {
   capture: "capture",
   changeAccess: "change_access",
   changeTags: "change_tags",
+  rename: "rename",
   commentCreate: "comment_create",
   commentDelete: "comment_delete",
   commentReopen: "comment_reopen",
@@ -34,13 +35,14 @@ export type ArtifactActionKind =
   (typeof artifactActionKinds)[keyof typeof artifactActionKinds];
 
 /**
- * Kinds the per-artifact action history has always returned. The public-link
+ * Artifact mutations returned by per-artifact action history. The public-link
  * kinds duplicate `change_access` for the activity feed and stay out of it.
  */
 export const artifactHistoryActionKinds: readonly ArtifactActionKind[] = [
   artifactActionKinds.capture,
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
+  artifactActionKinds.rename,
   artifactActionKinds.commentCreate,
   artifactActionKinds.commentDelete,
   artifactActionKinds.commentReopen,
