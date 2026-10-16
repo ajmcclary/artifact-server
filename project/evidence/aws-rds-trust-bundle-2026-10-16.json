@@ -1,0 +1,11 @@
+{
+  "recordedAt": "2026-10-16T21:57:44.412Z",
+  "source": "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
+  "documentation": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html",
+  "previousSha256": "fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c",
+  "sha256": "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b",
+  "certificateCount": 114,
+  "allCertificatesAreAmazonRdsSelfSignedCa": true,
+  "firstImageBuildFailure": "https://github.com/ajmcclary/artifact-server/actions/runs/38972640085",
+  "reason": "Upstream public bundle changed; refresh the exact checksum while retaining HTTPS and mandatory checksum verification."
+}
