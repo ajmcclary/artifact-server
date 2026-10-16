@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated October 9, 2026. This is the one place for open work, waiting owner
+Updated October 16, 2026. This is the one place for open work, waiting owner
 decisions and the current deployment. It replaces `NEXT.md`, `NEXT-STEPS.md`,
 `PLAN.md` and `HANDOFF.md`, which are kept verbatim in
 [docs/archive/planning-2026-10-08/](docs/archive/planning-2026-10-08/README.md)
@@ -14,6 +14,16 @@ its evidence to the ledger, and leave the history to Git.
 
 Task IDs (T03, T10, …) are the planning identifiers from the archived backlog,
 kept so older evidence and ledger text still resolve. They are not conformance IDs.
+
+## Next priority
+
+- **Rename existing artifacts (added October 16).** Add authorized artifact
+  renaming through the API, MCP, CLI and Library UI. Update the display name and
+  search index without republishing or changing artifact IDs, immutable versions,
+  comments, sharing settings or remembered publication bindings. First requested
+  renames in the Apple Systems project: **Apple Systems Design System → Design
+  System** and **Apple Systems Projects → Projects**. Prove valid renames, input
+  validation, authorization and preservation of existing versions and links.
 
 ## Current deployment
 
