@@ -204,7 +204,7 @@ jobs:
 
   portable:
     name: macOS portability
-    if: inputs.tier != 'release'
+    if: inputs.tier != 'release' && inputs.runner != 'home'
     runs-on: macos-14
     timeout-minutes: 12
     steps:
@@ -232,7 +232,7 @@ jobs:
 
   windows-local:
     name: Windows local publishing and development
-    if: inputs.tier != 'release'
+    if: inputs.tier != 'release' && inputs.runner != 'home'
     runs-on: windows-latest
     timeout-minutes: 12
     steps:

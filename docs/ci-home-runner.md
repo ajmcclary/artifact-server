@@ -11,9 +11,10 @@ The home runner is GitHub's Actions Runner Controller (ARC 0.15.0), deployed fro
 the Workspace repository: the recipe `deployments/clusters/home-ci`, the Argo apps
 `ci-home`, `arc-controller` and `arc-runners` (project `ci-runners`), and the
 descriptor `deployments/environments/home-ci.yaml`. Its runner scale set,
-`artifact-server-home`, keeps no idle runner and starts at most one, so a second
-dispatch waits in GitHub's queue. Each run gets a fresh pod with its own Docker
+`artifact-server-home`, keeps no idle runner and starts at most two; additional
+dispatches wait in GitHub's queue. Each run gets a fresh pod with its own Docker
 daemon, and logs and the `full-gate-evidence-*` artifact appear in GitHub as usual.
+A `runner=home` dispatch runs only the Linux full gate; it skips the GitHub-hosted macOS and Windows portability jobs. The image workflow also uses the home runner.
 `.github/workflows/home-runner-smoke.yml` proves the runner's Docker, kind and
 toolchain without running the whole gate.
 
