@@ -82,7 +82,7 @@ describe("resumable staged uploads over HTTP", () => {
     await removeTestInstallation(installation);
   });
 
-  test("PUB-004-B: a fresh HTTP plan reuses committed bytes and transfers only changed files", async () => {
+  test("a fresh HTTP plan reuses committed bytes and transfers only changed files", async () => {
     server = await startTestServer(installation, {clock});
     const original = testSiteFile("shared file bytes");
     const first = await createStagedUpload(server, installation, original.path, [original]);

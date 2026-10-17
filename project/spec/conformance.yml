@@ -677,12 +677,12 @@ requirements:
 
   - id: PUB-004
     kind: behavior
-    behavior: Verified files become immutable content-addressed blobs written without overwriting an existing blob. Upload planning may reuse committed content from the active destination project only with artifact-read authority, matching digest and size and re-verifying bytes through staging.
+    behavior: Verified files become immutable content-addressed blobs written without overwriting an existing blob.
     owner: blob-storage
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
-      behavior: {id: PUB-004-B, description: "Publish identical file bytes from several versions, confirm one immutable fingerprint object, and reuse verified project content in a fresh upload plan without client transfer."}
-      failure: {id: PUB-004-F, description: "A conflicting write cannot replace immutable bytes; unauthorized, cross-project, deleted, missing, or corrupt content cannot satisfy a fresh upload plan."}
+      behavior: {id: PUB-004-B, description: "Publish identical file bytes from several versions and confirm that they resolve to the same immutable fingerprint object."}
+      failure: {id: PUB-004-F, description: "A conflicting write to an existing fingerprint cannot replace or corrupt the stored bytes."}
     deployments: *all
     status: behavior_verified
     depends_on: [PUB-003]
@@ -1052,6 +1052,25 @@ requirements:
         result: pass
         run: project/evidence/local-foundation.json
         recorded_at: "2026-10-07T14:48:44.621Z"
+
+  - id: PUB-023
+    kind: behavior
+    behavior: Upload planning reuses committed content only inside the active destination project and installation with artifact-read authority, matches digest and size, and verifies stored bytes through staging before marking a file verified. The existing plan contract requests only missing client bytes.
+    owner: publishing
+    source: {file: artifact-server-product-spec.html, anchor: architecture}
+    acceptance:
+      behavior: {id: PUB-023-B, description: "Reuse committed project bytes in concurrent fresh upload plans, preserve verified staging across restart, and request changed files normally."}
+      failure: {id: PUB-023-F, description: "Write-only callers, foreign installations, other projects, wrong sizes and deleted artifacts cannot reuse content; missing or corrupt stored bytes leave the slot unverified for ordinary upload."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Local lifecycle and HTTP checks pass. The local D1/R2 reuse fixture passes. Final Postgres/object-storage and hosted deployment qualification are pending."
+    depends_on: [PUB-001, PUB-003, PUB-004, AUTH-004]
+    evidence:
+      - deployment: local
+        tests: [PUB-023-B, PUB-023-F]
+        result: pass
+        run: project/evidence/upload-reuse.json
+        recorded_at: "2026-10-17T00:30:49.036000Z"
 
   - id: CLI-001
     kind: security

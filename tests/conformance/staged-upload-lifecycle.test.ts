@@ -76,7 +76,7 @@ describe("staged upload lifecycle", () => {
     await rm(dataDirectory, {force: true, recursive: true});
   });
 
-  test("PUB-004-B PUB-003-B: reuse verifies committed bytes, survives restart and skips changed content", async () => {
+  test("PUB-023-B: reuse verifies committed bytes, survives restart and skips changed content", async () => {
     const principal = {...testPrincipal("reuse"), capabilities: [principalCapabilities.createArtifact, principalCapabilities.readArtifacts]};
     const bytes = new TextEncoder().encode("reusable content");
     const file = {path: "index.txt", mediaType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")};
@@ -101,7 +101,7 @@ describe("staged upload lifecycle", () => {
     }));
   });
 
-  test("PUB-004-F PUB-001-F: hash knowledge without read authority cannot reuse, and corrupt or missing bytes fall back", async () => {
+  test("PUB-023-F: hash knowledge without read authority cannot reuse, and corrupt or missing bytes fall back", async () => {
     const principal = {...testPrincipal("reuse"), capabilities: [principalCapabilities.createArtifact, principalCapabilities.readArtifacts]};
     const bytes = new TextEncoder().encode("protected bytes");
     const file = {path: "index.txt", mediaType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")};
