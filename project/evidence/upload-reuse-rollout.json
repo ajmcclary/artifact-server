@@ -1,0 +1,160 @@
+{
+  "recordedAt": "2026-10-17T01:54:29.042186+00:00",
+  "status": "complete",
+  "projectId": "prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5",
+  "projectUrl": "https://artifacts.backend.app/review?project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5",
+  "server": {
+    "commit": "94c501341ac1d3504bb5b0dad0b99de8b3c08717",
+    "imageDigest": "sha256:69fae0f615247043cc1eeb936af13fa180cbecdd95e7aa82c336d70d2775e83e",
+    "previousImageDigest": "sha256:b01709f3e6b295f89d565e4089598835540f5945667b37eac687d0fc713cef68",
+    "imageRun": "https://github.com/ajmcclary/artifact-server/actions/runs/38986867665",
+    "fullGateRun": "https://github.com/ajmcclary/artifact-server/actions/runs/38986865802",
+    "fullGateConclusion": "success",
+    "gitopsCommit": "f9cca5df86c9ac6c066112de52a13445213df026",
+    "deployment": {
+      "image": "ghcr.io/ajmcclary/artifact-server@sha256:69fae0f615247043cc1eeb936af13fa180cbecdd95e7aa82c336d70d2775e83e",
+      "readyReplicas": 4,
+      "updatedReplicas": 4,
+      "availableReplicas": 4,
+      "argoSync": "Synced",
+      "argoHealth": "Healthy"
+    }
+  },
+  "validation": {
+    "localPreviewCount": 327,
+    "productBoardCount": 205,
+    "preservedCanvasNotes": 28,
+    "designedScenarioCount": 33,
+    "scenarioEngines": [
+      "chromium",
+      "webkit"
+    ],
+    "realLocalReviewSandboxTargets": 6,
+    "hostedEngineTargetChecks": 20,
+    "hostedScenariosPerEngine": 33,
+    "cleanVerifiedProvenanceTargets": 10,
+    "externalStorageRuntimeTests": 61,
+    "smokeTests": 2,
+    "localPreviewEngine": "chromium",
+    "localPerformanceWarnings": []
+  },
+  "upload": {
+    "logicalFileBytes": 2774679378,
+    "reusedFileBytes": 2762682572,
+    "streamedFileBytes": 11996806,
+    "reusePercent": 99.5676,
+    "uploadPlans": 10,
+    "failedFileTransfers": 0,
+    "scope": "File payload bytes streamed through the CLI Fetch boundary. Excludes HTTP/TLS overhead, browser downloads and permanent storage savings. Server-side reuse still verifies bytes through staging."
+  },
+  "hostedReuseProbe": {
+    "recordedAt": "2026-10-17T01:17:42.915Z",
+    "origin": "https://artifacts.backend.app",
+    "projectId": "prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5",
+    "verified": true,
+    "bytes": 10751,
+    "clientFileBytesUploaded": 0
+  },
+  "artifacts": [
+    {
+      "target": "design-system",
+      "artifactId": "art_62163308-8942-4e27-9f91-3740d128827f",
+      "versionId": "ver_0da00d50-b4e6-4609-8df0-a56318fb0b49",
+      "versionNumber": 4,
+      "previousVersionId": "ver_a189ccc7-c97b-4e47-afb1-3f5e9cead22d",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_62163308-8942-4e27-9f91-3740d128827f&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_0da00d50-b4e6-4609-8df0-a56318fb0b49&view=focus",
+      "sourceCommit": "123cf3fb3711c284f46738e43bfdf9c473373b26",
+      "manifestDigest": "4a1c5a5dc1ab3dc4128e282584f468d41642a0ceb5fc85455a8da21aff1ccf77"
+    },
+    {
+      "target": "allegory",
+      "artifactId": "art_177583a7-8af7-41f2-98c1-2c3390615fa9",
+      "versionId": "ver_e4e91acc-b540-4e7d-a492-1ab4503fb523",
+      "versionNumber": 3,
+      "previousVersionId": "ver_20fbcedd-8d52-47e8-a2d9-28358218a612",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_177583a7-8af7-41f2-98c1-2c3390615fa9&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_e4e91acc-b540-4e7d-a492-1ab4503fb523&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "036688180cbc405f245298c85b5cee509f1ceaa4acf0b1340e5e57122651ea0e"
+    },
+    {
+      "target": "bridge",
+      "artifactId": "art_02beb887-ff7b-4025-8c2d-7242f24776a1",
+      "versionId": "ver_74fb1eb5-501a-4e18-9035-1323f5e1e89a",
+      "versionNumber": 3,
+      "previousVersionId": "ver_6335a38e-22d9-4bf6-bffd-cab894f560a5",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_02beb887-ff7b-4025-8c2d-7242f24776a1&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_74fb1eb5-501a-4e18-9035-1323f5e1e89a&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "4b4f50d7292d1267dac36be610652054aee8ce15eef06446bfec86624cafbd6d"
+    },
+    {
+      "target": "claudius",
+      "artifactId": "art_8ffd435b-e982-48a3-b2fb-7bcead3ebbcd",
+      "versionId": "ver_c16609c4-8ad8-46b2-866a-917b3180a9ce",
+      "versionNumber": 3,
+      "previousVersionId": "ver_f9cd73fe-b4db-40d3-9b36-058d74a55369",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_8ffd435b-e982-48a3-b2fb-7bcead3ebbcd&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_c16609c4-8ad8-46b2-866a-917b3180a9ce&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "e2aae2d611ed32ede30b39dc74054ffe4a1b20a13f9ccaec57580dda1447fefb"
+    },
+    {
+      "target": "musictoolkit",
+      "artifactId": "art_6abc03bd-dfdf-4b4b-8172-96b1febb9f5f",
+      "versionId": "ver_851b90a0-1cf8-45b1-9bfc-278d680edf84",
+      "versionNumber": 3,
+      "previousVersionId": "ver_d18cdddc-cb09-49bf-8db6-bee5f1a04d30",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_6abc03bd-dfdf-4b4b-8172-96b1febb9f5f&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_851b90a0-1cf8-45b1-9bfc-278d680edf84&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "05e7cf7bc52bef8691106a2fddd5a669abb23ade5aa3f72c95417c958a007561"
+    },
+    {
+      "target": "patterns",
+      "artifactId": "art_d5607ab2-cbe6-4df2-9d08-b0845d1646ae",
+      "versionId": "ver_fbb14e24-1fd1-4659-a389-a9c08c114b1d",
+      "versionNumber": 3,
+      "previousVersionId": "ver_b7229cfa-2a8b-4881-a346-3c11698ca34a",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_d5607ab2-cbe6-4df2-9d08-b0845d1646ae&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_fbb14e24-1fd1-4659-a389-a9c08c114b1d&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "44dada13ed46d6249f5a51a7200bf452488c67da06c506cb20f7b8ea8f02038e"
+    },
+    {
+      "target": "pixellift",
+      "artifactId": "art_7e3bb84c-c912-4c84-b01e-06a24e2bca53",
+      "versionId": "ver_427a22fb-b6df-4a24-b2e5-fcd7b4c0a52a",
+      "versionNumber": 3,
+      "previousVersionId": "ver_b7b985c7-e38f-42b0-8a8f-85baea0be982",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_7e3bb84c-c912-4c84-b01e-06a24e2bca53&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_427a22fb-b6df-4a24-b2e5-fcd7b4c0a52a&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "ab3db3a37c0db828d20f01df34860099bedd374f87b9fa169d6d7bb86daa7286"
+    },
+    {
+      "target": "sonography",
+      "artifactId": "art_d50c2790-ebfa-4f2c-a17b-778541a372fe",
+      "versionId": "ver_fadb764e-3427-4b5f-97b4-6fd45ebd4000",
+      "versionNumber": 3,
+      "previousVersionId": "ver_b37ac950-208e-4a5f-8599-d1249e7d7b98",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_d50c2790-ebfa-4f2c-a17b-778541a372fe&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_fadb764e-3427-4b5f-97b4-6fd45ebd4000&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "451fdb71e75dc175ab78fb1065bfc3afdf3d557a0a1dffa5a5521e0496fe2bc6"
+    },
+    {
+      "target": "standards",
+      "artifactId": "art_3e5ca091-3871-4bdb-8c31-8858cd97401e",
+      "versionId": "ver_ea32e6f9-a345-4349-ba9f-2e341e3571ed",
+      "versionNumber": 3,
+      "previousVersionId": "ver_31daeaaa-4bae-4331-be12-12b474499572",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_3e5ca091-3871-4bdb-8c31-8858cd97401e&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_ea32e6f9-a345-4349-ba9f-2e341e3571ed&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "20f2b9a9e48c75dd4e688df8bcce6c74c19928a1aeee2ef7cf0fb9bebf3b6f2d"
+    },
+    {
+      "target": "ready-room",
+      "artifactId": "art_d4ed45a7-dc81-46b1-b723-5cc1a46bb78c",
+      "versionId": "ver_a9149de7-b4fb-4e35-965e-8e6b621cd51e",
+      "versionNumber": 4,
+      "previousVersionId": "ver_cad8ebbf-0764-4582-8971-3ff7dfb52f9c",
+      "reviewUrl": "https://artifacts.backend.app/review?artifact=art_d4ed45a7-dc81-46b1-b723-5cc1a46bb78c&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_a9149de7-b4fb-4e35-965e-8e6b621cd51e&view=focus",
+      "sourceCommit": "8e37f8bd6b84060beee2119ce62b5fb1a40479e3",
+      "manifestDigest": "d745831da7e31be1351ba6156543af8ece3df983709d80591281264d574055f7"
+    }
+  ]
+}

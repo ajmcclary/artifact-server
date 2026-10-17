@@ -1063,7 +1063,7 @@ requirements:
       failure: {id: PUB-023-F, description: "Write-only callers, foreign installations, other projects, wrong sizes and deleted artifacts cannot reuse content; missing or corrupt stored bytes leave the slot unverified for ordinary upload."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "Local lifecycle and HTTP checks pass. The local D1/R2 reuse fixture passes. Final Postgres/object-storage and hosted deployment qualification are pending."
+    proof_gap: "Local lifecycle, HTTP, Postgres/S3 integration, and local D1/R2 checks pass. The home-runner full gate and the existing Kubernetes deployment passed; all ten Platform publications and their hosted Chromium/WebKit checks are recorded in project/evidence/upload-reuse-rollout.json. Transfer figures cover client file payloads only. No separate live Azure, GCS, or Cloudflare provider qualification was performed."
     depends_on: [PUB-001, PUB-003, PUB-004, AUTH-004]
     evidence:
       - deployment: local
