@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-10-17T00:30:08.006735+00:00",
+  "scope": "Upload reuse local implementation checks; full deployment qualification recorded separately.",
+  "focusedTests": {
+    "numTotalTests": 28,
+    "numPassedTests": 28,
+    "numFailedTests": 0,
+    "success": true
+  },
+  "coreTests": {
+    "passed": 761,
+    "files": 185
+  },
+  "webUnitTests": {
+    "passed": 173,
+    "files": 27
+  },
+  "cloudflareReuseFixture": {
+    "passed": 6,
+    "command": "pnpm --dir deploy/cloudflare exec vitest run tests/worker-runtime.test.ts"
+  },
+  "limits": [
+    "A broader Cloudflare run had a transient agent long-poll 503; the isolated three-test suite passed on retry.",
+    "No hosted upload savings or deployment completion is claimed by this local record."
+  ],
+  "sourceSha256": {
+    "src/application/staged-upload.ts": "8582fe02481c1979f9300f62a99af1af5ad23b4778666b4511ed69b729d61856",
+    "src/core/ports.ts": "81fded83b05c179a446ed8e8bf862e0ea092478510d7e2427c1c2826866cd218",
+    "src/local/create-local-application-layer.ts": "7276dabd798681110ab235050810a0ccaadf78691e09bed0dc79def3e03e7d1d",
+    "src/storage/sqlite-artifact-repository.ts": "fef3809213a93b3a78ef602e6f2fbd543cf6c9ec10dd7a5fe436d46faed38ffa",
+    "src/storage/postgres-artifact-repository.ts": "197fba29eb68f7d7887026ef9d368908dc463689d91a95fba36e1b1fc948dc6f",
+    "deploy/cloudflare/src/d1-artifact-repository.ts": "3449a3d1aeafcc28ea1465d9584318f9965ae6ddca93aa693017eedd787f667f"
+  }
+}

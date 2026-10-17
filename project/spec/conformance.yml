@@ -677,12 +677,12 @@ requirements:
 
   - id: PUB-004
     kind: behavior
-    behavior: Verified files become immutable content-addressed blobs written without overwriting an existing blob.
+    behavior: Verified files become immutable content-addressed blobs written without overwriting an existing blob. Upload planning may reuse committed content from the active destination project only with artifact-read authority, matching digest and size and re-verifying bytes through staging.
     owner: blob-storage
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
-      behavior: {id: PUB-004-B, description: "Publish identical file bytes from several versions and confirm that they resolve to the same immutable fingerprint object."}
-      failure: {id: PUB-004-F, description: "A conflicting write to an existing fingerprint cannot replace or corrupt the stored bytes."}
+      behavior: {id: PUB-004-B, description: "Publish identical file bytes from several versions, confirm one immutable fingerprint object, and reuse verified project content in a fresh upload plan without client transfer."}
+      failure: {id: PUB-004-F, description: "A conflicting write cannot replace immutable bytes; unauthorized, cross-project, deleted, missing, or corrupt content cannot satisfy a fresh upload plan."}
     deployments: *all
     status: behavior_verified
     depends_on: [PUB-003]

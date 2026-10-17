@@ -82,6 +82,29 @@ describe("resumable staged uploads over HTTP", () => {
     await removeTestInstallation(installation);
   });
 
+  test("PUB-004-B: a fresh HTTP plan reuses committed bytes and transfers only changed files", async () => {
+    server = await startTestServer(installation, {clock});
+    const original = testSiteFile("shared file bytes");
+    const first = await createStagedUpload(server, installation, original.path, [original]);
+    await requireSuccessfulUploads(uploadEveryStagedFile(installation, first.body, [original]));
+    await commitStagedUpload(installation, first.body, "http-reuse-source-0001", {
+      kind: "new_artifact", name: "Reuse source", accessSetting: "account_required", tags: [],
+    });
+    const changed = {...testSiteFile("new bytes"), path: "changed.html"};
+    const planned = await createStagedUpload(server, installation, original.path, [original, changed], undefined, "static", "http-reuse-plan-0001");
+    expect(planned.body.files.find(file => file.path === original.path)?.verified).toBe(true);
+    expect(planned.body.files.find(file => file.path === changed.path)?.verified).toBe(false);
+    expect(planned.body.files.filter(file => !file.verified).reduce((sum,file) => sum + file.size,0)).toBe(changed.bytes.length);
+    const slot = planned.body.files.find(file => file.path === changed.path);
+    if (!slot) throw new Error("Missing changed slot");
+    const sent = await uploadStagedFile(installation, slot, changed.bytes);
+    expect(sent.status).toBe(200);
+    const committed = await commitStagedUpload(installation, planned.body, "http-reuse-commit-0001", {
+      kind: "new_artifact", name: "Reused publication", accessSetting: "account_required", tags: [],
+    });
+    expect(committed.response.status).toBe(201);
+  });
+
   test("a fresh key-bound upload returns created", async () => {
     server = await startTestServer(installation, {clock});
     const file = testSiteFile("fresh key-bound upload");

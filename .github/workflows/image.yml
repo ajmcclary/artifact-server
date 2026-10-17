@@ -9,9 +9,14 @@ permissions:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: artifact-server-home
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+
+      - name: Prepare the home runner
+        run: scripts/prepare-home-runner.sh
 
       - uses: docker/setup-buildx-action@v3
         with:

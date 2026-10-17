@@ -868,6 +868,8 @@ export interface ArtifactRepository {
     principalId: string,
     idempotencyKey: string,
   ): Promise<PublishedVersion | null>;
+  /** Match only committed, readable project content; storage hashes are not authority. */
+  hasReusableContent(projectId: string, sha256: string, size: number): Promise<boolean>;
   findVersionContent(
     contentToken: string,
     path: string,

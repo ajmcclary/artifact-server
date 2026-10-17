@@ -2,6 +2,7 @@ import { Context, DateTime, Effect, Layer } from "effect";
 
 import {
   type ArtifactRepositoryFailure,
+  type BlobStorageFailure,
   type AuthorizationDenied,
   IdempotencyConflict,
   StagingStorageFailure,
@@ -227,10 +228,17 @@ export interface StagingStoragePort {
   ): Effect.Effect<void, StagingStorageFailure>;
 }
 
+/** Authorized project lookup and immutable bytes used to avoid client transfer. */
+export interface UploadReusePort {
+  hasContent(projectId: string, sha256: string, size: number): Effect.Effect<boolean, ArtifactRepositoryFailure>;
+  open(sha256: string): Effect.Effect<OpenedStagedFile, BlobStorageFailure>;
+}
+
 /** Dependencies used to construct the staged upload application service. */
 export interface StagedUploadDependencies {
   readonly clock: ApplicationClock;
   readonly ids: IdGenerator;
+  readonly reuse?: UploadReusePort;
   readonly staging: StagingStoragePort;
   readonly uploads: StagedUploadRepositoryPort;
 }
@@ -535,6 +543,41 @@ function makeStagedUploadService(
     },
   );
 
+  const createUploadWithReuse = Effect.fn("StagedUploadService.createUploadWithReuse")(
+    function*(command: CreateStagedUploadCommand): Effect.fn.Return<CreateStagedUploadResult, StagedUploadFailure> {
+      const result = yield* createUpload(command);
+      const reuse = dependencies.reuse;
+      if (result.kind === "committed" || reuse === undefined) return result;
+      const canRead = yield* authorization.requireArtifactRead(command.principal).pipe(
+        Effect.as(true), Effect.catchTag("AuthorizationDenied", () => Effect.succeed(false)),
+      );
+      if (!canRead) return result;
+      const upload = result.upload;
+      let reusedFiles = 0;
+      let reusedBytes = 0;
+      yield* Effect.forEach(upload.files.filter((file) => file.uploadedAt === null), (file) =>
+        Effect.gen(function*() {
+          const allowed = yield* reuse.hasContent(upload.projectId, file.entry.sha256, file.entry.size);
+          if (!allowed) return;
+          const opened = yield* reuse.open(file.entry.sha256);
+          const close = Effect.promise(() => opened.body.cancel().catch(() => undefined));
+          if (opened.size !== file.entry.size) {
+            yield* close;
+            return;
+          }
+          yield* uploadFile({body: opened.body, ownerId: command.principal.id,
+            projectId: upload.projectId, storageToken: file.storageToken, uploadId: upload.id}).pipe(Effect.ensuring(close));
+          reusedFiles += 1;
+          reusedBytes += file.entry.size;
+        }).pipe(Effect.catchTag(
+          ["BlobStorageFailure", "StagingStorageFailure", "UploadedFileMismatch", "UploadInterrupted"],
+          () => Effect.void,
+        )), {concurrency: 4, discard: true});
+      yield* Effect.annotateCurrentSpan({"upload.reused_files": reusedFiles, "upload.reused_bytes": reusedBytes});
+      return {...result, upload: yield* requiredUpload(upload.projectId, upload.id, command.principal.id)};
+    },
+  );
+
   const uploadBatch = Effect.fn("StagedUploadService.uploadBatch")(
     function*(
     command: UploadStagedBatchCommand,
@@ -778,7 +821,7 @@ function makeStagedUploadService(
     },
   );
 
-  return StagedUploadService.of({commitUpload, createUpload, uploadBatch, uploadFile});
+  return StagedUploadService.of({commitUpload, createUpload: createUploadWithReuse, uploadBatch, uploadFile});
 }
 
 function abortSignalUntil(expiresAt: string, now: DateTime.Utc): AbortSignal {

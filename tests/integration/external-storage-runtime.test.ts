@@ -142,6 +142,7 @@ const uploadResponseSchema = z.object({
   files: z.array(z.object({
     path: z.string(),
     uploadUrl: z.url(),
+    verified: z.boolean(),
   })),
   projectId: z.string(),
   uploadId: z.string(),
@@ -1379,6 +1380,13 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     );
     expect(rendered.status).toBe(200);
     expect(await rendered.text()).toBe(new TextDecoder().decode(fileBytes));
+
+    const reused = await fetch(`${second.baseUrl}/api/v1/uploads`, {
+      body: JSON.stringify({entryPath: "index.html", files: [{path: "index.html", mediaType: "text/html", size: fileBytes.length, sha256: createHash("sha256").update(fileBytes).digest("hex")}]}),
+      headers: {Authorization: `Bearer ${externalStorageIdentity.apiToken}`, "Content-Type": "application/json"}, method: "POST",
+    });
+    expect(reused.status).toBe(201);
+    expect(uploadResponseSchema.parse(await reused.json()).files[0]?.verified).toBe(true);
 
     const logout = await fetch(`${second.baseUrl}/api/v1/session/logout`, {
       headers: browserMutationHeaders("https://artifacts.example.com", cookies),

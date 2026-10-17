@@ -20,6 +20,7 @@ const uploadPlanSchema = z.object({
   files: z.array(z.object({
     path: z.string(),
     uploadUrl: z.url(),
+    verified: z.boolean(),
   })).min(1),
 });
 const preparingResponseSchema = z.object({
@@ -383,6 +384,13 @@ describe("Cloudflare Worker runtime", () => {
     });
     expect(committed.status).toBe(201);
     const publication = publicationSchema.parse(await committed.json());
+
+    const reused = await worker.fetch(`${origin}/api/v1/uploads`, {
+      body: JSON.stringify({entryPath: "index.html", files: [{path: "index.html", mediaType: "text/html", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")}]}),
+      headers: authenticatedJsonHeaders(), method: "POST",
+    });
+    expect(reused.status).toBe(201);
+    expect(uploadPlanSchema.parse(await reused.json()).files[0]?.verified).toBe(true);
 
     const rendered = await worker.fetch(publication.links.version);
     expect(rendered.status).toBe(200);

@@ -3439,6 +3439,17 @@ export function createD1ArtifactRepository(
       const parsed = result.results.map((row) => actionRowSchema.parse(row));
       return pageResult(parsed.slice(0, command.limit), parsed, command.limit);
     },
+    hasReusableContent: async (projectId, sha256, size) => {
+      const row = await database.prepare(`
+        SELECT 1 FROM manifest_entries e
+        JOIN versions v ON v.id = e.version_id
+        JOIN artifacts a ON a.id = v.artifact_id
+        JOIN projects p ON p.id = a.project_id
+        WHERE e.sha256 = ? AND e.size = ? AND a.project_id = ?
+          AND a.deleted_at IS NULL AND p.archived_at IS NULL AND p.installation_id = ? LIMIT 1
+      `).bind(sha256, size, projectId, installationId).first();
+      return row !== null;
+    },
     findVersionContent: async (contentToken, requestedPath, fallback) => {
       const row = await database.prepare(`
         SELECT a.access_setting AS accessSetting, a.id AS artifactId,

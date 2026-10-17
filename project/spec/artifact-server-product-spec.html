@@ -2399,6 +2399,7 @@
         </section>
 
         <section class="section" id="architecture" aria-labelledby="architecture-section-title">
+          <p>Upload planning may reuse committed files within the destination project when the caller has artifact-read authority in the same installation. Reuse matches digest and size, excludes deleted artifacts and archived projects, and verifies stored bytes through staging before advertising a file as verified. Missing or corrupt stored bytes require normal upload. Knowledge of a content hash grants no access. Existing clients and servers retain the same upload-plan contract.</p>
           <div class="section-heading">
             <span class="section-label">Architecture</span>
             <h2 id="architecture-section-title">One product core with deployment-specific storage</h2>

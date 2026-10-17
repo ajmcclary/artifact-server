@@ -456,6 +456,7 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "findStagedUploadByIdempotencyKey",
       "findStagedUploadFileSlot",
       "findVersionContent",
+      "hasReusableContent",
       "deleteArtifact",
       "listActivity",
       "listAgentDispatches",

@@ -2465,6 +2465,23 @@ export class PostgresArtifactRepository implements
     ));
   }
 
+  async hasReusableContent(projectId: string, sha256: string, size: number): Promise<boolean> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT 1 FROM manifest_entries e
+         JOIN versions v ON v.installation_id = e.installation_id AND v.id = e.version_id
+         JOIN artifacts a ON a.installation_id = v.installation_id AND a.id = v.artifact_id
+         JOIN projects p ON p.installation_id = a.installation_id AND p.id = a.project_id
+         WHERE e.installation_id = $1 AND e.sha256 = $2 AND e.size = $3
+           AND a.project_id = $4 AND a.deleted_at IS NULL AND p.archived_at IS NULL LIMIT 1`,
+        [installationId, sha256, size, projectId],
+      );
+      return rows.length !== 0;
+    }));
+  }
+
   async findVersionContent(
     contentToken: string,
     requestedPath: string,

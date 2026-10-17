@@ -410,6 +410,16 @@ export function createApplicationLayer(
   };
   const preparationLayer = PublicationPreparationService.layer(preparationDependencies);
   const stagedDependencies: StagedUploadDependencies = {
+    reuse: {
+      hasContent: (projectId, sha256, size) => Effect.tryPromise({
+        try: () => adapters.repository.hasReusableContent(projectId, sha256, size),
+        catch: (cause) => repositoryFailure("hasReusableContent", cause),
+      }),
+      open: (sha256) => Effect.tryPromise({
+        try: () => adapters.blobs.open(sha256),
+        catch: (cause) => new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
+      }),
+    },
     clock,
     ids: adapters.ids,
     staging: stagingPort,

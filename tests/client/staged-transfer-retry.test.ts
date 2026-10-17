@@ -53,8 +53,6 @@ describe("staged transfer retry", () => {
     installation = await createTestInstallation();
     server = await startTestServer(installation);
     fixtureDirectory = await mkdtemp(path.join(tmpdir(), "artifact-server-retry-"));
-    // Large enough that a drop lands while the client is still sending.
-    largeFile = randomBytes(2 * 1_024 * 1_024);
   });
 
   afterAll(async () => {
@@ -66,6 +64,9 @@ describe("staged transfer retry", () => {
   });
 
   beforeEach(async () => {
+    // Fresh bytes force a transfer; committed bytes are now eligible for reuse.
+    // Keep the file large enough for faults to land during the body.
+    largeFile = randomBytes(2 * 1_024 * 1_024);
     proxy = await startUploadFaultProxy(server.baseUrl);
   });
 

@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {mkdtemp, rm} from "node:fs/promises";
+import {mkdtemp, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -74,6 +74,61 @@ describe("staged upload lifecycle", () => {
     identityRepository.close();
     repository.close();
     await rm(dataDirectory, {force: true, recursive: true});
+  });
+
+  test("PUB-004-B PUB-003-B: reuse verifies committed bytes, survives restart and skips changed content", async () => {
+    const principal = {...testPrincipal("reuse"), capabilities: [principalCapabilities.createArtifact, principalCapabilities.readArtifacts]};
+    const bytes = new TextEncoder().encode("reusable content");
+    const file = {path: "index.txt", mediaType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")};
+    const initial = await runStaged(runtime, s => s.createUpload({entryPath: file.path, files: [file], principal}));
+    if (initial.kind !== "upload" || !initial.upload.files[0]) throw new Error("Expected staging");
+    const initialSlot = initial.upload.files[0];
+    await runStaged(runtime, s => s.uploadFile({body: byteStream(bytes), ownerId: principal.id, projectId: initial.upload.projectId, uploadId: initial.upload.id, storageToken: initialSlot.storageToken}));
+    const committed = await runStaged(runtime, s => s.commitUpload({principal, uploadId: initial.upload.id, idempotencyKey: "reuse-source-publication", target: {kind: "new_artifact", name: "Source", accessSetting: "account_required"}}));
+    expect(committed.kind).toBe("committed");
+    await runtime.dispose(); runtime = createRuntime(); await runtime.context();
+    const changed = {...file, path: "changed.txt", sha256: createHash("sha256").update("changed content!").digest("hex")};
+    const command = {principal, entryPath: file.path, files: [file, changed], idempotencyKey: "reuse-planning-operation"};
+    const results = await Promise.all([runStaged(runtime,s=>s.createUpload(command)),runStaged(runtime,s=>s.createUpload(command))]);
+    await Promise.all(results.map(async result => {
+      if(result.kind !== "upload") throw new Error("Expected staging");
+      expect(result.upload.files.find(f=>f.entry.path===file.path)?.uploadedAt).not.toBeNull();
+      expect(result.upload.files.find(f=>f.entry.path===changed.path)?.uploadedAt).toBeNull();
+      const slot=result.upload.files.find(f=>f.entry.path===file.path);
+      if (!slot) throw new Error("Missing reused slot");
+      const opened=await staging.open(result.upload.id,slot.storageToken);
+      expect(new Uint8Array(await new Response(opened.body).arrayBuffer())).toEqual(bytes);
+    }));
+  });
+
+  test("PUB-004-F PUB-001-F: hash knowledge without read authority cannot reuse, and corrupt or missing bytes fall back", async () => {
+    const principal = {...testPrincipal("reuse"), capabilities: [principalCapabilities.createArtifact, principalCapabilities.readArtifacts]};
+    const bytes = new TextEncoder().encode("protected bytes");
+    const file = {path: "index.txt", mediaType: "text/plain", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex")};
+    const first = await runStaged(runtime,s=>s.createUpload({principal,entryPath:file.path,files:[file]}));
+    if(first.kind!=="upload"||!first.upload.files[0])throw new Error("Expected staging");
+    const firstSlot = first.upload.files[0];
+    await runStaged(runtime,s=>s.uploadFile({body:byteStream(bytes),ownerId:principal.id,projectId:first.upload.projectId,uploadId:first.upload.id,storageToken:firstSlot.storageToken}));
+    const source = await runStaged(runtime,s=>s.commitUpload({principal,uploadId:first.upload.id,idempotencyKey:"protected-source-publication",target:{kind:"new_artifact",name:"Protected",accessSetting:"account_required"}}));
+    const assertMissing=async (caller: Principal) => {
+      const result=await runStaged(runtime,s=>s.createUpload({principal:caller,entryPath:file.path,files:[file]}));
+      if(result.kind!=="upload")throw new Error("Expected staging");
+      expect(result.upload.files[0]?.uploadedAt).toBeNull();
+    };
+    await assertMissing(testPrincipal("write-only"));
+    expect(await repository.hasReusableContent("other-project",file.sha256,file.size)).toBe(false);
+    expect(await repository.hasReusableContent(first.upload.projectId,file.sha256,file.size+1)).toBe(false);
+    await writeFile(blobs.blobPath(file.sha256),new Uint8Array(bytes.length));
+    await assertMissing(principal);
+    await rm(blobs.blobPath(file.sha256));
+    await assertMissing(principal);
+    await expectStagedFailure(runtime,"AuthorizationDenied",s=>s.createUpload({principal:{...principal,installationId:"foreign"},entryPath:file.path,files:[file]}));
+    if(source.kind!=="committed")throw new Error("Expected committed source");
+    await repository.deleteArtifact({actor:{displayName:principal.displayName,kind:principal.kind},authorizedByPrincipalId:null,
+      artifactId:source.publication.artifact.id,expectedCurrentVersionId:source.publication.version.id,
+      createdAt:clock.now().toISOString(),idempotencyKey:"delete-reuse-source",inputDigest:file.sha256,principalId:principal.id,projectId:first.upload.projectId});
+    expect(await repository.hasReusableContent(first.upload.projectId,file.sha256,file.size)).toBe(false);
+
   });
 
   test("PUB-001-F: another principal or installation cannot use a staged upload", async () => {

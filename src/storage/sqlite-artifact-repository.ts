@@ -2585,6 +2585,17 @@ export class SqliteArtifactRepository implements
     );
   }
 
+  hasReusableContent(projectId: string, sha256: string, size: number): Promise<boolean> {
+    return Promise.resolve().then(() => this.#database.prepare(
+      `SELECT 1 FROM manifest_entries e
+       JOIN versions v ON v.id = e.version_id
+       JOIN artifacts a ON a.id = v.artifact_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE e.sha256 = ? AND e.size = ? AND a.project_id = ?
+         AND a.deleted_at IS NULL AND p.archived_at IS NULL AND p.installation_id = ? LIMIT 1`,
+    ).get(sha256, size, projectId, this.#installationId) !== undefined);
+  }
+
   findVersionContent(
     contentToken: string,
     requestedPath: string,
