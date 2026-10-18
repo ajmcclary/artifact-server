@@ -50,7 +50,8 @@
         "select macOS and Dark inside Annotate",
         "return to Live retains macOS and Dark"
       ],
-      "console": "Two initial 401 responses during local content bootstrapping; no JavaScript errors reported."
+      "console": "Two initial 401 responses during local content bootstrapping; no JavaScript errors reported.",
+      "screenshot": "/Users/ajmcclary/Dev/Platform/verification/runs/platform-theme-controls/configuration-controls.png"
     },
     "worker_check": {
       "lint": "pass",
@@ -64,11 +65,21 @@
         "file": "deploy/cloudflare/tests/agent-dispatch-runtime.test.ts",
         "passed": 3,
         "failed": 0
+      },
+      "final": {
+        "command": "pnpm check:cloudflare:prebuilt",
+        "lint": "pass",
+        "typecheck": "pass",
+        "files": 30,
+        "passed": 87,
+        "failed": 0,
+        "result": "pass"
       }
     },
     "local_package": {
       "result": "pass",
-      "evidence": "project/evidence/local-package.json"
+      "evidence": "project/evidence/local-package.json",
+      "note": "Release build explicitly sets NODE_ENV=production even under Vitest; install, replacement and restore passed afterward."
     },
     "browser_initial": {
       "result": "failed",
@@ -80,6 +91,42 @@
     "search_cancellation": {
       "result": "pass",
       "note": "With each superseded query held at its initial four requests, queued work stops and the final query searches all13 projects. Production search code is unchanged."
+    },
+    "browser_final": {
+      "command": "BROWSER_CRITICAL_ENGINES=all NODE_ENV=production pnpm test:web:prebuilt",
+      "result": "pass",
+      "passed": 175,
+      "failed": 0,
+      "engines": [
+        "chromium",
+        "firefox",
+        "webkit"
+      ],
+      "evidence": "project/evidence/browser.json",
+      "note": "No concurrent build ran during the production regression suite."
+    },
+    "hosted_safari_allegory": {
+      "version": 7,
+      "result": "pass",
+      "assertions": [
+        "index.html canonicalizes to configured Allegory hub",
+        "Platform iOS confirms while Annotate remains off",
+        "Theme Light confirms while Annotate remains off",
+        "Annotate retains iOS and Light",
+        "return to Live retains iOS and Light"
+      ],
+      "note": "Verified through signed-in Safari accessibility state; native screenshot returned a desktop window thumbnail."
+    },
+    "secret_scan": {
+      "command": "gitleaks git --redact --log-opts=e471dab..HEAD",
+      "result": "pass"
+    },
+    "publication": {
+      "result": "pass",
+      "targets": 7,
+      "configuration": "valid",
+      "sourceProvenance": "verified and clean for all seven versions",
+      "evidence": "project/evidence/review-configuration-publication.json"
     }
   }
 }

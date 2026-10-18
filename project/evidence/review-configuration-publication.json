@@ -1,0 +1,145 @@
+{
+  "recorded_at": "2026-10-18T20:46:52.338Z",
+  "result": "pass",
+  "deployment": "kubernetes",
+  "image": "sha256:d642281cc4a572cd1ea26aed346e23d2c92a458d8a60e3ce0631e441cbd402d4",
+  "gitopsCommit": "3b251126867fa8f5fec9690229f2eb1c7fe7ee4e",
+  "replicasReady": 4,
+  "argo": "Synced/Healthy",
+  "health": "ok",
+  "ready": "ready",
+  "publications": [
+    {
+      "target": "allegory",
+      "name": "Allegory",
+      "artifactId": "art_177583a7-8af7-41f2-98c1-2c3390615fa9",
+      "versionId": "ver_a5398d50-bef7-4f45-a948-ce27155402dc",
+      "version": 7,
+      "review": "https://artifacts.backend.app/review?artifact=art_177583a7-8af7-41f2-98c1-2c3390615fa9&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_a5398d50-bef7-4f45-a948-ce27155402dc",
+      "scenarioCount": 4,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "bridge",
+      "name": "Bridge",
+      "artifactId": "art_02beb887-ff7b-4025-8c2d-7242f24776a1",
+      "versionId": "ver_ba2aab44-3dfa-470e-b54e-3e39d0655e36",
+      "version": 7,
+      "review": "https://artifacts.backend.app/review?artifact=art_02beb887-ff7b-4025-8c2d-7242f24776a1&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_ba2aab44-3dfa-470e-b54e-3e39d0655e36",
+      "scenarioCount": 8,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "claudius",
+      "name": "Claudius",
+      "artifactId": "art_8ffd435b-e982-48a3-b2fb-7bcead3ebbcd",
+      "versionId": "ver_743dc939-a643-442f-a100-29e0a7924178",
+      "version": 7,
+      "review": "https://artifacts.backend.app/review?artifact=art_8ffd435b-e982-48a3-b2fb-7bcead3ebbcd&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_743dc939-a643-442f-a100-29e0a7924178",
+      "scenarioCount": 7,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "musictoolkit",
+      "name": "MusicToolkit",
+      "artifactId": "art_6abc03bd-dfdf-4b4b-8172-96b1febb9f5f",
+      "versionId": "ver_4199291c-e9ce-446d-adc9-1060ae54601b",
+      "version": 6,
+      "review": "https://artifacts.backend.app/review?artifact=art_6abc03bd-dfdf-4b4b-8172-96b1febb9f5f&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_4199291c-e9ce-446d-adc9-1060ae54601b",
+      "scenarioCount": 4,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "pixellift",
+      "name": "PixelLift",
+      "artifactId": "art_7e3bb84c-c912-4c84-b01e-06a24e2bca53",
+      "versionId": "ver_5b77facb-04d9-4521-adee-cb426fe57168",
+      "version": 6,
+      "review": "https://artifacts.backend.app/review?artifact=art_7e3bb84c-c912-4c84-b01e-06a24e2bca53&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_5b77facb-04d9-4521-adee-cb426fe57168",
+      "scenarioCount": 5,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "sonography",
+      "name": "Sonography",
+      "artifactId": "art_d50c2790-ebfa-4f2c-a17b-778541a372fe",
+      "versionId": "ver_1a18b7a4-a58c-4d99-8d80-b07054f768d5",
+      "version": 6,
+      "review": "https://artifacts.backend.app/review?artifact=art_d50c2790-ebfa-4f2c-a17b-778541a372fe&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_1a18b7a4-a58c-4d99-8d80-b07054f768d5",
+      "scenarioCount": 5,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    },
+    {
+      "target": "theory",
+      "name": "Theory",
+      "artifactId": "art_f25715e2-b10b-4f8d-a7ec-f12b896fde70",
+      "versionId": "ver_82584f5a-4ea8-44d8-ab6b-22ce7e602e1a",
+      "version": 4,
+      "review": "https://artifacts.backend.app/review?artifact=art_f25715e2-b10b-4f8d-a7ec-f12b896fde70&project=prj_b6a9672d-e2af-497e-a1e0-034e29d4bab5&version=ver_82584f5a-4ea8-44d8-ab6b-22ce7e602e1a",
+      "scenarioCount": 5,
+      "themeValues": [
+        "light",
+        "dark"
+      ],
+      "provenance": "verified",
+      "sourceCommit": "caa06636fb142788d8919572cca77174f3a60b2c",
+      "dirty": false
+    }
+  ],
+  "safari": {
+    "allegory": {
+      "version": 7,
+      "result": "pass",
+      "platform": "ios",
+      "theme": "light",
+      "modeRetention": [
+        "live",
+        "annotate",
+        "live"
+      ]
+    },
+    "sonography": {
+      "version": 6,
+      "result": "pass",
+      "entryAliasCanonicalized": true,
+      "platformControl": "macOS",
+      "themeControl": "Dark"
+    }
+  }
+}

@@ -1498,10 +1498,15 @@ requirements:
       behavior: {id: DSN-012-B, description: "Open an entry alias, select a platform and light/dark prototype theme while staying interactive, edit a field, switch to annotation and back with the configuration retained, follow in-page platform changes, and keep controls usable on a phone."}
       failure: {id: DSN-012-F, description: "Ignore messages from foreign origins, other frames and undeclared scenarios; report a page confirming the scenario but not its requested parameters without changing the confirmed selection or enabling annotations."}
     deployments: *all
-    status: implementing
-    proof_gap: Local cross-engine and producer proofs are being attached; live provider qualification has not been rerun.
+    status: behavior_verified
+    proof_gap: Local Chromium, Firefox and WebKit prove controls, aliases, mode retention and hostile-message refusal. Producer checks cover 38 scenarios in two appearances. Hosted Safari confirms Allegory configuration and mode retention; hostile hosted/provider qualification is not claimed.
     depends_on: [DSN-007, DSN-008, CMT-022]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [DSN-012-B, DSN-012-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-10-18T20:35:08.820Z"
 
   - id: AUD-001
     kind: security
