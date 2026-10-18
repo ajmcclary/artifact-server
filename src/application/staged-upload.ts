@@ -65,6 +65,7 @@ import {
   observeUploadBody,
 } from "./upload-body-source.js";
 import {redactedFailureCause} from "../observability/failure-cause-summary.js";
+import {verifyBlobContent} from "./verify-blob-content.js";
 
 const uploadInterruptedMessage =
   "The upload body was interrupted before it was complete. Re-run the same publish to resume; files already verified are not sent again.";
@@ -175,6 +176,7 @@ export interface StagedUploadRepositoryPort {
     principalId: string,
     storageToken: string,
     uploadedAt: string,
+    installedAt?: string,
   ): Effect.Effect<
     void,
     | UploadNotFound
@@ -561,18 +563,14 @@ function makeStagedUploadService(
           if (!allowed) return;
           const opened = yield* reuse.open(file.entry.sha256);
           const close = Effect.promise(() => opened.body.cancel().catch(() => undefined));
-          if (opened.size !== file.entry.size) {
-            yield* close;
-            return;
-          }
-          yield* uploadFile({body: opened.body, ownerId: command.principal.id,
-            projectId: upload.projectId, storageToken: file.storageToken, uploadId: upload.id}).pipe(Effect.ensuring(close));
+          const verified = yield* verifyBlobContent(opened, file.entry.sha256, file.entry.size).pipe(Effect.ensuring(close));
+          if (!verified) return;
+          const installedAt = DateTime.formatIso(yield* dependencies.clock.now);
+          yield* dependencies.uploads.markStagedFileUploaded(upload.projectId, upload.id, command.principal.id,
+            file.storageToken, installedAt, installedAt);
           reusedFiles += 1;
           reusedBytes += file.entry.size;
-        }).pipe(Effect.catchTag(
-          ["BlobStorageFailure", "StagingStorageFailure", "UploadedFileMismatch", "UploadInterrupted"],
-          () => Effect.void,
-        )), {concurrency: 4, discard: true});
+        }).pipe(Effect.catchTag("BlobStorageFailure", () => Effect.void)), {concurrency: 4, discard: true});
       yield* Effect.annotateCurrentSpan({"upload.reused_files": reusedFiles, "upload.reused_bytes": reusedBytes});
       return {...result, upload: yield* requiredUpload(upload.projectId, upload.id, command.principal.id)};
     },
@@ -682,10 +680,10 @@ function makeStagedUploadService(
         ReadableStream<Uint8Array>,
         StagingStorageFailure
       > {
-        const opened = yield* dependencies.staging.open(
-          upload.id,
-          file.storageToken,
-        );
+        const opened = file.installedAt !== null && dependencies.reuse !== undefined
+          ? yield* dependencies.reuse.open(file.entry.sha256).pipe(Effect.mapError((error) =>
+            new StagingStorageFailure({cause: error, operation: "open"})))
+          : yield* dependencies.staging.open(upload.id, file.storageToken);
         if (opened.size !== file.entry.size) {
           yield* Effect.tryPromise({
             try: () => opened.body.cancel(),

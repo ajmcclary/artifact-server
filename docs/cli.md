@@ -4,14 +4,14 @@ Agents normally publish through the [Artifact Server Skill](../skills/artifact-s
 
 The `artifactserver` command ships in the packaged release. Download it from the [latest GitHub release](https://github.com/ajmcclary/artifact-server/releases/latest), or run it from a source checkout by replacing `artifactserver` with `pnpm artifactserver`.
 
-Every command prints JSON on success. Do not add a `--json` flag; there is none.
+Single-path publication prints JSON on success. Group publication accepts `--json` for a structured run report.
 
 ## Command reference
 
 | Command | Purpose |
 | --- | --- |
 | `rename <artifact> <name>` | Rename an existing artifact without publishing. |
-| `publish <path>` | Publish one file or a finished directory. |
+| `publish <path>` | Publish one file, a finished directory, or an explicit local file inventory. |
 | `link <path>` | Link a file on this machine as an artifact that tracks it. |
 | `auth login <server>` | Sign in to one exact origin and save a profile. |
 | `auth status [profile]` | Verify saved profiles without printing credentials. |
@@ -32,7 +32,7 @@ Every command prints JSON on success. Do not add a `--json` flag; there is none.
 | `migrate status` / `migrate apply` | Inspect or apply external-storage migrations. |
 | `support manifest` | Print product, schema, provider, and configuration versions. |
 | `integrity check` | Verify committed records and bytes without repairing them. |
-| `maintenance cleanup-staging` | Remove expired uploads that were never committed. |
+| `maintenance cleanup-staging` | Remove expired abandoned staging and verified redundant committed-upload staging. |
 
 Run `artifactserver --help` or `artifactserver <command> --help` for the authoritative reference.
 
@@ -65,6 +65,8 @@ Publication returns JSON with three browser links:
 | `--new-artifact` | Deliberately create another artifact and remember it after success. |
 | `--expected-version <id>` | Current version ID required when publishing a new version. |
 | `--entry <path>` | Directory file that opens first. |
+| `--input-format <format>` | `path` or `inventory`; inventory streams named canonical files without copying a directory. |
+| `--version-identity <identity>` | `package` compares all bytes; `content` skips differences confined to root source provenance. |
 | `--routing <mode>` | `static` or `spa`; reuses a remembered choice, otherwise `static`. |
 | `--server <origin>` | Artifact Server origin. Also read from `ARTIFACT_SERVER_URL`. |
 | `--profile <name>` | Saved profile to authenticate with. |
@@ -73,6 +75,26 @@ Publication returns JSON with three browser links:
 | `--token-file <path>` | File containing an Artifact Server API token. |
 
 `--name`, `--public`, and `--tag` configure a new artifact. Repeating them for a remembered artifact is allowed when they match its current metadata; conflicting values are refused. Use artifact management to change existing metadata.
+
+### Publish canonical files without a directory copy
+
+`artifactserver publish ./publication.json --input-format inventory` accepts a local JSON inventory:
+
+```json
+{
+  "format": "artifact-server.local-files",
+  "version": 1,
+  "root": ".",
+  "entryPath": "index.html",
+  "files": [
+    {"path": "index.html", "source": "project/index.html", "size": 123, "sha256": "<SHA-256 of the actual source bytes>"}
+  ]
+}
+```
+
+`root` is relative to the inventory file; each source is a regular file beneath that root. The CLI checks every declared size and fingerprint and refuses symlinks or changed sources before upload. Destination paths remain portable artifact paths. Group inventory sources must also stay inside the group configuration directory and outside private CLI state. No local source paths are sent to the server. Input format is remembered for single-path retries and may be set per group target with `inputFormat: "inventory"`.
+
+Set `versionIdentity: "content"` in group defaults, or use `--version-identity content`, to retain the existing immutable version when only `artifactserver.provenance.json` differs. Documents, assets, previews, views, entry paths and routing still count as changes. Use package identity for an intentional provenance-only correction. This decision occurs before creating an upload; actual content changes still include their complete source-provenance record.
 
 ### Choose a routing mode
 

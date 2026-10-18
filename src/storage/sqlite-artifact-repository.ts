@@ -1,3 +1,4 @@
+import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import { DatabaseSync } from "node:sqlite";
 
 import { z } from "zod";
@@ -3285,12 +3286,18 @@ export class SqliteArtifactRepository implements
     });
   }
 
+  get committedStagingCleanup() {
+    return committedStagingCleanupRepository((statement, values) => Promise.resolve().then(() =>
+      this.#database.prepare(statement).all(...values)));
+  }
+
   markStagedFileUploaded(
     projectId: string,
     uploadId: string,
     principalId: string,
     storageToken: string,
     uploadedAt: string,
+    installedAt?: string,
   ): Promise<void> {
     return Promise.resolve().then(() =>
       this.#transaction(() => {
@@ -3298,7 +3305,7 @@ export class SqliteArtifactRepository implements
         const update = this.#database
           .prepare(
             `UPDATE staged_upload_files
-             SET uploaded_at = ?
+             SET uploaded_at = ?, installed_at = COALESCE(?, installed_at)
              WHERE upload_id = ?
                AND storage_token = ?
                AND EXISTS (
@@ -3312,6 +3319,7 @@ export class SqliteArtifactRepository implements
           )
           .run(
             uploadedAt,
+            installedAt ?? null,
             uploadId,
             storageToken,
             projectId,
@@ -6108,7 +6116,14 @@ export class SqliteArtifactRepository implements
         "ALTER TABLE staged_uploads ADD COLUMN cleanup_claimed_at TEXT",
       );
     }
+    if (!uploadColumns.includes("staging_cleaned_at")) {
+      this.#database.exec("ALTER TABLE staged_uploads ADD COLUMN staging_cleaned_at TEXT");
+    }
     const fileColumns = this.#tableColumns("staged_upload_files");
+    if (!fileColumns.includes("staging_cleaned_at")) {
+      this.#database.exec("ALTER TABLE staged_upload_files ADD COLUMN staging_cleaned_at TEXT");
+    }
+    this.#database.exec("CREATE INDEX IF NOT EXISTS committed_staging_cleanup ON staged_uploads(status, staging_cleaned_at, expires_at)");
     if (!fileColumns.includes("installed_at")) {
       this.#database.exec("ALTER TABLE staged_upload_files ADD COLUMN installed_at TEXT");
     }

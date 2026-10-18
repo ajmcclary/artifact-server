@@ -96,9 +96,22 @@ describe("staged upload lifecycle", () => {
       expect(result.upload.files.find(f=>f.entry.path===changed.path)?.uploadedAt).toBeNull();
       const slot=result.upload.files.find(f=>f.entry.path===file.path);
       if (!slot) throw new Error("Missing reused slot");
-      const opened=await staging.open(result.upload.id,slot.storageToken);
-      expect(new Uint8Array(await new Response(opened.body).arrayBuffer())).toEqual(bytes);
+      expect(slot.installedAt).not.toBeNull();
+      await expect(staging.open(result.upload.id,slot.storageToken)).rejects.toMatchObject({code:"ENOENT"});
     }));
+    await runtime.dispose(); runtime = createRuntime(); await runtime.context();
+    const resumed = await runStaged(runtime,s=>s.createUpload(command));
+    if(resumed.kind!=="upload")throw new Error("Expected reused upload");
+    const changedSlot=resumed.upload.files.find(f=>f.entry.path===changed.path);
+    if(!changedSlot)throw new Error("Missing changed slot");
+    await runStaged(runtime,s=>s.uploadFile({body:byteStream(new TextEncoder().encode("changed content!")),ownerId:principal.id,
+      projectId:resumed.upload.projectId,uploadId:resumed.upload.id,storageToken:changedSlot.storageToken}));
+    const published=await runStaged(runtime,s=>s.commitUpload({principal,uploadId:resumed.upload.id,
+      idempotencyKey:"reference-without-staging",target:{kind:"new_artifact",name:"Reused",accessSetting:"account_required"}}));
+    expect(published.kind).toBe("committed");
+    if(published.kind!=="committed")throw new Error("Expected committed publication");
+    expect((await repository.findVersionContent(
+      published.publication.version.contentToken,file.path,"none"))?.entry.sha256).toBe(file.sha256);
   });
 
   test("PUB-023-F: hash knowledge without read authority cannot reuse, and corrupt or missing bytes fall back", async () => {
@@ -431,11 +444,12 @@ describe("staged upload lifecycle", () => {
       runCleanup(runtime, 100),
       runCleanup(runtime, 100),
     ]);
-    expect(concurrent.reduce((sum, report) => sum + report.deleted, 0)).toBe(1);
+    expect(concurrent.reduce((sum, report) => sum + report.deleted, 0)).toBe(2);
+    expect(concurrent.reduce((sum, report) => sum + (report.committedDeleted ?? 0), 0)).toBe(1);
     expect(concurrent.reduce((sum, report) => sum + report.failed, 0)).toBe(0);
     // A live claim is exclusive, so the losing pass never touches the objects
     // the winner is removing.
-    expect(concurrent.reduce((sum, report) => sum + report.claimRejected, 0)).toBe(1);
+    expect(concurrent.reduce((sum, report) => sum + report.claimRejected, 0)).toBeGreaterThanOrEqual(1);
     expect(concurrent.reduce((sum, report) => sum + report.alreadyAbsent, 0)).toBe(0);
     await expect(repository.findStagedUpload(
       expired.projectId,
@@ -450,15 +464,64 @@ describe("staged upload lifecycle", () => {
       committedUpload.id,
       committedUpload.principalId,
     )).resolves.toMatchObject({status: "committed"});
-    const committedBytes = await staging.open(
+    await expect(staging.open(
       committedUpload.id,
       committedFile.storageToken,
-    );
-    expect(committedBytes.size).toBe(bytes.byteLength);
-    await committedBytes.body.cancel();
+    )).rejects.toThrow(/ENOENT|no such file/u);
     const immutableBlob = await blobs.open(file.sha256);
     expect(new Uint8Array(await new Response(immutableBlob.body).arrayBuffer()))
       .toEqual(bytes);
+  });
+
+  test("OPS-012-B: committed staging cleanup resumes over bounded passes and preserves replay after restart", async () => {
+    const principal=testPrincipal("committed-cleanup");
+    const bodies=[new TextEncoder().encode("first retained blob"),new TextEncoder().encode("second retained blob")];
+    const files=bodies.map((bytes,index)=>({path:`file-${index}.txt`,mediaType:"text/plain",size:bytes.length,
+      sha256:createHash("sha256").update(bytes).digest("hex")}));
+    const planned=await runStaged(runtime,s=>s.createUpload({principal,entryPath:files[0]?.path??"",files}));
+    if(planned.kind!=="upload")throw new Error("Expected upload");
+    await Promise.all(planned.upload.files.map(slot=>runStaged(runtime,s=>s.uploadFile({ownerId:principal.id,
+      projectId:planned.upload.projectId,uploadId:planned.upload.id,storageToken:slot.storageToken,
+      body:byteStream(bodies[files.findIndex(file=>file.path===slot.entry.path)]??new Uint8Array())}))));
+    const command={principal,uploadId:planned.upload.id,idempotencyKey:"cleanup-preserves-exact-replay",
+      target:{kind:"new_artifact" as const,name:"Cleanup replay",accessSetting:"account_required" as const}};
+    const published=await runStaged(runtime,s=>s.commitUpload(command));
+    if(published.kind!=="committed")throw new Error("Expected committed publication");
+    clock.set(new Date(Date.parse(planned.upload.expiresAt)+5*60*1_000));
+    expect(await runCleanup(runtime,100,{maxFiles:1})).toMatchObject({deleted:0,budgetExhausted:true,remaining:1});
+    await runtime.dispose();runtime=createRuntime();await runtime.context();
+    expect(await runCleanup(runtime,100,{maxFiles:1})).toMatchObject({deleted:1,committedDeleted:1,failed:0});
+    const replayed=await runStaged(runtime,s=>s.commitUpload(command));
+    expect(replayed.kind).toBe("committed");
+    if(replayed.kind!=="committed")throw new Error("Expected replayed publication");
+    expect(replayed.publication.version.id).toBe(published.publication.version.id);
+    await Promise.all(planned.upload.files.map(async slot=>{
+      await expect(staging.open(planned.upload.id,slot.storageToken)).rejects.toMatchObject({code:"ENOENT"});
+      const opened=await blobs.open(slot.entry.sha256);
+      expect(new Uint8Array(await new Response(opened.body).arrayBuffer())).toEqual(bodies[files.findIndex(file=>file.path===slot.entry.path)]);
+    }));
+  });
+
+  test("OPS-012-F: committed staging is retained if its canonical blob is corrupt or missing", async () => {
+    const principal=testPrincipal("cleanup-integrity");
+    const bytes=new TextEncoder().encode("staging is the last good copy");
+    const file={path:"proof.txt",mediaType:"text/plain",size:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")};
+    const planned=await runStaged(runtime,s=>s.createUpload({principal,entryPath:file.path,files:[file]}));
+    if(planned.kind!=="upload"||!planned.upload.files[0])throw new Error("Expected upload");
+    const slot=planned.upload.files[0];
+    await runStaged(runtime,s=>s.uploadFile({ownerId:principal.id,projectId:planned.upload.projectId,
+      uploadId:planned.upload.id,storageToken:slot.storageToken,body:byteStream(bytes)}));
+    await runStaged(runtime,s=>s.commitUpload({principal,uploadId:planned.upload.id,idempotencyKey:"cleanup-integrity",
+      target:{kind:"new_artifact",name:"Integrity",accessSetting:"account_required"}}));
+    clock.set(new Date(Date.parse(planned.upload.expiresAt)+5*60*1_000));
+    await writeFile(blobs.blobPath(file.sha256),new Uint8Array(bytes.length));
+    expect(await runCleanup(runtime,100)).toMatchObject({deleted:0,failed:1,remaining:1});
+    await rm(blobs.blobPath(file.sha256));
+    expect(await runCleanup(runtime,100)).toMatchObject({deleted:0,failed:1,remaining:1});
+    const retained=await staging.open(planned.upload.id,slot.storageToken);
+    expect(new Uint8Array(await new Response(retained.body).arrayBuffer())).toEqual(bytes);
+    await blobs.put({body:byteStream(bytes),sha256:file.sha256,size:file.size});
+    expect(await runCleanup(runtime,100)).toMatchObject({deleted:1,committedDeleted:1,failed:0});
   });
 
   test("foundation: an interrupted local write cannot reappear after cleanup", async () => {

@@ -119,6 +119,20 @@ export interface ExpiredStagedUpload {
   readonly id: string;
 }
 
+export interface CommittedStagingUpload {
+  readonly id: string;
+  readonly files: readonly {readonly storageToken: string; readonly sha256: string; readonly size: number}[];
+}
+
+/** Remove redundant staging while retaining publication receipts and immutable blobs. */
+export interface CommittedStagingCleanupRepository {
+  list(expiredBefore: string, limit: number): Promise<readonly CommittedStagingUpload[]>;
+  claim(uploadId: string, expiredBefore: string, now: string, staleClaimBefore: string): Promise<boolean>;
+  markFileRemoved(uploadId: string, storageToken: string, claimedAt: string, removedAt: string): Promise<void>;
+  complete(uploadId: string, claimedAt: string, completedAt: string): Promise<boolean>;
+  release(uploadId: string, claimedAt: string, staleClaimBefore: string): Promise<void>;
+}
+
 export interface PublicationSource {
   readonly kind: "staged_upload";
   readonly principalId: string;
@@ -927,6 +941,7 @@ export interface UploadPreparationClaim {
 }
 
 export interface StagedUploadRepository {
+  readonly committedStagingCleanup?: CommittedStagingCleanupRepository;
   claimUploadPreparation(
     uploadId: string,
     now: string,
@@ -956,6 +971,7 @@ export interface StagedUploadRepository {
     principalId: string,
     storageToken: string,
     uploadedAt: string,
+    installedAt?: string,
   ): Promise<void>;
   renewUploadPreparation(
     uploadId: string,

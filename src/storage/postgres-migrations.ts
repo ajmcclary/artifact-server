@@ -1047,6 +1047,13 @@ const addArtifactRename = Effect.gen(function*() {
     ADD CONSTRAINT actions_scope_check CHECK (${actionRowChecks[1]})`);
 });
 
+const addCommittedStagingCleanup = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  yield* sql.unsafe("ALTER TABLE staged_uploads ADD COLUMN IF NOT EXISTS staging_cleaned_at TEXT");
+  yield* sql.unsafe("ALTER TABLE staged_upload_files ADD COLUMN IF NOT EXISTS staging_cleaned_at TEXT");
+  yield* sql.unsafe("CREATE INDEX IF NOT EXISTS committed_staging_cleanup ON staged_uploads(installation_id, status, staging_cleaned_at, expires_at)");
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1071,10 +1078,11 @@ const migrationLoader = Migrator.fromRecord({
   "0021_login_attempt_invite": addLoginAttemptInvite,
   "0022_installation_invites": addInstallationInvites,
   "0023_artifact_rename": addArtifactRename,
+  "0024_committed_staging_cleanup": addCommittedStagingCleanup,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 23;
+export const requiredPostgresSchemaVersion = 24;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1198,6 +1206,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 23,
     name: "artifact_rename",
+  }, {
+    migration_id: 24,
+    name: "committed_staging_cleanup",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

@@ -1689,6 +1689,23 @@
             yields exactly one version, and a lost commit response replays the recorded result.
           </p>
 
+          <p>
+            A publishing client may name canonical files in a local inventory rather than copy a
+            complete directory. It verifies their sizes and fingerprints before streaming their
+            bytes; the server never reads the client's source paths. Content-based version
+            detection can retain an existing version when only its source-provenance metadata
+            differs. A real document, asset, preview, view, entry-path, or routing change still
+            creates a version with its complete provenance.
+          </p>
+          <p>
+            Authorized reuse verifies committed bytes within the destination project and records
+            a durable reference without another staging copy. After upload expiry and a settle
+            delay, bounded cleanup may remove redundant staging only when the committed blob
+            remains intact. Receipts, immutable versions and comments remain available, including
+            exact retries after staging removal. Cleanup does not expire committed versions or
+            garbage-collect their blobs.
+          </p>
+
           <div class="pathway" aria-label="The four steps in the normal artifact workflow">
             <article class="pathway-step">
               <div class="pathway-copy">

@@ -43,6 +43,7 @@ import {
   maximumBatchRequestBytes,
 } from "../core/publishing-limits.js";
 import {redactFailureMessage} from "../observability/failure-cause-summary.js";
+import {readLocalPublicationInventory} from "./local-publication-inventory.js";
 
 import {
   claudeDesignManifestPath,
@@ -304,6 +305,7 @@ export type FilePublicationTarget =
 
 /** One user-facing file or directory publication request. */
 export interface FilePublicationCommand {
+  readonly inputFormat?: "path" | "inventory";
   readonly entryPath?: string;
   readonly idempotencyKey: string;
   readonly inputPath: string;
@@ -487,13 +489,15 @@ export const prepareFilePublication = Effect.fn(
 ): Effect.fn.Return<PreparedFilePublication, FilePublicationInputError> {
   const publication = yield* preparePublication(command);
   const target = effectiveCommitTarget(command.target, publication.defaultName);
-  const operationScopeDigest = createHash("sha256").update(JSON.stringify({
+  const scope = {
     entryPath: publication.entryPath,
     inputPath: path.resolve(command.inputPath),
     projectId: command.projectId ?? null,
     routingMode: publication.routingMode,
     target,
-  })).digest("hex");
+  };
+  const selectedScope = command.inputFormat === undefined ? scope : {...scope, inputFormat: command.inputFormat};
+  const operationScopeDigest = createHash("sha256").update(JSON.stringify(selectedScope)).digest("hex");
   const operationDigest = createHash("sha256").update(JSON.stringify({
     entryPath: publication.entryPath,
     files: publication.files.map((file) => ({
@@ -627,6 +631,7 @@ const preparePublication = Effect.fn("FilePublicationClient.preparePublication")
         absoluteInputPath,
         command.entryPath,
         command.routingMode ?? "static",
+        command.inputFormat,
       ),
       catch: (cause) => inputFailureFrom(cause, absoluteInputPath),
     });
@@ -638,6 +643,7 @@ async function inspectPublicationPath(
   absoluteInputPath: string,
   requestedEntryPath: string | undefined,
   routingMode: "spa" | "static",
+  inputFormat: "path" | "inventory" | undefined,
 ): Promise<PreparedPublication> {
   const rootInfo = await lstat(absoluteInputPath);
   if (rootInfo.isSymbolicLink()) {
@@ -646,6 +652,22 @@ async function inspectPublicationPath(
       "symbolic_link",
       "The publication input cannot be a symbolic link.",
     );
+  }
+  if (inputFormat === "inventory") {
+    const inventory = await readLocalPublicationInventory(absoluteInputPath, maximumFileCount);
+    const inspected = new Map<string, DiskPreparedFile>();
+    const files: PreparedFile[] = [];
+    for (const entry of inventory.files) {
+      // eslint-disable-next-line no-await-in-loop -- hash each canonical source once without materializing a package directory
+      const file = inspected.get(entry.source) ?? await inspectRegularFile(entry.source, entry.path);
+      if (file.sha256 !== entry.sha256 || file.size !== entry.size) {
+        throw inputFailure(absoluteInputPath, "invalid_path", `Inventory source changed; rebuild the inventory: ${entry.path}`);
+      }
+      inspected.set(entry.source, file);
+      files.push({...file, path: entry.path, mediaType: mediaTypeForPath(entry.path)});
+    }
+    const entryPath = requestedEntryPath ?? inventory.entryPath ?? await inferDirectoryEntry(files, absoluteInputPath);
+    return canonicalPreparedPublication(inventory.name ?? path.basename(absoluteInputPath), entryPath, files, absoluteInputPath, routingMode);
   }
   if (rootInfo.isFile()) {
     const relativePath = path.basename(absoluteInputPath);

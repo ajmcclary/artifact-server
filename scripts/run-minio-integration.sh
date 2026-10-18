@@ -43,6 +43,11 @@ if ! curl --fail --silent "${endpoint}/minio/health/ready" >/dev/null; then
   exit 1
 fi
 
+minio_coverage_args=(--coverage)
+if [[ "${ARTIFACT_SERVER_S3_FOCUSED:-0}" == "1" ]]; then
+  minio_coverage_args=(--coverage.enabled=false)
+fi
+
 ARTIFACT_SERVER_S3_ENDPOINT="${endpoint}" \
 ARTIFACT_SERVER_S3_ACCESS_KEY="${access_key}" \
 ARTIFACT_SERVER_S3_SECRET_KEY="${secret_key}" \
@@ -50,7 +55,7 @@ ARTIFACT_SERVER_MINIO_CONTAINER="${container_name}" \
 ARTIFACT_SERVER_MINIO_IMAGE="${minio_image}" \
 ARTIFACT_SERVER_MINIO_VOLUME="${volume_name}" \
 NODE_OPTIONS="${NODE_OPTIONS:+${NODE_OPTIONS} }--max-old-space-size=4096" \
-pnpm exec vitest run --coverage --config tests/configs/vitest.integration.config.ts \
+pnpm exec vitest run "${minio_coverage_args[@]}" --config tests/configs/vitest.integration.config.ts \
   --reporter=default \
   --reporter=json \
-  --outputFile=project/evidence/s3-minio.json
+  --outputFile="${ARTIFACT_SERVER_S3_EVIDENCE_FILE:-project/evidence/s3-minio.json}" "$@"

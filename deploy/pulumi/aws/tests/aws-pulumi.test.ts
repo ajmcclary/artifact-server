@@ -183,7 +183,9 @@ describe("AWS Pulumi deployment", () => {
       "s3:GetBucketLocation",
     );
     expect(String(objectStoragePolicy.inputs["policy"])).toContain("s3:DeleteObject");
-    expect(String(objectStoragePolicy.inputs["policy"])).not.toContain(
+    expect(String(objectStoragePolicy.inputs["policy"])).toContain("s3:DeleteObjectVersion");
+    expect(String(objectStoragePolicy.inputs["policy"])).toContain("/staging/*");
+    expect(String(objectStoragePolicy.inputs["policy"])).toContain(
       "s3:prefix",
     );
     const loadBalancer = requireResource("aws:lb/loadBalancer:LoadBalancer");

@@ -762,15 +762,15 @@ requirements:
 
   - id: PUB-009
     kind: behavior
-    behavior: The first release deletes expired uncommitted staging uploads but does not garbage-collect committed or orphaned blobs.
+    behavior: Expired abandoned staging and verified redundant committed-upload staging are reclaimed without garbage-collecting committed or orphaned blobs.
     owner: operations
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
-      behavior: {id: PUB-009-B, description: "Expire abandoned staging records and confirm that their staging bytes are removed."}
+      behavior: {id: PUB-009-B, description: "Expire abandoned staging and reclaim redundant committed-upload staging with durable bounded progress while preserving receipts and immutable blobs."}
       failure: {id: PUB-009-F, description: "Cleanup cannot delete a blob referenced by a committed version or one involved in a concurrent commit."}
     deployments: *all
     status: behavior_verified
-    proof_gap: The PUB-009-F failure proof is the SQLite service-level race driven through the real cleanup pass and storage removal; the matching repository-level exclusion, fencing, and crash/retry suites also pass on pinned Postgres (tests/integration/postgres-expired-staging-cleanup.test.ts, recorded in project/evidence/external-storage-runtime.json) and local Wrangler-D1 (deploy/cloudflare/tests/d1-expired-staging-cleanup.test.ts). Successful-staging reclamation stays a deferred policy decision (T24).
+    proof_gap: The PUB-009-F failure proof is the SQLite service-level race driven through the real cleanup pass and storage removal; the matching repository-level exclusion, fencing, and crash/retry suites also pass on pinned Postgres (tests/integration/postgres-expired-staging-cleanup.test.ts, recorded in project/evidence/external-storage-runtime.json) and local Wrangler-D1 (deploy/cloudflare/tests/d1-expired-staging-cleanup.test.ts). Successful-staging reclamation now requires expiry plus settle delay, canonical-blob verification, durable per-file progress, exclusive cleanup claims, and retained replay metadata; OPS-012 carries its new local proofs. Live provider qualification is not rerun for this change.
     depends_on: [PUB-005]
     evidence:
       - deployment: local
@@ -1059,7 +1059,7 @@ requirements:
     owner: publishing
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
-      behavior: {id: PUB-023-B, description: "Reuse committed project bytes in concurrent fresh upload plans, preserve verified staging across restart, and request changed files normally."}
+      behavior: {id: PUB-023-B, description: "Reuse verified committed project bytes by durable reference without redundant staging, preserve references across restart, and request changed files normally."}
       failure: {id: PUB-023-F, description: "Write-only callers, foreign installations, other projects, wrong sizes and deleted artifacts cannot reuse content; missing or corrupt stored bytes leave the slot unverified for ordinary upload."}
     deployments: *all
     status: behavior_verified
@@ -1165,6 +1165,44 @@ requirements:
         result: pass
         run: project/evidence/cli-publication-groups-2026-09-29.json
         recorded_at: "2026-09-29T21:32:43.499000Z"
+
+  - id: CLI-006
+    kind: behavior
+    behavior: Opt-in content identity retains the current immutable artifact version when differences are confined to root source provenance, without weakening version guards.
+    owner: cli
+    source: {file: artifact-server-product-spec.html, anchor: implementation}
+    acceptance:
+      behavior: {id: CLI-006-B, description: "Change only provenance and observe no upload or version, change a document and publish, and explicitly select package identity for a provenance correction."}
+      failure: {id: CLI-006-F, description: "A stale binding cannot bypass the expected-version guard through content identity even when its delivered bytes match the server."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Real local CLI processes prove provenance-only skipping, actual content publication, package identity, and stale-version refusal. No extra metered publication or benchmark was run.
+    depends_on: [CLI-004, PUB-008]
+    evidence:
+      - deployment: local
+        tests: [CLI-006-B, CLI-006-F]
+        result: pass
+        run: project/evidence/publication-content-storage-2026-10-18.json
+        recorded_at: "2026-10-18T19:27:53.209Z"
+
+  - id: CLI-007
+    kind: behavior
+    behavior: Explicit local inventories fingerprint and stream canonical regular files without copying a finished directory and preserve durable publication recovery.
+    owner: cli
+    source: {file: artifact-server-product-spec.html, anchor: implementation}
+    acceptance:
+      behavior: {id: CLI-007-B, description: "Publish canonical inventory sources, lose a response, restart and recover the exact version without another commit or a materialized package."}
+      failure: {id: CLI-007-F, description: "Traversal, symlinks, stale fingerprints, and widened group source boundaries are rejected before an upload."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Real local CLI processes prove direct inventories, byte fingerprints, recovery and source containment. Live provider publication qualification was not rerun.
+    depends_on: [CLI-003, CLI-005, MAN-001]
+    evidence:
+      - deployment: local
+        tests: [CLI-007-B, CLI-007-F]
+        result: pass
+        run: project/evidence/publication-content-storage-2026-10-18.json
+        recorded_at: "2026-10-18T19:27:53.209Z"
 
   - id: DSN-001
     kind: behavior
@@ -5280,7 +5318,7 @@ requirements:
     source: {file: artifact-server-product-spec.html, anchor: architecture}
     acceptance:
       behavior: {id: OPS-006-B, description: "Publish, race, restore, restart, and wait beyond staging expiry and confirm every committed version and referenced byte remains."}
-      failure: {id: OPS-006-F, description: "Cleanup may delete only expired uncommitted staging records and cannot select a committed or possibly referenced blob."}
+      failure: {id: OPS-006-F, description: "Cleanup removes only eligible staging keys, retains staging when its canonical committed blob is missing or corrupt, and cannot select a committed or possibly referenced blob."}
     deployments: *all
     status: behavior_verified
     proof_gap: Cleanup-selection failure evidence exists, the durable cleanup claim that excludes a racing preparation while staging objects are removed is proved at the service level on SQLite and at the repository level on pinned Postgres and local Wrangler-D1 (September 28), and the combined OPS-006-B acceptance run now passes locally (September 28). One run publishes two artifacts through the real HTTP boundary, races a concurrent finalization of one operation (exactly one version, loser replays), restores from a data-directory copy, restarts, advances past staging expiry through a real cleanup pass that reclaims an abandoned upload, and verifies every committed byte remains byte-identical throughout. The combined run remains unrun on cloudflare, aws and gcp.
@@ -5376,6 +5414,44 @@ requirements:
     status: specified
     depends_on: [OPS-003, OPS-004, DEP-005, DEP-006]
     evidence: []
+
+  - id: OPS-012
+    kind: behavior
+    behavior: Expired committed-upload staging is reclaimed with bounded durable progress only while canonical committed bytes remain intact, preserving exact retry receipts.
+    owner: operations
+    source: {file: artifact-server-product-spec.html, anchor: implementation}
+    acceptance:
+      behavior: {id: OPS-012-B, description: "Clean over bounded passes, restart, replay the original receipt, and read exact committed bytes after all redundant staging is gone."}
+      failure: {id: OPS-012-F, description: "Missing or corrupt canonical blobs retain the last good staging copy; cleanup never targets immutable blobs."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: Real SQLite service proofs cover bounded cleanup, restart, replay and corrupt canonical bytes. Repository progress and installation isolation also pass on pinned Postgres and local Wrangler-D1; live cloud cleanup is qualified separately.
+    depends_on: [PUB-009, OPS-006]
+    evidence:
+      - deployment: local
+        tests: [OPS-012-B, OPS-012-F]
+        result: pass
+        run: project/evidence/publication-content-storage-2026-10-18.json
+        recorded_at: "2026-10-18T19:27:53.209Z"
+
+  - id: DEP-023
+    kind: behavior
+    behavior: Versioned S3 staging cleanup permanently removes versions and delete markers of only the exact server-derived staging key.
+    owner: blob-storage
+    source: {file: artifact-server-product-spec.html, anchor: implementation}
+    acceptance:
+      behavior: {id: DEP-023-B, description: "Create multiple staging object versions and a delete marker in pinned MinIO, clean the named slot, and observe no retained version of that slot."}
+      failure: {id: DEP-023-F, description: "Neighboring staging keys and canonical immutable blobs remain intact during exact-key version purging."}
+    deployments: [local, aws, kubernetes]
+    status: behavior_verified
+    proof_gap: Pinned local MinIO proves exact-key version and delete-marker removal while neighboring staging and canonical blobs remain intact. Metered live provider suites were not rerun.
+    depends_on: [OPS-012, DEP-011]
+    evidence:
+      - deployment: local
+        tests: [DEP-023-B, DEP-023-F]
+        result: pass
+        run: project/evidence/staging-version-cleanup-2026-10-18.json
+        recorded_at: "2026-10-18T19:27:53.209Z"
 
   - id: REL-001
     kind: release_gate

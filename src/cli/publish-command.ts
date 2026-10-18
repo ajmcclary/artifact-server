@@ -15,6 +15,8 @@ export function configurePublishCommand(program: Command, options: PublishComman
     .description("Publish a file or directory, remembering its artifact for later versions.")
     .argument("[path]", "file or finished directory to publish"), options.defaultProfileDirectory)
     .addOption(new Option("--entry <path>", "directory file that opens first"))
+    .addOption(new Option("--input-format <format>", "publish a path or an explicit local file inventory").choices(["path", "inventory"]))
+    .addOption(new Option("--version-identity <identity>", "content skips source-provenance-only changes").choices(["package", "content"]))
     .addOption(new Option("--routing <mode>", "path routing; defaults to remembered choice or static")
       .choices(["static", "spa"]))
     .addOption(new Option("--name <name>", "name for a new artifact"))
@@ -37,7 +39,8 @@ export function configurePublishCommand(program: Command, options: PublishComman
       if (publishOptions.group !== undefined) {
         if (publishOptions.artifact !== undefined || publishOptions.expectedVersion !== undefined ||
           publishOptions.newArtifact || publishOptions.name !== undefined || publishOptions.public || publishOptions.tag.length > 0 ||
-          publishOptions.entry !== undefined || publishOptions.routing !== undefined) {
+          publishOptions.entry !== undefined || publishOptions.routing !== undefined ||
+          publishOptions.inputFormat !== undefined || publishOptions.versionIdentity !== undefined) {
           throw new Error("Group publication inherits each target's choices. Per-artifact flags cannot be combined with --group.");
         }
         await publishGroupCommand({...publishOptions, group: publishOptions.group}, publishOptions.json);

@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import {inspectPublicationContext, resolveGroupPublicationDestination, type GroupPublicationDestination} from "./publication-context.js";
-import {groupSource, pathContains, readPublicationGroups, selectPublicationGroup, type PublicationGroupsConfig} from "./publication-groups-config.js";
+import {groupSource, pathContains, readPublicationGroups, selectPublicationGroup, validateInventorySources, type PublicationGroupsConfig} from "./publication-groups-config.js";
 import {groupSummary, type GroupMemberResult, type GroupPreflightMember, type GroupProgress, type GroupRunResult} from "./publication-group-model.js";
 import {createPublicationRunStore, PublicationRunStoreError, type PublicationRunStore} from "./publication-group-report.js";
 import type {PublicationDestinationOptions, PublishOptions} from "./publication-options.js";
@@ -18,6 +18,7 @@ interface PreparedMember {
   readonly target: string;
   readonly source: string;
   readonly expectation: PublicationExpectation;
+  readonly options: PublishOptions;
 }
 interface PreparedGroup {
   readonly config: PublicationGroupsConfig;
@@ -77,13 +78,18 @@ async function preflightGroup(options: PublicationGroupOptions): Promise<Prepare
       // eslint-disable-next-line no-await-in-loop -- inspect members in configured order without parallel authentication/state access
       const context = await inspectPublicationContext(row.source, publishOptions, destination);
       if (pathContains(path.dirname(context.directory), row.source)) throw new Error("Target is inside private CLI state and cannot be published by a group.");
+      // eslint-disable-next-line no-await-in-loop -- check every inventory source against this destination's private state
+      await validateInventorySources(config, row.target, row.source, path.dirname(context.directory));
       // eslint-disable-next-line no-await-in-loop -- bounded sequential hashing and remote version inspection
-      const inspected = await inspectRememberedPublication(context, publishOptions);
+      const inputFormat = config.definition.targets[row.target]?.inputFormat;
+      const memberOptions = inputFormat === undefined ? publishOptions : {...publishOptions, inputFormat};
+      // eslint-disable-next-line no-await-in-loop -- inspect each bounded snapshot in configured order
+      const inspected = await inspectRememberedPublication(context, memberOptions);
       const allowed = inspected.status !== "conflicted" && (inspected.status !== "unregistered" || options.allowCreate);
       rows[index] = {target: row.target, source: row.source, status: inspected.status, allowed,
         message: inspected.status === "unregistered" && options.allowCreate ? "Explicitly allowed to create a private artifact." : inspected.message,
         artifactId: inspected.artifactId, versionId: inspected.versionId};
-      members.push({target: row.target, source: row.source, expectation: inspected.expectation});
+      members.push({target: row.target, source: row.source, expectation: inspected.expectation, options: memberOptions});
     } catch (error) { rows[index] = blockedMember(row.target, row.source, (error instanceof Error ? error.message : "Publication group operation failed.")); }
   }
   const result: GroupRunResult = {...emptyResult(options), config: config.file,
@@ -117,8 +123,10 @@ async function executeGroup(
       // eslint-disable-next-line no-await-in-loop -- revalidate containment before each independent publication
       const currentSource = await groupSource(prepared.config, member.target);
       if (currentSource !== member.source) throw new Error("Source location changed after preflight.");
+      // eslint-disable-next-line no-await-in-loop -- recheck inventory containment before the selected member can mutate the server
+      await validateInventorySources(prepared.config, member.target, currentSource, path.dirname(member.expectation.directory));
       // eslint-disable-next-line no-await-in-loop -- publication groups intentionally execute sequentially
-      await publishRemembered(member.source, prepared.options, async (receipt) => {
+      await publishRemembered(member.source, member.options, async (receipt) => {
         const status = receipt.unchanged ? "unchanged" : receipt.replayed ? "recovered" : "published";
         result = replaceMember(result, index, {...memberResult(member), status, receipt});
         // The publisher acknowledges delivery only after the run report is durable.
@@ -151,6 +159,8 @@ function effectiveOptions(options: PublicationGroupOptions, config: PublicationG
   let resolved: PublishOptions = {data: options.data, profileData: options.profileData, public: false, newArtifact: false, tag: []};
   const profile = options.profile ?? group.profile ?? config.definition.defaults.profile;
   const project = options.project ?? group.project ?? config.definition.defaults.project;
+  const versionIdentity = group.versionIdentity ?? config.definition.defaults.versionIdentity;
+  if (versionIdentity !== undefined) resolved = {...resolved, versionIdentity};
   if (profile !== undefined) resolved = {...resolved, profile};
   if (project !== undefined) resolved = {...resolved, project};
   if (options.server !== undefined) resolved = {...resolved, server: options.server};

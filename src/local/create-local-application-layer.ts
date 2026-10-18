@@ -44,7 +44,7 @@ import {
   type ContentAccessDependencies,
   ContentAccessService,
 } from "../application/content-access.js";
-import {ExpiredStagingCleanupService} from
+import {ExpiredStagingCleanupService, type ExpiredStagingCleanupDependencies} from
   "../application/expired-staging-cleanup.js";
 import {
   type GitHistoryAccessDependencies,
@@ -526,6 +526,7 @@ export function createApplicationLayer(
         principalId,
         storageToken,
         uploadedAt,
+        installedAt,
       ) =>
         Effect.tryPromise({
           try: () =>
@@ -535,6 +536,7 @@ export function createApplicationLayer(
               principalId,
               storageToken,
               uploadedAt,
+              installedAt,
             ),
           catch: (cause) => {
             if (
@@ -1328,7 +1330,7 @@ export function createApplicationLayer(
   const stagedLayer = StagedUploadService.layer(stagedDependencies).pipe(
     Layer.provideMerge(Layer.mergeAll(publishLayer, projectLayer, preparationLayer)),
   );
-  const cleanupLayer = ExpiredStagingCleanupService.layer({
+  const cleanupDependencies: ExpiredStagingCleanupDependencies = {
     clock,
     concurrency: adapters.stagingCleanupPolicy?.concurrency ??
       defaultStagingCleanupPolicy.concurrency,
@@ -1337,7 +1339,13 @@ export function createApplicationLayer(
       adapters.stagingCleanupPolicy?.settleDelayMilliseconds ??
         defaultStagingCleanupPolicy.settleDelayMilliseconds,
     storage: stagedDependencies.staging,
-  });
+  };
+  if (adapters.repository.committedStagingCleanup !== undefined) {
+    Object.assign(cleanupDependencies,{committed:{repository:adapters.repository.committedStagingCleanup,
+      openBlob:(sha256:string)=>Effect.tryPromise({try:()=>adapters.blobs.open(sha256),
+        catch:(cause)=>new BlobStorageFailure({cause:redactedFailureCause(cause),operation:"open"})})}});
+  }
+  const cleanupLayer = ExpiredStagingCleanupService.layer(cleanupDependencies);
   const contentLayer = ContentAccessService.layer(contentDependencies).pipe(
     Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)),
   );

@@ -1,5 +1,6 @@
 import {Effect, Redacted} from "effect";
 import {z} from "zod";
+import {createManifest} from "../manifest/create-manifest.js";
 
 import {verifyCliCredential} from "./cli-profile-credential.js";
 import {authenticatedCliHttpClientLayer, type CliServerConnection} from "./cli-server-connection.js";
@@ -41,6 +42,14 @@ export async function currentPublication(
   projectId: string,
   artifactId: string,
 ): Promise<PublicationReceipt> {
+  return (await currentPublicationSnapshot(connection, projectId, artifactId)).receipt;
+}
+
+export async function currentPublicationSnapshot(
+  connection: CliServerConnection,
+  projectId: string,
+  artifactId: string,
+) {
   const query = new URLSearchParams({projectId});
   const details = publicationDetailsSchema.parse(JSON.parse(await readPublicationResource(
     connection,
@@ -55,7 +64,11 @@ export async function currentPublication(
   if (receipt.artifact.id !== artifactId || receipt.artifact.projectId !== projectId) {
     throw new Error("Artifact Server returned a different publication identity.");
   }
-  return receipt;
+  const manifest = createManifest({...details.current.manifest, files: details.current.manifest.entries});
+  if (manifest.digest !== receipt.version.manifestDigest) {
+    throw new Error("Artifact Server returned an inconsistent publication manifest.");
+  }
+  return {receipt, manifest};
 }
 
 export function requireCurrentPublication(receipt: PublicationReceipt, expectedVersion: string): void {

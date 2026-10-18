@@ -45,6 +45,11 @@ export const publicationDetailsSchema = z.object({
   current: z.object({
     version: versionSchema,
     links: z.object({review: z.url(), version: z.url()}),
+    manifest: z.object({
+      entryPath: z.string(),
+      routingMode: z.enum(["static", "spa"]),
+      entries: z.array(z.object({path: z.string(), mediaType: z.string(), sha256: z.string(), size: z.number()})),
+    }),
   }),
   links: z.object({artifact: z.url()}),
 });
@@ -70,6 +75,7 @@ export const legacyPublicationSchema = z.object({
 export type LegacyPublication = z.infer<typeof legacyPublicationSchema>;
 export const publicationIntentSchema = z.object({
   inputPath: z.string(),
+  inputFormat: z.enum(["path", "inventory"]).optional(),
   projectId: z.string().optional(),
   entryPath: z.string().optional(),
   routingMode: z.enum(["static", "spa"]).optional(),
@@ -82,6 +88,7 @@ export const publicationIntentSchema = z.object({
     if (value.target.name !== undefined) target = {...target, name: value.target.name};
   }
   let intent: FilePublicationIntent = {inputPath: value.inputPath, target};
+  if (value.inputFormat !== undefined) intent = {...intent, inputFormat: value.inputFormat};
   if (value.projectId !== undefined) intent = {...intent, projectId: value.projectId};
   if (value.entryPath !== undefined) intent = {...intent, entryPath: value.entryPath};
   if (value.routingMode !== undefined) intent = {...intent, routingMode: value.routingMode};
@@ -96,6 +103,8 @@ export const publicationScopeSchema = z.object({
 });
 export type PublicationScope = z.infer<typeof publicationScopeSchema>;
 const preferencesSchema = z.object({
+  inputFormat: z.enum(["path", "inventory"]).optional(),
+  versionIdentity: z.enum(["package", "content"]).optional(),
   entry: z.string().optional(),
   routing: z.enum(["static", "spa"]).optional(),
 });

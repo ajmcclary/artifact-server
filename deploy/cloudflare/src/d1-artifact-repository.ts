@@ -1,3 +1,4 @@
+import {committedStagingCleanupRepository} from "../../../src/storage/committed-staging-cleanup.js";
 import {z} from "zod";
 
 import type {
@@ -2650,16 +2651,19 @@ export function createD1ArtifactRepository(
         status: header.status,
       };
     },
+    committedStagingCleanup: committedStagingCleanupRepository(async (statement, values) =>
+      (await database.prepare(statement).bind(...values).all()).results),
     markStagedFileUploaded: async (
       projectId,
       uploadId,
       principalId,
       storageToken,
       uploadedAt,
+      installedAt,
     ) => {
       await assertProjectActive(projectId);
       const result = await database.prepare(`
-        UPDATE staged_upload_files SET uploaded_at = ?
+        UPDATE staged_upload_files SET uploaded_at = ?, installed_at = COALESCE(?, installed_at)
         WHERE upload_id = ? AND storage_token = ? AND EXISTS (
           SELECT 1 FROM staged_uploads u
           WHERE u.id = staged_upload_files.upload_id AND u.project_id = ?
@@ -2668,6 +2672,7 @@ export function createD1ArtifactRepository(
         )
       `).bind(
         uploadedAt,
+        installedAt ?? null,
         uploadId,
         storageToken,
         projectId,

@@ -4,11 +4,14 @@ import path from "node:path";
 import {z} from "zod";
 
 import {hasFileError, publicationSource} from "./publication-registry.js";
+import {readLocalPublicationInventory} from "../client/local-publication-inventory.js";
+import {maximumDeclaredFiles} from "../core/publishing-limits.js";
 
 export const publicationGroupsFilename = "artifactserver.publish.json";
 const nameSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
-const destinationSchema = z.object({profile: z.string().min(1).optional(), project: z.string().startsWith("prj_").optional()}).strict();
-const targetSchema = z.object({path: z.string().min(1)}).strict();
+const destinationSchema = z.object({profile: z.string().min(1).optional(), project: z.string().startsWith("prj_").optional(),
+  versionIdentity: z.enum(["package", "content"]).optional()}).strict();
+const targetSchema = z.object({path: z.string().min(1), inputFormat: z.enum(["path", "inventory"]).optional()}).strict();
 const groupSchema = destinationSchema.extend({targets: z.array(nameSchema).min(1)}).strict();
 const configSchema = z.object({
   schemaVersion: z.literal(1),
@@ -57,7 +60,21 @@ export async function groupSource(config: PublicationGroupsConfig, name: string)
   const source = await publicationSource(lexical);
   if (!pathContains(config.root, source)) throw new Error(`Target ${name} resolves outside the configuration directory.`);
   if (pathContains(source, config.file)) throw new Error(`Target ${name} would publish the group configuration itself. Move the configuration above its sources.`);
+  await validateInventorySources(config, name, source);
   return source;
+}
+
+export async function validateInventorySources(config: PublicationGroupsConfig, name: string, source: string, privateState?: string): Promise<void> {
+  if (config.definition.targets[name]?.inputFormat !== "inventory") return;
+  const inventory = await readLocalPublicationInventory(source, maximumDeclaredFiles);
+  for (const entry of inventory.files) {
+    if (!pathContains(config.root, entry.source) || entry.source === config.file) {
+      throw new Error(`Target ${name} inventory source escapes the configuration directory or publishes the configuration.`);
+    }
+    if (privateState !== undefined && pathContains(privateState, entry.source)) {
+      throw new Error(`Target ${name} inventory source is inside private CLI state.`);
+    }
+  }
 }
 
 async function discoverConfig(cwd: string): Promise<string> {

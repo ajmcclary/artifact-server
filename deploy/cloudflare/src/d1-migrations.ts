@@ -21,7 +21,7 @@ import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 19;
+export const requiredD1SchemaVersion = 20;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -664,6 +664,7 @@ export async function migrateD1(
     await addArtifactCommentRevisionIfMissing(database);
     await addStagedUploadPreparationColumnsIfMissing(database);
     await addStagedUploadCleanupClaimIfMissing(database);
+    await addCommittedStagingCleanupIfMissing(database);
     await addPreparedManifestEntriesTableIfMissing(database);
   }
   await addInstallationActivityLogIfMissing(database);
@@ -1047,4 +1048,16 @@ async function widenRenameIdempotencyIfNeeded(database: D1Database): Promise<voi
     database.prepare("DROP TABLE idempotency_records"),
     database.prepare("ALTER TABLE idempotency_records_renamed RENAME TO idempotency_records"),
   ]);
+}
+
+async function addCommittedStagingCleanupIfMissing(database: D1Database): Promise<void> {
+  for (const table of ["staged_uploads", "staged_upload_files"]) {
+    // eslint-disable-next-line no-await-in-loop -- each schema check precedes its idempotent migration
+    const columns = await database.prepare(`PRAGMA table_info(${table})`).all<{name:string}>();
+    if (!columns.results.some(column => column.name === "staging_cleaned_at")) {
+      // eslint-disable-next-line no-await-in-loop -- table names are the fixed internal schema list above
+      await database.prepare(`ALTER TABLE ${table} ADD COLUMN staging_cleaned_at TEXT`).run();
+    }
+  }
+  await database.prepare("CREATE INDEX IF NOT EXISTS committed_staging_cleanup ON staged_uploads(status, staging_cleaned_at, expires_at)").run();
 }

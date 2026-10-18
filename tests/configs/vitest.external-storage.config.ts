@@ -16,6 +16,7 @@ export default defineConfig({
       "tests/integration/postgres-activity-log-writes.test.ts",
       "tests/integration/postgres-content-variant-index.test.ts",
       "tests/integration/postgres-expired-staging-cleanup.test.ts",
+      "tests/integration/postgres-committed-staging-cleanup.test.ts",
       "tests/integration/postgres-content-access-revocation.test.ts",
       "tests/integration/postgres-library-dates.test.ts",
       "tests/integration/postgres-invitations.test.ts",

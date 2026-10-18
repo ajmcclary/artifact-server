@@ -6,6 +6,9 @@ import {
   AbortMultipartUploadCommand,
   CreateBucketCommand,
   ListMultipartUploadsCommand,
+  ListObjectVersionsCommand,
+  PutBucketVersioningCommand,
+  DeleteObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -24,6 +27,7 @@ import {
   createS3ObjectStorageAdapters,
   createS3ObjectStorageProviderFactory,
 } from "../../src/storage/s3-object-storage.js";
+import {createInstallationObjectKeyspace} from "../../src/storage/cloud-object-storage.js";
 
 const runFile = promisify(execFile);
 const bucket = "artifact-server-integration";
@@ -60,6 +64,29 @@ describe.sequential("S3-compatible object storage", () => {
     expect(config).toMatchObject({forcePathStyle: false, region});
     expect(config).not.toHaveProperty("credentials");
     expect(config).not.toHaveProperty("endpoint");
+  });
+
+  test("DEP-023-B DEP-023-F: versioned staging cleanup purges exact object versions without deleting neighboring keys or blobs", async () => {
+    const versionedBucket=bucket+"-versioned";
+    await client.send(new CreateBucketCommand({Bucket:versionedBucket}));
+    await client.send(new PutBucketVersioningCommand({Bucket:versionedBucket,VersioningConfiguration:{Status:"Enabled"}}));
+    const installationId="versioned-staging-cleanup";
+    const storage=createS3ObjectStorageAdapters({client,bucket:versionedBucket,installationId});
+    const keys=createInstallationObjectKeyspace(installationId);
+    const uploadId=`upl_${randomUUID()}`,storageToken=stagedFileToken();
+    const bytes=new TextEncoder().encode("versioned staging bytes"),sha256=digest(bytes);
+    const key=keys.staging(uploadId,storageToken);
+    await storage.staging.put({uploadId,storageToken,sha256,size:bytes.length,body:chunkedBody(bytes,4)});
+    await storage.staging.put({uploadId,storageToken,sha256,size:bytes.length,body:chunkedBody(bytes,4)});
+    await client.send(new DeleteObjectCommand({Bucket:versionedBucket,Key:key}));
+    await client.send(new PutObjectCommand({Bucket:versionedBucket,Key:key+"-neighbor",Body:bytes}));
+    await storage.blobs.put({sha256,size:bytes.length,body:chunkedBody(bytes,4)});
+    await storage.staging.remove(uploadId,storageToken);
+    const remaining=await client.send(new ListObjectVersionsCommand({Bucket:versionedBucket,Prefix:key}));
+    expect(remaining.Versions?.some(version=>version.Key===key)).not.toBe(true);
+    expect(remaining.DeleteMarkers?.some(version=>version.Key===key)).not.toBe(true);
+    expect(remaining.Versions?.some(version=>version.Key===key+"-neighbor")).toBe(true);
+    expect(await readBlob(storage.blobs,sha256)).toEqual(bytes);
   });
 
   test("DEP-011-B DEP-022-B: MinIO preserves the provider factory contract", async () => {

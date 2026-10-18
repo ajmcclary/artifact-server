@@ -1,3 +1,4 @@
+import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import {Effect} from "effect";
 import {SqlClient} from "effect/unstable/sql/SqlClient";
 import {z} from "zod";
@@ -2951,12 +2952,25 @@ export class PostgresArtifactRepository implements
     }));
   }
 
+  get committedStagingCleanup() {
+    const database = this.#database;
+    return committedStagingCleanupRepository((statement, values) => {
+      let index = 0;
+      const parameterized = statement.replaceAll("?", () => `$${++index}`);
+      return database.run(Effect.gen(function*() {
+        const sql = yield* SqlClient;
+        return yield* sql.unsafe(parameterized, values);
+      }));
+    }, this.#installationId);
+  }
+
   async markStagedFileUploaded(
     projectId: string,
     uploadId: string,
     principalId: string,
     storageToken: string,
     uploadedAt: string,
+    installedAt?: string,
   ): Promise<void> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {
@@ -2964,7 +2978,7 @@ export class PostgresArtifactRepository implements
       return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
         yield* this.#assertProjectActive(projectId);
         const updated = yield* sql`UPDATE staged_upload_files AS file
-          SET uploaded_at = ${uploadedAt}
+          SET uploaded_at = ${uploadedAt}, installed_at = COALESCE(${installedAt ?? null}, file.installed_at)
           FROM staged_uploads AS upload
           WHERE file.installation_id = ${installationId}
             AND file.upload_id = ${uploadId}

@@ -6,6 +6,8 @@ export interface PublicationDestinationOptions extends CliServerConnectionOption
   readonly project?: string;
 }
 export interface PublishOptions extends PublicationDestinationOptions {
+  readonly inputFormat?: "path" | "inventory";
+  readonly versionIdentity?: "package" | "content";
   readonly artifact?: string;
   readonly expectedVersion?: string;
   readonly entry?: string;

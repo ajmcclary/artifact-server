@@ -45,9 +45,20 @@ current access. Previously downloaded copies cannot be recalled.
 Normal publication currently streams binary uploads through the application
 origin and verifies staged files before immutable installation. Provider-native
 signed upload and copy-promotion optimizations need separate qualification.
-Maintenance currently removes expired uploads that were never committed; it does
-not reclaim successful staging or committed/race-left blobs. Do not add a bucket
-age-deletion rule for those objects.
+Maintenance removes expired abandoned uploads and redundant staging for committed
+uploads after their upload expiry and settle delay. Committed staging is removed
+only after its canonical blob passes size and SHA-256 verification. Cleanup keeps
+the receipt, per-file metadata, version IDs and comments, so exact retries still
+replay after staging is gone. It does not reclaim committed or race-left blobs.
+Use this record-driven cleanup rather than a bucket-wide age-deletion rule.
+
+For versioned S3 buckets, cleanup deletes every version and delete marker of each
+exact staging key. Grant `s3:ListBucketVersions` constrained to the installation's
+`staging/` prefix and `s3:DeleteObjectVersion` only on that prefix. A permission
+failure retains cleanup progress for retry; it is not reported as reclaimed storage.
+R2's unversioned S3 endpoint uses ordinary current-object deletion. Other SDK
+embedders can select `stagingVersionCleanup: "current"` for an unversioned provider
+that does not implement version listing. Immutable blob keys are never selected.
 
 ### Check the actual operating envelope
 

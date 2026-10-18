@@ -31,6 +31,7 @@ describe("Cloudflare R2 S3 adapter probe", () => {
     const namespace = createHash("sha256").update(installationId).digest("hex");
     const prefix = `installations/${namespace}/`;
     const storage = createS3ObjectStorageAdapters({
+      stagingVersionCleanup: "current",
       bucket,
       client,
       installationId,

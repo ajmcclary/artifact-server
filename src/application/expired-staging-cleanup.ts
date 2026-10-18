@@ -8,6 +8,7 @@ import {
   type StagingStorageFailure,
 } from "../core/errors.js";
 import type {ExpiredStagedUpload} from "../core/ports.js";
+import {cleanupCommittedStaging, type CommittedStagingCleanupDependencies} from "./committed-staging-cleanup.js";
 
 /** Inputs for one bounded expired-staging cleanup pass. */
 export interface RunExpiredStagingCleanupCommand {
@@ -20,6 +21,7 @@ export interface RunExpiredStagingCleanupCommand {
 
 /** Bounded outcome from one expired-staging cleanup pass. */
 export interface ExpiredStagingCleanupReport {
+  readonly committedDeleted?: number;
   readonly alreadyAbsent: number;
   readonly budgetExhausted: boolean;
   readonly claimRejected: number;
@@ -70,6 +72,7 @@ export interface ExpiredStagingCleanupStorage {
 
 /** Dependencies and bounded concurrency policy for expired staging cleanup. */
 export interface ExpiredStagingCleanupDependencies {
+  readonly committed?: CommittedStagingCleanupDependencies;
   readonly clock: ApplicationClock;
   readonly concurrency: number;
   readonly repository: ExpiredStagingCleanupRepository;
@@ -86,7 +89,7 @@ interface ExpiredStagingCleanupOperations {
   >;
 }
 
-/** Removes only expired, never-committed staging records and their named objects. */
+/** Reclaims expired staging while retaining committed receipts and canonical blobs. */
 export class ExpiredStagingCleanupService extends Context.Service<
   ExpiredStagingCleanupService,
   ExpiredStagingCleanupOperations
@@ -257,7 +260,7 @@ function makeExpiredStagingCleanupService(
         }
       }
       const remaining = uploads.length - deleted - alreadyAbsent;
-      const report: ExpiredStagingCleanupReport = {
+      let report: ExpiredStagingCleanupReport = {
         alreadyAbsent,
         budgetExhausted,
         claimRejected,
@@ -266,6 +269,19 @@ function makeExpiredStagingCleanupService(
         remaining,
         selected: uploads.length,
       };
+      const remainingDuration = deadline === null ? maxDurationMilliseconds : Math.max(0,
+        DateTime.toEpochMillis(deadline)-DateTime.toEpochMillis(yield* dependencies.clock.now));
+      if (remainingDuration===0)report={...report,budgetExhausted:true};
+      if (!report.budgetExhausted && dependencies.committed !== undefined && command.limit > uploads.length && budget.filesRemaining > 0) {
+        const committed = yield* cleanupCommittedStaging(dependencies.committed,dependencies.clock,dependencies.storage,{
+          limit:command.limit-uploads.length,maxFiles:budget.filesRemaining,expiredBefore,now:DateTime.formatIso(now),
+          maxDurationMilliseconds:remainingDuration,
+        });
+        report={...report,selected:report.selected+committed.selected,deleted:report.deleted+committed.deleted,
+          failed:report.failed+committed.failed,remaining:report.remaining+committed.remaining,
+          claimRejected:report.claimRejected+committed.claimRejected,budgetExhausted:report.budgetExhausted||committed.budgetExhausted};
+        if(committed.deleted>0)report={...report,committedDeleted:committed.deleted};
+      }
       yield* Effect.logInfo("Expired staging cleanup pass completed.").pipe(
         Effect.annotateLogs({
           cleanup_budget_exhausted: report.budgetExhausted,

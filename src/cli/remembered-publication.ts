@@ -12,7 +12,8 @@ import {resolvePublicationContext, type PublicationContext} from "./publication-
 import type {PublishOptions} from "./publication-options.js";
 import {completeLegacyPublicationOperation, findLegacyPublicationOperation, hasLegacyPublicationOperations} from "./publication-operation-store.js";
 import {publicationReceiptSchema, validatePublicationReceipt, type PublicationPreferences, type PublicationReceipt, type PublicationRecord, type PublicationScope} from "./publication-record.js";
-import {currentPublication, requireCurrentPublication} from "./publication-remote.js";
+import {currentPublicationSnapshot, requireCurrentPublication} from "./publication-remote.js";
+import {samePublicationContent} from "./publication-content.js";
 import {lockPublication, publicationRecordPath, readPublicationRecord, savePublicationRecord, publicationSource, inspectPublicationLock} from "./publication-registry.js";
 
 export interface RememberedPublicationResult extends PublicationReceipt {
@@ -86,10 +87,11 @@ async function executeRemembered(
   const intent = rememberedIntent(context, record, options, preferences);
   const prepared = await prepare(intent);
   if (intent.target.kind === "new_version") {
-    const current = await currentPublication(context.connection, context.scope.projectId, intent.target.artifactId);
+    const snapshot = await currentPublicationSnapshot(context.connection, context.scope.projectId, intent.target.artifactId);
+    const current = snapshot.receipt;
     requireCurrentPublication(current, intent.target.expectedCurrentVersionId);
     checkCreationOptions(current, options);
-    if (createManifest(prepared.publication).digest === current.version.manifestDigest) {
+    if (samePublicationContent(createManifest(prepared.publication), snapshot.manifest, preferences.versionIdentity)) {
       validatePublicationReceipt(current, context.scope);
       await savePublicationRecord(context.directory, {...record, preferences, receipt: current});
       return {...current, unchanged: true};
@@ -131,6 +133,8 @@ function createIntent(
     if (options.name !== undefined) target = {...target, name: options.name};
   }
   let intent: FilePublicationIntent = {inputPath, target, routingMode: options.routing ?? preferences.routing ?? "static"};
+  const inputFormat = options.inputFormat ?? preferences.inputFormat;
+  if (inputFormat !== undefined) intent = {...intent, inputFormat};
   const entryPath = options.entry ?? preferences.entry;
   if (projectId !== undefined) intent = {...intent, projectId};
   if (entryPath !== undefined) intent = {...intent, entryPath};
@@ -139,7 +143,11 @@ function createIntent(
 
 function selectedPreferences(previous: PublicationPreferences, options: PublishOptions): PublicationPreferences {
   const entry = options.entry ?? previous.entry;
-  const preferences = {routing: options.routing ?? previous.routing ?? "static"};
+  let preferences: PublicationPreferences = {routing: options.routing ?? previous.routing ?? "static"};
+  const inputFormat = options.inputFormat ?? previous.inputFormat;
+  const versionIdentity = options.versionIdentity ?? previous.versionIdentity;
+  if (inputFormat !== undefined) preferences = {...preferences, inputFormat};
+  if (versionIdentity !== undefined) preferences = {...preferences, versionIdentity};
   return entry === undefined ? preferences : {...preferences, entry};
 }
 
@@ -220,9 +228,11 @@ function validateTargetOptions(options: PublishOptions): void {
 }
 
 function selectionSignature(options: PublishOptions): string {
-  return JSON.stringify({artifact: options.artifact ?? null, expectedVersion: options.expectedVersion ?? null,
+  const selection = {artifact: options.artifact ?? null, expectedVersion: options.expectedVersion ?? null,
     newArtifact: options.newArtifact, name: options.name ?? null, public: options.public,
-    tag: [...options.tag].toSorted(), entry: options.entry ?? null, routing: options.routing ?? null});
+    tag: [...options.tag].toSorted(), entry: options.entry ?? null, routing: options.routing ?? null};
+  const input = options.inputFormat === undefined ? selection : {...selection, inputFormat: options.inputFormat};
+  return JSON.stringify(options.versionIdentity === undefined ? input : {...input, versionIdentity: options.versionIdentity});
 }
 
 function checkCreationOptions(receipt: PublicationReceipt, options: PublishOptions): void {
@@ -295,14 +305,16 @@ export async function inspectRememberedPublication(
     if (legacy !== null) return {...base, expectation, status: "resumable", message: "A matching legacy operation can be recovered."};
     return {...base, expectation, status: "unregistered", message: "Import an existing receipt or explicitly use --allow-create."};
   }
-  const prepared = await prepare(rememberedIntent(context, record, options, selectedPreferences(record.preferences, options)));
-  const current = await currentPublication(context.connection, context.scope.projectId, record.receipt.artifact.id);
+  const preferences = selectedPreferences(record.preferences, options);
+  const prepared = await prepare(rememberedIntent(context, record, options, preferences));
+  const snapshot = await currentPublicationSnapshot(context.connection, context.scope.projectId, record.receipt.artifact.id);
+  const current = snapshot.receipt;
   validatePublicationReceipt(current, context.scope);
   if (current.version.id !== record.receipt.version.id) {
     return {...base, expectation, status: "conflicted", message: `Expected ${record.receipt.version.id}; server is at ${current.version.id}. Inspect it and explicitly refresh the binding.`};
   }
   return {...base, expectation,
-    status: createManifest(prepared.publication).digest === current.version.manifestDigest ? "unchanged" : "changed",
+    status: samePublicationContent(createManifest(prepared.publication), snapshot.manifest, preferences.versionIdentity) ? "unchanged" : "changed",
     message: "The remembered version matches the server.",
   };
 }

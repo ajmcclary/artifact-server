@@ -4,10 +4,12 @@ import {
   AbortMultipartUploadCommand,
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   HeadBucketCommand,
   ListMultipartUploadsCommand,
+  ListObjectVersionsCommand,
   type PutObjectCommandInput,
   S3Client,
   type S3ClientConfig,
@@ -50,6 +52,7 @@ interface S3ObjectStorageProviderConfigBase {
   readonly endpoint?: string;
   readonly forcePathStyle?: boolean;
   readonly region: string;
+  readonly stagingVersionCleanup?: "versions" | "current";
 }
 
 /** S3 settings using either a static pair or the AWS SDK credential chain. */
@@ -66,6 +69,7 @@ export type S3ObjectStorageProviderConfig = S3ObjectStorageProviderConfigBase & 
 
 /** Construction values for one installation's S3-compatible storage adapters. */
 export interface S3ObjectStorageConfig {
+  readonly stagingVersionCleanup?: "versions" | "current";
   /** Bucket created and authorized by the deployment composition root. */
   readonly bucket: string;
   /** Provider client owned and destroyed by the deployment composition root. */
@@ -125,7 +129,8 @@ function createS3ObjectStorageProvider(
 ): ObjectStorageProvider {
   const client = new S3Client(createS3ClientConfig(config));
   const keyspace = createInstallationObjectKeyspace(installationId);
-  const objects = new S3Objects(client, config.bucket);
+  const r2 = config.endpoint !== undefined && new URL(config.endpoint).hostname.endsWith(".r2.cloudflarestorage.com");
+  const objects = new S3Objects(client, config.bucket, config.stagingVersionCleanup ?? (r2 ? "current" : "versions"));
   const adapters = buildS3ObjectStorageAdapters(objects, keyspace, "probe");
   // The capability probe writes, copies and deletes scratch objects, so a
   // settled result is memoized per process rather than re-run on every
@@ -172,7 +177,7 @@ export function createS3ObjectStorageAdapters(
   config: S3ObjectStorageConfig,
 ): S3ObjectStorageAdapters {
   const keyspace = createInstallationObjectKeyspace(config.installationId);
-  const objects = new S3Objects(config.client, config.bucket);
+  const objects = new S3Objects(config.client, config.bucket, config.stagingVersionCleanup ?? "versions");
   return buildS3ObjectStorageAdapters(
     objects,
     keyspace,
@@ -238,12 +243,14 @@ function buildS3ObjectStorageAdapters(
 }
 
 class S3Objects {
+  readonly #stagingVersionCleanup: "versions" | "current";
   readonly #bucket: string;
   readonly #client: S3Client;
 
-  constructor(client: S3Client, bucket: string) {
+  constructor(client: S3Client, bucket: string, stagingVersionCleanup: "versions" | "current") {
     this.#bucket = bucket;
     this.#client = client;
+    this.#stagingVersionCleanup = stagingVersionCleanup;
   }
 
   async inspect(
@@ -265,10 +272,27 @@ class S3Objects {
   }
 
   async remove(key: string): Promise<void> {
-    await this.#client.send(new DeleteObjectCommand({
-      Bucket: this.#bucket,
-      Key: key,
-    }));
+    if (this.#stagingVersionCleanup === "current") {
+      await this.#client.send(new DeleteObjectCommand({Bucket: this.#bucket, Key: key}));
+      return;
+    }
+    for (let page = 0; page < 128; page++) {
+      // eslint-disable-next-line no-await-in-loop -- restart from the first page after deletion so removed version markers cannot skip older versions
+      const listed = await this.#client.send(new ListObjectVersionsCommand({
+        Bucket: this.#bucket, Prefix: key, MaxKeys: 1_000,
+      }));
+      const objects = [...(listed.Versions ?? []), ...(listed.DeleteMarkers ?? [])].filter(version => version.Key === key).map(version => {
+        if (version.VersionId === undefined) throw new Error("S3 did not identify a staging object version.");
+        return {Key: key, VersionId: version.VersionId};
+      });
+      if (objects.length === 0) return;
+      // eslint-disable-next-line no-await-in-loop -- purge only the exact server-derived staging key, including retained noncurrent versions
+      const removed = await this.#client.send(new DeleteObjectsCommand({
+        Bucket: this.#bucket, Delete: {Objects: objects, Quiet: true},
+      }));
+      if (removed.Errors !== undefined && removed.Errors.length > 0) throw new Error("S3 refused staging version cleanup.");
+    }
+    throw new Error("Staging version cleanup exceeded its bounded page limit; retry the cleanup pass.");
   }
 
   async open(

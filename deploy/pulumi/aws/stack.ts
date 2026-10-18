@@ -346,6 +346,17 @@ export async function defineAwsStack(
           Resource: artifactBucket.arn,
         },
         {
+          Action: ["s3:ListBucketVersions"],
+          Effect: "Allow",
+          Resource: artifactBucket.arn,
+          Condition: {StringLike: {"s3:prefix": pulumi.interpolate`installations/${installationNamespace}/staging/*`}},
+        },
+        {
+          Action: ["s3:DeleteObjectVersion"],
+          Effect: "Allow",
+          Resource: pulumi.interpolate`${artifactBucket.arn}/installations/${installationNamespace}/staging/*`,
+        },
+        {
           Action: [
             "s3:AbortMultipartUpload",
             "s3:DeleteObject",
