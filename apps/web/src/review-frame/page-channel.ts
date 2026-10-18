@@ -11,7 +11,7 @@ export type RestoreResult =
   | {readonly outcome: "restored"; readonly state: PageState}
   | {
     readonly outcome: "failed";
-    readonly reason: "adapter-error" | "scenario-mismatch" | "timeout";
+    readonly reason: "adapter-error" | "parameter-mismatch" | "scenario-mismatch" | "timeout";
     readonly state: PageState | null;
   }
   | {readonly outcome: "unsupported"; readonly reason: "no-adapter"}
@@ -25,6 +25,7 @@ export type RegionAnswer =
 export type RegionCounts = ReadonlyMap<string, {readonly count: number; readonly tagName: string | null}>;
 
 export interface PageChannel {
+  readonly dispose: () => void;
   readonly capture: (props: readonly string[]) => Promise<PageState | null>;
   /** The sandbox document fired `load`: the page's own scripts have arrived. */
   readonly documentLoaded: () => void;
@@ -46,6 +47,7 @@ export interface PageChannelOptions {
   readonly nextRequestId?: () => string;
   /** An adapter said hello after the wait had already reported none. */
   readonly onLateHello?: () => void;
+  readonly onUnsupported?: () => void;
   readonly onUnpromptedState: (state: PageState) => void;
   readonly post: (message: FrameToPageMessage) => void;
   readonly replyTimeoutMilliseconds?: number;
@@ -82,6 +84,7 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
     const released = waiters;
     waiters = [];
     for (const waiter of released) waiter(value);
+    if (!value) options.onUnsupported?.();
   }
 
   function ready(): Promise<boolean> {
@@ -179,8 +182,20 @@ export function createPageChannel(options: PageChannelOptions): PageChannel {
       if (reply.state?.scenarioId !== scenarioId) {
         return {outcome: "failed", reason: "scenario-mismatch", state: reply.state};
       }
+      if (Object.entries(props).some(([name, value]) => reply.state?.props[name] !== value)) {
+        return {outcome: "failed", reason: "parameter-mismatch", state: reply.state};
+      }
       return {outcome: "restored", state: reply.state};
     },
     supports: () => supported,
+    dispose: () => {
+      ++latestRestore;
+      cancelHelloWait();
+      supported = false;
+      for (const resolve of pending.values()) resolve(null);
+      pending.clear();
+      for (const resolve of waiters) resolve(false);
+      waiters = [];
+    },
   };
 }

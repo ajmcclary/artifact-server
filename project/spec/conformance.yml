@@ -1489,6 +1489,20 @@ requirements:
         run: project/evidence/hosted-design-review-2026-10-08T1741Z.json
         recorded_at: "2026-10-08T17:46:44.570Z"
 
+  - id: DSN-012
+    kind: behavior
+    behavior: Producer-declared live views expose finite named configuration controls, canonicalize validated HTML entry aliases, confirm applied values, and retain platform and prototype appearance across live and annotation modes without changing Review appearance.
+    owner: artifact-comments
+    source: {file: artifact-server-product-spec.html, anchor: design-review-views}
+    acceptance:
+      behavior: {id: DSN-012-B, description: "Open an entry alias, select a platform and light/dark prototype theme while staying interactive, edit a field, switch to annotation and back with the configuration retained, follow in-page platform changes, and keep controls usable on a phone."}
+      failure: {id: DSN-012-F, description: "Ignore messages from foreign origins, other frames and undeclared scenarios; report a page confirming the scenario but not its requested parameters without changing the confirmed selection or enabling annotations."}
+    deployments: *all
+    status: implementing
+    proof_gap: Local cross-engine and producer proofs are being attached; live provider qualification has not been rerun.
+    depends_on: [DSN-007, DSN-008, CMT-022]
+    evidence: []
+
   - id: AUD-001
     kind: security
     behavior: Every publish, restore, access change, connection change, and deletion records the responsible effective principal and human authorizer when present.
@@ -3724,7 +3738,7 @@ requirements:
 
   - id: CMT-022
     kind: security
-    behavior: Every HTML page opens live in an isolated Interactive preview of the exact selected version and never in Annotate, with one reversible Annotate switch to the opaque-origin annotation viewer. Interactive preview carries no annotation bridge; Review only reads a designed page's own scenario changes from that frame, so Annotate reopens the scenario the reviewer reached, and never sends the live page a message.
+    behavior: Every HTML page opens live in an isolated Interactive preview of the exact selected version and never in Annotate, with one reversible Annotate switch to the opaque-origin annotation viewer. Interactive preview carries no annotation bridge; views without explicit live-control opt-in only report their own scenario changes, while opted-in views accept their declared configuration through a source- and origin-checked channel. Review reads a designed page's own scenario changes from that frame, so Annotate reopens the scenario the reviewer reached, and sends no commands to views without that opt-in.
     owner: artifact-comments
     source: {file: artifact-comments-spec.md, anchor: interactive-html-preview}
     acceptance:

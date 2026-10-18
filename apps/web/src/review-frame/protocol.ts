@@ -198,7 +198,7 @@ export const frameMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     outcome: z.enum(["failed", "restored", "unsupported"]),
-    reason: z.enum(["adapter-error", "no-adapter", "scenario-mismatch", "timeout"]).optional(),
+    reason: z.enum(["adapter-error", "no-adapter", "parameter-mismatch", "scenario-mismatch", "timeout"]).optional(),
     requestId: z.string().min(1).max(64).nullable(),
     state: pageStateSchema.nullable(),
     type: z.literal("as-review-view-state"),

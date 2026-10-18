@@ -10,13 +10,17 @@ export const reviewScenarioSchema = z.object({
 }).strict();
 
 export const reviewViewSchema = z.object({
+  aliases: z.array(z.string()).optional(),
   defaultScenarioId: z.string(),
+  interactive: z.boolean().optional(),
   label: z.string(),
+  scenarioLabel: z.string().optional(),
   parameters: z.array(z.object({
     default: propValueSchema,
+    label: z.string().optional(),
     name: z.string(),
     prop: z.string(),
-    values: z.array(z.object({propValue: propValueSchema, value: propValueSchema}).strict()),
+    values: z.array(z.object({label: z.string().optional(), propValue: propValueSchema, value: propValueSchema}).strict()),
   }).strict()),
   path: z.string(),
   scenarios: z.array(reviewScenarioSchema),

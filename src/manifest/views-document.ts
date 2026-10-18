@@ -52,14 +52,18 @@ const scenarioSchema = Schema.Struct({
 });
 const parameterSchema = Schema.Struct({
   default: propValueSchema,
+  label: Schema.optional(label),
   name: propNameSchema,
   prop: propNameSchema,
-  values: Schema.Array(Schema.Struct({propValue: propValueSchema, value: propValueSchema}))
+  values: Schema.Array(Schema.Struct({label: Schema.optional(label), propValue: propValueSchema, value: propValueSchema}))
     .check(Schema.isMinLength(2), Schema.isMaxLength(16)),
 });
 const viewSchema = Schema.Struct({
+  aliases: Schema.optional(Schema.Array(Schema.String).check(Schema.isMaxLength(8))),
   defaultScenarioId: scenarioIdSchema,
+  interactive: Schema.optional(Schema.Boolean),
   label,
+  scenarioLabel: Schema.optional(label),
   parameters: Schema.Array(parameterSchema).check(Schema.isMaxLength(8)),
   path: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
   scenarios: Schema.Array(scenarioSchema).check(Schema.isMinLength(1), Schema.isMaxLength(200)),
@@ -138,16 +142,18 @@ function checkedViews(
     }
     viewIds.add(view.viewId);
     // Validate before lookup: a normalized '..' would conceal an escaping reference.
-    const viewPath = parseManifestPath(view.path);
-    if (viewPath !== view.path || !htmlPaths.has(viewPath)) {
-      throw new ViewsDocumentRejected(
-        `View ${JSON.stringify(view.viewId)} names ${JSON.stringify(view.path)}, which is not a published HTML file.`,
-      );
+    for (const candidate of [view.path, ...(view.aliases ?? [])]) {
+      const viewPath = parseManifestPath(candidate);
+      if (viewPath !== candidate || !htmlPaths.has(viewPath)) {
+        throw new ViewsDocumentRejected(
+          `View ${JSON.stringify(view.viewId)} names ${JSON.stringify(candidate)}, which is not a published HTML file.`,
+        );
+      }
+      if (paths.has(viewPath)) {
+        throw new ViewsDocumentRejected(`More than one view names ${JSON.stringify(viewPath)}.`);
+      }
+      paths.add(viewPath);
     }
-    if (paths.has(viewPath)) {
-      throw new ViewsDocumentRejected(`More than one view names ${JSON.stringify(viewPath)}.`);
-    }
-    paths.add(viewPath);
     requireRelativeSourcePath(view.viewId, view.sourceRef.path);
     checkScenarios(view);
     checkParameters(view);

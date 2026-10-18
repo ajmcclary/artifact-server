@@ -1214,6 +1214,7 @@ function ProjectReview({
     <ScenarioSessionProvider
       artifactId={selectedArtifactId}
       initialScenarioId={initialLocation.scenarioId ?? null}
+      onSelectPath={setSelectedPath}
       path={selectedPath ?? selectedVersion?.manifest.entryPath ?? null}
       projectId={projectId}
       versionId={selectedVersionId}
@@ -1456,7 +1457,7 @@ function ThreadScenarioFollower({revision, selectedThreadId, threads}: {
     const parsed = reviewAnchorSchema.safeParse(thread?.anchor);
     const located = parsed.success ? parsed.data.view : undefined;
     if (located === undefined || located.viewId !== view.viewId) return;
-    if (located.scenarioId === scenario.onScreen.scenarioId) return;
+    if (located.scenarioId === scenario.onScreen.scenarioId && JSON.stringify(located.state.parameters ?? {}) === JSON.stringify(scenario.parameters)) return;
     scenario.requestScenario(located.scenarioId, located.state.parameters);
   }, [revision, scenario, selectedThreadId, threads]);
   return null;

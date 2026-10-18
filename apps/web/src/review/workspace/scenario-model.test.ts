@@ -9,6 +9,7 @@ import {
   liveScenarioFrom,
   parametersFromProps,
   reduceViewState,
+  reduceConfigurationState,
   restorePropsFor,
   sanitizeLabel,
   scenarioFailureText,
@@ -40,9 +41,15 @@ const state = (scenarioId: string | null, chromeRtl = false): PageState => ({
 });
 
 describe("scenario model", () => {
+  test("a stale configuration reply cannot replace confirmed parameter values", () => {
+    const current = {onScreen: {reason: null, requestId: "latest", scenarioId: "5", status: "restoring" as const}, parameters: {direction: "rtl"}};
+    expect(reduceConfigurationState(current, {outcome: "restored", requestId: "old", state: state("5", false), type: "as-review-view-state", v: 1}, view)).toBe(current);
+    expect(reduceConfigurationState(current, {outcome: "restored", requestId: "latest", state: state("5", true), type: "as-review-view-state", v: 1}, view)).toMatchObject({parameters: {direction: "rtl"}, onScreen: {status: "ready"}});
+  });
   test("finds the view for the open path only when the outcome is valid", () => {
     expect(viewForPath({status: "valid", views: [view]}, "honest.html")).toBe(view);
     expect(viewForPath({status: "valid", views: [view]}, "other.html")).toBeNull();
+    expect(viewForPath({status: "valid", views: [{...view, aliases: ["index.html"]}]}, "index.html")?.path).toBe("honest.html");
     expect(viewForPath({diagnostic: "x", status: "invalid"}, "honest.html")).toBeNull();
   });
 

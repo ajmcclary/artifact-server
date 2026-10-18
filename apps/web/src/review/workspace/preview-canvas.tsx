@@ -41,6 +41,7 @@ import {
   viewAnchorFrom,
 } from "./scenario-model.ts";
 import {useScenarioSession} from "./scenario-session.tsx";
+import {useLiveViewChannel} from "./live-view-channel.ts";
 
 interface PreviewDocument {
   readonly baseHref: string;
@@ -634,11 +635,12 @@ function HtmlPreview({
     clearOnScreen();
   }, [clearOnScreen, mode]);
 
-  // The live page is never asked anything, but a designed page announces the
-  // scenario it moves to. Recording it as the requested scenario keeps the
-  // picker and URL with the page, and Annotate reopens exactly what was reached.
+  // Explicitly enabled views use the bounded live configuration channel.
+  // Legacy views remain read-only here: their own scenario reports keep the
+  // picker and URL with the page, and Annotate reopens what was reached.
   const liveOrigin = previewDocument === null ? null : new URL(previewDocument.interactiveUrl).origin;
-  const liveView = mode === "interactive" ? scenario.view : null;
+  const liveDocumentLoaded = useLiveViewChannel({active: mode === "interactive", documentKey: `${version.version.id}/${entry.path}`, frame: liveFrameRef, origin: liveOrigin, session: scenario});
+  const liveView = mode === "interactive" && scenario.view?.interactive !== true ? scenario.view : null;
   useEffect(() => {
     if (liveView === null || liveOrigin === null) return undefined;
     const onLiveMessage = (event: MessageEvent<unknown>): void => {
@@ -846,6 +848,7 @@ function HtmlPreview({
           <iframe
             key="interactive"
             ref={liveFrameRef}
+            onLoad={liveDocumentLoaded}
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin"
             src={previewDocument.interactiveUrl}

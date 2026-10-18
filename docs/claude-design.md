@@ -160,3 +160,10 @@ omitted rather than shown disabled:
 
 Public links keep their accessible per-row selection, paging and partial-success
 retry (ADM-005) inside the console instead of the prototype's single-row grid.
+
+
+### Configured live previews
+
+A producer can publish `artifactserver.views.json` with `interactive: true` on a view to expose its finite scenarios and parameters without entering Annotate. `scenarioLabel` names the scenario picker (for example, Platform); parameter and option `label` fields name additional controls (for example, Theme with Light/Dark). The producer's adapter applies those props and reports the actual rendered values. A confirmation that omits or changes a requested value is a configuration failure.
+
+A view's optional `aliases` map published HTML landing entries such as `index.html` to the canonical `path`. Review resolves these aliases before opening the configured document; missing, escaping, duplicate or overlapping aliases invalidate the views document. Older views retain their existing behavior. Changing prototype appearance leaves the Review account appearance unchanged.

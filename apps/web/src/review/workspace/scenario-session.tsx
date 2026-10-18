@@ -1,10 +1,11 @@
-import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 
 import {api, ApiError} from "../../api/client.ts";
 import type {ReviewView, ViewsOutcome} from "../../api/views.ts";
 import type {ViewStateMessage} from "../../review-frame/protocol.ts";
 import {
-  reduceViewState,
+  reduceConfigurationState,
+  type ConfigurationStatus,
   viewForPath,
   type ParameterValue,
   type ScenarioStatus,
@@ -28,6 +29,9 @@ export interface ScenarioSession {
   readonly loaded: boolean;
   readonly onScreen: ScenarioStatus;
   readonly outcome: ViewsOutcome | null;
+  readonly parameters: Readonly<Record<string, ParameterValue>>;
+  /** Follow a confirmed page change without issuing another restore. */
+  readonly followScenario: (scenarioId: string, parameters: Readonly<Record<string, ParameterValue>>) => void;
   readonly report: (message: ViewStateMessage) => void;
   readonly requestScenario: (scenarioId: string, parameters?: Readonly<Record<string, ParameterValue>>) => void;
   readonly requested: ScenarioRequestState | null;
@@ -42,6 +46,8 @@ const noScenarios: ScenarioSession = {
   loaded: true,
   onScreen: idle,
   outcome: null,
+  parameters: {},
+  followScenario: () => undefined,
   report: () => undefined,
   requestScenario: () => undefined,
   requested: null,
@@ -59,6 +65,7 @@ export function ScenarioSessionProvider({
   artifactId,
   children,
   initialScenarioId,
+  onSelectPath,
   path,
   projectId,
   versionId,
@@ -66,12 +73,15 @@ export function ScenarioSessionProvider({
   readonly artifactId: string | null;
   readonly children: ReactNode;
   readonly initialScenarioId: string | null;
+  readonly onSelectPath: (path: string) => void;
   readonly path: string | null;
   readonly projectId: string;
   readonly versionId: string | null;
 }) {
   const [loaded, setLoaded] = useState<{readonly outcome: ViewsOutcome; readonly versionId: string} | null>(null);
-  const [onScreen, setOnScreen] = useState<ScenarioStatus>(idle);
+  const [screen, setScreen] = useState<ConfigurationStatus>({onScreen: idle, parameters: {}});
+  const {onScreen, parameters} = screen;
+  const previousView = useRef<string | null>(null);
   const [requested, setRequested] = useState<ScenarioRequestState | null>(
     initialScenarioId === null ? null : {parameters: {}, revision: 1, scenarioId: initialScenarioId},
   );
@@ -107,20 +117,34 @@ export function ScenarioSessionProvider({
   const view = viewForPath(outcome, path);
 
   useEffect(() => {
+    if (view === null || versionId === null) return;
+    const identity = `${versionId}/${view.viewId}`;
+    if (previousView.current !== null && previousView.current !== identity) setRequested(null);
+    previousView.current = identity;
+    if (path !== view.path) onSelectPath(view.path);
+  }, [onSelectPath, path, versionId, view]);
+
+  useEffect(() => {
     // A new page or version starts unknown; the preview captures or restores it.
-    setOnScreen(idle);
+    setScreen({onScreen: idle, parameters: {}});
   }, [path, versionId]);
 
-  const requestScenario = useCallback((scenarioId: string, parameters: Readonly<Record<string, ParameterValue>> = {}) => {
-    setRequested((previous) => ({parameters, revision: (previous?.revision ?? 0) + 1, scenarioId}));
+  const requestScenario = useCallback((scenarioId: string, selectedParameters?: Readonly<Record<string, ParameterValue>>) => {
+    setRequested((previous) => ({parameters: selectedParameters ?? previous?.parameters ?? {}, revision: (previous?.revision ?? 0) + 1, scenarioId}));
+  }, []);
+  const followScenario = useCallback((scenarioId: string, selectedParameters: Readonly<Record<string, ParameterValue>>) => {
+    setRequested((previous) => {
+      if (previous?.scenarioId === scenarioId && JSON.stringify(previous.parameters) === JSON.stringify(selectedParameters)) return previous;
+      return {parameters: selectedParameters, revision: previous?.revision ?? 0, scenarioId};
+    });
   }, []);
   const beginRequest = useCallback((requestId: string) => {
-    setOnScreen((current) => ({...current, reason: null, requestId, status: "restoring"}));
+    setScreen((current) => ({...current, onScreen: {...current.onScreen, reason: null, requestId, status: "restoring"}}));
   }, []);
-  const clearOnScreen = useCallback(() => setOnScreen(idle), []);
+  const clearOnScreen = useCallback(() => setScreen(current => ({...current, onScreen: idle})), []);
   const report = useCallback((message: ViewStateMessage) => {
     if (view === null) return;
-    setOnScreen((current) => reduceViewState(current, message, view));
+    setScreen(current => reduceConfigurationState(current, message, view));
   }, [view]);
 
   const loadedState = artifactId === null || versionId === null || outcome !== null;
@@ -130,10 +154,12 @@ export function ScenarioSessionProvider({
     loaded: loadedState,
     onScreen,
     outcome,
+    parameters,
+    followScenario,
     report,
     requestScenario,
     requested,
     view,
-  }), [beginRequest, clearOnScreen, loadedState, onScreen, outcome, report, requestScenario, requested, view]);
+  }), [beginRequest, clearOnScreen, followScenario, loadedState, onScreen, outcome, parameters, report, requestScenario, requested, view]);
   return <ScenarioSessionContext.Provider value={value}>{children}</ScenarioSessionContext.Provider>;
 }

@@ -67,6 +67,13 @@ function expectInvalid(outcome: ViewsOutcome, fragment: RegExp): void {
 }
 
 describe("views document validation", () => {
+  test("accepts explicit live controls and rejects ambiguous or escaping entry aliases", () => {
+    const configured = formsView({aliases: ["project/other.html"], interactive: true, scenarioLabel: "Platform"});
+    expect(readViewsDocument(document([configured]), entries).status).toBe("valid");
+    expectInvalid(readViewsDocument(document([formsView({aliases: ["../outside.html"]})]), entries), /path|relative|escape/u);
+    expectInvalid(readViewsDocument(document([formsView({aliases: ["missing.html"]})]), entries), /published HTML/u);
+    expectInvalid(readViewsDocument(document([configured, formsView({path: "project/other.html", viewId: "fixture/other"})]), entries), /More than one view/u);
+  });
   test("accepts the Forms view with scenarios and parameters", () => {
     const outcome = readViewsDocument(document([formsView()]), entries);
     expect(outcome.status).toBe("valid");

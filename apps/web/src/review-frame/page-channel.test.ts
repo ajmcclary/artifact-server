@@ -44,6 +44,27 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const hello: PageMessage = {capabilities: ["capture", "regions", "restore"], pageVersion: 3, type: "as-page-hello"};
 
 describe("page channel", () => {
+  test("rejects a configuration that confirms the scenario but not its parameters", async () => {
+    const {channel} = harness();
+    channel.receive(hello);
+    const restoring = channel.restore({appearance: "dark", scenario: "5"}, "5");
+    await flush();
+    channel.receive({ok: true, requestId: "r1", state: {...state("5"), props: {appearance: "light", scenario: "5"}}, type: "as-page-restored"});
+    expect(await restoring).toMatchObject({outcome: "failed", reason: "parameter-mismatch"});
+    channel.dispose();
+  });
+
+  test("disposing releases pending replies and ignores their later arrival", async () => {
+    const {channel, advance} = harness();
+    channel.receive(hello);
+    const capture = channel.capture(["scenario"]);
+    await flush();
+    channel.dispose();
+    channel.receive({requestId: "r1", state: state("5"), type: "as-page-state"});
+    expect(await capture).toBeNull();
+    advance(30_000);
+    expect(channel.supports()).toBe(false);
+  });
   test("negotiates the lower version and restores after hello", async () => {
     const {channel, posted} = harness();
     const restoring = channel.restore({scenario: "5"}, "5");

@@ -25,14 +25,50 @@
       "items": {
         "type": "object",
         "properties": {
+          "aliases": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 8
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "defaultScenarioId": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"
+          },
+          "interactive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "label": {
             "type": "string",
             "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
             "maxLength": 200
+          },
+          "scenarioLabel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "parameters": {
             "type": "array",
@@ -53,6 +89,18 @@
                     }
                   ]
                 },
+                "label": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "name": {
                   "type": "string",
                   "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
@@ -66,6 +114,18 @@
                   "items": {
                     "type": "object",
                     "properties": {
+                      "label": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
+                            "maxLength": 200
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "propValue": {
                         "anyOf": [
                           {

@@ -179,3 +179,23 @@ export async function publishScenarioFixture(
     tags: [],
   })).body;
 }
+
+/** Explicit live configuration fixture; older fixture pages retain their original contract. */
+export function interactiveScenarioFiles(wrongParameter = false): TestSiteFile[] {
+  const script = adapterScript
+    .replace('var current = "1";', 'var appearance = "dark"; var current = "1";')
+    .replace('function render() {', 'function render() { document.documentElement.dataset.theme = appearance;')
+    .replace('props: {scenario: current}', 'props: {appearance: appearance, scenario: current}')
+    .replace('theme: matchMedia("(prefers-contrast: more)").matches ? "high-contrast" : "light"', 'theme: appearance')
+    .replace('if (m.type === "as-page-restore") {', `if (m.type === "as-page-welcome") { post({capabilities: ["capture", "regions", "restore"], pageVersion: 1, type: "as-page-hello"}); return; }
+      if (m.type === "as-page-restore") { ${wrongParameter ? "" : 'if (m.props.appearance === "light" || m.props.appearance === "dark") appearance = m.props.appearance;'}`);
+  const configured = {...view("fixture/controlled", "honest.html"), aliases: ["index.html"], interactive: true, scenarioLabel: "Platform",
+    parameters: [{default: "dark", label: "Theme", name: "appearance", prop: "appearance", values: [
+      {label: "Light", propValue: "light", value: "light"}, {label: "Dark", propValue: "dark", value: "dark"},
+    ]}]};
+  return [
+    {path: "honest.html", mediaType: "text/html", bytes: encoder.encode(`<!doctype html><html lang="en" data-fixture-behavior="honest"><head><title>Controlled preview</title><style>html[data-theme=dark]{background:#111;color:white}html[data-theme=light]{background:white;color:#111}</style></head><body><main id="root"></main><script>${script}</script></body></html>`)},
+    {path: "index.html", mediaType: "text/html", bytes: encoder.encode('<!doctype html><html><head><meta http-equiv="refresh" content="0;url=honest.html"></head><body>Opening</body></html>')},
+    {path: "artifactserver.views.json", mediaType: "application/json", bytes: encoder.encode(JSON.stringify({format: "artifact-server.views", version: 1, views: [configured]}))},
+  ];
+}

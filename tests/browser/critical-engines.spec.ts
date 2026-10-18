@@ -27,7 +27,7 @@ import {
 } from "./browser-fixture.js";
 import {fetchVersion} from "../support/runtime-harness.js";
 import {annotateSwitch, interactiveFrame, isolatedReviewFrame, openInspectorTab, openReview, previewFrame, returnToGallery, reviewHref, startAnnotating} from "./review-helpers.js";
-import {publishScenarioFixture} from "./scenario-fixture.js";
+import {interactiveScenarioFiles, publishScenarioFixture} from "./scenario-fixture.js";
 import {
   createThreadOverApi,
   deleteThreadOverApi,
@@ -424,4 +424,73 @@ test.describe("critical engine review paths @critical", () => {
       await stopBrowserFixture(fixture);
     }
   });
+});
+
+test("DSN-012-B: configured platform and theme controls work live, through entry aliases, and in annotations @critical", async ({browser}) => {
+  const fixture = await startBrowserFixture(browser);
+  try {
+    const published = await publishScenarioFixture(fixture, "live-configurations", "Live configurations", interactiveScenarioFiles());
+    await localLogin(fixture);
+    const {page} = fixture;
+    await page.goto(reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "index.html", versionId: published.version.id}));
+    await expect(page).toHaveURL(/[?&]path=honest.html(?:&|$)/u);
+    const platform = page.getByRole("combobox", {name: "Platform", exact: true});
+    const theme = page.getByRole("combobox", {name: "Theme", exact: true});
+    const chromeTheme = await page.locator("html").getAttribute("data-theme");
+    await expect(platform).toHaveValue("1");
+    await theme.selectOption("0");
+    await expect(interactiveFrame(page).locator("html")).toHaveAttribute("data-theme", "light");
+    await platform.selectOption("5");
+    await expect(interactiveFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+    await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(interactiveFrame(page).locator("html")).toHaveAttribute("data-theme", "light");
+    await interactiveFrame(page).getByRole("textbox", {name: "Minimum length"}).fill("8");
+    await expect(interactiveFrame(page).getByRole("textbox", {name: "Minimum length"})).toHaveValue("8");
+    await startAnnotating(page);
+    await expect(previewFrame(page).locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(previewFrame(page).getByRole("heading", {name: "Validation"})).toBeVisible();
+    await theme.selectOption("1");
+    await expect(previewFrame(page).locator("html")).toHaveAttribute("data-theme", "dark");
+    await annotateSwitch(page).click();
+    await expect(interactiveFrame(page).locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await page.locator("html").getAttribute("data-theme")).toBe(chromeTheme);
+    await platform.selectOption("1");
+    await expect(interactiveFrame(page).getByRole("heading", {name: "Library"})).toBeVisible();
+    await interactiveFrame(page).getByRole("button", {name: "Open Logic"}).click();
+    await expect(platform).toHaveValue("6");
+    await page.setViewportSize({width: 390, height: 844});
+    await expect(platform).toBeVisible();
+    await expect(theme).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await stopBrowserFixture(fixture); }
+});
+
+test("DSN-012-F: live controls reject forged frame messages and an unconfirmed theme @critical", async ({browser}) => {
+  const fixture = await startBrowserFixture(browser);
+  try {
+    const published = await publishScenarioFixture(fixture, "live-configurations-hostile", "Unconfirmed configuration", interactiveScenarioFiles(true));
+    await localLogin(fixture);
+    const {page} = fixture;
+    await page.goto(reviewHref(fixture.server.baseUrl, {artifactId: published.artifact.id, path: "honest.html", versionId: published.version.id}));
+    const platform = page.getByRole("combobox", {name: "Platform", exact: true});
+    await expect(platform).toHaveValue("1");
+    await page.evaluate(() => {
+      const state = {direction: "ltr", locale: "en", pageVersion: 1, props: {appearance: "light", scenario: "6"}, scenarioId: "6", theme: "light", viewport: {height: 900, width: 1440}};
+      window.dispatchEvent(new MessageEvent("message", {data: {requestId: null, state, type: "as-page-state"}, origin: "https://untrusted.invalid", source: window}));
+      window.dispatchEvent(new MessageEvent("message", {data: {requestId: null, state, type: "as-page-state"}, origin: location.origin, source: window}));
+    });
+    await interactiveFrame(page).locator("body").evaluate(() => {
+      const nested = document.createElement("iframe");
+      nested.srcdoc = '<script>parent.parent.postMessage({requestId:null,state:{direction:"ltr",locale:"en",pageVersion:1,props:{appearance:"light",scenario:"6"},scenarioId:"6",theme:"light",viewport:{height:900,width:1440}},type:"as-page-state"},"*")</script>';
+      document.body.append(nested);
+      parent.postMessage({requestId: null, state: {direction: "ltr", locale: "en", pageVersion: 1, props: {scenario: "undeclared"}, scenarioId: "undeclared", theme: "light", viewport: {height: 900, width: 1440}}, type: "as-page-state"}, "*");
+    });
+    await expect(platform).toHaveValue("1");
+    await page.setViewportSize({width: 390, height: 844});
+    await page.getByRole("combobox", {name: "Theme", exact: true}).selectOption("0");
+    await expect(page.getByRole("status").filter({hasText: "the page did not confirm the selected configuration"})).toBeVisible();
+    await expect(interactiveFrame(page).locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(annotateSwitch(page)).toHaveAttribute("aria-pressed", "false");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await stopBrowserFixture(fixture); }
 });

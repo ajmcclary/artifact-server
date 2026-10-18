@@ -113,7 +113,8 @@ const toolbarStyle = {
 } satisfies CSSProperties;
 const phoneToolbarStyle = {...toolbarStyle, padding: "7px 8px"} satisfies CSSProperties;
 const inlineStyle = {display: "inline-flex", flex: "none"} satisfies CSSProperties;
-const scenarioStatusStyle = {color: "var(--pill-danger-fg)", fontSize: "var(--font-size-xs, 12px)", whiteSpace: "nowrap"} satisfies CSSProperties;
+const scenarioStatusStyle = {color: "var(--pill-danger-fg)", fontSize: "var(--font-size-xs, 12px)", maxWidth: 320, overflowWrap: "anywhere", whiteSpace: "normal"} satisfies CSSProperties;
+const configurationPickerStyle = {maxWidth: 240} satisfies CSSProperties;
 const anchorStyle = {display: "inline-flex", flex: "none", position: "relative"} satisfies CSSProperties;
 const separatorStyle = {height: 20, margin: "0 2px"} satisfies CSSProperties;
 const pickersStyle = {alignItems: "center", display: "flex", flex: "0 1 auto", gap: 2, minWidth: 0} satisfies CSSProperties;
@@ -291,21 +292,22 @@ export function ReviewToolbar({
   const requestedScenario = scenario.requested?.scenarioId ?? null;
   const scenarioFailure = requestedScenario !== null
     && (scenario.onScreen.status === "failed" || scenario.onScreen.status === "unsupported")
-    ? scenarioFailureText(requestedScenario, scenario.onScreen.reason)
+    ? scenarioFailureText(requestedScenario, scenario.onScreen.reason, scenario.view?.interactive === true)
     : null;
   const scenarioPicker = scenario.view === null ? null : (
     <>
       {noAdapter ? null : (
         <Select
-          aria-label="Designed scenario"
+          aria-label={scenario.view.scenarioLabel ?? "Designed scenario"}
+          style={configurationPickerStyle}
           fit="selected"
           onChange={(event) => {
             scenario.requestScenario(event.currentTarget.value);
-            // Only the annotation surface can be told which scenario to show.
-            if (annotate.available && !annotate.active) annotate.onToggle();
+            // Older views keep the annotation-only adapter contract.
+            if (scenario.view?.interactive !== true && annotate.available && !annotate.active) annotate.onToggle();
           }}
           options={scenario.view.scenarios.map((option) => ({
-            label: `${option.scenarioId} · ${option.label}`,
+            label: scenario.view?.scenarioLabel === undefined ? `${option.scenarioId} · ${option.label}` : option.label,
             value: option.scenarioId,
           }))}
           placeholder="Scenario"
@@ -313,6 +315,27 @@ export function ReviewToolbar({
           value={scenario.onScreen.scenarioId ?? requestedScenario ?? ""}
         />
       )}
+      {noAdapter ? null : scenario.view.parameters.map(parameter => {
+        const chosen = scenario.onScreen.status === "restoring"
+          ? scenario.requested?.parameters[parameter.name] ?? parameter.default
+          : scenario.parameters[parameter.name] ?? parameter.default;
+        return <Select
+          aria-label={parameter.label ?? parameter.name}
+          style={configurationPickerStyle}
+          fit="selected"
+          key={parameter.name}
+          onChange={event => {
+            const option = parameter.values[Number(event.currentTarget.value)];
+            if (option === undefined || scenario.view === null) return;
+            scenario.requestScenario(requestedScenario ?? scenario.onScreen.scenarioId ?? scenario.view.defaultScenarioId,
+              {...scenario.parameters, ...scenario.requested?.parameters, [parameter.name]: option.value});
+            if (scenario.view.interactive !== true && annotate.available && !annotate.active) annotate.onToggle();
+          }}
+          options={parameter.values.map((option, index) => ({label: option.label ?? String(option.value), value: String(index)}))}
+          size="viewer"
+          value={String(parameter.values.findIndex(option => option.value === chosen))}
+        />;
+      })}
       {scenarioFailure === null ? null : (
         <span role="status" style={scenarioStatusStyle}>{scenarioFailure}</span>
       )}

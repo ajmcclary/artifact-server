@@ -21,12 +21,17 @@ export interface ScenarioStatus {
   readonly status: "failed" | "idle" | "ready" | "restoring" | "unsupported";
 }
 
+export interface ConfigurationStatus {
+  readonly onScreen: ScenarioStatus;
+  readonly parameters: Readonly<Record<string, ParameterValue>>;
+}
+
 const invisibleOrControl = /[\p{Cc}\p{Cf}]/gu;
 
 /** The valid view whose page is open, or null. */
 export function viewForPath(outcome: ViewsOutcome | null, path: string | null): ReviewView | null {
   if (outcome?.status !== "valid" || path === null) return null;
-  return outcome.views.find((view) => view.path === path) ?? null;
+  return outcome.views.find((view) => view.path === path || view.aliases?.includes(path)) ?? null;
 }
 
 /** The props that reproduce one declared scenario with the given parameters. */
@@ -170,12 +175,14 @@ const restoreFailureReasons = new Map<string, string>([
   ["adapter-error", "the page reported an error while switching"],
   ["no-adapter", "this page can't be told which scenario to show"],
   ["scenario-mismatch", "the page showed a different scenario"],
+  ["parameter-mismatch", "the page did not confirm the selected configuration"],
   ["timeout", "the page didn't confirm it in time"],
 ]);
 
 /** The toolbar's sentence for a restore that did not reach the requested scenario. */
-export function scenarioFailureText(scenarioId: string, reason: string | null): string {
+export function scenarioFailureText(scenarioId: string, reason: string | null, configuration = false): string {
   const explained = reason === null ? undefined : restoreFailureReasons.get(reason);
+  if (configuration) return `Couldn't apply the selected configuration: ${explained ?? "the page didn't say why"}.`;
   return `Couldn't open scenario ${scenarioId}: ${explained ?? "the page didn't say why"}.`;
 }
 
@@ -202,4 +209,14 @@ export function reduceViewState(
     return {reason: message.reason ?? "no-adapter", requestId: null, scenarioId: null, status: "unsupported"};
   }
   return {reason: message.reason ?? "adapter-error", requestId: null, scenarioId: declared, status: "failed"};
+}
+
+/** A stale reply cannot replace either the confirmed scenario or its parameters. */
+export function reduceConfigurationState(current: ConfigurationStatus, message: ViewStateMessage, view: ReviewView): ConfigurationStatus {
+  const onScreen = reduceViewState(current.onScreen, message, view);
+  if (onScreen === current.onScreen) return current;
+  const state = message.state;
+  const parameters = state !== null && view.scenarios.some(option => option.scenarioId === state.scenarioId)
+    ? parametersFromProps(view, state.props) : current.parameters;
+  return {onScreen, parameters};
 }

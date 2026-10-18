@@ -2006,9 +2006,12 @@
                   Review opens every HTML page live in Interactive preview on the version's
                   isolated content origin, and never opens a page in Annotate. This view does not
                   carry the annotation bridge; reviewers turn on the one Annotate switch to place
-                  comments on the page and turn it off to return to the live page. Review never
-                  sends the live page a message, but a designed page's report of the scenario it
-                  moved to is kept, so Annotate reopens that scenario. A private or
+                  comments on the page and turn it off to return to the live page. A producer can
+                  explicitly enable finite platform and parameter controls on a declared view.
+                  Review sends only those declared props to that exact live frame and origin,
+                  checks its confirmation, and retains the configuration across annotation mode.
+                  Other live pages remain read-only to Review. A designed page's own scenario
+                  reports are kept, so Annotate reopens the selected scenario. A private or
                   historical interactive preview uses a short-lived exact-version lease, so work
                   that must be kept should be opened through the raw artifact link.
                 </p>
