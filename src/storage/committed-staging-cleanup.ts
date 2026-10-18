@@ -22,7 +22,7 @@ export function committedStagingCleanupRepository(query: Query, installationId?:
         SELECT selected.id, f.storage_token AS "storageToken", f.sha256, f.size
         FROM selected LEFT JOIN staged_upload_files f ON f.upload_id = selected.id
           AND f.staging_cleaned_at IS NULL${selectedScope}
-        ORDER BY selected.id, f.storage_token`, [expiredBefore,...scopeValues,limit]));
+        ORDER BY selected.id, f.storage_token LIMIT 1024`, [expiredBefore,...scopeValues,limit]));
       const uploads = new Map<string, {id:string;files:Array<CommittedStagingUpload['files'][number]>}>();
       for (const row of rows) {
         const upload = uploads.get(row.id) ?? {id:row.id,files:[]};

@@ -50,6 +50,7 @@ export const cleanupCommittedStaging = Effect.fn("cleanupCommittedStaging")(
       );
       if (Result.isFailure(result)) failed++;
       else if (result.success) deleted++;
+      else if (filesRemaining === 0) budgetExhausted = true;
     }
     return {selected:uploads.length,deleted,failed,claimRejected,budgetExhausted,remaining:uploads.length-deleted};
   },
