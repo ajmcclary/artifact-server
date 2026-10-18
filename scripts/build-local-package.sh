@@ -21,7 +21,8 @@ trap cleanup EXIT
 
 mkdir -p -- "$artifactserver_stage" "$artifactserver_output"
 
-pnpm --dir "$artifactserver_repository" build
+# Vitest sets NODE_ENV=test; release archives must still contain production React.
+NODE_ENV=production pnpm --dir "$artifactserver_repository" build
 
 cp -- "$artifactserver_repository/package.json" "$artifactserver_stage/package.json"
 cp -R -- "$artifactserver_repository/patches" "$artifactserver_stage/patches"

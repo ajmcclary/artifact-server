@@ -1,0 +1,292 @@
+{
+  "config": {
+    "argv": [
+      "/Users/ajmcclary/.local/share/mise/installs/node/24.15.0/bin/node",
+      "/Users/ajmcclary/artifact-server/node_modules/@playwright/test/cli.js",
+      "test",
+      "--project=chromium",
+      "--grep",
+      "searching many projects|Library loads in one request|selects and settles exact image",
+      "--reporter=line,json",
+      "--output=test-results/configuration-regression-retry"
+    ],
+    "configFile": "/Users/ajmcclary/artifact-server/playwright.config.ts",
+    "rootDir": "/Users/ajmcclary/artifact-server/tests/browser",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/ajmcclary/artifact-server/test-results/configuration-regression-retry",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/ajmcclary/artifact-server/tests/browser",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "command-palette.spec.ts",
+      "file": "command-palette.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Command palette",
+          "file": "command-palette.spec.ts",
+          "line": 35,
+          "column": 6,
+          "specs": [
+            {
+              "title": "searching many projects keeps at most four catalog requests in flight and drops superseded keystrokes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2026,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-18T20:33:19.610Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f783ade4f1b8d5bdb19-7868fbb085cbbcdab9dd",
+              "file": "command-palette.spec.ts",
+              "line": 142,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "design-library.spec.ts",
+      "file": "design-library.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "DSN-006-B: the Library loads in one request with no per-gallery reads",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 938,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoHaveLength\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected length: \u001b[32m1\u001b[39m\nReceived length: \u001b[31m2\u001b[39m\nReceived array:  \u001b[31m[\"/api/v1/library\", \"/api/v1/library\"]\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoHaveLength\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected length: \u001b[32m1\u001b[39m\nReceived length: \u001b[31m2\u001b[39m\nReceived array:  \u001b[31m[\"/api/v1/library\", \"/api/v1/library\"]\u001b[39m\n    at /Users/ajmcclary/artifact-server/tests/browser/design-library.spec.ts:266:75",
+                    "location": {
+                      "file": "/Users/ajmcclary/artifact-server/tests/browser/design-library.spec.ts",
+                      "column": 75,
+                      "line": 266
+                    },
+                    "snippet": "  264 |     const library = page.getByRole(\"region\", {exact: true, name: \"Library\"});\n  265 |     await expect(library.locator(\"a[data-gallery-path]\").first()).toBeVisible();\n> 266 |     expect(apiPaths.filter((pathName) => pathName === \"/api/v1/library\")).toHaveLength(1);\n      |                                                                           ^\n  267 |     // Thumbnails still load through the media route; versions, manifests, indexes and comments must not.\n  268 |     expect(apiPaths.filter((pathName) => /\\/versions(\\/[^/]+)?$|\\/file$|\\/comments/u.test(pathName))).toEqual([]);\n  269 |   } finally {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/ajmcclary/artifact-server/tests/browser/design-library.spec.ts",
+                        "column": 75,
+                        "line": 266
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoHaveLength\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected length: \u001b[32m1\u001b[39m\nReceived length: \u001b[31m2\u001b[39m\nReceived array:  \u001b[31m[\"/api/v1/library\", \"/api/v1/library\"]\u001b[39m\n\n  264 |     const library = page.getByRole(\"region\", {exact: true, name: \"Library\"});\n  265 |     await expect(library.locator(\"a[data-gallery-path]\").first()).toBeVisible();\n> 266 |     expect(apiPaths.filter((pathName) => pathName === \"/api/v1/library\")).toHaveLength(1);\n      |                                                                           ^\n  267 |     // Thumbnails still load through the media route; versions, manifests, indexes and comments must not.\n  268 |     expect(apiPaths.filter((pathName) => /\\/versions(\\/[^/]+)?$|\\/file$|\\/comments/u.test(pathName))).toEqual([]);\n  269 |   } finally {\n    at /Users/ajmcclary/artifact-server/tests/browser/design-library.spec.ts:266:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-18T20:33:21.773Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/ajmcclary/artifact-server/test-results/configuration-regression-retry/design-library-DSN-006-B-t-ee11d-t-with-no-per-gallery-reads-chromium/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/ajmcclary/artifact-server/test-results/configuration-regression-retry/design-library-DSN-006-B-t-ee11d-t-with-no-per-gallery-reads-chromium/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/ajmcclary/artifact-server/tests/browser/design-library.spec.ts",
+                    "column": 75,
+                    "line": 266
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4f9a5eb185ee451e62f4-c3840d55ca542e12f689",
+          "file": "design-library.spec.ts",
+          "line": 248,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "frontend-mvp.spec.ts",
+      "file": "frontend-mvp.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Artifact Server frontend MVP",
+          "file": "frontend-mvp.spec.ts",
+          "line": 62,
+          "column": 6,
+          "specs": [
+            {
+              "title": "PRV-001-B PRV-001-F PRV-002-B PRV-002-F PRV-004-B PRV-004-F PRV-005-B PRV-005-F: Artifact Server selects and settles exact image and video previews",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 11653,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('heading', { name: 'Image preview unavailable' })\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('heading', { name: 'Image preview unavailable' })\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('heading', { name: 'Image preview unavailable' })\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('heading', { name: 'Image preview unavailable' })\u001b[22m\n\n    at /Users/ajmcclary/artifact-server/tests/browser/frontend-mvp.spec.ts:1049:11",
+                        "location": {
+                          "file": "/Users/ajmcclary/artifact-server/tests/browser/frontend-mvp.spec.ts",
+                          "column": 11,
+                          "line": 1049
+                        },
+                        "snippet": "  1047 |       await expect(fixture.page.getByRole(\"heading\", {\n  1048 |         name: \"Image preview unavailable\",\n> 1049 |       })).toBeVisible();\n       |           ^\n  1050 |       const brokenFallback = fixture.page.getByRole(\"region\", {name: \"Artifact preview\"}).getByRole(\"alert\");\n  1051 |       await expect(brokenFallback.getByText(\"media/broken.png\", {exact: true}))\n  1052 |         .toBeVisible();"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/ajmcclary/artifact-server/tests/browser/frontend-mvp.spec.ts",
+                            "column": 11,
+                            "line": 1049
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('heading', { name: 'Image preview unavailable' })\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('heading', { name: 'Image preview unavailable' })\u001b[22m\n\n\n  1047 |       await expect(fixture.page.getByRole(\"heading\", {\n  1048 |         name: \"Image preview unavailable\",\n> 1049 |       })).toBeVisible();\n       |           ^\n  1050 |       const brokenFallback = fixture.page.getByRole(\"region\", {name: \"Artifact preview\"}).getByRole(\"alert\");\n  1051 |       await expect(brokenFallback.getByText(\"media/broken.png\", {exact: true}))\n  1052 |         .toBeVisible();\n    at /Users/ajmcclary/artifact-server/tests/browser/frontend-mvp.spec.ts:1049:11"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-18T20:33:23.574Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/ajmcclary/artifact-server/test-results/configuration-regression-retry/frontend-mvp-Artifact-Serv-c4f94-ct-image-and-video-previews-chromium/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/ajmcclary/artifact-server/test-results/configuration-regression-retry/frontend-mvp-Artifact-Serv-c4f94-ct-image-and-video-previews-chromium/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/ajmcclary/artifact-server/tests/browser/frontend-mvp.spec.ts",
+                        "column": 11,
+                        "line": 1049
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "3d7eaee21a2fd37f3e3a-b5a44ff3b5ad9a542138",
+              "file": "frontend-mvp.spec.ts",
+              "line": 983,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-18T20:33:18.404Z",
+    "duration": 17144.096999999998,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

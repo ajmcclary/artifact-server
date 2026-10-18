@@ -1,8 +1,8 @@
 {
   "arch": "arm64",
   "availableParallelism": 10,
-  "capturedAt": "2026-10-18T19:21:52.244Z",
-  "commit": "710ff2187278b56c82da5a0e231f850ded621ae8",
+  "capturedAt": "2026-10-18T20:18:05.363Z",
+  "commit": "e471dab019e9c24eb8060d67d4560947d7795788",
   "cpu": "Apple M1 Max",
   "details": {
     "probe": "storage-shutdown",

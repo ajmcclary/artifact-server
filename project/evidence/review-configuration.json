@@ -1,0 +1,85 @@
+{
+  "recorded_at": "2026-10-18T20:27:52.161702+00:00",
+  "source_commit": "8c1b5052e3579b300780e6db14f7e9c5bd334f48",
+  "producer_commit": "caa06636fb142788d8919572cca77174f3a60b2c",
+  "scope": "Local functional qualification of declared platform/theme controls; no hosted publication or performance benchmark was used.",
+  "checks": {
+    "server_unit_tests": {
+      "files": 187,
+      "tests": 770,
+      "result": "pass",
+      "evidence": "project/evidence/local-foundation.json"
+    },
+    "web_unit_tests": {
+      "files": 27,
+      "tests": 176,
+      "result": "pass"
+    },
+    "producer_sources": {
+      "command": "npm run validate:sources",
+      "result": "pass"
+    },
+    "producer_previews": {
+      "previews": 175,
+      "failures": 0,
+      "result": "pass"
+    },
+    "producer_configurations": {
+      "scenarios": 38,
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "engines": [
+        "chromium",
+        "webkit"
+      ],
+      "result": "pass",
+      "note": "Existing pinned-dark watchOS/visionOS styles are retained."
+    },
+    "real_producer_in_review": {
+      "producer": "claudius",
+      "input": "local-files inventory",
+      "provider": "temporary local SQLite and disk",
+      "engine": "chromium",
+      "result": "pass",
+      "assertions": [
+        "index.html canonicalizes to project/Claudius.dc.html",
+        "select iOS and Light while interactive",
+        "Annotate retains iOS and Light",
+        "select macOS and Dark inside Annotate",
+        "return to Live retains macOS and Dark"
+      ],
+      "console": "Two initial 401 responses during local content bootstrapping; no JavaScript errors reported."
+    },
+    "worker_check": {
+      "lint": "pass",
+      "typecheck": "pass",
+      "suite": {
+        "passed": 86,
+        "failed": 1,
+        "failure": "agent-dispatch-runtime idle claim returned503 under full suite load"
+      },
+      "isolated_retry": {
+        "file": "deploy/cloudflare/tests/agent-dispatch-runtime.test.ts",
+        "passed": 3,
+        "failed": 0
+      }
+    },
+    "local_package": {
+      "result": "pass",
+      "evidence": "project/evidence/local-package.json"
+    },
+    "browser_initial": {
+      "result": "failed",
+      "passed": 172,
+      "failed": 3,
+      "evidence": "project/evidence/browser.json",
+      "note": "Local release-package test overlapped this browser run and rebuilt shared assets with NODE_ENV=test. Library counted StrictMode duplicate reads and the media mounted flag exposed duplicate effect cleanup. The search test had an unrelated total-count assumption, replaced with controlled per-query cancellation assertions."
+    },
+    "search_cancellation": {
+      "result": "pass",
+      "note": "With each superseded query held at its initial four requests, queued work stops and the final query searches all13 projects. Production search code is unchanged."
+    }
+  }
+}

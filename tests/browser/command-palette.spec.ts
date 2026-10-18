@@ -142,6 +142,7 @@ test.describe("Command palette", () => {
   test("searching many projects keeps at most four catalog requests in flight and drops superseded keystrokes", async ({browser}) => {
     test.setTimeout(120_000);
     const fixture = await startBrowserFixture(browser);
+    const heldQueries = new Map(["Pal", "Pale", "Palet"].map(query => [query, Promise.withResolvers<void>()]));
     try {
       const owner = new ApiClient(fixture.server, fixture.installation.apiToken);
       const projectIds = await Promise.all(Array.from({length: 12}, async (_, index) =>
@@ -152,10 +153,11 @@ test.describe("Command palette", () => {
 
       let inFlight = 0;
       let peak = 0;
-      let started = 0;
+      const startedByQuery = new Map<string, number>();
       page.on("request", (request) => {
         if (!paletteSearchRequest(request)) return;
-        started += 1;
+        const query = new URL(request.url()).searchParams.get("search") ?? "";
+        startedByQuery.set(query, (startedByQuery.get(query) ?? 0) + 1);
         inFlight += 1;
         peak = Math.max(peak, inFlight);
       });
@@ -164,28 +166,36 @@ test.describe("Command palette", () => {
       };
       page.on("requestfinished", settle);
       page.on("requestfailed", settle);
-      // Slow catalogs make consecutive debounced searches overlap, as on a busy server.
+      // Hold the first batch until the next input supersedes it. This proves
+      // queued cancellation without relying on browser scheduling or wall-clock pauses.
       await page.route("**/api/v1/artifacts?**", async (route) => {
-        if (paletteSearchRequest(route.request())) await new Promise((resolve) => setTimeout(resolve, 250));
+        if (paletteSearchRequest(route.request())) {
+          const query = new URL(route.request().url()).searchParams.get("search") ?? "";
+          await heldQueries.get(query)?.promise;
+        }
         await route.continue();
       });
 
       await page.keyboard.press("ControlOrMeta+k");
       const palette = page.getByRole("dialog", {name: "Search"});
       const field = palette.getByRole("combobox", {name: "Search"});
-      // Each pause outlasts the debounce, so every keystroke starts a search.
       await field.fill("Pal");
-      await page.waitForTimeout(200);
+      await expect.poll(() => startedByQuery.get("Pal")).toBe(4);
       await field.fill("Pale");
-      await page.waitForTimeout(200);
+      heldQueries.get("Pal")?.resolve();
+      await expect.poll(() => startedByQuery.get("Pale")).toBe(4);
       await field.fill("Palet");
-      await page.waitForTimeout(200);
+      heldQueries.get("Pale")?.resolve();
+      await expect.poll(() => startedByQuery.get("Palet")).toBe(4);
       await field.fill("Palette load");
+      heldQueries.get("Palet")?.resolve();
       await expect(palette.getByRole("option", {name: /Palette load target/u})).toBeVisible();
       expect(peak).toBeLessThanOrEqual(4);
-      // Four overlapping unbounded searches would ask every project four times.
-      expect(started).toBeLessThan(projectIds.length * 2);
+      for (const query of heldQueries.keys()) expect(startedByQuery.get(query)).toBe(4);
+      // The final search covers all created projects and the existing Default project.
+      expect(startedByQuery.get("Palette load")).toBe(projectIds.length + 1);
     } finally {
+      for (const gate of heldQueries.values()) gate.resolve();
       await stopBrowserFixture(fixture);
     }
   });

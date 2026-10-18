@@ -140,9 +140,9 @@ const capturedThemes = new Map<string, string>([
 
 /**
  * The theme a comment was made in, when it was not the light default. A
- * restore sets the scenario and props, never the theme: the reviewer's own
- * theme may be an accessibility setting. Saying so keeps a reopened comment
- * from showing a different theme silently.
+ * restore sets the scenario and declared props, which can include prototype
+ * appearance. It never changes Review's account theme or accessibility settings.
+ * This note preserves the appearance captured with the conversation.
  */
 export function capturedThemeText(anchor: ReviewAnchor | null, view: ReviewView | null): string | null {
   const located = anchor?.view;
