@@ -224,14 +224,14 @@ requirements:
       failure: {id: PRM-001-F, description: "An upgraded bare public link serves exactly as before: current version only, no Review controls, no comments."}
     deployments: *all
     status: behavior_verified
-    proof_gap: "PRM-001-B proves a populated SQLite v22 database upgrades with every project open at the editor default and every key unscoped; the shared repository cases also prove Postgres migration 25 and D1 schema 21 upgrades, but those tests carry no requirement ID. PRM-001-F (the bare public link is unchanged after upgrade) waits for share links in ADR 0033 part B."
+    proof_gap: "PRM-001-B proves a populated SQLite database upgrades with every project open at the editor default and every key unscoped, and PRM-001-F proves over HTTP that a bare public link still redirects to the current version only, with no comments or guest session. The shared repository cases also prove the Postgres (migrations 25 and 26) and D1 (schemas 21 and 22) upgrades, but those tests carry no requirement ID, so no single_server or cloudflare evidence is claimed."
     depends_on: [PRJ-004]
     evidence:
       - deployment: local
-        tests: [PRM-001-B]
+        tests: [PRM-001-B, PRM-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-26T18:50:52.736Z"
+        recorded_at: "2026-10-26T21:14:43.661Z"
 
   - id: PRM-002
     kind: security
@@ -318,9 +318,15 @@ requirements:
       behavior: {id: PRM-006-B, description: "A guest on a view-and-comment link names themselves and creates, replies to, edits, and deletes their own comment."}
       failure: {id: PRM-006-F, description: "A guest cannot read history, another version's comments, another artifact, or any member route."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved against the local SQLite runtime through the application services (prm-007-guest-sessions) and over HTTP (prm-006-guest-http); the browser specs prm-006-share-links and prm-006-guest-review drive the same flows in Review. Not built: the Annotate switch and pinned comments for guests that the product spec promises with comment.write — guests leave page-level comments and replies only. Postgres and D1 share-link storage is proved by repository cases with no requirement ID."
     depends_on: [PRM-003, CMT-006]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-006-B, PRM-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T21:14:43.661Z"
 
   - id: PRM-007
     kind: security
@@ -331,9 +337,15 @@ requirements:
       behavior: {id: PRM-007-B, description: "Revoke, rotate, and expiry each end a guest session on its next request."}
       failure: {id: PRM-007-F, description: "A guest preview lease stops serving once its version is no longer the link's target."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved against the local SQLite runtime: revoke, rotate and expiry end the session on its next request, and a latest-target preview lease stops once a newer version is published. Postgres and D1 are proved by repository cases with no requirement ID."
     depends_on: [PRM-006]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-007-B, PRM-007-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T21:14:43.661Z"
 
   - id: PRM-008
     kind: security
@@ -344,9 +356,15 @@ requirements:
       behavior: {id: PRM-008-B, description: "A dispatched guest comment reaches the agent bundle with the guest marker, and guest writes over the hourly limit are refused."}
       failure: {id: PRM-008-F, description: "A guest cannot forge or hide the marker with invisible or bidirectional characters."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved end to end over the real HTTP and MCP surfaces: the mailbox claim and the native bridge both lead a guest body with the marker, and the guest's 21st write in an hour is refused. The hourly limit is counted in memory per process (and per Worker isolate on Cloudflare), so a multi-replica deployment admits proportionally more; no single_server or cloudflare evidence is claimed."
     depends_on: [PRM-006, DSP-011]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-008-B, PRM-008-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T21:14:43.661Z"
 
   - id: PRM-009
     kind: security
