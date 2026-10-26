@@ -20,6 +20,7 @@ export default defineConfig({
       "tests/integration/postgres-content-access-revocation.test.ts",
       "tests/integration/postgres-library-dates.test.ts",
       "tests/integration/postgres-invitations.test.ts",
+      "tests/integration/postgres-access.test.ts",
       "tests/integration/postgres-login-attempt-invite.test.ts",
       "tests/integration/postgres-pool-shutdown.test.ts",
       "tests/integration/postgres-principal-activity.test.ts",

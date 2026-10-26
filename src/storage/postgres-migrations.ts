@@ -1054,6 +1054,57 @@ const addCommittedStagingCleanup = Effect.gen(function*() {
   yield* sql.unsafe("CREATE INDEX IF NOT EXISTS committed_staging_cleanup ON staged_uploads(installation_id, status, staging_cleaned_at, expires_at)");
 });
 
+// ADR 0033: existing projects stay open to every member at the editor role,
+// and existing keys stay unscoped.
+const addLayeredProjectAccess = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    `ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS access_mode TEXT NOT NULL DEFAULT 'open'
+        CHECK (access_mode IN ('open', 'restricted')),
+      ADD COLUMN IF NOT EXISTS default_member_role TEXT NOT NULL DEFAULT 'editor'
+        CHECK (default_member_role IN ('none', 'viewer', 'commenter', 'editor', 'manager')),
+      ADD COLUMN IF NOT EXISTS access_revision INTEGER NOT NULL DEFAULT 0 CHECK (access_revision >= 0)`,
+    `ALTER TABLE IF EXISTS managed_api_keys
+      ADD COLUMN IF NOT EXISTS project_ids_json TEXT NOT NULL DEFAULT '[]'`,
+    `CREATE TABLE IF NOT EXISTS installation_access_policy (
+      installation_id TEXT PRIMARY KEY REFERENCES artifact_installations(id),
+      policy_json TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      updated_at TEXT NOT NULL,
+      updated_by_principal_id TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS access_grants (
+      installation_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      artifact_id TEXT,
+      member_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('none', 'viewer', 'commenter', 'editor', 'manager')),
+      add_permissions_json TEXT NOT NULL DEFAULT '[]',
+      remove_permissions_json TEXT NOT NULL DEFAULT '[]',
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      created_by_principal_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      PRIMARY KEY (installation_id, id),
+      FOREIGN KEY (installation_id, project_id) REFERENCES projects(installation_id, id),
+      CHECK (artifact_id IS NULL OR role <> 'none')
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS access_grants_subject
+      ON access_grants (installation_id, project_id, COALESCE(artifact_id, ''), member_id)`,
+    `CREATE INDEX IF NOT EXISTS access_grants_member
+      ON access_grants (installation_id, member_id)`,
+    `ALTER TABLE actions
+      DROP CONSTRAINT IF EXISTS actions_action_check,
+      ADD CONSTRAINT actions_action_check CHECK (${actionRowChecks[0]}),
+      DROP CONSTRAINT IF EXISTS actions_scope_check,
+      ADD CONSTRAINT actions_scope_check CHECK (${actionRowChecks[1]})`,
+  ] as const;
+  for (const statement of statements) yield* sql.unsafe(statement);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1079,10 +1130,11 @@ const migrationLoader = Migrator.fromRecord({
   "0022_installation_invites": addInstallationInvites,
   "0023_artifact_rename": addArtifactRename,
   "0024_committed_staging_cleanup": addCommittedStagingCleanup,
+  "0025_layered_project_access": addLayeredProjectAccess,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 24;
+export const requiredPostgresSchemaVersion = 25;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1209,6 +1261,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 24,
     name: "committed_staging_cleanup",
+  }, {
+    migration_id: 25,
+    name: "layered_project_access",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,
