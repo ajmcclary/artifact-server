@@ -76,6 +76,7 @@ const memberPrincipal: Principal = {
   installationId: "local",
   kind: principalKinds.human,
   membershipRole: membershipRoles.member,
+  projectIds: [],
 };
 const administratorPrincipal: Principal = {
   authorizedByPrincipalId: null,
@@ -85,6 +86,7 @@ const administratorPrincipal: Principal = {
   installationId: "local",
   kind: principalKinds.human,
   membershipRole: membershipRoles.administrator,
+  projectIds: [],
 };
 const routeVerifier: BearerCredentialVerifier = {
   verify: (credential) => {

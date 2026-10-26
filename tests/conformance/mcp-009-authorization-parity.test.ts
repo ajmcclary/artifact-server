@@ -154,6 +154,7 @@ const externalPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: principalKinds.human,
     membershipRole: membershipRoles.administrator,
+    projectIds: [],
   }],
   [humanTokens.member, {
     authorizedByPrincipalId: null,
@@ -163,6 +164,7 @@ const externalPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: principalKinds.human,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   }],
   [humanTokens.delegated, {
     authorizedByPrincipalId: "usr_mcp009_member",
@@ -172,6 +174,7 @@ const externalPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: principalKinds.human,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   }],
   [humanTokens.bare, {
     authorizedByPrincipalId: null,
@@ -181,6 +184,7 @@ const externalPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: principalKinds.service,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   }],
   [humanTokens.foreign, {
     authorizedByPrincipalId: null,
@@ -190,6 +194,7 @@ const externalPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "other-installation",
     kind: principalKinds.human,
     membershipRole: membershipRoles.administrator,
+    projectIds: [],
   }],
 ]);
 

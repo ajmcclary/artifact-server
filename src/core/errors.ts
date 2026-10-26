@@ -2,6 +2,9 @@ import { Schema } from "effect";
 
 /** Stable error codes exposed by Artifact Server protocols. */
 export const errorCodes = {
+  accessChangeUnconfirmed: "ACCESS_CHANGE_UNCONFIRMED",
+  accessGrantInvalid: "ACCESS_GRANT_INVALID",
+  accessRevisionConflict: "ACCESS_REVISION_CONFLICT",
   agentNotFound: "AGENT_NOT_FOUND",
   artifactNotFound: "ARTIFACT_NOT_FOUND",
   artifactMutationConflict: "ARTIFACT_MUTATION_CONFLICT",
@@ -36,6 +39,7 @@ export const errorCodes = {
   sourceDrifted: "SOURCE_DRIFTED",
   sourceMissing: "SOURCE_MISSING",
   sourceUnreadable: "SOURCE_UNREADABLE",
+  permissionNotHeld: "PERMISSION_NOT_HELD",
   publishConflict: "PUBLISH_CONFLICT",
   projectArchived: "PROJECT_ARCHIVED",
   projectConflict: "PROJECT_CONFLICT",
@@ -54,6 +58,30 @@ export const errorCodes = {
 export type ErrorCode = (typeof errorCodes)[keyof typeof errorCodes];
 
 const messageField = {message: Schema.String};
+
+/** A grant or project access change broke a rule the caller can fix. */
+export class AccessGrantInvalid extends Schema.TaggedError<AccessGrantInvalid>()(
+  "AccessGrantInvalid",
+  messageField,
+) {}
+
+/** The caller tried to grant a permission they do not hold on the same scope. */
+export class PermissionNotHeld extends Schema.TaggedError<PermissionNotHeld>()(
+  "PermissionNotHeld",
+  messageField,
+) {}
+
+/** An access record changed after the caller read it. */
+export class AccessRevisionConflict extends Schema.TaggedError<AccessRevisionConflict>()(
+  "AccessRevisionConflict",
+  messageField,
+) {}
+
+/** Restricting a project needs the caller to confirm how many members lose access. */
+export class AccessChangeUnconfirmed extends Schema.TaggedError<AccessChangeUnconfirmed>()(
+  "AccessChangeUnconfirmed",
+  {membersLosingAccess: Schema.Int, message: Schema.String},
+) {}
 
 /** The requested artifact does not exist in the installation. */
 export class ArtifactNotFound extends Schema.TaggedError<ArtifactNotFound>()(
@@ -563,6 +591,10 @@ export class StagingStorageFailure extends Schema.TaggedError<StagingStorageFail
 ) {}
 
 const artifactServerFailureSchema = Schema.Union([
+  AccessChangeUnconfirmed,
+  AccessGrantInvalid,
+  AccessRevisionConflict,
+  PermissionNotHeld,
   AgentDispatchNotFound,
   AgentNotFound,
   ArtifactNotFound,

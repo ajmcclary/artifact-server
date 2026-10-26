@@ -196,6 +196,7 @@ const commentReaderPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "human",
     membershipRole: "member",
+    projectIds: [],
   }],
   [unscopedCredential, {
     authorizedByPrincipalId: null,
@@ -205,6 +206,7 @@ const commentReaderPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "service",
     membershipRole: "member",
+    projectIds: [],
   }],
   [foreignCredential, {
     authorizedByPrincipalId: null,
@@ -214,6 +216,7 @@ const commentReaderPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "other-installation",
     kind: "human",
     membershipRole: "administrator",
+    projectIds: [],
   }],
 ]);
 

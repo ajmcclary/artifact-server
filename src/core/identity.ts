@@ -44,6 +44,8 @@ export interface Principal {
   readonly installationId: string;
   readonly kind: PrincipalKind;
   readonly membershipRole: MembershipRole;
+  /** Projects a scoped key may reach; empty means every project. */
+  readonly projectIds: readonly string[];
 }
 
 /** Determine whether a principal has an explicit capability. */

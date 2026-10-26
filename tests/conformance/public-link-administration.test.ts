@@ -371,6 +371,7 @@ const administratorVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: "human",
         membershipRole: "administrator",
+        projectIds: [],
       })
       : Effect.fail(new AuthenticationRequired({
         message: "The external administrator credential is invalid.",

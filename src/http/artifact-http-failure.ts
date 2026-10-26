@@ -6,6 +6,19 @@ import {
 /** Stable protocol-safe projection shared by HTTP and MCP adapters. */
 export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
   switch (failure._tag) {
+    case "AccessGrantInvalid":
+      return {code: errorCodes.accessGrantInvalid, message: failure.message, status: 422};
+    case "PermissionNotHeld":
+      return {code: errorCodes.permissionNotHeld, message: failure.message, status: 403};
+    case "AccessRevisionConflict":
+      return {code: errorCodes.accessRevisionConflict, message: failure.message, status: 409};
+    case "AccessChangeUnconfirmed":
+      return {
+        code: errorCodes.accessChangeUnconfirmed,
+        details: {membersLosingAccess: failure.membersLosingAccess},
+        message: failure.message,
+        status: 409,
+      };
     case "AgentNotFound":
       return {code: errorCodes.agentNotFound, message: failure.message, status: 404};
     case "AgentDispatchNotFound":

@@ -69,6 +69,9 @@ const principalSchema = Schema.Struct({
     membershipRoles.administrator,
     membershipRoles.member,
   ]),
+  projectIds: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 const sessionResponseSchema = Schema.Struct({
   authenticationMethod: Schema.Literals(["bearer", "session"]),

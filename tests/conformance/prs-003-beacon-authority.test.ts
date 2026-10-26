@@ -133,6 +133,7 @@ const memberPrincipal: Principal = {
   installationId: "local",
   kind: principalKinds.human,
   membershipRole: membershipRoles.member,
+  projectIds: [],
 };
 
 const memberVerifier: BearerCredentialVerifier = {

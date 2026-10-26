@@ -1,6 +1,16 @@
 import {Result, Schema} from "effect";
 import {describe, expect, test} from "vitest";
 
+import {toActivityEntry} from "../../src/application/activity-entries.js";
+import {
+  AccessChangeUnconfirmed,
+  AccessGrantInvalid,
+  AccessRevisionConflict,
+  PermissionNotHeld,
+} from "../../src/core/errors.js";
+import type {ActionKind} from "../../src/core/model.js";
+import {artifactServerFailureResponse} from "../../src/http/artifact-http-failure.js";
+
 import {
   accessPolicyParseOptions,
   accessPolicySchema,
@@ -292,5 +302,62 @@ describe("access policy schema", () => {
     expect(Result.isFailure(decodeJson(defaultJson.replace("artifact.view", "artifact.fly")))).toBe(true);
     expect(Result.isFailure(decodeJson(defaultJson.replace('{"members"', '{"extra":true,"members"')))).toBe(true);
     expect(Result.isFailure(decodeJson(defaultJson.replace('"maxExpiryDays":null', '"maxExpiryDays":0')))).toBe(true);
+  });
+});
+
+describe("access errors and activity", () => {
+  test("access errors map to stable HTTP failures", () => {
+    expect(artifactServerFailureResponse(new AccessGrantInvalid({message: "Bad."})))
+      .toEqual({code: "ACCESS_GRANT_INVALID", message: "Bad.", status: 422});
+    expect(artifactServerFailureResponse(new PermissionNotHeld({message: "No."})))
+      .toEqual({code: "PERMISSION_NOT_HELD", message: "No.", status: 403});
+    expect(artifactServerFailureResponse(new AccessRevisionConflict({message: "Stale."})))
+      .toEqual({code: "ACCESS_REVISION_CONFLICT", message: "Stale.", status: 409});
+    expect(artifactServerFailureResponse(new AccessChangeUnconfirmed({membersLosingAccess: 3, message: "Confirm."})))
+      .toEqual({
+        code: "ACCESS_CHANGE_UNCONFIRMED",
+        details: {membersLosingAccess: 3},
+        message: "Confirm.",
+        status: 409,
+      });
+  });
+
+  const row = (action: ActionKind, subjectId: string | null, projectId: string | null) => ({
+    action: {
+      accessFrom: null,
+      accessTo: null,
+      action,
+      actor: {displayName: "Jordan Lee", kind: "human" as const},
+      artifactId: null,
+      createdAt: now,
+      detail: null,
+      id: "act_1",
+      principalId: "mem_admin",
+      projectId,
+      replyId: null,
+      subjectId,
+      threadId: null,
+      versionId: null,
+    },
+    artifact: null,
+    dispatch: null,
+    excerpt: null,
+    project: projectId === null ? null : {id: projectId, name: "Design"},
+    thread: null,
+    versionNumber: null,
+  });
+
+  test("access activity appears in the admin feed with its subject", () => {
+    const names = {keys: new Map(), members: new Map([["mem_dana", "Dana"]])};
+    expect(toActivityEntry(row("policy_change", null, null), names))
+      .toMatchObject({kind: "admin", verb: "changed the access policy"});
+    expect(toActivityEntry(row("grant_create", "mem_dana", "prj_a"), names))
+      .toMatchObject({kind: "admin", subject: {id: "mem_dana", name: "Dana"}, verb: "granted access"});
+    expect(toActivityEntry(row("grant_update", "mem_dana", "prj_a"), names))
+      .toMatchObject({verb: "changed access"});
+    expect(toActivityEntry(row("grant_delete", "mem_dana", "prj_a"), names))
+      .toMatchObject({verb: "removed access"});
+    expect(toActivityEntry(row("project_access_change", "prj_a", "prj_a"), names))
+      .toMatchObject({kind: "admin", subject: {id: "prj_a", name: "Design"}, verb: "changed project access"});
   });
 });

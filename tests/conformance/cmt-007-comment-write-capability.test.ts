@@ -344,6 +344,7 @@ const commentWriterPrincipal: Principal = {
   installationId: "local",
   kind: "human",
   membershipRole: "member",
+  projectIds: [],
 };
 
 const commentWriterVerifier: BearerCredentialVerifier = {

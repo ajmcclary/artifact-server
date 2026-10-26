@@ -888,6 +888,7 @@ function testPrincipal(
     installationId,
     kind: principalKinds.service,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   };
 }
 

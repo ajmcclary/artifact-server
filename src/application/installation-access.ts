@@ -747,6 +747,7 @@ function makeInstallationAccessService(
       installationId: key.installationId,
       kind: key.principalKind,
       membershipRole: membershipRoles.member,
+      projectIds: [],
     };
     apiKeyCache?.set(
       cacheKey(presentedDigest),
@@ -982,6 +983,7 @@ function humanPrincipal(member: InstallationMember): Principal {
     installationId: member.installationId,
     kind: principalKinds.human,
     membershipRole: member.role,
+    projectIds: [],
   };
 }
 

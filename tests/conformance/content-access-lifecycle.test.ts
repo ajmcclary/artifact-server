@@ -243,6 +243,7 @@ const testPrincipal: Principal = {
   installationId: "test-installation",
   kind: principalKinds.service,
   membershipRole: membershipRoles.member,
+  projectIds: [],
 };
 
 async function publishPrivateArtifact(runtime: ApplicationRuntime) {

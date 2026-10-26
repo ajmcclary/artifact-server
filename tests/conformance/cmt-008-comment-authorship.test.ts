@@ -281,6 +281,7 @@ const commentAuthorshipPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "human",
     membershipRole: "member",
+    projectIds: [],
   }],
   [otherCredential, {
     authorizedByPrincipalId: null,
@@ -290,6 +291,7 @@ const commentAuthorshipPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "human",
     membershipRole: "member",
+    projectIds: [],
   }],
   [administratorCredential, {
     authorizedByPrincipalId: null,
@@ -299,6 +301,7 @@ const commentAuthorshipPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "human",
     membershipRole: "administrator",
+    projectIds: [],
   }],
   [managerCredential, {
     authorizedByPrincipalId: null,
@@ -308,6 +311,7 @@ const commentAuthorshipPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "service",
     membershipRole: "member",
+    projectIds: [],
   }],
 ]);
 

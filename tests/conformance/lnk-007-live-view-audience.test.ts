@@ -226,6 +226,7 @@ const nonMemberPrincipals: ReadonlyMap<string, Principal> = new Map([
     installationId: "local",
     kind: "service",
     membershipRole: "member",
+    projectIds: [],
   }],
 ]);
 

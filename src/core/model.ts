@@ -60,6 +60,9 @@ export const artifactHistoryActionKinds: readonly ArtifactActionKind[] = [
 export const installationActionKinds = {
   dispatchAddressed: "dispatch_addressed",
   dispatchCreate: "dispatch_create",
+  grantCreate: "grant_create",
+  grantDelete: "grant_delete",
+  grantUpdate: "grant_update",
   inviteCreate: "invite_create",
   inviteRedeem: "invite_redeem",
   inviteRevoke: "invite_revoke",
@@ -68,6 +71,8 @@ export const installationActionKinds = {
   keyRotate: "key_rotate",
   memberAdmit: "member_admit",
   memberDeactivate: "member_deactivate",
+  policyChange: "policy_change",
+  projectAccessChange: "project_access_change",
   projectArchive: "project_archive",
   projectCreate: "project_create",
   projectUnarchive: "project_unarchive",
@@ -196,10 +201,12 @@ export interface ActorSnapshot {
 
 /** Bounded per-kind facts stored in `detail_json`; every field is optional by kind. */
 export interface ActivityDetail {
+  readonly accessMode?: string;
   readonly agentDisplayName?: string;
   readonly agentId?: string;
   readonly capabilities?: readonly string[];
   readonly expiresAt?: string;
+  readonly grantArtifactId?: string;
   readonly how?: string;
   readonly inviteId?: string;
   readonly inviteKind?: string;

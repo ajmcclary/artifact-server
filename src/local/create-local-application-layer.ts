@@ -980,6 +980,7 @@ export function createApplicationLayer(
     installationId: adapters.installationId,
     kind: principalKinds.service,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   };
   const identityRepository = adapters.identityRepository;
   const principalActivity = makePrincipalActivity({

@@ -345,6 +345,7 @@ const versionFileVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.service,
         membershipRole: membershipRoles.member,
+        projectIds: [],
       });
     }
     if (token === commentOnlyToken) {
@@ -356,6 +357,7 @@ const versionFileVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.service,
         membershipRole: membershipRoles.member,
+        projectIds: [],
       });
     }
     return Effect.fail(new AuthenticationRequired({

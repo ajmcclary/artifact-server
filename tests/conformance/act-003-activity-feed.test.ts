@@ -556,6 +556,7 @@ describe("activity visibility", () => {
           installationId: "local",
           kind: principalKinds.human,
           membershipRole: role,
+          projectIds: [],
         });
       }),
     };

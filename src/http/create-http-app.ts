@@ -2934,7 +2934,11 @@ export function createHttpApp(
         );
       }
       return Response.json(
-        {error: {code: response.code, message: response.message}},
+        {
+          error: "details" in response
+            ? {code: response.code, details: response.details, message: response.message}
+            : {code: response.code, message: response.message},
+        },
         {
           headers,
           status: response.status,

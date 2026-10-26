@@ -484,6 +484,7 @@ const commentPrincipalVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.human,
         membershipRole: membershipRoles.administrator,
+        projectIds: [],
       });
     }
     if (token === agentToken) {
@@ -498,6 +499,7 @@ const commentPrincipalVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.service,
         membershipRole: membershipRoles.member,
+        projectIds: [],
       });
     }
     return Effect.fail(new AuthenticationRequired({

@@ -491,6 +491,7 @@ const commenterVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.human,
         membershipRole: membershipRoles.administrator,
+        projectIds: [],
       });
     }
     return Effect.fail(new AuthenticationRequired({

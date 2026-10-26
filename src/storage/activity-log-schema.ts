@@ -21,6 +21,10 @@ export function recoveredActionId(kind: ActionKind, subjectId: string): string {
 export const projectScopedActionKinds = [
   installationActionKinds.dispatchAddressed,
   installationActionKinds.dispatchCreate,
+  installationActionKinds.grantCreate,
+  installationActionKinds.grantDelete,
+  installationActionKinds.grantUpdate,
+  installationActionKinds.projectAccessChange,
   installationActionKinds.projectArchive,
   installationActionKinds.projectCreate,
   installationActionKinds.projectUnarchive,
@@ -36,6 +40,7 @@ export const installationScopedActionKinds = [
   installationActionKinds.keyRotate,
   installationActionKinds.memberAdmit,
   installationActionKinds.memberDeactivate,
+  installationActionKinds.policyChange,
 ] as const;
 
 /**

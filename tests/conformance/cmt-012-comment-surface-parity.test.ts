@@ -582,6 +582,7 @@ const writeOnlyVerifier: BearerCredentialVerifier = {
         installationId: "local",
         kind: principalKinds.service,
         membershipRole: membershipRoles.member,
+        projectIds: [],
       })
       : Effect.fail(new AuthenticationRequired({
         message: "The parity credential is invalid.",

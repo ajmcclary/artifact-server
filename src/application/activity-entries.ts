@@ -77,6 +77,9 @@ const verbs = {
   comment_resolve: ["resolution", "resolved"],
   dispatch_addressed: ["agent", "answered"],
   dispatch_create: ["agent", "sent"],
+  grant_create: ["admin", "granted access"],
+  grant_delete: ["admin", "removed access"],
+  grant_update: ["admin", "changed access"],
   invite_create: ["admin", "created"],
   invite_redeem: ["admin", "joined with"],
   invite_revoke: ["admin", "revoked"],
@@ -85,6 +88,8 @@ const verbs = {
   key_rotate: ["admin", "rotated"],
   member_admit: ["admin", "admitted"],
   member_deactivate: ["admin", "deactivated"],
+  policy_change: ["admin", "changed the access policy"],
+  project_access_change: ["admin", "changed project access"],
   project_archive: ["admin", "archived"],
   project_create: ["admin", "created"],
   project_unarchive: ["admin", "unarchived"],
@@ -141,7 +146,7 @@ function subjectOf(
   if (action.startsWith("invite_")) {
     return {id: subjectId, name: row.action.detail?.subjectName ?? null};
   }
-  if (action.startsWith("member_")) {
+  if (action.startsWith("member_") || action.startsWith("grant_")) {
     return {id: subjectId, name: names.members.get(subjectId) ?? null};
   }
   if (action.startsWith("key_")) {

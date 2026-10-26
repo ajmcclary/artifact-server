@@ -260,6 +260,7 @@ const memberPrincipal: Principal = {
   installationId: "local",
   kind: "human",
   membershipRole: "member",
+  projectIds: [],
 };
 
 const memberVerifier: BearerCredentialVerifier = {

@@ -204,6 +204,7 @@ function humanPrincipal(
     installationId: "installation-a",
     kind: principalKinds.human,
     membershipRole,
+    projectIds: [],
   };
 }
 
@@ -219,5 +220,6 @@ function servicePrincipal(
     installationId: "installation-a",
     kind: principalKinds.service,
     membershipRole: membershipRoles.member,
+    projectIds: [],
   };
 }

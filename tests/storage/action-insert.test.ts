@@ -62,6 +62,7 @@ describe("the shared action writer", () => {
       installationId: "action-insert-installation",
       kind: principalKinds.human,
       membershipRole: membershipRoles.administrator,
+      projectIds: [],
     } as const;
     const insert = attributedInsert(attributionOf(administrator), {
       action: "member_admit",

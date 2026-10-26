@@ -670,6 +670,7 @@ const admittedMemberPrincipal: Principal = {
   installationId: "local",
   kind: principalKinds.human,
   membershipRole: membershipRoles.member,
+  projectIds: [],
 };
 
 const admittedMemberVerifier: BearerCredentialVerifier = {

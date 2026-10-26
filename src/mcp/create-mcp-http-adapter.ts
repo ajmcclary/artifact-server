@@ -53,6 +53,7 @@ const principalSchema = z.object({
     membershipRoles.administrator,
     membershipRoles.member,
   ]),
+  projectIds: z.array(z.string().min(1)).default([]),
 }).strict();
 
 /** Configuration for the stateless modern MCP boundary and its 2025-era bridge. */

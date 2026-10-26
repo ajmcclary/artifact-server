@@ -47,6 +47,7 @@ const sessionResponseSchema = z.object({
     id: z.string(),
     kind: z.literal("human"),
     membershipRole: z.literal("administrator"),
+    projectIds: z.array(z.string()),
   }),
 });
 const issuedKeySchema = z.object({
@@ -1308,6 +1309,7 @@ describe("installation identity and access", () => {
             installationId: "local",
             kind: "service",
             membershipRole: "member",
+            projectIds: [],
           })
           : Effect.fail(new AuthenticationRequired({
             message: "The external access token is invalid.",

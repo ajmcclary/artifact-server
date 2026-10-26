@@ -1579,6 +1579,7 @@ async function startOAuthFixture(): Promise<OAuthFixture> {
           installationId: "ins_oauth_test",
           kind: "human",
           membershipRole: "member",
+          projectIds: [],
         },
       });
       return;
@@ -1898,6 +1899,7 @@ async function startArtifactServerAuthorization(
         installationId: "local",
         kind: principalKinds.human,
         membershipRole: membershipRoles.member,
+        projectIds: [],
       };
       return Effect.succeed(principal);
     },

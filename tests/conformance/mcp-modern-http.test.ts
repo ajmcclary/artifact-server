@@ -933,6 +933,7 @@ describe("modern MCP HTTP", () => {
           installationId: token === readToken ? "local" : "other-installation",
           kind: "service",
           membershipRole: "member",
+          projectIds: [],
         });
       },
     };
