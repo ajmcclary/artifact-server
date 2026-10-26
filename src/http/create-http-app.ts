@@ -36,6 +36,15 @@ import {
   type InviteRateLimitPolicy,
 } from "./invite-rate-limiter.js";
 import { ProjectManagementService } from "../application/project-management.js";
+import {
+  AccessAdministrationService,
+  type ExplainedAccess,
+} from "../application/access-administration.js";
+import {
+  allPermissions,
+  projectAccessModes,
+  projectRoles,
+} from "../core/permissions.js";
 import {ProjectGitHistoryService} from
   "../application/project-git-history.js";
 import {
@@ -204,6 +213,36 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
 }).strict();
 const renameProjectSchema = createProjectSchema;
+const permissionSchema = z.enum(allPermissions);
+const projectRoleSchema = z.enum(Object.values(projectRoles));
+const accessPolicyBodySchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  policy: z.object({
+    members: z.object({memberCeiling: z.array(permissionSchema).nullable()}).strict(),
+    projects: z.object({defaultMode: z.enum(Object.values(projectAccessModes))}).strict(),
+    shareLinks: z.object({
+      enabled: z.boolean(),
+      guestPermissionsMax: z.array(permissionSchema),
+      linkCreators: z.enum(["sharers", "administrators"]),
+      maxExpiryDays: z.number().int().min(1).max(3_650).nullable(),
+    }).strict(),
+  }).strict(),
+}).strict();
+const projectAccessBodySchema = z.object({
+  accessMode: z.enum(Object.values(projectAccessModes)),
+  confirmMembersLosingAccess: z.number().int().nonnegative().nullable(),
+  defaultMemberRole: projectRoleSchema,
+  expectedRevision: z.number().int().nonnegative(),
+}).strict();
+const grantBodySchema = z.object({
+  add: z.array(permissionSchema).max(allPermissions.length * 2),
+  expectedRevision: z.number().int().positive().nullable(),
+  expiresAt: z.iso.datetime().nullable(),
+  remove: z.array(permissionSchema).max(allPermissions.length * 2),
+  role: projectRoleSchema,
+}).strict();
+const grantRevisionQuerySchema = z.object({expectedRevision: z.coerce.number().int().positive()});
+const accessSubjectQuerySchema = z.object({subject: z.string().trim().min(1).max(200).optional()});
 const setProjectGitHistorySchema = z.discriminatedUnion("enabled", [
   z.object({enabled: z.literal(false)}).strict(),
   z.object({
@@ -521,6 +560,7 @@ const issueApiKeySchema = z.object({
   expiresAt: z.iso.datetime(),
   memberId: z.string().trim().min(1).max(200).optional(),
   name: z.string().trim().min(1).max(200),
+  projectIds: z.array(projectIdSchema).max(100).default([]),
 });
 const localLoginQuerySchema = z.object({
   token: z.string().min(32).max(200),
@@ -1336,6 +1376,7 @@ export function createHttpApp(
         expiresAt: body.expiresAt,
         name: body.name,
         principal: context.get("principal"),
+        projectIds: body.projectIds,
       }
       : {
         capabilities: body.capabilities,
@@ -1343,6 +1384,7 @@ export function createHttpApp(
         memberId: body.memberId,
         name: body.name,
         principal: context.get("principal"),
+        projectIds: body.projectIds,
       };
     const issued = await runHttpApplicationEffect(
       context,
@@ -1805,6 +1847,134 @@ export function createHttpApp(
       ),
     );
     return context.json({project});
+  });
+
+  app.get("/api/v1/access-policy", async (context) => {
+    const policy = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.readPolicy(context.get("principal"))),
+    );
+    return context.json({policy});
+  });
+
+  app.put("/api/v1/access-policy", boundedJsonBody, async (context) => {
+    const body = accessPolicyBodySchema.parse(await context.req.json());
+    const written = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.writePolicy({
+        expectedRevision: body.expectedRevision,
+        policy: body.policy,
+        principal: context.get("principal"),
+      })),
+    );
+    return context.json(written);
+  });
+
+  app.get("/api/v1/projects/:projectId/access", async (context) => {
+    const read = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.readProjectAccess({
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json(read);
+  });
+
+  app.patch("/api/v1/projects/:projectId/access", boundedJsonBody, async (context) => {
+    const body = projectAccessBodySchema.parse(await context.req.json());
+    const access = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.changeProjectAccess({
+        ...body,
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({access});
+  });
+
+  app.get("/api/v1/projects/:projectId/access/effective", async (context) => {
+    const query = accessSubjectQuerySchema.parse(context.req.query());
+    const explained = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.explain({
+        artifactId: null,
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+        subjectMemberId: query.subject ?? null,
+      })),
+    );
+    return context.json(explainedAccessResponse(explained));
+  });
+
+  app.get("/api/v1/projects/:projectId/artifacts/:artifactId/access", async (context) => {
+    const query = accessSubjectQuerySchema.parse(context.req.query());
+    const explained = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.explain({
+        artifactId: context.req.param("artifactId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+        subjectMemberId: query.subject ?? null,
+      })),
+    );
+    return context.json(explainedAccessResponse(explained));
+  });
+
+  for (const route of [
+    "/api/v1/projects/:projectId/grants/:memberId",
+    "/api/v1/projects/:projectId/artifacts/:artifactId/grants/:memberId",
+  ] as const) {
+    app.put(route, boundedJsonBody, async (context) => {
+      const body = grantBodySchema.parse(await context.req.json());
+      const grant = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        AccessAdministrationService.use((administration) => administration.putGrant({
+          ...body,
+          artifactId: context.req.param("artifactId") ?? null,
+          memberId: context.req.param("memberId"),
+          principal: context.get("principal"),
+          projectId: projectIdSchema.parse(context.req.param("projectId")),
+        })),
+      );
+      return context.json({grant});
+    });
+
+    app.delete(route, async (context) => {
+      const query = grantRevisionQuerySchema.parse(context.req.query());
+      await runHttpApplicationEffect(
+        context,
+        dependencies,
+        AccessAdministrationService.use((administration) => administration.deleteGrant({
+          artifactId: context.req.param("artifactId") ?? null,
+          expectedRevision: query.expectedRevision,
+          memberId: context.req.param("memberId"),
+          principal: context.get("principal"),
+          projectId: projectIdSchema.parse(context.req.param("projectId")),
+        })),
+      );
+      return context.body(null, 204);
+    });
+  }
+
+  app.get("/api/v1/members/:memberId/grants", async (context) => {
+    const grants = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      AccessAdministrationService.use((administration) => administration.listMemberGrants({
+        memberId: context.req.param("memberId"),
+        principal: context.get("principal"),
+      })),
+    );
+    return context.json({grants});
   });
 
   app.get("/api/v1/projects/:projectId/git-history", async (context) => {
@@ -3191,6 +3361,15 @@ function requireLocalOwnerExchangeBoundary(
 
 function isUnsafeMethod(method: string): boolean {
   return method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+}
+
+/** Effective access on the wire: a sorted permission list instead of a set. */
+function explainedAccessResponse(explained: ExplainedAccess) {
+  return {
+    permissions: [...explained.permissions].toSorted(),
+    sources: explained.sources,
+    subject: explained.subject,
+  };
 }
 
 function requestedProjectId(context: Context<HttpEnvironment>): string | null {
