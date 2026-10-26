@@ -48,7 +48,7 @@ export const adminAreas: readonly AdminArea[] = [
     administratorOnly: true,
     group: "People and access",
     href: "/review/settings/access-policy",
-    icon: "bi-shield-check",
+    icon: "bi-shield-lock",
     id: "accessPolicy",
     label: "Access policy",
     lede: "Limits that no project, grant, or share link can exceed.",
