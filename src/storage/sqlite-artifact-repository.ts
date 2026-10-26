@@ -1,3 +1,4 @@
+import {principalKindFromStorage, storedPrincipalKind, storedPrincipalKindOrNull} from "../core/identity.js";
 import {artifactIdsJson} from "./access-rows.js";
 import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import { DatabaseSync } from "node:sqlite";
@@ -176,7 +177,11 @@ import {
   snapshotThreadIds,
   type ActivityStatement,
 } from "./activity-sql.js";
-import {sqliteAccessTableStatements, sqliteProjectAccessColumns} from "./access-schema.js";
+import {
+  sqliteAccessTableStatements,
+  sqliteProjectAccessColumns,
+  sqliteShareLinkTableStatements,
+} from "./access-schema.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
   ListPublicLinks,
@@ -4093,7 +4098,7 @@ export class SqliteArtifactRepository implements
             anchorJson,
             command.body,
             command.author.principalId,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.author.displayName,
             command.author.authorizedByPrincipalId,
             command.idempotencyKey,
@@ -4255,7 +4260,7 @@ export class SqliteArtifactRepository implements
               : resolution?.principalId ?? null,
             command.state === null
               ? row.resolvedByPrincipalKind
-              : resolution?.principalKind ?? null,
+              : storedPrincipalKindOrNull(resolution?.principalKind),
             command.state === null
               ? row.resolvedByDisplayName
               : resolution?.displayName ?? null,
@@ -4449,7 +4454,7 @@ export class SqliteArtifactRepository implements
             command.id,
             command.body,
             command.author.principalId,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.author.displayName,
             command.author.authorizedByPrincipalId,
             command.idempotencyKey,
@@ -5946,6 +5951,7 @@ export class SqliteArtifactRepository implements
       if (!projectColumns.includes(column)) this.#database.exec(sql);
     }
     for (const statement of sqliteAccessTableStatements) this.#database.exec(statement);
+    for (const statement of sqliteShareLinkTableStatements) this.#database.exec(statement);
   }
 
 
@@ -7080,7 +7086,7 @@ function commentAuthorFromRow(
     authorizedByPrincipalId: row.authorAuthorizedByPrincipalId,
     displayName: row.authorDisplayName,
     principalId: row.authorPrincipalId,
-    principalKind: row.authorPrincipalKind,
+    principalKind: principalKindFromStorage(row.authorPrincipalId, row.authorPrincipalKind),
   };
 }
 
@@ -7107,7 +7113,7 @@ function commentThreadFromRow(
         authorizedByPrincipalId: row.resolvedByAuthorizedByPrincipalId,
         displayName: row.resolvedByDisplayName,
         principalId: row.resolvedByPrincipalId,
-        principalKind: row.resolvedByPrincipalKind,
+        principalKind: principalKindFromStorage(row.resolvedByPrincipalId, row.resolvedByPrincipalKind),
       },
     state: row.state,
     updatedAt: row.updatedAt,

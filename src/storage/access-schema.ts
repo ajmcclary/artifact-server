@@ -51,3 +51,58 @@ export const sqliteAccessTableStatements = [
   `CREATE INDEX IF NOT EXISTS access_grants_member
     ON access_grants (installation_id, member_id)`,
 ] as const;
+
+/** SQLite and D1 share-link, guest, and guest-session tables (ADR 0033 part B). */
+export const sqliteShareLinkTableStatements = [
+  `CREATE TABLE IF NOT EXISTS share_links (
+    installation_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    artifact_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    target_kind TEXT NOT NULL CHECK (target_kind IN ('latest', 'pinned')),
+    pinned_version_id TEXT,
+    permissions_json TEXT NOT NULL,
+    expires_at TEXT,
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    created_at TEXT NOT NULL,
+    created_by_principal_id TEXT NOT NULL,
+    created_by_name TEXT NOT NULL,
+    revoked_at TEXT,
+    revoked_by_principal_id TEXT,
+    PRIMARY KEY (installation_id, id),
+    CHECK ((target_kind = 'pinned') = (pinned_version_id IS NOT NULL)),
+    CHECK ((revoked_at IS NULL) = (revoked_by_principal_id IS NULL))
+  )`,
+  `CREATE INDEX IF NOT EXISTS share_links_artifact
+    ON share_links (installation_id, project_id, artifact_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS share_links_active
+    ON share_links (installation_id, revoked_at, created_at DESC, id DESC)`,
+  `CREATE TABLE IF NOT EXISTS guest_principals (
+    installation_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    share_link_id TEXT NOT NULL,
+    generation INTEGER NOT NULL CHECK (generation >= 0),
+    display_name TEXT,
+    contact_email TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (installation_id, id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS guest_principals_link
+    ON guest_principals (installation_id, share_link_id, generation)`,
+  `CREATE TABLE IF NOT EXISTS guest_sessions (
+    installation_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    guest_id TEXT NOT NULL,
+    share_link_id TEXT NOT NULL,
+    token_digest TEXT NOT NULL,
+    csrf_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT,
+    PRIMARY KEY (installation_id, id),
+    UNIQUE (installation_id, token_digest)
+  )`,
+] as const;

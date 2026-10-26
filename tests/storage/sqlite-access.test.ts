@@ -15,6 +15,7 @@ import {requiredSqliteSchemaVersion} from "../../src/storage/sqlite-schema.js";
 import {
   accessRepositoryCases,
   caseManager,
+  shareLinkRepositoryCases,
   type AccessFixture,
 } from "../support/access-repository-cases.js";
 
@@ -90,6 +91,10 @@ describe("SQLite access repository", () => {
 
   test.for(accessRepositoryCases)("$name", async ({run}) => {
     await expect(run(fixture)).resolves.toBeUndefined();
+  });
+
+  test.for(shareLinkRepositoryCases)("share links: $name", async ({run}) => {
+    await expect(run({...fixture, artifacts, store: access})).resolves.toBeUndefined();
   });
 
   test("the database refuses rule-breaking grant rows written directly", async () => {

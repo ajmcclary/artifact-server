@@ -1,3 +1,4 @@
+import {principalKindFromStorage} from "../core/identity.js";
 import {z} from "zod";
 
 import {
@@ -384,7 +385,12 @@ export function assembleActivityFacets(
     byPrincipal.set(row.principalId, newer
       ? {
         lastAt: row.lastAt,
-        person: {displayName: row.displayName, entryCount, kind: row.kind, principalId: row.principalId},
+        person: {
+          displayName: row.displayName,
+          entryCount,
+          kind: principalKindFromStorage(row.principalId, row.kind),
+          principalId: row.principalId,
+        },
       }
       : {lastAt: known.lastAt, person: {...known.person, entryCount}});
   }
@@ -494,7 +500,10 @@ function actionFromRow(row: ActivitySqlRow): ActivityActionRow {
     action: row.action,
     actor: row.actorName === null || row.actorKind === null
       ? null
-      : {displayName: row.actorName, kind: row.actorKind},
+      : {
+        displayName: row.actorName,
+        kind: row.principalId === null ? row.actorKind : principalKindFromStorage(row.principalId, row.actorKind),
+      },
     artifactId: row.artifactId,
     createdAt: row.createdAt,
     detail: row.detailJson === null

@@ -1,3 +1,4 @@
+import {principalKindFromStorage, storedPrincipalKind, storedPrincipalKindOrNull} from "../../../src/core/identity.js";
 import {artifactIdsJson} from "../../../src/storage/access-rows.js";
 import {committedStagingCleanupRepository} from "../../../src/storage/committed-staging-cleanup.js";
 import {z} from "zod";
@@ -3940,7 +3941,7 @@ export function createD1ArtifactRepository(
             anchorJson,
             command.body,
             command.author.principalId,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.author.displayName,
             command.author.authorizedByPrincipalId,
             command.idempotencyKey,
@@ -4075,7 +4076,7 @@ export function createD1ArtifactRepository(
             stateChanged,
             resolution?.principalId ?? null,
             stateChanged,
-            resolution?.principalKind ?? null,
+            storedPrincipalKindOrNull(resolution?.principalKind),
             stateChanged,
             resolution?.displayName ?? null,
             stateChanged,
@@ -4315,7 +4316,7 @@ export function createD1ArtifactRepository(
             command.id,
             command.body,
             command.author.principalId,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.author.displayName,
             command.author.authorizedByPrincipalId,
             command.idempotencyKey,
@@ -4379,7 +4380,7 @@ export function createD1ArtifactRepository(
             command.author.authorizedByPrincipalId,
             command.createdAt,
             command.author.displayName,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.threadId,
             command.projectId,
             command.author.principalId,
@@ -5076,7 +5077,7 @@ function commentAuthorFromRow(
     authorizedByPrincipalId: row.authorAuthorizedByPrincipalId,
     displayName: row.authorDisplayName,
     principalId: row.authorPrincipalId,
-    principalKind: row.authorPrincipalKind,
+    principalKind: principalKindFromStorage(row.authorPrincipalId, row.authorPrincipalKind),
   };
 }
 
@@ -5103,7 +5104,7 @@ function commentThreadFromRow(
         authorizedByPrincipalId: row.resolvedByAuthorizedByPrincipalId,
         displayName: row.resolvedByDisplayName,
         principalId: row.resolvedByPrincipalId,
-        principalKind: row.resolvedByPrincipalKind,
+        principalKind: principalKindFromStorage(row.resolvedByPrincipalId, row.resolvedByPrincipalKind),
       },
     state: row.state,
     updatedAt: row.updatedAt,

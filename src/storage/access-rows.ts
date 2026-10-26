@@ -15,6 +15,8 @@ import {
   type AccessGrant,
   type ProjectAccess,
 } from "../core/permissions.js";
+import type {ShareLinkDraft} from "../core/share-link-ports.js";
+import type {GuestRecord, ShareLink} from "../core/share-links.js";
 import {attributedInsert, type ActionInsert} from "./action-insert.js";
 
 const permissionListSchema = z.array(z.enum(allPermissions));
@@ -162,4 +164,165 @@ export function policyAction(
 /** Bind value for an optional artifact-id filter: null means unfiltered. */
 export function artifactIdsJson(artifactIds: readonly string[] | null): string | null {
   return artifactIds === null ? null : JSON.stringify(artifactIds);
+}
+
+const shareLinkPermissionsSchema = z.array(z.enum(allPermissions));
+
+/** Columns of one share link with its live guest count; `l` is the share_links alias. */
+export const shareLinkSelectColumns = `
+  l.id, l.project_id AS "projectId", l.artifact_id AS "artifactId", l.label, l.token,
+  l.target_kind AS "targetKind", l.pinned_version_id AS "pinnedVersionId",
+  l.permissions_json AS "permissionsJson", l.expires_at AS "expiresAt", l.generation, l.revision,
+  l.created_at AS "createdAt", l.created_by_principal_id AS "createdByPrincipalId",
+  l.created_by_name AS "createdByName", l.revoked_at AS "revokedAt",
+  (SELECT COUNT(*) FROM guest_principals g
+    WHERE g.installation_id = l.installation_id AND g.share_link_id = l.id
+      AND g.generation = l.generation) AS "guestCount"`;
+
+export const shareLinkRowSchema = z.object({
+  artifactId: z.string(),
+  createdAt: z.string(),
+  createdByName: z.string(),
+  createdByPrincipalId: z.string(),
+  expiresAt: z.string().nullable(),
+  generation: z.coerce.number().int().nonnegative(),
+  guestCount: z.coerce.number().int().nonnegative(),
+  id: z.string(),
+  label: z.string(),
+  permissionsJson: z.string(),
+  pinnedVersionId: z.string().nullable(),
+  projectId: z.string(),
+  revision: z.coerce.number().int().positive(),
+  revokedAt: z.string().nullable(),
+  targetKind: z.enum(["latest", "pinned"]),
+  token: z.string(),
+});
+
+/** Decode one stored share link. */
+export function shareLinkFromRow(row: z.infer<typeof shareLinkRowSchema>): ShareLink {
+  return {
+    artifactId: row.artifactId,
+    createdAt: row.createdAt,
+    createdByName: row.createdByName,
+    createdByPrincipalId: row.createdByPrincipalId,
+    expiresAt: row.expiresAt,
+    generation: row.generation,
+    guestCount: row.guestCount,
+    id: row.id,
+    label: row.label,
+    permissions: shareLinkPermissionsSchema.parse(JSON.parse(row.permissionsJson)),
+    projectId: row.projectId,
+    revision: row.revision,
+    revokedAt: row.revokedAt,
+    target: row.targetKind === "pinned" && row.pinnedVersionId !== null
+      ? {kind: "pinned", versionId: row.pinnedVersionId}
+      : {kind: "latest"},
+    token: row.token,
+  };
+}
+
+/** Columns of one guest; `g` is the guest_principals alias. */
+export const guestSelectColumns = `
+  g.id AS "guestId", g.share_link_id AS "shareLinkId", g.generation AS "guestGeneration",
+  g.display_name AS "displayName", g.contact_email AS "contactEmail", g.created_at AS "guestCreatedAt"`;
+
+export const guestRowSchema = z.object({
+  contactEmail: z.string().nullable(),
+  displayName: z.string().nullable(),
+  guestCreatedAt: z.string(),
+  guestGeneration: z.coerce.number().int().nonnegative(),
+  guestId: z.string(),
+  shareLinkId: z.string(),
+});
+
+/** Decode one stored guest. */
+export function guestFromRow(row: z.infer<typeof guestRowSchema>): GuestRecord {
+  return {
+    contactEmail: row.contactEmail,
+    createdAt: row.guestCreatedAt,
+    displayName: row.displayName,
+    generation: row.guestGeneration,
+    id: row.guestId,
+    shareLinkId: row.shareLinkId,
+  };
+}
+
+export const guestSessionRowSchema = z.object({
+  csrfDigest: z.string(),
+  sessionExpiresAt: z.string(),
+  sessionGuestId: z.string(),
+  sessionId: z.string(),
+  sessionRevokedAt: z.string().nullable(),
+});
+
+/** Columns of one guest session; `s` is the guest_sessions alias. */
+export const guestSessionSelectColumns = `
+  s.id AS "sessionId", s.guest_id AS "sessionGuestId", s.expires_at AS "sessionExpiresAt",
+  s.revoked_at AS "sessionRevokedAt", s.csrf_digest AS "csrfDigest"`;
+
+/** Bind values for inserting one share link, in `shareLinkInsertColumns` order. */
+export const shareLinkInsertColumns = `installation_id, id, project_id, artifact_id, label, token,
+  target_kind, pinned_version_id, permissions_json, expires_at, generation, revision,
+  created_at, created_by_principal_id, created_by_name`;
+
+export function shareLinkInsertValues(installationId: string, link: ShareLinkDraft): readonly (string | number | null)[] {
+  return [
+    installationId,
+    link.id,
+    link.projectId,
+    link.artifactId,
+    link.label,
+    link.token,
+    link.target.kind,
+    link.target.kind === "pinned" ? link.target.versionId : null,
+    JSON.stringify(link.permissions),
+    link.expiresAt,
+    0,
+    1,
+    link.createdAt,
+    link.createdByPrincipalId,
+    link.createdByName,
+  ];
+}
+
+/** The activity row for one share-link change. */
+export function shareLinkAction(
+  kind: "share_link_create" | "share_link_revoke" | "share_link_rotate" | "share_link_update",
+  link: Pick<ShareLink, "artifactId" | "generation" | "id" | "label" | "projectId" | "revision">,
+  versionId: string,
+  attribution: ActionAttribution,
+  at: string,
+): ActionInsert {
+  return {
+    ...attributedInsert(attribution, {
+      action: kind,
+      createdAt: at,
+      detail: {name: link.label},
+      idempotencyKey: `${kind}:${link.id}:${link.revision}:${link.generation}`,
+      projectId: link.projectId,
+      subjectId: link.id,
+    }),
+    artifactId: link.artifactId,
+    versionId,
+  };
+}
+
+/** The activity row for one guest opening a share link. */
+export function guestJoinAction(
+  guest: GuestRecord,
+  link: Pick<ShareLink, "artifactId" | "id" | "projectId">,
+  versionId: string,
+  attribution: ActionAttribution,
+): ActionInsert {
+  return {
+    ...attributedInsert(attribution, {
+      action: "guest_join",
+      createdAt: guest.createdAt,
+      idempotencyKey: `guest_join:${guest.id}`,
+      projectId: link.projectId,
+      subjectId: link.id,
+    }),
+    artifactId: link.artifactId,
+    versionId,
+  };
 }

@@ -1,3 +1,4 @@
+import {principalKindFromStorage, storedPrincipalKind, storedPrincipalKindOrNull} from "../core/identity.js";
 import {artifactIdsJson} from "./access-rows.js";
 import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import {Effect} from "effect";
@@ -3284,7 +3285,7 @@ export class PostgresArtifactRepository implements
           ${installationId}, ${command.projectId}, ${command.id},
           ${command.artifactId}, ${command.versionId}, ${command.path},
           ${anchorJson}, ${command.body}, ${commentThreadStates.open},
-          ${command.author.principalId}, ${command.author.principalKind},
+          ${command.author.principalId}, ${storedPrincipalKind(command.author.principalKind)},
           ${command.author.displayName},
           ${command.author.authorizedByPrincipalId},
           NULL, NULL, NULL, NULL, NULL,
@@ -3652,7 +3653,7 @@ export class PostgresArtifactRepository implements
             command.id,
             command.body,
             command.author.principalId,
-            command.author.principalKind,
+            storedPrincipalKind(command.author.principalKind),
             command.author.displayName,
             command.author.authorizedByPrincipalId,
             command.idempotencyKey,
@@ -5892,7 +5893,7 @@ function changedThreadValues(
     resolvedByAuthorizedByPrincipalId: resolution?.authorizedByPrincipalId ?? null,
     resolvedByDisplayName: resolution?.displayName ?? null,
     resolvedByPrincipalId: resolution?.principalId ?? null,
-    resolvedByPrincipalKind: resolution?.principalKind ?? null,
+    resolvedByPrincipalKind: storedPrincipalKindOrNull(resolution?.principalKind),
     state: command.state.state,
   };
 }
@@ -5904,7 +5905,7 @@ function commentAuthorFromRow(
     authorizedByPrincipalId: row.authorAuthorizedByPrincipalId,
     displayName: row.authorDisplayName,
     principalId: row.authorPrincipalId,
-    principalKind: row.authorPrincipalKind,
+    principalKind: principalKindFromStorage(row.authorPrincipalId, row.authorPrincipalKind),
   };
 }
 
@@ -5931,7 +5932,7 @@ function commentThreadFromRow(
         authorizedByPrincipalId: row.resolvedByAuthorizedByPrincipalId,
         displayName: row.resolvedByDisplayName,
         principalId: row.resolvedByPrincipalId,
-        principalKind: row.resolvedByPrincipalKind,
+        principalKind: principalKindFromStorage(row.resolvedByPrincipalId, row.resolvedByPrincipalKind),
       },
     state: row.state,
     updatedAt: row.updatedAt,

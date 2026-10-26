@@ -69,3 +69,21 @@ export function isDirectHumanPrincipal(principal: Principal): boolean {
   return principal.kind === principalKinds.human &&
     principal.authorizedByPrincipalId === null;
 }
+
+/** Guests are stored as `human` in principal-kind columns; their id prefix restores the kind. */
+export const guestPrincipalIdPrefix = "guest:";
+
+/** The kind a principal-kind column stores: guests are written as people. */
+export function storedPrincipalKind(kind: PrincipalKind): "human" | "service" {
+  return kind === principalKinds.guest ? principalKinds.human : kind;
+}
+
+/** {@link storedPrincipalKind} for an optional principal. */
+export function storedPrincipalKindOrNull(kind: PrincipalKind | null | undefined): "human" | "service" | null {
+  return kind === null || kind === undefined ? null : storedPrincipalKind(kind);
+}
+
+/** The kind read back from storage: a guest id marks a guest whatever the column holds. */
+export function principalKindFromStorage(principalId: string, stored: PrincipalKind): PrincipalKind {
+  return principalId.startsWith(guestPrincipalIdPrefix) ? principalKinds.guest : stored;
+}

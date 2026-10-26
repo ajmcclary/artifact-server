@@ -1,3 +1,4 @@
+import {storedPrincipalKindOrNull} from "../core/identity.js";
 import type {ActionAttribution} from "../core/action-attribution.js";
 import type {AccessSetting, ActionKind, ActivityDetail, ActorSnapshot} from "../core/model.js";
 import {activityDetailJsonMaxBytes} from "./activity-log-schema.js";
@@ -102,7 +103,7 @@ export function positionalActionValues(insert: ActionInsert): (string | null)[] 
     insert.accessFrom ?? null,
     insert.accessTo ?? null,
     insert.actor?.displayName ?? null,
-    insert.actor?.kind ?? null,
+    storedPrincipalKindOrNull(insert.actor?.kind),
     serializeActionDetail(insert.detail),
   ];
 }

@@ -9,12 +9,16 @@ export type ShareLinkDraft = Omit<ShareLink, "generation" | "guestCount" | "revi
 /** Persistence for share links, their guests, and guest sessions (ADR 0033). */
 export interface ShareLinkRepository {
   readonly createGuest: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly attribution: ActionAttribution;
     readonly guest: GuestRecord;
     readonly installationId: string;
     readonly session: GuestSessionRecord & {readonly csrfDigest: string; readonly tokenDigest: string};
   }) => Promise<void>;
   readonly createShareLink: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly attribution: ActionAttribution;
     readonly installationId: string;
     readonly link: ShareLinkDraft;
@@ -47,18 +51,24 @@ export interface ShareLinkRepository {
     artifactId: string,
   ) => Promise<readonly ShareLink[]>;
   readonly revokeArtifactShareLinks: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly artifactId: string;
     readonly attribution: ActionAttribution;
     readonly installationId: string;
     readonly projectId: string;
   }) => Promise<number>;
   readonly revokeShareLink: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly attribution: ActionAttribution;
     readonly installationId: string;
     readonly linkId: string;
   }) => Promise<ShareLink | "missing">;
   /** Replace the token and end every guest who joined before (generation + 1). */
   readonly rotateShareLink: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly attribution: ActionAttribution;
     readonly expectedRevision: number;
     readonly installationId: string;
@@ -72,6 +82,8 @@ export interface ShareLinkRepository {
     readonly installationId: string;
   }) => Promise<GuestRecord>;
   readonly updateShareLink: (command: {
+    /** The version the activity row names: the artifact's current or pinned version. */
+    readonly versionId: string;
     readonly attribution: ActionAttribution;
     readonly expectedRevision: number;
     readonly expiresAt: string | null;
