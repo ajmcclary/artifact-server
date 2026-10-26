@@ -206,7 +206,10 @@ function makeCompareArtifactService(
           principal: command.principal,
           projectId: command.projectId,
         });
-      yield* authorization.requireArtifactRead(command.principal);
+      yield* authorization.requireArtifactHistory(
+        command.principal,
+        {artifactId: command.artifactId, projectId: project.id},
+      );
       const artifact = yield* dependencies.repository.findArtifact(
         project.id,
         command.artifactId,

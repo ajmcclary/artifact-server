@@ -4,6 +4,8 @@ import type {ApplicationClock} from "./application-clock.js";
 import {
   type AuthorizationOperations,
   AuthorizationService,
+  type ArtifactScope,
+  type ScopedDenial,
 } from "./authorization.js";
 import {parseIdempotencyKey} from "./idempotency-key.js";
 import {
@@ -29,7 +31,6 @@ import {
   VersionNotFound,
 } from "../core/errors.js";
 import {
-  isHumanAdministrator,
   hasCapability,
   principalCapabilities,
   type Principal,
@@ -492,11 +493,11 @@ function makeArtifactCommentService(
 
   const requireCommentDeletionAuthority = Effect.fn(
     "ArtifactCommentService.requireCommentDeletionAuthority",
-  )(function*(principal: Principal) {
+  )(function*(principal: Principal, scope: ArtifactScope) {
     if (hasCapability(principal, principalCapabilities.manageAnyArtifact)) {
-      return yield* authorization.requireArtifactManagement(principal);
+      return yield* authorization.requireCommentModeration(principal, scope);
     }
-    return yield* authorization.requireCommentWrite(principal);
+    return yield* authorization.requireCommentWrite(principal, scope);
   });
 
   const requireCommentRemoval = Effect.fn(
@@ -504,17 +505,18 @@ function makeArtifactCommentService(
   )(function*(
     principal: Principal,
     author: CommentAuthor,
-  ): Effect.fn.Return<CommentAuthor, AuthorizationDenied> {
-    if (
-      principal.id === author.principalId ||
-      isHumanAdministrator(principal) ||
-      hasCapability(principal, principalCapabilities.manageAnyArtifact)
-    ) {
-      return author;
-    }
-    return yield* new AuthorizationDenied({
-      message: "The authenticated principal cannot delete this comment.",
-    });
+    scope: ArtifactScope,
+  ): Effect.fn.Return<CommentAuthor, ScopedDenial> {
+    if (principal.id === author.principalId) return author;
+    // Anyone else needs comment moderation: administrators and project managers,
+    // or a service holding the artifact-management capability.
+    yield* authorization.requireCommentModeration(principal, scope).pipe(
+      Effect.catchTag("AuthorizationDenied", () =>
+        Effect.fail(new AuthorizationDenied({
+          message: "The authenticated principal cannot delete this comment.",
+        }))),
+    );
+    return author;
   });
 
   const createThread = Effect.fn("ArtifactCommentService.createThread")(
@@ -523,7 +525,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentWrite(command.principal);
+      yield* authorization.requireCommentWrite(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const requestedVersion = yield* requireVersion(
         project.id,
@@ -576,7 +578,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentRead(command.principal);
+      yield* authorization.requireCommentRead(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       if (command.revision !== undefined) {
         const currentRevision = yield* dependencies.repository.commentRevision(
@@ -612,7 +614,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentRead(command.principal);
+      yield* authorization.requireCommentRead(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -630,7 +632,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentWrite(command.principal);
+      yield* authorization.requireCommentWrite(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -678,14 +680,14 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* requireCommentDeletionAuthority(command.principal);
+      yield* requireCommentDeletionAuthority(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
         artifact.id,
         command.threadId,
       );
-      yield* requireCommentRemoval(command.principal, thread.author);
+      yield* requireCommentRemoval(command.principal, thread.author, {artifactId: command.artifactId, projectId: project.id});
       const deletedAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.deleteThread({
         artifactId: artifact.id,
@@ -707,7 +709,7 @@ function makeArtifactCommentService(
       );
       // Bulk clear shares the dispatch-send rule: a direct human member, or
       // the artifact-management capability (spec §2).
-      yield* authorization.requireDispatchSend(command.principal);
+      yield* authorization.requireDispatchSend(command.principal, {projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       if (command.versionId !== null) {
         yield* requireVersion(project.id, artifact.id, command.versionId);
@@ -732,7 +734,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentWrite(command.principal);
+      yield* authorization.requireCommentWrite(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -761,7 +763,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireCommentWrite(command.principal);
+      yield* authorization.requireCommentWrite(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -792,7 +794,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* requireCommentDeletionAuthority(command.principal);
+      yield* requireCommentDeletionAuthority(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -800,7 +802,7 @@ function makeArtifactCommentService(
         command.threadId,
       );
       const reply = yield* requireReply(thread.id, command.replyId);
-      yield* requireCommentRemoval(command.principal, reply.author);
+      yield* requireCommentRemoval(command.principal, reply.author, {artifactId: command.artifactId, projectId: project.id});
       const deletedAt = DateTime.formatIso(yield* dependencies.clock.now);
       yield* dependencies.repository.deleteReply({
         artifactId: artifact.id,

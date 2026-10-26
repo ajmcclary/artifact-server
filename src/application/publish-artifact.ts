@@ -14,6 +14,7 @@ import {
   type InvalidIdempotencyKey,
   type PublishConflict,
   type ProjectArchived,
+  type ProjectNotFound,
   type StagingStorageFailure,
   type UploadClosed,
   type UploadExpired,
@@ -153,6 +154,7 @@ export type PublishArtifactFailure =
   | ArtifactNotFound
   | PublishConflict
   | ProjectArchived
+  | ProjectNotFound
   | BlobStorageFailure
   | StagingStorageFailure
   | AuthorizationDenied;
@@ -246,7 +248,7 @@ function makePublishArtifactService(
   )(function*(
     command: PublishPreparedNewArtifactCommand,
   ): Effect.fn.Return<PublishedVersion, PublishArtifactFailure> {
-    yield* authorization.requireArtifactCreation(command.principal);
+    yield* authorization.requireArtifactCreation(command.principal, {projectId: command.projectId});
     const name = yield* decodeArtifactName(command.name).pipe(
       Effect.mapError(() =>
         new InvalidArtifactName({
@@ -318,6 +320,7 @@ function makePublishArtifactService(
     }
     yield* authorization.requireVersionPublication(
       command.principal,
+      {artifactId: current.artifact.id, projectId: command.projectId},
     );
     const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
     const inputDigest = artifactVersionInputDigest({

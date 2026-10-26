@@ -139,22 +139,24 @@ function makeProjectManagementService(
 ): ProjectManagementOperations {
   const requireProject = Effect.fn("ProjectManagementService.requireProject")(
     function*(principal: Principal, projectId: string) {
-      yield* authorization.requireProjectAccess(principal);
       const project = yield* dependencies.repository.findProject(projectId);
       if (
-        project !== null &&
-        project.installationId === dependencies.installationId
+        project === null ||
+        project.installationId !== dependencies.installationId
       ) {
-        yield* Effect.annotateCurrentSpan({"artifact.project.id": project.id});
-        return project;
+        // Refuse the principal first so an unauthorized caller learns nothing.
+        yield* authorization.requireProjectListing(principal);
+        return yield* new ProjectNotFound({message: "The project does not exist."});
       }
-      return yield* new ProjectNotFound({message: "The project does not exist."});
+      yield* authorization.requireProjectAccess(principal, {projectId: project.id});
+      yield* Effect.annotateCurrentSpan({"artifact.project.id": project.id});
+      return project;
     },
   );
 
   const listProjects = Effect.fn("ProjectManagementService.listProjects")(
     function*(principal: Principal) {
-      yield* authorization.requireProjectAccess(principal);
+      yield* authorization.requireProjectListing(principal);
       return yield* dependencies.repository.listProjects();
     },
   );
@@ -194,7 +196,7 @@ function makeProjectManagementService(
 
   const createProject = Effect.fn("ProjectManagementService.createProject")(
     function*(command: CreateProjectCommand) {
-      yield* authorization.requireProjectManagement(command.principal);
+      yield* authorization.requireProjectCreation(command.principal);
       const name = yield* parseProjectName(command.name);
       const project = yield* dependencies.repository.createProject({
         archivedAt: null,
@@ -217,8 +219,8 @@ function makeProjectManagementService(
 
   const renameProject = Effect.fn("ProjectManagementService.renameProject")(
     function*(command: RenameProjectCommand) {
-      yield* authorization.requireProjectManagement(command.principal);
       yield* requireProject(command.principal, command.projectId);
+      yield* authorization.requireProjectManagement(command.principal, {projectId: command.projectId});
       return yield* dependencies.repository.renameProject({
         name: yield* parseProjectName(command.name),
         projectId: command.projectId,
@@ -229,8 +231,8 @@ function makeProjectManagementService(
   const setProjectArchive = Effect.fn(
     "ProjectManagementService.setProjectArchive",
   )(function*(command: ReadProjectCommand, archivedAt: string | null) {
-    yield* authorization.requireProjectManagement(command.principal);
     const project = yield* requireProject(command.principal, command.projectId);
+    yield* authorization.requireProjectManagement(command.principal, {projectId: project.id});
     const alreadyInRequestedState = archivedAt === null
       ? project.archivedAt === null
       : project.archivedAt !== null;

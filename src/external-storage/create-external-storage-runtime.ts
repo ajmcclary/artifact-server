@@ -70,6 +70,7 @@ import {
 } from "../application/content-variants.js";
 import {currentVersionEntries} from "../application/current-version-entries.js";
 import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
+import {PostgresAccessRepository} from "../storage/postgres-access-repository.js";
 import {PostgresContentVariantIndex} from "../storage/postgres-content-variant-index.js";
 
 /** Configuration for one stateless Artifact Server process. */
@@ -193,6 +194,7 @@ export async function createExternalStorageRuntime(
     });
     const readyVariants = contentVariants;
     const applicationAdapters: Parameters<typeof createApplicationLayer>[0] = {
+      access: new PostgresAccessRepository(database, runtimeClock),
       publishedContent: readyVariants,
       apiToken: null,
       autoAdmitEmailDomains: config.autoAdmitEmailDomains,

@@ -168,7 +168,7 @@ function makeActivityService(
     principal: Principal,
     request: ActivityRequest,
   ) {
-    yield* authorization.requireArtifactListing(principal);
+    yield* authorization.requireArtifactDiscovery(principal);
     const includeAdministration = isHumanAdministrator(principal);
     const page = yield* dependencies.persistence.listActivity({
       ...countQuery(request, includeAdministration),
@@ -190,7 +190,7 @@ function makeActivityService(
     principal: Principal,
     request: ActivityFilterRequest,
   ) {
-    yield* authorization.requireArtifactListing(principal);
+    yield* authorization.requireArtifactDiscovery(principal);
     return yield* dependencies.persistence.countActivity(
       countQuery(request, isHumanAdministrator(principal)),
     );
@@ -200,7 +200,7 @@ function makeActivityService(
     principal: Principal,
     projectIds: readonly string[],
   ) {
-    yield* authorization.requireArtifactListing(principal);
+    yield* authorization.requireArtifactDiscovery(principal);
     return yield* dependencies.persistence.summarizeActivity(projectIds);
   });
 

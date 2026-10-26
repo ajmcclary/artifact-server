@@ -1,33 +1,55 @@
-import {Effect, Layer, ManagedRuntime, Result} from "effect";
+import {mkdtemp, rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import path from "node:path";
+
+import {DateTime, Effect, Layer, ManagedRuntime, Result} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
-import {AuthorizationService} from "../../src/application/authorization.js";
-import type {AuthorizationDenied} from "../../src/core/errors.js";
+import {AuthorizationService, type ScopedDenial} from "../../src/application/authorization.js";
 import {
   membershipRoles,
   principalCapabilities,
   principalKinds,
   type Principal,
 } from "../../src/core/identity.js";
-import type {ArtifactRecord} from "../../src/core/model.js";
+import {accessRepositoryEffects} from "../../src/local/create-local-application-layer.js";
+import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
+import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
+
+const projectScope = {projectId: "prj_default"} as const;
+const artifactScope = {artifactId: "artifact-1", projectId: "prj_default"} as const;
+const clock = {now: () => new Date("2026-08-13T00:00:00.000Z")};
 
 describe("authorization policy", () => {
   let runtime: ManagedRuntime.ManagedRuntime<AuthorizationService, never>;
+  let dataDirectory: string;
+  let artifacts: SqliteArtifactRepository;
+  let access: SqliteAccessRepository;
 
   beforeEach(async () => {
+    dataDirectory = await mkdtemp(path.join(tmpdir(), "artifact-authorization-policy-"));
+    const databasePath = path.join(dataDirectory, "artifact-server.db");
+    artifacts = new SqliteArtifactRepository(databasePath, "installation-a");
+    access = new SqliteAccessRepository(databasePath, clock);
     runtime = ManagedRuntime.make(Layer.mergeAll(
-      AuthorizationService.layer({installationId: "installation-a"}),
+      AuthorizationService.layer({
+        access: accessRepositoryEffects(access),
+        clock: {now: Effect.sync(() => DateTime.makeUnsafe(clock.now()))},
+        installationId: "installation-a",
+      }),
     ));
     await runtime.context();
   });
 
   afterEach(async () => {
     await runtime.dispose();
+    access.close();
+    artifacts.close();
+    await rm(dataDirectory, {force: true, recursive: true});
   });
 
   test("AUTH-008-B AUTH-008-F: standalone mutations use membership and explicit capabilities", async () => {
     expect.hasAssertions();
-    const artifact = artifactFixture();
     const member = humanPrincipal("member", membershipRoles.member);
     const administrator = humanPrincipal(
       "administrator",
@@ -48,58 +70,57 @@ describe("authorization policy", () => {
     const unscopedService = servicePrincipal("reader", []);
 
     await expectAllowed((authorization) =>
-      authorization.requireArtifactRead(member)
+      authorization.requireArtifactRead(member, artifactScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireArtifactListing(member)
+      authorization.requireArtifactListing(member, projectScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireArtifactRead(readerService)
+      authorization.requireArtifactRead(readerService, artifactScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireArtifactManagement(member)
+      authorization.requireArtifactManagement(member, artifactScope, "artifact.edit")
     );
     await expectAllowed((authorization) =>
-      authorization.requireArtifactManagement(administrator)
+      authorization.requireArtifactManagement(administrator, artifactScope, "artifact.edit")
     );
     await expectAllowed((authorization) =>
-      authorization.requireArtifactManagement(managerService)
+      authorization.requireArtifactManagement(managerService, artifactScope, "artifact.edit")
     );
     await expectAllowed((authorization) =>
-      authorization.requireContentSession(member, artifact)
+      authorization.requireContentSession(member, artifactScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireVersionPublication(member)
+      authorization.requireVersionPublication(member, artifactScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireVersionPublication(administrator)
+      authorization.requireVersionPublication(administrator, artifactScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireVersionPublication(scopedService)
+      authorization.requireVersionPublication(scopedService, artifactScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireVersionPublication(unscopedService)
+      authorization.requireVersionPublication(unscopedService, artifactScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireArtifactRead(unscopedService)
+      authorization.requireArtifactRead(unscopedService, artifactScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireArtifactListing(unscopedService).pipe(Effect.asVoid)
+      authorization.requireArtifactListing(unscopedService, projectScope).pipe(Effect.asVoid)
     );
   });
 
   test("foundation: another installation or an unscoped service cannot acquire authority", async () => {
     expect.hasAssertions();
-    const artifact = artifactFixture();
     const foreignAdministrator: Principal = {
       ...humanPrincipal("foreign-admin", membershipRoles.administrator),
       installationId: "installation-b",
     };
     await expectDenied((authorization) =>
-      authorization.requireContentSession(foreignAdministrator, artifact)
+      authorization.requireContentSession(foreignAdministrator, artifactScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireArtifactCreation(servicePrincipal("unscoped", []))
+      authorization.requireArtifactCreation(servicePrincipal("unscoped", []), projectScope)
     );
   });
 
@@ -125,38 +146,38 @@ describe("authorization policy", () => {
     };
 
     await expectAllowed((authorization) =>
-      authorization.requireProjectAccess(member)
+      authorization.requireProjectAccess(member, projectScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireProjectAccess(reader)
+      authorization.requireProjectAccess(reader, projectScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireProjectAccess(projectManager)
+      authorization.requireProjectAccess(projectManager, projectScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireProjectManagement(administrator)
+      authorization.requireProjectManagement(administrator, projectScope)
     );
     await expectAllowed((authorization) =>
-      authorization.requireProjectManagement(projectManager)
+      authorization.requireProjectManagement(projectManager, projectScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireProjectManagement(member)
+      authorization.requireProjectManagement(member, projectScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireProjectAccess(unscoped)
+      authorization.requireProjectAccess(unscoped, projectScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireProjectAccess(foreignAdministrator)
+      authorization.requireProjectAccess(foreignAdministrator, projectScope)
     );
     await expectDenied((authorization) =>
-      authorization.requireProjectManagement(foreignAdministrator)
+      authorization.requireProjectManagement(foreignAdministrator, projectScope)
     );
   });
 
   async function expectAllowed(
     operation: (
       authorization: AuthorizationService["Service"],
-    ) => Effect.Effect<void, AuthorizationDenied>,
+    ) => Effect.Effect<void, ScopedDenial>,
   ): Promise<void> {
     const result = await runtime.runPromise(
       Effect.result(AuthorizationService.use(operation)),
@@ -167,7 +188,7 @@ describe("authorization policy", () => {
   async function expectDenied(
     operation: (
       authorization: AuthorizationService["Service"],
-    ) => Effect.Effect<void, AuthorizationDenied>,
+    ) => Effect.Effect<void, ScopedDenial>,
   ): Promise<void> {
     const result = await runtime.runPromise(
       Effect.result(AuthorizationService.use(operation)),
@@ -178,19 +199,6 @@ describe("authorization policy", () => {
     })).toBe("AuthorizationDenied");
   }
 });
-
-function artifactFixture(): ArtifactRecord {
-  return {
-    accessSetting: "account_required",
-    createdAt: "2026-08-13T00:00:00.000Z",
-    currentVersionId: "version-1",
-    deletedAt: null,
-    id: "artifact-1",
-    name: "Authorization fixture",
-    projectId: "prj_default",
-    tags: [],
-  };
-}
 
 function humanPrincipal(
   id: string,

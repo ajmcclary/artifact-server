@@ -325,7 +325,7 @@ interface LinkedArtifactOperations {
     command: LinkedArtifactReadCommand,
   ) => Effect.Effect<
     SourceBindingRecord | null,
-    AuthorizationDenied | ArtifactRepositoryFailure | ProjectManagementFailure
+    ArtifactNotFound | AuthorizationDenied | ArtifactRepositoryFailure | ProjectManagementFailure
   >;
   readonly relinkArtifact: (
     command: RelinkArtifactCommand,
@@ -516,11 +516,11 @@ function makeLinkedArtifactService(
 
   const linkArtifact = Effect.fn("LinkedArtifactService.linkArtifact")(
     function*(command: LinkArtifactCommand) {
-      yield* authorization.requireArtifactCreation(command.principal);
       const project = yield* resolveProject(
         command.principal,
         command.projectId,
       );
+      yield* authorization.requireArtifactCreation(command.principal, {projectId: project.id});
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const canonical = yield* runLadder(command.path);
       const entryPath = fileNameOf(canonical);
@@ -717,10 +717,13 @@ function makeLinkedArtifactService(
 
   const captureArtifact = Effect.fn("LinkedArtifactService.captureArtifact")(
     function*(command: CaptureArtifactCommand) {
-      yield* authorization.requireVersionPublication(command.principal);
       const project = yield* resolveProject(
         command.principal,
         command.projectId,
+      );
+      yield* authorization.requireVersionPublication(
+        command.principal,
+        {artifactId: command.artifactId, projectId: project.id},
       );
       const binding = yield* requireBinding(project.id, command.artifactId);
       const observation = yield* runEngine(() =>
@@ -789,10 +792,13 @@ function makeLinkedArtifactService(
 
   const relinkArtifact = Effect.fn("LinkedArtifactService.relinkArtifact")(
     function*(command: RelinkArtifactCommand) {
-      yield* authorization.requireVersionPublication(command.principal);
       const project = yield* resolveProject(
         command.principal,
         command.projectId,
+      );
+      yield* authorization.requireVersionPublication(
+        command.principal,
+        {artifactId: command.artifactId, projectId: project.id},
       );
       yield* requireBinding(project.id, command.artifactId);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
@@ -853,10 +859,13 @@ function makeLinkedArtifactService(
 
   const observeBinding = Effect.fn("LinkedArtifactService.observeBinding")(
     function*(command: LinkedArtifactReadCommand) {
-      yield* authorization.requireArtifactRead(command.principal);
       const project = yield* resolveProject(
         command.principal,
         command.projectId,
+      );
+      yield* authorization.requireArtifactRead(
+        command.principal,
+        {artifactId: command.artifactId, projectId: project.id},
       );
       const binding = yield* dependencies.bindings.findSourceBinding(
         project.id,
@@ -898,7 +907,7 @@ function makeLinkedArtifactService(
     }
     yield* authorization.requireContentSession(
       command.principal,
-      current.artifact,
+      {artifactId: current.artifact.id, projectId: project.id},
     );
     yield* requireBinding(project.id, command.artifactId);
     const contentToken = liveContentToken(command.artifactId);

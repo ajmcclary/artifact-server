@@ -18,6 +18,7 @@ import {SystemIdGenerator} from "../../src/core/system.js";
 import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
 import {LocalStagingStore} from "../../src/storage/local-staging-store.js";
+import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {
@@ -1444,6 +1445,7 @@ async function localOwnerDeactivationByAnotherAdministrator(): Promise<{
     apiToken: Redacted.make("local-owner-administrator-test-token"),
     blobs: new LocalBlobStore(path.join(dataDirectory, "blobs")),
     bootstrapAdministratorEmail: "local-owner@example.test",
+    access: new SqliteAccessRepository(databasePath, new MutableClock("2026-08-13T08:00:00.000Z")),
     clock: new MutableClock("2026-08-13T08:00:00.000Z"),
     dispatches: repository,
     externalApiBearerVerifier: null,

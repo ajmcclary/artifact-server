@@ -10,6 +10,7 @@ import {SystemIdGenerator} from "../../src/core/system.js";
 import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
 import {LocalStagingStore} from "../../src/storage/local-staging-store.js";
+import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {MutableClock} from "./agent-dispatch.js";
@@ -28,7 +29,9 @@ export async function startInvitationRuntime() {
   const repository = new SqliteArtifactRepository(databasePath);
   const identityRepository = new SqliteIdentityRepository(databasePath);
   const clock = new MutableClock("2026-10-06T10:00:00.000Z");
+  const accessRepository = new SqliteAccessRepository(databasePath, clock);
   const runtime = ManagedRuntime.make(createLocalApplicationLayer({
+    access: accessRepository,
     apiToken: Redacted.make("invitation-runtime-test-token"),
     blobs: new LocalBlobStore(path.join(dataDirectory, "blobs")),
     bootstrapAdministratorEmail: "jordan@acme.test",
@@ -69,6 +72,7 @@ export async function startInvitationRuntime() {
     signIn,
     stop: async () => {
       await runtime.dispose();
+      accessRepository.close();
       identityRepository.close();
       repository.close();
       await rm(dataDirectory, {force: true, recursive: true});

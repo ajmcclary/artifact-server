@@ -88,6 +88,7 @@ import {
 } from "../application/content-variants.js";
 import {currentVersionEntries} from "../application/current-version-entries.js";
 import {nodeBrotliVariantCompressor} from "../http/node-variant-compressor.js";
+import {SqliteAccessRepository} from "../storage/sqlite-access-repository.js";
 import {SqliteContentVariantIndex} from "../storage/sqlite-content-variant-index.js";
 
 export interface LocalRuntimeConfig {
@@ -244,6 +245,7 @@ export async function createLocalRuntime(
       }
       : undefined;
   const contentVariantIndex = new SqliteContentVariantIndex(databasePath, installationId, runtimeClock);
+  const accessRepository = new SqliteAccessRepository(databasePath, runtimeClock);
   // Builds log through the application runtime, which exists only after the layer is built.
   let variantLogRuntime: ApplicationRuntime | null = null;
   const contentVariants = new ContentVariants({
@@ -267,12 +269,14 @@ export async function createLocalRuntime(
   const resourceLayer = Layer.effectDiscard(
     Effect.acquireRelease(
       Effect.succeed({
+        accessRepository,
         contentVariantIndex,
         gitHistoryIdentityStore,
         identityRepository,
         repository,
       }),
       (owned) => Effect.sync(() => {
+        owned.accessRepository.close();
         owned.contentVariantIndex.close();
         owned.gitHistoryIdentityStore?.close();
         owned.identityRepository.close();
@@ -281,6 +285,7 @@ export async function createLocalRuntime(
     ),
   );
   let applicationAdapters: Parameters<typeof createLocalApplicationLayer>[0] = {
+    access: accessRepository,
     publishedContent: contentVariants,
     apiToken: config.browserAccess.mode === browserAccessModes.localOwner
       ? apiToken

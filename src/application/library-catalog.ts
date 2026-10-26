@@ -180,7 +180,7 @@ function makeLibraryCatalogService(
   });
 
   const read = Effect.fn("LibraryCatalogService.read")(function*(principal: Principal) {
-    yield* authorization.requireArtifactListing(principal);
+    yield* authorization.requireArtifactDiscovery(principal);
     const projects = (yield* dependencies.listProjects())
       .toSorted((left, right) => left.name.localeCompare(right.name));
     const listed: ListedArtifact[] = [];

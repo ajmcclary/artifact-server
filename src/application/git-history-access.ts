@@ -103,8 +103,11 @@ function makeGitHistoryAccessService(
   const issueCloneCredential = Effect.fn(
     "GitHistoryAccessService.issueCloneCredential",
   )(function*(command: IssueGitHistoryCloneCommand) {
-    yield* authorization.requireArtifactRead(command.principal);
     yield* projects.getProject(command);
+    yield* authorization.requireArtifactHistory(
+      command.principal,
+      {artifactId: command.artifactId, projectId: command.projectId},
+    );
     const artifact = yield* dependencies.repository.findArtifact(
       command.projectId,
       command.artifactId,

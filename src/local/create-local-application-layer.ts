@@ -1,3 +1,4 @@
+import type {AccessRepository} from "../core/access-ports.js";
 import {createHash, randomUUID, timingSafeEqual} from "node:crypto";
 
 import { DateTime, Effect, Layer, Redacted } from "effect";
@@ -35,7 +36,7 @@ import {
   type ArtifactManagementDependencies,
   ArtifactManagementService,
 } from "../application/artifact-management.js";
-import { AuthorizationService } from "../application/authorization.js";
+import { type AccessRepositoryEffects, AuthorizationService } from "../application/authorization.js";
 import {
   type CompareArtifactDependencies,
   CompareArtifactService,
@@ -163,6 +164,8 @@ import type {LibraryDatesStore} from "../core/library.js";
 
 /** Concrete Node adapters reused by the Effect application layer. */
 export interface ApplicationAdapters {
+  /** Installation policy, project access settings, and member grants (ADR 0033). */
+  readonly access: AccessRepository;
   readonly apiToken: Redacted.Redacted | null;
   readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
   readonly blobs: BlobStore;
@@ -1284,6 +1287,8 @@ export function createApplicationLayer(
     secrets: identitySecrets,
   });
   const authorizationLayer = AuthorizationService.layer({
+    access: accessRepositoryEffects(adapters.access),
+    clock,
     installationId: adapters.installationId,
   });
   const activityLayer = ActivityService.layer({
@@ -1805,6 +1810,26 @@ function classifyCommentFailure(
     return cause;
   }
   return repositoryFailure(operation, cause);
+}
+
+/** Lift the access store into Effect with redacted repository failures. */
+export function accessRepositoryEffects(access: AccessRepository): AccessRepositoryEffects {
+  const read = <A>(run: () => Promise<A>) =>
+    Effect.tryPromise({try: run, catch: (cause) => repositoryFailure("readAccess", cause)});
+  const write = <A>(run: () => Promise<A>) =>
+    Effect.tryPromise({try: run, catch: (cause) => repositoryFailure("writeAccess", cause)});
+  return {
+    deleteGrant: (command) => write(() => access.deleteGrant(command)),
+    findSubjectGrants: (command) => read(() => access.findSubjectGrants(command)),
+    listMemberGrants: (installationId, memberId) => read(() => access.listMemberGrants(installationId, memberId)),
+    listProjectAccess: (installationId) => read(() => access.listProjectAccess(installationId)),
+    listProjectGrants: (installationId, projectId) => read(() => access.listProjectGrants(installationId, projectId)),
+    readAccessPolicy: (installationId) => read(() => access.readAccessPolicy(installationId)),
+    readProjectAccess: (installationId, projectId) => read(() => access.readProjectAccess(installationId, projectId)),
+    upsertGrant: (command) => write(() => access.upsertGrant(command)),
+    writeAccessPolicy: (command) => write(() => access.writeAccessPolicy(command)),
+    writeProjectAccess: (command) => write(() => access.writeProjectAccess(command)),
+  };
 }
 
 // A failed span renders its whole cause chain, including a driver error's

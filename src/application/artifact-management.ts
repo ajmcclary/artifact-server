@@ -1,3 +1,4 @@
+import {permissions} from "../core/permissions.js";
 import { createHash } from "node:crypto";
 
 import { Context, DateTime, Effect, Layer } from "effect";
@@ -397,7 +398,7 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactRead(command.principal);
+      yield* authorization.requireArtifactRead(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const current = yield* requireVersion(
         project.id,
@@ -418,7 +419,7 @@ function makeArtifactManagementService(
       // lookup and a caller who cannot read learns nothing about existence.
       // The artifact and version reads are independent, so they run in one
       // round of concurrent queries.
-      yield* authorization.requireArtifactRead(command.principal);
+      yield* authorization.requireArtifactRead(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const [artifact, version] = yield* Effect.all([
         dependencies.repository.findArtifact(project.id, command.artifactId),
         dependencies.repository.findVersionRecord(
@@ -434,6 +435,9 @@ function makeArtifactManagementService(
         return yield* new VersionNotFound({
           message: "The saved version does not exist on this artifact.",
         });
+      }
+      if (version.version.id !== artifact.currentVersionId) {
+        yield* authorization.requireArtifactHistory(command.principal, {artifactId: command.artifactId, projectId: project.id});
       }
       return {artifact, saved: version};
     },
@@ -454,7 +458,7 @@ function makeArtifactManagementService(
       );
       // Read authority depends only on the caller, so it is checked before any
       // lookup and a caller who cannot read learns nothing about existence.
-      yield* authorization.requireArtifactRead(command.principal);
+      yield* authorization.requireArtifactHistory(command.principal, {artifactId: command.artifactId, projectId: project.id});
       if (command.limit === null) {
         // The artifact read and the version listing are independent, so they
         // run concurrently.
@@ -497,8 +501,11 @@ function makeArtifactManagementService(
       command.principal,
       command.projectId,
     );
-    yield* authorization.requireArtifactRead(command.principal);
+    yield* authorization.requireArtifactRead(command.principal, {artifactId: command.artifactId, projectId: project.id});
     const artifact = yield* requireArtifact(project.id, command.artifactId);
+    if (command.versionId !== artifact.currentVersionId) {
+      yield* authorization.requireArtifactHistory(command.principal, {artifactId: command.artifactId, projectId: project.id});
+    }
     const version = yield* dependencies.repository.findVersionMetadata(
       project.id,
       artifact.id,
@@ -529,13 +536,13 @@ function makeArtifactManagementService(
           message: "The artifact page cursor does not match the selected sort.",
         });
       }
-      yield* authorization.requireArtifactListing(command.principal);
       const tags = yield* parseArtifactTags(command.tags);
       const search = normalizeArtifactSearch(command.search);
       const project = yield* resolveProjectForRead(
         command.principal,
         command.projectId,
       );
+      yield* authorization.requireArtifactListing(command.principal, {projectId: project.id});
       return yield* dependencies.repository.listArtifacts({
         comments,
         cursor: command.cursor,
@@ -560,7 +567,11 @@ function makeArtifactManagementService(
       project.id,
       command.artifactId,
     );
-    yield* authorization.requireArtifactManagement(command.principal);
+    yield* authorization.requireArtifactManagement(
+      command.principal,
+      {artifactId: artifact.id, projectId: project.id},
+      permissions.artifactHistory,
+    );
     return yield* dependencies.repository.listArtifactActions({
       artifactId: artifact.id,
       cursor: command.cursor,
@@ -575,7 +586,7 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactManagement(command.principal);
+      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       yield* requireVersion(project.id, artifact.id, command.versionId);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
@@ -608,7 +619,7 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactManagement(command.principal);
+      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactShare);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
@@ -637,7 +648,7 @@ function makeArtifactManagementService(
   const renameArtifact = Effect.fn("ArtifactManagementService.renameArtifact")(
     function*(command: RenameArtifactCommand) {
       const project = yield* resolveProjectForRead(command.principal, command.projectId);
-      yield* authorization.requireArtifactManagement(command.principal);
+      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       if (project.archivedAt !== null) return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
       const name = yield* parseRenamedArtifactName(command.name);
@@ -672,7 +683,7 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactManagement(command.principal);
+      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const tags = yield* parseArtifactTags(command.tags);
@@ -705,7 +716,7 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactManagement(command.principal);
+      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactDelete);
       const artifact = yield* requireArtifactForAdministration(
         project.id,
         command.artifactId,

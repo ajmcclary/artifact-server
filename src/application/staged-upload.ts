@@ -386,11 +386,12 @@ function makeStagedUploadService(
     function*(
     command: CreateStagedUploadCommand,
   ): Effect.fn.Return<CreateStagedUploadResult, StagedUploadFailure> {
-      yield* authorization.requirePublicationPreparation(command.principal);
+      yield* authorization.requirePublicationPreparation(command.principal, null);
       const project = yield* projects.resolveActiveProject({
         principal: command.principal,
         projectId: command.projectId ?? null,
       });
+      yield* authorization.requirePublicationPreparation(command.principal, {projectId: project.id});
 
       if (command.idempotencyKey === undefined) {
         const manifest = yield* parseManifest({
@@ -550,8 +551,13 @@ function makeStagedUploadService(
       const result = yield* createUpload(command);
       const reuse = dependencies.reuse;
       if (result.kind === "committed" || reuse === undefined) return result;
-      const canRead = yield* authorization.requireArtifactRead(command.principal).pipe(
-        Effect.as(true), Effect.catchTag("AuthorizationDenied", () => Effect.succeed(false)),
+      // Reuse reveals which bytes the project already holds, so it needs read authority there.
+      const canRead = yield* authorization.requireArtifactListing(
+        command.principal,
+        {projectId: result.upload.projectId},
+      ).pipe(
+        Effect.as(true),
+        Effect.catchTag(["AuthorizationDenied", "ProjectNotFound"], () => Effect.succeed(false)),
       );
       if (!canRead) return result;
       const upload = result.upload;
@@ -715,7 +721,7 @@ function makeStagedUploadService(
     function*(
     command: CommitStagedUploadCommand,
   ): Effect.fn.Return<CommitStagedUploadResult, StagedUploadFailure> {
-      yield* authorization.requirePublicationPreparation(command.principal);
+      yield* authorization.requirePublicationPreparation(command.principal, null);
       // An explicit project can be archived after a successful commit. Let the
       // repository replay that exact idempotent result; it still rejects every
       // genuinely new publication into the archived project.
@@ -728,6 +734,7 @@ function makeStagedUploadService(
           principal: command.principal,
           projectId: command.projectId,
         });
+      yield* authorization.requirePublicationPreparation(command.principal, {projectId: project.id});
       const upload = yield* requiredUpload(
         project.id,
         command.uploadId,

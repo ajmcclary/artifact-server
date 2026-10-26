@@ -261,7 +261,7 @@ function makeContentAccessService(
     }
     yield* authorization.requireContentSession(
       command.principal,
-      current.artifact,
+      {artifactId: current.artifact.id, projectId: project.id},
     );
     const target = command.target.kind === "current"
       ? current.version

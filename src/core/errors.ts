@@ -535,6 +535,8 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "setProjectArchive",
       "storeProjectGitHistorySetting",
       "writePreparedManifestEntries",
+      "readAccess",
+      "writeAccess",
     ]),
   },
 ) {}

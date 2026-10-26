@@ -46,6 +46,7 @@ import {SystemIdGenerator} from "../../src/core/system.js";
 import {createLocalApplicationLayer} from "../../src/local/create-local-application-layer.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
 import {LocalStagingStore} from "../../src/storage/local-staging-store.js";
+import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {
@@ -764,6 +765,7 @@ describe("publication preparation", () => {
       apiToken: Redacted.make("test-api-token"),
       blobs: blobStore,
       bootstrapAdministratorEmail: "admin@example.test",
+      access: new SqliteAccessRepository(path.join(dataDirectory, "artifact-server.db"), controlledClock),
       clock: controlledClock,
       dispatches: repository,
       externalApiBearerVerifier: null,

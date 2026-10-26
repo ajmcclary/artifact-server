@@ -15,6 +15,7 @@ import {
   type ReadinessComponent,
   type ReadinessReport,
 } from "../../../src/http/create-http-app.js";
+import {createD1AccessRepository} from "./d1-access-repository.js";
 import {createApplicationLayer} from "../../../src/local/create-local-application-layer.js";
 import {
   defaultCompletedRequestLogSampleRate,
@@ -184,7 +185,9 @@ async function createCloudflareRuntime(
     : oidcIdentityProvider !== null
     ? privateTeamBrowserAccess(browserLoginKinds.oidc)
     : missingIdentityProvider();
+  const clock = new SystemClock();
   const applicationAdapters: Parameters<typeof createApplicationLayer>[0] = {
+    access: createD1AccessRepository(environment.ARTIFACT_SERVER_D1_DATABASE, clock),
     apiToken: Redacted.make(environment.ARTIFACT_SERVER_API_TOKEN, {
       label: "cloudflare-api-token",
     }),
@@ -194,7 +197,7 @@ async function createCloudflareRuntime(
     blobs,
     bootstrapAdministratorEmail:
       environment.ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL,
-    clock: new SystemClock(),
+    clock,
     dispatches: repository,
     externalApiBearerVerifier: null,
     externalMcpBearerVerifier: null,

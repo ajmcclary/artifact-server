@@ -14,6 +14,7 @@ import {createLocalApplicationLayer} from "../../src/local/create-local-applicat
 import {defaultStagingCleanupPolicy} from "../../src/lifecycle/staging-cleanup.js";
 import {LocalBlobStore} from "../../src/storage/local-blob-store.js";
 import {LocalStagingStore} from "../../src/storage/local-staging-store.js";
+import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 import {SqliteIdentityRepository} from "../../src/storage/sqlite-identity-repository.js";
 import {
@@ -368,6 +369,7 @@ function makeCleanupRuntime(
     apiToken: Redacted.make(installation.apiToken),
     blobs,
     bootstrapAdministratorEmail: "admin@example.test",
+    access: new SqliteAccessRepository(databasePath, clock),
     clock,
     dispatches: repository,
     externalApiBearerVerifier: null,
