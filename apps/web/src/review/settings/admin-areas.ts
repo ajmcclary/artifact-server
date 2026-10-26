@@ -3,7 +3,7 @@ import {usDate, usDateTime} from "@/ui/activity-model";
 /** The administration menu's remembered pin and width, under the review panel store. */
 export const adminMenuPanelId = "admin-areas";
 
-export type AdminAreaId = "apiKeys" | "invites" | "mcp" | "members" | "publicLinks";
+export type AdminAreaId = "accessPolicy" | "apiKeys" | "invites" | "mcp" | "members" | "publicLinks";
 
 /** One administration area: its menu row, route, and one-line lede. */
 export interface AdminArea {
@@ -24,7 +24,7 @@ export const adminAreas: readonly AdminArea[] = [
     icon: "bi-people",
     id: "members",
     label: "Members",
-    lede: "Members can open every project in this installation.",
+    lede: "Members open each project according to that project's access.",
   },
   {
     administratorOnly: true,
@@ -43,6 +43,15 @@ export const adminAreas: readonly AdminArea[] = [
     id: "apiKeys",
     label: "API keys",
     lede: "Keys let agents and automation act with the capabilities you grant.",
+  },
+  {
+    administratorOnly: true,
+    group: "People and access",
+    href: "/review/settings/access-policy",
+    icon: "bi-shield-check",
+    id: "accessPolicy",
+    label: "Access policy",
+    lede: "Limits that no project, grant, or share link can exceed.",
   },
   {
     administratorOnly: true,

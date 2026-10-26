@@ -141,6 +141,8 @@ describe("parseReviewRoute", () => {
       .toEqual({kind: "settings", settings: {kind: "apiKeys"}});
     expect(routeOf("/review/settings/public-links"))
       .toEqual({kind: "settings", settings: {kind: "publicLinks"}});
+    expect(routeOf("/review/settings/access-policy"))
+      .toEqual({kind: "settings", settings: {kind: "accessPolicy"}});
     expect(routeOf("/review/settings/projects/a%2Fb"))
       .toEqual({kind: "settings", settings: {kind: "notFound"}});
     expect(routeOf("/review/settings/unknown"))

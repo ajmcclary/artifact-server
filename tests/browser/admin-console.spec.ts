@@ -34,7 +34,7 @@ test.describe("Admin console", () => {
       await page.getByRole("menuitem", {name: "Administration"}).click();
       await expect(page).toHaveURL(/\/review\/settings\/members$/u);
       await expect(page.getByRole("heading", {level: 1, name: "Members"})).toBeVisible();
-      await expect(page.getByText("Members can open every project in this installation.")).toBeVisible();
+      await expect(page.getByText("Members open each project according to that project's access.")).toBeVisible();
       const areas = page.getByRole("navigation", {name: "Administration areas"});
       await Promise.all(["Members", "API keys", "Public links", "MCP & WebMCP"].map((label) =>
         expect(areas.getByRole("link", {exact: true, name: label})).toBeVisible()));

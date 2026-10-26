@@ -571,6 +571,19 @@ export function createApplicationLayer(
     },
   };
   const projectDependencies: ProjectManagementDependencies = {
+    applyDefaultAccess: (projectId, attribution) => Effect.gen(function*() {
+      const access = accessRepositoryEffects(adapters.access);
+      const {policy} = yield* access.readAccessPolicy(adapters.installationId);
+      if (policy.projects.defaultMode !== "restricted") return;
+      yield* access.writeProjectAccess({
+        accessMode: "restricted",
+        attribution,
+        defaultMemberRole: "editor",
+        expectedRevision: 0,
+        installationId: adapters.installationId,
+        projectId,
+      });
+    }),
     clock,
     ids: adapters.ids,
     installationId: adapters.installationId,

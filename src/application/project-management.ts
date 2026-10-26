@@ -15,7 +15,7 @@ import {
   ProjectNotFound,
   ProjectSelectionRequired,
 } from "../core/errors.js";
-import {attributionOf} from "../core/action-attribution.js";
+import {type ActionAttribution, attributionOf} from "../core/action-attribution.js";
 import type {Principal} from "../core/identity.js";
 import type {ProjectRecord} from "../core/model.js";
 import type {
@@ -76,6 +76,11 @@ export interface ProjectManagementRepository {
 
 /** Dependencies used to construct project lifecycle operations. */
 export interface ProjectManagementDependencies {
+  /** Apply the installation policy's default access mode to a project just created (ADR 0033). */
+  readonly applyDefaultAccess: (
+    projectId: string,
+    attribution: ActionAttribution,
+  ) => Effect.Effect<void, ArtifactRepositoryFailure>;
   readonly clock: ApplicationClock;
   readonly ids: IdGenerator;
   readonly installationId: string;
@@ -201,14 +206,16 @@ function makeProjectManagementService(
     function*(command: CreateProjectCommand) {
       yield* authorization.requireProjectCreation(command.principal);
       const name = yield* parseProjectName(command.name);
+      const attribution = attributionOf(command.principal);
       const project = yield* dependencies.repository.createProject({
         archivedAt: null,
-        attribution: attributionOf(command.principal),
+        attribution,
         createdAt: DateTime.formatIso(yield* dependencies.clock.now),
         id: dependencies.ids.projectId(),
         installationId: dependencies.installationId,
         name,
       });
+      yield* dependencies.applyDefaultAccess(project.id, attribution);
       yield* Effect.annotateCurrentSpan({"artifact.project.id": project.id});
       return project;
     },

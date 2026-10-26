@@ -40,6 +40,7 @@ import {mediaTypeEssence} from "./workspace/page-inventory.ts";
 import {PreviewCanvas} from "./workspace/preview-canvas.tsx";
 import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {exactReviewLink, SharePopover} from "./workspace/share-popover.tsx";
+import {useEffectiveAccess} from "./workspace/use-effective-access.ts";
 import {VersionsTab} from "./workspace/versions-tab.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useArtifactCatalog} from "./workspace/use-artifact-catalog.ts";
@@ -427,6 +428,7 @@ function ProjectReview({
   } = record;
   const [comparisonView, setComparisonView] = useState<ComparisonTab | null>(null);
   const [comparisonPair, setComparisonPair] = useState<{readonly from: string; readonly to: string} | null>(null);
+  const effectiveAccess = useEffectiveAccess(projectId, selectedArtifactId);
   const activity = useArtifactActivity(projectId, selectedArtifactId, comparisonView === "activity");
   const versionComparison = useVersionComparison(projectId, selectedArtifactId);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
@@ -644,26 +646,11 @@ function ProjectReview({
     }
   };
 
-  const canComment = selectedProject?.archivedAt === null
-    && (
-      (
-        session.principal.kind === "human"
-        && session.principal.authorizedByPrincipalId === null
-      )
-      || session.principal.capabilities.includes("comment:write")
-    );
-  const canManageArtifacts = selectedProject?.archivedAt === null && (
-    (
-      session.principal.kind === "human"
-      && session.principal.authorizedByPrincipalId === null
-    )
-    || session.principal.capabilities.includes("artifact:manage:any")
-  );
-  const canDeleteAnyComment = (
-    session.principal.kind === "human"
-    && session.principal.authorizedByPrincipalId === null
-    && session.principal.membershipRole === "administrator"
-  ) || session.principal.capabilities.includes("artifact:manage:any");
+  // Controls follow the server's effective access for this artifact (ADR 0033); the server still refuses.
+  const canComment = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("comment.write");
+  const canManageArtifacts = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("artifact.edit");
+  const canShare = effectiveAccess.permissions.has("artifact.share");
+  const canDeleteAnyComment = effectiveAccess.permissions.has("comment.moderate");
   const previewKind = reviewPreviewKind(selectedVersion, selectedPath);
   const galleryCanvas = useDesignGalleryCanvas({
     announce,
@@ -1210,6 +1197,19 @@ function ProjectReview({
     />
   );
 
+  if (effectiveAccess.status === "gone") {
+    return (
+      <SurfaceState
+        count={0}
+        emptyBody="Who can open this project changed. Ask a project manager if you still need it."
+        emptyIcon="bi-shield-lock"
+        emptyTitle="You no longer have access to this project"
+        noun="projects"
+        phase="ready"
+      />
+    );
+  }
+
   return (
     <ScenarioSessionProvider
       artifactId={selectedArtifactId}
@@ -1315,7 +1315,7 @@ function ProjectReview({
               reloading={comments.loading}
               selectedPath={selectedPath}
               selectedVersion={selectedVersion}
-              share={sharePopover("toolbar")}
+              share={canShare ? sharePopover("toolbar") : null}
               // The docked list already names the artifact; collapsed, the name joins the breadcrumb.
               showName={!catalogDocked}
               versions={versions}
@@ -1371,7 +1371,7 @@ function ProjectReview({
                       onShow={showFocusControls}
                       onToggleComments={() => setFocusCommentsOpen((open) => !open)}
                       restoreRef={restoreControlsRef}
-                      share={sharePopover("focus")}
+                      share={canShare ? sharePopover("focus") : null}
                     />
                   ) : null}
                   focusTitleControls={focusMode ? <FocusAnnotationControl annotate={annotateToggle} collapsed={focusControlsCollapsed} /> : null}

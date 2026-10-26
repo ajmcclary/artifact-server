@@ -50,7 +50,7 @@ describe("settings routing", () => {
 
   it("ADM-006-F: direct unauthorized settings routes resolve to forbidden states, not empty data", () => {
     const member = settingsAccess(principal({}));
-    for (const kind of ["members", "invites", "apiKeys", "publicLinks"] as const) {
+    for (const kind of ["members", "invites", "apiKeys", "publicLinks", "accessPolicy"] as const) {
       expect(resolveSettingsView({kind}, member)).toEqual({kind: "administratorPermission"});
     }
     expect(resolveSettingsView({kind: "invites"}, settingsAccess(principal({membershipRole: "administrator"}))))
@@ -65,6 +65,7 @@ describe("settings routing", () => {
       .toEqual({kind: "administratorPermission"});
     const administrator = settingsAccess(principal({membershipRole: "administrator"}));
     expect(resolveSettingsView({kind: "publicLinks"}, administrator)).toEqual({kind: "publicLinks"});
+    expect(resolveSettingsView({kind: "accessPolicy"}, administrator)).toEqual({kind: "accessPolicy"});
     expect(resolveSettingsView({kind: "notFound"}, administrator)).toEqual({kind: "notFound"});
     expect(resolveSettingsView({kind: "projects"}, administrator))
       .toEqual({href: projectsHref(null), kind: "redirect"});

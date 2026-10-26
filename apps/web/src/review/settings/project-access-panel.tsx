@@ -17,6 +17,7 @@ import {
   RequestFailure,
   type LedgerColumn,
 } from "./admin-parts.tsx";
+import {AccessExplainer} from "./access-explainer.tsx";
 import {PermissionOverridePopover} from "./permission-override-popover.tsx";
 import {
   type Permission,
@@ -28,6 +29,7 @@ import {
 
 export interface ProjectAccessPanelProps {
   readonly projectId: string;
+  readonly projectName: string;
 }
 
 type AccessMember = ProjectAccessDetails["members"][number];
@@ -42,7 +44,7 @@ const isRole = (value: string): value is ProjectRole =>
   projectRoleOrder.some((role) => role === value);
 
 /** One project's access mode, default member role, and per-member grants. */
-export function ProjectAccessPanel({projectId}: ProjectAccessPanelProps) {
+export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelProps) {
   const [details, setDetails] = useState<ProjectAccessDetails | null>(null);
   const [actor, setActor] = useState<ReadonlySet<Permission>>(new Set());
   const [ceiling, setCeiling] = useState<readonly Permission[] | null>(null);
@@ -237,6 +239,7 @@ export function ProjectAccessPanel({projectId}: ProjectAccessPanelProps) {
         </AdminActions>
       </AdminStack>
       <Ledger ariaLabel="Project members" columns={columns} rowKey={(member) => member.memberId} rows={details.members} />
+      <AccessExplainer artifactId={null} members={details.members} projectId={projectId} projectName={projectName} />
       <ConfirmDialog
         confirmLabel="Restrict project"
         message={confirming === null ? null : restrictConfirmation(confirming)}

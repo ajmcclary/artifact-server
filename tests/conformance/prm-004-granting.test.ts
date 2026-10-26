@@ -254,4 +254,16 @@ describe("granting access", () => {
     expect(read.grants.map((grant) => grant.memberId)).toEqual([sam.id]);
     expect(dana.id).not.toBe(sam.id);
   });
+
+  test("a new project starts restricted when the policy says so", async () => {
+    await harness.runtime.runPromise(AccessAdministrationService.use((service) => service.writePolicy({
+      expectedRevision: 0,
+      policy: {...defaultAccessPolicy, projects: {defaultMode: "restricted"}},
+      principal: harness.administrator,
+    })));
+    const projectId = await harness.createProject("Private by default");
+    const access = await harness.access.readProjectAccess(harness.installationId, projectId);
+    expect(access).toMatchObject({accessMode: "restricted"});
+  });
+
 });

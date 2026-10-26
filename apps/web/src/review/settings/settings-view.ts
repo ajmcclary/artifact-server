@@ -9,6 +9,7 @@ export interface SettingsAccess {
 
 /** The one screen or state a settings URL shows for this principal. */
 export type SettingsView =
+  | {readonly kind: "accessPolicy"}
   | {readonly kind: "administratorPermission"}
   | {readonly kind: "apiKeys"}
   | {readonly kind: "mcp"; readonly administrator: boolean}
@@ -64,6 +65,8 @@ export function resolveSettingsView(route: SettingsRoute, access: SettingsAccess
       return access.administrator ? {kind: "invites"} : {kind: "administratorPermission"};
     case "apiKeys":
       return access.administrator ? {kind: "apiKeys"} : {kind: "administratorPermission"};
+    case "accessPolicy":
+      return access.administrator ? {kind: "accessPolicy"} : {kind: "administratorPermission"};
     case "publicLinks":
       break;
   }

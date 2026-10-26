@@ -354,7 +354,7 @@ export function ProjectSettings({
         </AdminPanel>
       )}
 
-      <ProjectAccessPanel key={project.id} projectId={project.id} />
+      <ProjectAccessPanel key={project.id} projectId={project.id} projectName={project.name} />
       <AdminPanel label="Artifacts in this project" padded={false} subtitle={artifactCountLabel(artifacts)}>
         <ProjectArtifactsBody artifacts={artifacts} project={project} />
       </AdminPanel>

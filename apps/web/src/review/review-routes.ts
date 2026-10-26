@@ -12,6 +12,7 @@ export type SettingsRoute =
   | {readonly kind: "invites"}
   | {readonly kind: "apiKeys"}
   | {readonly kind: "publicLinks"}
+  | {readonly kind: "accessPolicy"}
   | {readonly kind: "notFound"};
 
 /** The project, artifact, version, file, and view a review URL names; null means not named. */
@@ -72,6 +73,8 @@ export function parseSettingsRoute(pathname: string): SettingsRoute {
         return {kind: "apiKeys"};
       case "public-links":
         return {kind: "publicLinks"};
+      case "access-policy":
+        return {kind: "accessPolicy"};
       default:
         return {kind: "notFound"};
     }

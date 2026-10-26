@@ -3,6 +3,7 @@ import {useEffect} from "react";
 import type {Session} from "@/api/client";
 import {PageScaffold, SurfaceState} from "@/arkcase";
 import {navigateReview, type SettingsRoute} from "../review-routes.ts";
+import {AccessPolicyScreen} from "./access-policy-screen.tsx";
 import {ApiKeysScreen} from "./api-keys-screen.tsx";
 import {McpWebmcpScreen} from "./mcp-webmcp-screen.tsx";
 import {InvitesScreen} from "./invites-screen.tsx";
@@ -26,7 +27,7 @@ export function SettingsScreen({route, session}: SettingsScreenProps) {
     case "administratorPermission":
       return (
         <SettingsState
-          body="Only an installation administrator can manage members, API keys, and public links."
+          body="Only an installation administrator can manage members, API keys, public links, and the access policy."
           icon="bi-shield-lock"
           title="Administrator permission required"
         />
@@ -39,6 +40,8 @@ export function SettingsScreen({route, session}: SettingsScreenProps) {
       return <ApiKeysScreen />;
     case "publicLinks":
       return <PublicLinksScreen />;
+    case "accessPolicy":
+      return <AccessPolicyScreen />;
     case "mcp":
       break;
   }

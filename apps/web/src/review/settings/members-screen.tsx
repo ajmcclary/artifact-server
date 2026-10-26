@@ -8,6 +8,7 @@ import {
 import {AddRecordButton, AdminStack, nativeInputAttributes, RequestFailure} from "./admin-parts.tsx";
 import {AdminConsole, useAdminInspectorFullscreen} from "./admin-console.tsx";
 import {admittedLabel, dateOrDash, dateTimeOrDash} from "./admin-areas.ts";
+import {MemberGrants} from "./member-grants.tsx";
 import {useSelectedRecord} from "./use-selected-record.ts";
 
 interface MemberRow {
@@ -130,6 +131,7 @@ export function MembersScreen() {
           {label: "Last active", mono: true, value: dateTimeOrDash(selected.lastActiveAt)},
         ]}
       />
+      {selected.role === "administrator" ? null : <MemberGrants key={selected.id} memberId={selected.id} />}
     </SlideOver>
   );
   const activeCount = members.filter((member) => member.status === "active").length;

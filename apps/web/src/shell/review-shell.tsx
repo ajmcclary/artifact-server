@@ -302,6 +302,7 @@ function useScreenChange(title: string, announce: (message: string) => void, rou
 }
 
 const settingsTitles = {
+  accessPolicy: "Access policy",
   apiKeys: "API keys",
   invites: "Invites",
   mcp: "MCP & WebMCP",

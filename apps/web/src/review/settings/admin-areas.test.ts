@@ -12,17 +12,19 @@ import {
 import {describe, expect, it} from "vitest";
 
 describe("administration areas", () => {
-  it("groups the four areas for administrators and leaves only MCP for everyone else", () => {
+  it("groups the areas for administrators and leaves only MCP for everyone else", () => {
     expect(visibleAdminAreas(true).map((area) => [area.group, area.label])).toEqual([
       ["People and access", "Members"],
       ["People and access", "Invites"],
       ["People and access", "API keys"],
+      ["People and access", "Access policy"],
       ["Sharing", "Public links"],
       ["Integrations", "MCP & WebMCP"],
     ]);
     expect(visibleAdminAreas(false).map((area) => area.id)).toEqual(["mcp"]);
     expect(adminAreaById("apiKeys").href).toBe("/review/settings/api-keys");
     expect(adminAreaById("invites").href).toBe("/review/settings/invites");
+    expect(adminAreaById("accessPolicy").href).toBe("/review/settings/access-policy");
   });
 
   it("reads and writes the selected record without disturbing other query values", () => {
