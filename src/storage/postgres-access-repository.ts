@@ -497,7 +497,7 @@ export class PostgresAccessRepository implements AccessRepository, ShareLinkRepo
       const sql = yield* SqlClient;
       yield* sql.withTransaction(Effect.gen(function*() {
         const link = yield* findShareLink(command.installationId, command.guest.shareLinkId);
-        if (link === null) return yield* Effect.die(new Error("A guest needs an existing share link."));
+        if (link === null) throw new Error("A guest needs an existing share link.");
         yield* sql.unsafe(
           `INSERT INTO guest_principals
              (installation_id, id, share_link_id, generation, display_name, contact_email, created_at)
