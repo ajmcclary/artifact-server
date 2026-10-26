@@ -35,6 +35,7 @@ import {
   type LedgerColumn,
 } from "./admin-parts.tsx";
 import {EmptyProjectState} from "./empty-project.tsx";
+import {ProjectAccessPanel} from "./project-access-panel.tsx";
 
 type ProjectArtifact = ArtifactPage["artifacts"][number];
 
@@ -353,6 +354,7 @@ export function ProjectSettings({
         </AdminPanel>
       )}
 
+      <ProjectAccessPanel key={project.id} projectId={project.id} />
       <AdminPanel label="Artifacts in this project" padded={false} subtitle={artifactCountLabel(artifacts)}>
         <ProjectArtifactsBody artifacts={artifacts} project={project} />
       </AdminPanel>

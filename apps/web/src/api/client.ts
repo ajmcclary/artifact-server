@@ -4,6 +4,12 @@ import {readBoundedReviewHtml} from "./bounded-text";
 import {provenanceOutcomeSchema, viewsOutcomeSchema} from "./views.ts";
 import {previewKinds} from "../review/workspace/preview-index.ts";
 import {createPreviewLeaseStore} from "../review/preview-lease-store.ts";
+import {
+  type Permission,
+  permissionOrder,
+  type ProjectRole,
+  projectRoleOrder,
+} from "../review/settings/project-access-model.ts";
 import {browserStorage} from "../ui/density-model.ts";
 import {
   activityPageSchema,
@@ -128,6 +134,102 @@ const projectSchema = z.object({
   installationId: z.string(),
   name: z.string(),
 });
+const permissionSchema = z.enum(permissionOrder);
+const projectRoleSchema = z.enum(projectRoleOrder);
+const accessPolicySchema = z.object({
+  members: z.object({ memberCeiling: z.array(permissionSchema).nullable() }),
+  projects: z.object({ defaultMode: z.enum(["open", "restricted"]) }),
+  shareLinks: z.object({
+    enabled: z.boolean(),
+    guestPermissionsMax: z.array(permissionSchema),
+    linkCreators: z.enum(["sharers", "administrators"]),
+    maxExpiryDays: z.number().int().nullable(),
+  }),
+});
+const storedAccessPolicySchema = z.object({
+  policy: accessPolicySchema,
+  revision: z.number().int().nonnegative(),
+  updatedAt: z.string().nullable(),
+  updatedByPrincipalId: z.string().nullable(),
+});
+const projectAccessSchema = z.object({
+  accessMode: z.enum(["open", "restricted"]),
+  archived: z.boolean(),
+  defaultMemberRole: projectRoleSchema,
+  projectId: z.string(),
+  revision: z.number().int().nonnegative(),
+});
+const accessGrantSchema = z.object({
+  add: z.array(permissionSchema),
+  artifactId: z.string().nullable(),
+  createdAt: z.string(),
+  createdByPrincipalId: z.string(),
+  expiresAt: z.string().nullable(),
+  id: z.string(),
+  memberId: z.string(),
+  projectId: z.string(),
+  remove: z.array(permissionSchema),
+  revision: z.number().int().positive(),
+  role: projectRoleSchema,
+  updatedAt: z.string(),
+});
+const accessSourceSchema = z.discriminatedUnion("layer", [
+  z.object({ layer: z.literal("administrator") }),
+  z.object({ layer: z.literal("project_default"), role: projectRoleSchema }),
+  z.object({
+    added: z.array(permissionSchema),
+    grantId: z.string(),
+    layer: z.enum(["project_grant", "artifact_grant"]),
+    removed: z.array(permissionSchema),
+    role: projectRoleSchema,
+  }),
+  z.object({ layer: z.literal("share_link"), shareLinkId: z.string() }),
+  z.object({ layer: z.literal("policy"), removed: z.array(permissionSchema) }),
+  z.object({
+    layer: z.literal("state"),
+    reason: z.enum(["archived", "deleted", "expired_grant"]),
+    removed: z.array(permissionSchema),
+  }),
+]);
+const effectiveAccessSchema = z.object({
+  permissions: z.array(permissionSchema),
+  sources: z.array(accessSourceSchema),
+  subject: z.object({ displayName: z.string(), id: z.string() }),
+});
+const projectAccessDetailsSchema = z.object({
+  access: projectAccessSchema,
+  grants: z.array(accessGrantSchema),
+  members: z.array(z.object({
+    displayName: z.string(),
+    effectiveRole: z.union([projectRoleSchema, z.literal("administrator")]),
+    email: z.string(),
+    memberId: z.string(),
+    role: z.enum(["administrator", "member"]),
+  })),
+});
+const policyWriteSchema = z.object({
+  narrowed: z.object({ grants: z.number().int(), shareLinks: z.number().int() }),
+  policy: storedAccessPolicySchema,
+});
+
+export type AccessPolicy = z.infer<typeof accessPolicySchema>;
+export type StoredAccessPolicy = z.infer<typeof storedAccessPolicySchema>;
+export type ProjectAccess = z.infer<typeof projectAccessSchema>;
+export type AccessGrant = z.infer<typeof accessGrantSchema>;
+export type AccessSource = z.infer<typeof accessSourceSchema>;
+export type EffectiveAccess = z.infer<typeof effectiveAccessSchema>;
+export type ProjectAccessDetails = z.infer<typeof projectAccessDetailsSchema>;
+
+/** A grant as a caller writes it. */
+export interface GrantBody {
+  readonly add: readonly Permission[];
+  /** Null creates the grant. */
+  readonly expectedRevision: number | null;
+  readonly expiresAt: string | null;
+  readonly remove: readonly Permission[];
+  readonly role: ProjectRole;
+}
+
 const projectGitHistorySettingSchema = z.object({
   enabled: z.boolean(),
   projectId: z.string(),
@@ -235,6 +337,7 @@ const artifactStateSchema = z.object({
 const apiErrorBodySchema = z.object({
   error: z.object({
     code: z.string(),
+    details: z.object({ membersLosingAccess: z.number().int().nonnegative() }).optional(),
     message: z.string(),
   }),
 });
@@ -847,14 +950,22 @@ const issuedKeySchema = z.object({
 
 export type IssuedApiKey = z.infer<typeof issuedKeySchema>;
 
+/** Structured facts some failures carry beside their code. */
+export interface ApiErrorDetails {
+  /** ACCESS_CHANGE_UNCONFIRMED: how many members a restriction removes. */
+  readonly membersLosingAccess: number;
+}
+
 export class ApiError extends Error {
   readonly code: string;
+  readonly details: ApiErrorDetails | null;
   readonly status: number;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(code: string, message: string, status: number, details: ApiErrorDetails | null = null) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.details = details;
     this.status = status;
   }
 }
@@ -884,6 +995,7 @@ async function parseFailure(response: Response): Promise<ApiError> {
         parsed.data.error.code,
         parsed.data.error.message,
         response.status,
+        parsed.data.error.details ?? null,
       );
     }
   } catch {
@@ -905,6 +1017,12 @@ const previewLeases = createPreviewLeaseStore(browserStorage(), Date.now);
 /** The signed-in principal whose preview leases may be reused; null forgets none and reuses none. */
 export function setPreviewLeasePrincipal(principalId: string | null): void {
   previewLeases.setPrincipal(principalId);
+}
+
+function grantPath(projectId: string, artifactId: string | null, memberId: string): string {
+  const project = `/api/v1/projects/${encodeURIComponent(projectId)}`;
+  const scope = artifactId === null ? project : `${project}/artifacts/${encodeURIComponent(artifactId)}`;
+  return `${scope}/grants/${encodeURIComponent(memberId)}`;
 }
 
 function mutationHeaders(idempotencyKey?: string): Headers {
@@ -1062,6 +1180,56 @@ export const api = {
       method: "POST",
     },
   ).then(({ project }) => project),
+  accessPolicy: () => request(
+    z.object({ policy: storedAccessPolicySchema }),
+    "/api/v1/access-policy",
+  ).then(({ policy }) => policy),
+  putAccessPolicy: (policy: AccessPolicy, expectedRevision: number) => request(
+    policyWriteSchema,
+    "/api/v1/access-policy",
+    { body: JSON.stringify({ expectedRevision, policy }), headers: mutationHeaders(), method: "PUT" },
+  ),
+  projectAccess: (projectId: string) => request(
+    projectAccessDetailsSchema,
+    `/api/v1/projects/${encodeURIComponent(projectId)}/access`,
+  ),
+  changeProjectAccess: (
+    projectId: string,
+    body: {
+      readonly accessMode: ProjectAccess["accessMode"];
+      readonly confirmMembersLosingAccess: number | null;
+      readonly defaultMemberRole: ProjectRole;
+      readonly expectedRevision: number;
+    },
+  ) => request(
+    z.object({ access: projectAccessSchema }),
+    `/api/v1/projects/${encodeURIComponent(projectId)}/access`,
+    { body: JSON.stringify(body), headers: mutationHeaders(), method: "PATCH" },
+  ).then(({ access }) => access),
+  putGrant: (projectId: string, artifactId: string | null, memberId: string, body: GrantBody) => request(
+    z.object({ grant: accessGrantSchema }),
+    grantPath(projectId, artifactId, memberId),
+    { body: JSON.stringify(body), headers: mutationHeaders(), method: "PUT" },
+  ).then(({ grant }) => grant),
+  deleteGrant: (projectId: string, artifactId: string | null, memberId: string, expectedRevision: number) =>
+    requestNoContent(
+      `${grantPath(projectId, artifactId, memberId)}?expectedRevision=${expectedRevision}`,
+      { headers: mutationHeaders(), method: "DELETE" },
+    ),
+  /** The caller's own access, or `subject`'s when the caller administers the scope. */
+  effectiveAccess: (projectId: string, artifactId: string | null, subject?: string) => {
+    const base = artifactId === null
+      ? `/api/v1/projects/${encodeURIComponent(projectId)}/access/effective`
+      : `/api/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}/access`;
+    return request(
+      effectiveAccessSchema,
+      subject === undefined ? base : `${base}?subject=${encodeURIComponent(subject)}`,
+    );
+  },
+  memberGrants: (memberId: string) => request(
+    z.object({ grants: z.array(accessGrantSchema) }),
+    `/api/v1/members/${encodeURIComponent(memberId)}/grants`,
+  ).then(({ grants }) => grants),
   renameProject: (projectId: string, name: string) => request(
     z.object({ project: projectSchema }),
     `/api/v1/projects/${encodeURIComponent(projectId)}`,
