@@ -231,7 +231,7 @@ requirements:
         tests: [PRM-001-B, PRM-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-26T21:14:43.661Z"
+        recorded_at: "2026-10-26T22:14:32.241Z"
 
   - id: PRM-002
     kind: security
@@ -326,7 +326,7 @@ requirements:
         tests: [PRM-006-B, PRM-006-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-26T21:14:43.661Z"
+        recorded_at: "2026-10-26T22:14:32.241Z"
 
   - id: PRM-007
     kind: security
@@ -345,7 +345,7 @@ requirements:
         tests: [PRM-007-B, PRM-007-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-26T21:14:43.661Z"
+        recorded_at: "2026-10-26T22:14:32.241Z"
 
   - id: PRM-008
     kind: security
@@ -364,7 +364,7 @@ requirements:
         tests: [PRM-008-B, PRM-008-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-26T21:14:43.661Z"
+        recorded_at: "2026-10-26T22:14:32.241Z"
 
   - id: PRM-009
     kind: security
