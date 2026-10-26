@@ -214,7 +214,18 @@ The mutation policy is separate from the two read settings:
 | Change account required/public link | Yes | Only with management capability |
 | Delete the artifact | Yes | Only with management capability |
 
-An interactive agent acts as the signed-in person. An API key belongs to one named user or service principal, one installation, an expiry and revoke state, and explicit capabilities. Rotating a key replaces its credential record and secret without changing that principal or the administrator who authorized it. A key with artifact access can use any project in that installation; projects do not add a second access-control list. Every mutation records the effective principal and, when present, the human who authorized the agent connection.
+Inside the installation, access resolves through five layers (ADR 0033): installation policy ceilings, the installation role, the project (open to every member at a default role, or restricted to members with a project grant), artifact grants and share links, and state (archive, deletion, expiry). Ceilings and state always win; grants are additive, and a member's own project grant replaces the project default.
+
+| Role | Adds |
+| --- | --- |
+| Viewer | Open artifacts and history; read comments |
+| Commenter | Write comments |
+| Editor | Publish, edit, restore, delete, share, dispatch agents (what every admitted member could do before ADR 0033) |
+| Manager | Delete anyone's comment; manage the project and its access |
+
+Administrators are managers on every project. A share link gives people without an account view, comment-read, or comment-write access to one version target in Review, under the installation's share-link ceiling.
+
+An interactive agent acts as the signed-in person. An API key belongs to one named user or service principal, one installation, an expiry and revoke state, and explicit capabilities. Rotating a key replaces its credential record and secret without changing that principal or the administrator who authorized it. A key may be limited to a list of projects; an unlimited key with artifact access can use any project in that installation. Projects and artifacts add layered permissions as described in [ADR 0033](decisions/0033-layered-project-permissions-and-guest-review.md). Every mutation records the effective principal and, when present, the human who authorized the agent connection.
 
 ## Versions, comparisons, and optional Git handoff
 

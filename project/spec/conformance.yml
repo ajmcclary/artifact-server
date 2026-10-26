@@ -214,6 +214,136 @@ requirements:
         run: project/evidence/external-storage-runtime.json
         recorded_at: "2026-10-06T15:26:24.816Z"
 
+  - id: PRM-001
+    kind: release_gate
+    behavior: "Upgrading an installation preserves every member's, key's, and public link's effective access."
+    owner: database-adapters
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-001-B, description: "Upgrade populated SQLite, Postgres, and D1 installations and observe every project open at the editor default and every key unscoped."}
+      failure: {id: PRM-001-F, description: "An upgraded bare public link serves exactly as before: current version only, no Review controls, no comments."}
+    deployments: *all
+    status: specified
+    depends_on: [PRJ-004]
+    evidence: []
+
+  - id: PRM-002
+    kind: security
+    behavior: "A restricted project is invisible to members without a grant in lists, search, activity, library, MCP, and direct identifiers."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-002-B, description: "A member without a grant sees no restricted project, artifact, activity, or library entry over HTTP and MCP, while an artifact grant lists exactly that artifact."}
+      failure: {id: PRM-002-F, description: "A principal with empty visibility receives empty results, and a direct identifier for a hidden artifact or version returns not found without disclosure."}
+    deployments: *all
+    status: specified
+    depends_on: [PRJ-002]
+    evidence: []
+
+  - id: PRM-003
+    kind: security
+    behavior: "Effective access follows the documented order: a member's project grant replaces the project default, artifact grants add, and ceilings and state subtract."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-003-B, description: "Viewer, commenter, editor, and manager grants allow exactly their permissions on real application services."}
+      failure: {id: PRM-003-F, description: "An override on one grant never leaks into another, no grant beats a policy ceiling or the archived state, and a member of a restricted project without a grant gets not found."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-002]
+    evidence: []
+
+  - id: PRM-004
+    kind: security
+    behavior: "No one grants a permission they do not hold, and every grant and project access change is validated and audited."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-004-B, description: "A manager grants a member a role and that member's access changes on the next request, with one action record."}
+      failure: {id: PRM-004-F, description: "An editor cannot grant manager or add comment moderation through any interface, and invalid overrides, expiries, and unconfirmed restrictions are refused."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-003]
+    evidence: []
+
+  - id: PRM-005
+    kind: constraint
+    behavior: "Administrators are always managers, can't receive grants, and can't be blocked; the installation keeps at least one manager on every project."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-005-B, description: "An administrator with no grants manages a restricted project."}
+      failure: {id: PRM-005-F, description: "Granting to an administrator is refused."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-003]
+    evidence: []
+
+  - id: PRM-006
+    kind: security
+    behavior: "A share link lets a guest open its version target in Review and, when the link allows it, read and write comments on that target only."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-006-B, description: "A guest on a view-and-comment link names themselves and creates, replies to, edits, and deletes their own comment."}
+      failure: {id: PRM-006-F, description: "A guest cannot read history, another version's comments, another artifact, or any member route."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-003, CMT-006]
+    evidence: []
+
+  - id: PRM-007
+    kind: security
+    behavior: "Revoking, rotating, expiring, or narrowing a share link, or narrowing installation policy, ends guest access on the next request."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-007-B, description: "Revoke, rotate, and expiry each end a guest session on its next request."}
+      failure: {id: PRM-007-F, description: "A guest preview lease stops serving once its version is no longer the link's target."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-006]
+    evidence: []
+
+  - id: PRM-008
+    kind: security
+    behavior: "Guest authorship is always labeled, sanitized, rate-limited, and marked untrusted when it reaches an agent."
+    owner: artifact-comments
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-008-B, description: "A dispatched guest comment reaches the agent bundle with the guest marker, and guest writes over the hourly limit are refused."}
+      failure: {id: PRM-008-F, description: "A guest cannot forge or hide the marker with invisible or bidirectional characters."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-006, DSP-011]
+    evidence: []
+
+  - id: PRM-009
+    kind: security
+    behavior: "A project-scoped key and a member-bound key never exceed their project scope or their member's access."
+    owner: authorization
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-009-B, description: "A key scoped to one project publishes there."}
+      failure: {id: PRM-009-F, description: "The same key cannot list, read, or publish in another project over HTTP or MCP, and a member-bound key cannot exceed its member's grant."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-003, AUTH-009]
+    evidence: []
+
+  - id: PRM-010
+    kind: security
+    behavior: "The interface shows only the controls the caller's effective permissions allow and explains why access is granted or refused."
+    owner: web-application
+    source: {file: decisions/0033-layered-project-permissions-and-guest-review.md, anchor: decision}
+    acceptance:
+      behavior: {id: PRM-010-B, description: "The effective-access route returns the caller's permissions and the Review controls follow them."}
+      failure: {id: PRM-010-F, description: "An operation behind a hidden control is still refused by the server."}
+    deployments: *all
+    status: specified
+    depends_on: [PRM-003]
+    evidence: []
+
   - id: PRD-004
     kind: constraint
     behavior: Browser, HTTP, MCP, CLI, and Plannotator entry points use the same product and authorization services.
@@ -5668,7 +5798,8 @@ requirements:
       behavior: {id: SCP-008-B, description: "Confirm that admitted human members can read and manage artifacts in every project while service mutations require explicit capabilities."}
       failure: {id: SCP-008-F, description: "A project or artifact cannot create an undocumented reader ACL or inherit Plannotator workspace membership."}
     deployments: *all
-    status: specified
+    status: not_applicable
+    rationale: "Superseded by ADR 0033 (layered project permissions); PRM-002 and PRM-003 replace this constraint."
     depends_on: [PRJ-003, AUTH-001, AUTH-006, PLN-004]
     evidence: []
 

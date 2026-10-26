@@ -180,7 +180,7 @@ Reuses `AuthorizationService` (`src/application/authorization.ts`) with three ad
 
 | Operation | Rule | New code |
 | --- | --- | --- |
-| List and read threads and replies | Same as reading artifact history: `requireArtifactRead` (direct human member, or key with `artifact:read` / `artifact:manage:any`). Public-link viewers never see comments; comments are never served from the content origin. | none |
+| List and read threads and replies | Same as reading artifact history: `requireArtifactRead` (direct human member, or key with `artifact:read` / `artifact:manage:any`). Bare public-link viewers never see comments. A share-link guest may read, and when the link allows it write, comments on the link's version target only (ADR 0033). Comments are never served from the content origin. | none |
 | Create thread, reply, resolve, reopen | Any direct human member, or a service principal with the new capability `comment:write`. | `principalCapabilities.writeComments = "comment:write"`, `requireCommentWrite` |
 | Edit body or anchor (thread or reply) | Only the author: `principal.id === author.principalId`. Administrators cannot edit other people's comments. | `requireCommentAuthor(principal, author)` |
 | Delete (thread or reply) | The author, or a human administrator, or a service principal with `artifact:manage:any`. | `requireCommentAuthorOrAdministration(principal, author)` |

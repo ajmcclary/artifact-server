@@ -74,10 +74,10 @@ Installation  (trust boundary, policy ceilings, admin/member role)
 | `none` | nothing (an explicit block on an open project) |
 | `viewer` | `artifact.view`, `artifact.history`, `comment.read` |
 | `commenter` | `comment.write` |
-| `editor` | `artifact.publish`, `artifact.edit`, `agent.dispatch` |
-| `manager` | `artifact.delete`, `artifact.share`, `comment.moderate`, `project.manage` |
+| `editor` | `artifact.publish`, `artifact.edit`, `artifact.delete`, `artifact.share`, `agent.dispatch` |
+| `manager` | `comment.moderate`, `project.manage` |
 
-Today's member maps to `manager` on every project (they can delete, share and change access). The default role for open projects is therefore `manager`, so the upgrade changes no one's access. **my call**, required by the first anti-goal.
+Today's member maps to `editor` on every project: they can publish, delete, share and change access, but cannot moderate other people's comments or manage projects. The default role for open projects is therefore `editor`, so the upgrade changes no one's access. **my call**, required by the first anti-goal (corrected during planning; see the end of this document).
 
 ## Permission hierarchy and resolution
 
@@ -149,7 +149,7 @@ CREATE TABLE installation_access_policy (
 -- L2: two new columns on projects
 ALTER TABLE projects ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'open'
   CHECK (access_mode IN ('open', 'restricted'));
-ALTER TABLE projects ADD COLUMN default_member_role TEXT NOT NULL DEFAULT 'manager'
+ALTER TABLE projects ADD COLUMN default_member_role TEXT NOT NULL DEFAULT 'editor'
   CHECK (default_member_role IN ('none','viewer','commenter','editor','manager'));
 
 -- L2 and L3 member grants share one shape
@@ -330,7 +330,7 @@ The new screens extend existing ones; the file paths are where each change lands
 
 ## Migration
 
-- Every project becomes `open` with `default_member_role = manager`. Member access is unchanged.
+- Every project becomes `open` with `default_member_role = editor`. Member access is unchanged.
 - Every `access_setting = public_link` artifact gets one `share_links` row with `legacy_public_link = 1`, `token =` the existing public ID, `target = latest`, `permissions = ["artifact.view"]`, `review_controls = 0`, and no expiry. Existing URLs keep serving the same bare content with the same CDN behavior.
 - API keys get `project_ids_json = '[]'`, meaning all projects. No key changes access.
 - The `public_link_enable` and `public_link_disable` action history is kept as it is.
@@ -357,3 +357,17 @@ The new screens extend existing ones; the file paths are where each change lands
 - Caching effective permissions within one request, as long as nothing is reused across requests beyond the existing authentication-cache window.
 - Visual design of the new screens, which should follow the existing Settings and Share popover patterns.
 - Whether `access_grants` gets its own repository port or extends the identity repository.
+
+## Adjustments during planning
+
+Recorded 2026-10-26 while writing `docs/superpowers/plans/2026-10-26-permissions-model.md`. Each follows from reading the code and overrides the text above where they conflict.
+
+1. **Roles shift one step.** Today's member cannot moderate other people's comments or rename and archive projects. `editor` therefore holds `artifact.delete` and `artifact.share`, `manager` adds `comment.moderate` and `project.manage`, and the upgrade default is `editor`.
+2. **The last-manager rule is structural.** Administrators are managers everywhere, and the installation already refuses to lose its last active administrator. Rules 6 and 8 need no code, and PRM-005 becomes "administrators are always managers, can't receive grants, and can't be blocked".
+3. **Legacy public links stay as they are.** The bare public link is the artifact-ID URL with no token of its own. `artifacts.access_setting` stays authoritative for it, share links are separate rows that always open Review, and there is no data migration. `legacy_public_link` and `review_controls` are dropped, and making an artifact private also revokes its share links.
+4. **Grant subjects are members only.** `access_grants.subject_kind` becomes `member_id`. Keys are limited by project scope, not grants.
+5. **Keys keep their capability rules.** A service or member-bound key passes only when its existing capability rule, its project scope and, for a member-bound key, the member's effective permissions all allow the operation.
+6. **Guest records are created at session start.** `guest_principals.display_name` is null until the first comment, because a content session needs a principal ID.
+7. **Rotation ends guests by generation.** A link has a `generation` counter, and each guest stores the generation it joined under.
+8. **Guest bundles carry a body marker.** Bundle items have no author field, and the native bridge renderer is pinned, so guest item bodies start with a fixed server-generated marker.
+9. **Activity ignores artifact-only grants.** A member who sees only some artifacts of a project sees no activity feed for that project.
