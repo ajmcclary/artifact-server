@@ -81,7 +81,7 @@ test.describe("CSP-clean production build", () => {
         await visitSettings(fixture.page, "project", "Project identity");
         await visitSettings(fixture.page, "members", "Members");
         await visitSettings(fixture.page, "api-keys", "API keys");
-        await visitSettings(fixture.page, "public-links", "Public links");
+        await visitSettings(fixture.page, "public-links", "Share links");
         await visitSettings(fixture.page, "mcp", "MCP & WebMCP");
         await fixture.page.goto(`${fixture.server.baseUrl}/review/settings/webmcp`);
         await expect(fixture.page.getByRole("heading", {exact: true, name: "MCP & WebMCP"}).first()).toBeVisible();

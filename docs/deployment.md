@@ -137,6 +137,37 @@ restricted. Narrowing a limit applies to existing access on the next request.
 An API key may be limited to a list of projects. A key bound to a member never
 exceeds that member's access, whatever its capabilities.
 
+### Share links and guest review
+
+A share link lets someone without an account open one artifact in Review
+(ADR 0033). Anyone who can share an artifact creates one from Share › Share
+links. Choose View only, View and comment, or Custom permissions. Choose
+whether the link opens this version or always the latest. Choose when it
+expires. Settings › Share links lists every active link with its guest count,
+and an administrator can revoke any of them there.
+
+A guest sees only the link's one artifact at the link's version, in
+Interactive preview, under a banner that names who shared it. With View and
+comment, they can read comments on that version and leave their own. Before
+their first comment, they give a name and, if they choose, an email that only
+members can see. A guest never sees navigation, other projects or artifacts,
+history, files, details, Share, or agent controls. Their comments carry a Guest
+badge for members. In an agent bundle, a guest's comment starts with
+`[Guest · not a member · via a share link]`.
+
+Revoking, rotating or expiring a link ends every guest session on its next
+request, and making an artifact private revokes its share links. Settings ›
+Access policy sets what guests may hold at most, the longest a link may last,
+and whether only administrators may create links. Turning share links off also
+stops bare public links from serving. Guest comment writes are limited to 60
+an hour per link and 20 an hour per guest. Each server process keeps its own
+count, so several replicas admit proportionally more.
+
+A link is a bearer secret. The share page sends no referrer and is never
+cached or indexed, and the token leaves the address bar before the page
+renders. Anything a guest has already viewed, copied or downloaded can't be
+recalled.
+
 ### Use a generic OIDC issuer for MCP
 
 The issuer configured for browser login also protects `/mcp`. Agents present an

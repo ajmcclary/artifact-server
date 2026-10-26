@@ -162,6 +162,14 @@ provider must keep sign-up enabled so someone without an account can create
 one; Artifact Server still refuses anyone it has not admitted. A Worker has no
 startup console, so this note replaces the reminder the Node server prints.
 
+### Share links
+
+Share links and guest sessions live in D1 alongside the rest of the records
+(schema 22). Guest comment rate limits are counted in memory by each Worker
+isolate, so on Cloudflare they bound bursts within one isolate rather than an
+exact hourly total across the deployment.
+
+
 ## Prepare authentication and state
 
 Log in to the approved Cloudflare account:

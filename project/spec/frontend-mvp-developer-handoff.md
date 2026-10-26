@@ -433,6 +433,19 @@ directory hashing, upload progress, or browser retry orchestration.
 - Do not build organizations, invitation email, public sign-up, project membership,
   ownership transfer, billing, or Plannotator connection screens.
 
+### Share links and guest review
+
+- `/s/<token>` and `/review/shared/<linkId>` serve the Review shell in guest
+  mode. The shell exchanges the token once through `POST /api/v1/share/sessions`
+  and replaces the address with `/review/shared/<linkId>` before rendering.
+- Guest requests use only `/api/v1/share/*` with the guest cookie and the guest
+  CSRF token. They never call member routes, and member routes never accept the
+  guest cookie.
+- Share links are managed under
+  `/api/v1/projects/<projectId>/artifacts/<artifactId>/share-links`, and
+  administrators list every active link at `/api/v1/share-links`.
+
+
 ## Interaction and content rules
 
 - Use product terms exactly: installation, project, artifact, version, account

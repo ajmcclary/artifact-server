@@ -1278,7 +1278,7 @@ test.describe("Artifact Server frontend MVP", () => {
 
       await localLogin(fixture);
       await openSettings(fixture.page, "public-links");
-      await expect(fixture.page.getByRole("heading", {level: 1, name: "Public links"})).toBeVisible();
+      await expect(fixture.page.getByRole("heading", {level: 1, name: "Share links"})).toBeVisible();
       const firstRow = fixture.page.getByRole("row").filter({hasText: "First public link"});
       await expect(firstRow.getByText("Default", {exact: true})).toBeVisible();
       const crossProjectRow = fixture.page.getByRole("row").filter({
@@ -1299,7 +1299,7 @@ test.describe("Artifact Server frontend MVP", () => {
       // A short viewport guarantees the three rows overflow the scrolling page body.
       await fixture.page.setViewportSize({height: 400, width: 1024});
       const pageBody = fixture.page
-        .getByRole("region", {exact: true, name: "Public links"})
+        .getByRole("region", {exact: true, name: "Share links"})
         .and(fixture.page.locator("[data-admin-content]"));
       const bodyScrollRange = await pageBody.evaluate((element) => ({
         clientHeight: element.clientHeight,
