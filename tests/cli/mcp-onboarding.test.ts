@@ -105,7 +105,7 @@ describe("local MCP onboarding", {timeout: testTimeoutMilliseconds}, () => {
     const first = await connectStdio(dataDirectory);
     const firstTools = await first.client.listTools();
     expect(first.client.getNegotiatedProtocolVersion()).toBe(modernProtocolRevision);
-    expect(firstTools.tools).toHaveLength(36);
+    expect(firstTools.tools).toHaveLength(39);
     expect(firstTools.tools.map((tool) => tool.name)).toContain("artifact_rename");
     const capabilities = await first.client.callTool({
       arguments: {},
@@ -128,11 +128,11 @@ describe("local MCP onboarding", {timeout: testTimeoutMilliseconds}, () => {
     )).toEqual({status: "ok"});
 
     const second = await connectStdio(dataDirectory);
-    expect((await second.client.listTools()).tools).toHaveLength(36);
+    expect((await second.client.listTools()).tools).toHaveLength(39);
     await second.client.close();
 
     const legacy = await connectStdio(dataDirectory, "legacy");
-    expect((await legacy.client.listTools()).tools).toHaveLength(36);
+    expect((await legacy.client.listTools()).tools).toHaveLength(39);
     const legacyCapabilities = await legacy.client.callTool({
       arguments: {},
       name: "artifact_capabilities",
@@ -148,7 +148,7 @@ describe("local MCP onboarding", {timeout: testTimeoutMilliseconds}, () => {
     const doctor = await runCli(["doctor", "--data", dataDirectory]);
     expect(doctor.exitCode).toBe(0);
     expect(doctorSchema.parse(JSON.parse(doctor.stdout))).toMatchObject({
-      discovery: {tools: 36},
+      discovery: {tools: 39},
       status: "healthy",
     });
     const apiCredential = (await readFile(

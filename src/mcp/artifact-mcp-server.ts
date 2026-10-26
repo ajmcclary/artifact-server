@@ -1,3 +1,5 @@
+import {ShareLinkService} from "../application/share-links.js";
+import type {ShareLink} from "../core/share-links.js";
 import {createHash} from "node:crypto";
 
 import {
@@ -1516,6 +1518,117 @@ export function createArtifactMcpServer(
           ? "New public requests are blocked. Copies already downloaded or cached outside Artifact Server cannot be recalled."
           : null,
       };
+    }),
+  );
+
+  const shareLinkOutput = z.object({
+    artifactId: z.string(),
+    createdAt: z.string(),
+    createdByName: z.string(),
+    expiresAt: z.string().nullable(),
+    guestCount: z.number().int().nonnegative(),
+    id: z.string(),
+    label: z.string(),
+    permissions: z.array(z.string()),
+    projectId: z.string(),
+    revision: z.number().int().positive(),
+    revokedAt: z.string().nullable(),
+    target: z.object({kind: z.enum(["latest", "pinned"]), versionId: z.string().optional()}).strict(),
+    url: z.url(),
+  }).strict();
+  const shareLinkView = (link: ShareLink) => ({
+    artifactId: link.artifactId,
+    createdAt: link.createdAt,
+    createdByName: link.createdByName,
+    expiresAt: link.expiresAt,
+    guestCount: link.guestCount,
+    id: link.id,
+    label: link.label,
+    permissions: [...link.permissions],
+    projectId: link.projectId,
+    revision: link.revision,
+    revokedAt: link.revokedAt,
+    target: link.target.kind === "pinned" ? {kind: "pinned" as const, versionId: link.target.versionId} : {kind: "latest" as const},
+    url: new URL(`/s/${link.token}`, applicationUrl).href,
+  });
+
+  registerNudgedTool(
+    "artifact_share_link_list",
+    {
+      title: "List share links",
+      description:
+        "List the share links of one artifact, including ended ones. Share links let people without an account open the artifact in Review and, when allowed, comment as guests.",
+      inputSchema: z.object({artifactId: artifactIdSchema, projectId: optionalProjectIdSchema}).strict(),
+      outputSchema: z.object({links: z.array(shareLinkOutput)}).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    async (input) => toolResult(async () => {
+      const links = await runMcpApplicationEffect(
+        dependencies,
+        ShareLinkService.use((service) => service.listForArtifact({
+          artifactId: input.artifactId,
+          principal: identity.principal,
+          projectId: input.projectId ?? null,
+        })),
+      );
+      return {links: links.map(shareLinkView)};
+    }),
+  );
+
+  registerNudgedTool(
+    "artifact_share_link_create",
+    {
+      title: "Create a share link",
+      description:
+        "Create a share link for one artifact. Guests who open it see only its version target in Review: the latest version, or the version named by versionId. permissions must include artifact.view and may add comment.read and comment.write. Anyone with the link can use it until it expires or is revoked.",
+      inputSchema: z.object({
+        artifactId: artifactIdSchema,
+        expiresAt: z.iso.datetime().nullable().default(null),
+        label: z.string().min(1).max(80),
+        permissions: z.array(z.enum(["artifact.view", "comment.read", "comment.write"])).min(1).max(3),
+        projectId: optionalProjectIdSchema,
+        versionId: z.string().min(1).max(200).nullable().default(null),
+      }).strict(),
+      outputSchema: z.object({link: shareLinkOutput}).strict(),
+      annotations: additiveWriteAnnotations,
+    },
+    async (input) => toolResult(async () => {
+      const link = await runMcpApplicationEffect(
+        dependencies,
+        ShareLinkService.use((service) => service.create({
+          artifactId: input.artifactId,
+          expiresAt: input.expiresAt,
+          label: input.label,
+          permissions: input.permissions,
+          principal: identity.principal,
+          projectId: input.projectId ?? null,
+          target: input.versionId === null ? {kind: "latest"} : {kind: "pinned", versionId: input.versionId},
+        })),
+      );
+      return {link: shareLinkView(link)};
+    }),
+  );
+
+  registerNudgedTool(
+    "artifact_share_link_revoke",
+    {
+      title: "End a share link",
+      description:
+        "End one share link now. Guests lose access on their next request; their comments stay. Copies already downloaded cannot be recalled.",
+      inputSchema: z.object({linkId: z.string().min(1).max(200), projectId: optionalProjectIdSchema}).strict(),
+      outputSchema: z.object({link: shareLinkOutput}).strict(),
+      annotations: idempotentWriteAnnotations,
+    },
+    async (input) => toolResult(async () => {
+      const link = await runMcpApplicationEffect(
+        dependencies,
+        ShareLinkService.use((service) => service.revoke({
+          linkId: input.linkId,
+          principal: identity.principal,
+          projectId: input.projectId ?? null,
+        })),
+      );
+      return {link: shareLinkView(link)};
     }),
   );
 

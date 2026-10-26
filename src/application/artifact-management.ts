@@ -18,7 +18,8 @@ import {
   type ProjectManagementFailure,
   ProjectManagementService,
 } from "./project-management.js";
-import {actorSnapshotOf} from "../core/action-attribution.js";
+import type {AccessPolicy} from "../core/access-policy.js";
+import {type ActionAttribution, actorSnapshotOf, attributionOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
   type ArtifactMutationConflict,
@@ -30,21 +31,23 @@ import {
   InvalidPagination,
   type InvalidArtifactName,
   ProjectArchived,
+  ShareLinksDisabled,
   VersionNotFound,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
-import type {
-  AccessSetting,
-  ArtifactActionPage,
-  ArtifactDeletion,
-  ArtifactPage,
-  ArtifactRecord,
-  ArtifactState,
-  ArtifactVersion,
-  ManifestEntryPage,
-  PageCursor,
-  VersionPage,
-  VersionRecord,
+import {
+  accessSettings,
+  type AccessSetting,
+  type ArtifactActionPage,
+  type ArtifactDeletion,
+  type ArtifactPage,
+  type ArtifactRecord,
+  type ArtifactState,
+  type ArtifactVersion,
+  type ManifestEntryPage,
+  type PageCursor,
+  type VersionPage,
+  type VersionRecord,
 } from "../core/model.js";
 import type {
   ChangeArtifactAccessSetting,
@@ -233,12 +236,22 @@ export interface ArtifactManagementRepository {
 
 /** Dependencies used to construct artifact management operations. */
 export interface ArtifactManagementDependencies {
+  /** The installation policy, which can turn public links off (ADR 0033). */
+  readonly accessPolicy: () => Effect.Effect<AccessPolicy, ArtifactRepositoryFailure>;
   readonly clock: ApplicationClock;
   readonly repository: ArtifactManagementRepository;
+  /** End every share link of an artifact made account-required. */
+  readonly revokeShareLinks: (command: {
+    readonly artifactId: string;
+    readonly attribution: ActionAttribution;
+    readonly projectId: string;
+    readonly versionId: string;
+  }) => Effect.Effect<number, ArtifactRepositoryFailure>;
 }
 
 /** Expected failures produced by artifact management. */
 export type ArtifactManagementFailure =
+  | ShareLinksDisabled
   | ArtifactNotFound
   | VersionNotFound
   | ArtifactMutationConflict
@@ -623,9 +636,12 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactShare);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      if (command.accessSetting === accessSettings.publicLink && !(yield* dependencies.accessPolicy()).shareLinks.enabled) {
+        return yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
+      }
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
-      return yield* dependencies.repository.changeAccessSetting({
+      const changed = yield* dependencies.repository.changeAccessSetting({
         accessSetting: command.accessSetting,
         artifactId: artifact.id,
         actor: actorSnapshotOf(command.principal),
@@ -644,6 +660,16 @@ function makeArtifactManagementService(
         principalId: command.principal.id,
         projectId: project.id,
       });
+      // Making an artifact private also ends every share link to it (ADR 0033).
+      if (command.accessSetting === accessSettings.accountRequired) {
+        yield* dependencies.revokeShareLinks({
+          artifactId: changed.artifact.id,
+          attribution: attributionOf(command.principal),
+          projectId: changed.artifact.projectId,
+          versionId: changed.artifact.currentVersionId,
+        });
+      }
+      return changed;
     },
   );
 

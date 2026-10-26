@@ -14,6 +14,7 @@ import type { InstallationAccessService } from "./installation-access.js";
 import type { PrincipalActivityService } from "./principal-activity.js";
 import type { InteractiveLoginService } from "./interactive-login.js";
 import type { AccessAdministrationService } from "./access-administration.js";
+import type { ShareLinkService } from "./share-links.js";
 import type { InvitationService } from "./invitations.js";
 import type { LibraryCatalogService } from "./library-catalog.js";
 import type { LinkedArtifactService } from "./linked-artifacts.js";
@@ -41,6 +42,7 @@ export type ApplicationServices =
   | InteractiveLoginService
   | InvitationService
   | AccessAdministrationService
+  | ShareLinkService
   | LibraryCatalogService
   | PrincipalActivityService
   | LinkedArtifactService

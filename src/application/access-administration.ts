@@ -27,7 +27,9 @@ import {
   type ProjectAccessMode,
   type ProjectRole,
 } from "../core/permissions.js";
+import type {PageCursor} from "../core/model.js";
 import type {IdGenerator} from "../core/ports.js";
+import type {ShareLink} from "../core/share-links.js";
 import type {ApplicationClock} from "./application-clock.js";
 import {
   type ArtifactManagementFailure,
@@ -54,6 +56,12 @@ export interface AccessAdministrationDependencies {
   readonly clock: ApplicationClock;
   readonly ids: IdGenerator;
   readonly installationId: string;
+  /** One page of the installation's active share links, for counting what a policy narrows. */
+  readonly listActiveShareLinks: (command: {
+    readonly cursor: PageCursor | null;
+    readonly limit: number;
+    readonly now: string;
+  }) => Effect.Effect<{readonly items: readonly ShareLink[]; readonly nextCursor: PageCursor | null}, ArtifactRepositoryFailure>;
   readonly listMembers: () => Effect.Effect<readonly InstallationMember[], IdentityRepositoryFailure>;
 }
 
@@ -284,8 +292,19 @@ function makeAccessAdministrationService(
         ).length;
       }
     }
-    // Share links arrive with ADR 0033 part B; until then nothing else narrows.
-    return {narrowed: {grants: narrowedGrants, shareLinks: 0}, policy: written};
+    const guestMaximum = new Set(command.policy.shareLinks.guestPermissionsMax);
+    let narrowedLinks = 0;
+    let cursor: PageCursor | null = null;
+    const at = yield* now;
+    do {
+      const page: {readonly items: readonly ShareLink[]; readonly nextCursor: PageCursor | null} =
+        yield* dependencies.listActiveShareLinks({cursor, limit: 100, now: at});
+      narrowedLinks += page.items.filter((link) =>
+        !command.policy.shareLinks.enabled || link.permissions.some((permission) => !guestMaximum.has(permission))
+      ).length;
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    return {narrowed: {grants: narrowedGrants, shareLinks: narrowedLinks}, policy: written};
   });
 
   const readProjectAccess = Effect.fn("AccessAdministrationService.readProjectAccess")(function*(command: {

@@ -1,4 +1,5 @@
 import type {AccessRepository} from "../core/access-ports.js";
+import type {ShareLinkRepository} from "../core/share-link-ports.js";
 import {createHash, randomUUID, timingSafeEqual} from "node:crypto";
 
 import { DateTime, Effect, Layer, Redacted } from "effect";
@@ -147,6 +148,7 @@ import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
 import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 import {AccessAdministrationService} from "../application/access-administration.js";
+import {ShareLinkService, type ShareLinkRepositoryEffects} from "../application/share-links.js";
 import {InvitationService} from "../application/invitations.js";
 import { FileVerificationError } from "../storage/verified-file.js";
 import {defaultStagingCleanupPolicy} from
@@ -165,8 +167,8 @@ import type {LibraryDatesStore} from "../core/library.js";
 
 /** Concrete Node adapters reused by the Effect application layer. */
 export interface ApplicationAdapters {
-  /** Installation policy, project access settings, and member grants (ADR 0033). */
-  readonly access: AccessRepository;
+  /** Installation policy, project access settings, member grants, and share links (ADR 0033). */
+  readonly access: AccessRepository & ShareLinkRepository;
   readonly apiToken: Redacted.Redacted | null;
   readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
   readonly blobs: BlobStore;
@@ -238,6 +240,7 @@ export function createApplicationLayer(
   adapters: ApplicationAdapters,
 ): Layer.Layer<
   | AccessAdministrationService
+  | ShareLinkService
   | ActivityService
   | AgentDispatchService
   | AuthenticationService
@@ -659,7 +662,15 @@ export function createApplicationLayer(
     },
   };
   const managementDependencies: ArtifactManagementDependencies = {
+    accessPolicy: () => Effect.map(
+      accessRepositoryEffects(adapters.access).readAccessPolicy(adapters.installationId),
+      (stored) => stored.policy,
+    ),
     clock,
+    revokeShareLinks: (command) => shareLinkRepositoryEffects(adapters.access).revokeArtifactShareLinks({
+      ...command,
+      installationId: adapters.installationId,
+    }),
     repository: {
       changeAccessSetting: (command) =>
         Effect.tryPromise({
@@ -1479,11 +1490,22 @@ export function createApplicationLayer(
     clock,
     ids: adapters.ids,
     installationId: adapters.installationId,
+    listActiveShareLinks: (command) => shareLinkRepositoryEffects(adapters.access).listActiveShareLinks({
+      ...command,
+      installationId: adapters.installationId,
+    }),
     listMembers: () => identityEffect(
       "listMembers",
       () => adapters.identityRepository.listMembers(adapters.installationId),
     ),
   }).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, managementLayer, projectLayer)));
+  const shareLinkLayer = ShareLinkService.layer({
+    access: accessRepositoryEffects(adapters.access),
+    clock,
+    ids: adapters.ids,
+    installationId: adapters.installationId,
+    shareLinks: shareLinkRepositoryEffects(adapters.access),
+  }).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, managementLayer)));
   const libraryLayer = LibraryCatalogService.layer({
     clock,
     findVersionRecord: (projectId, artifactId, versionId) =>
@@ -1514,6 +1536,7 @@ export function createApplicationLayer(
   }).pipe(Layer.provideMerge(authorizationLayer));
   return Layer.mergeAll(
     accessAdministrationLayer,
+    shareLinkLayer,
     activityLayer,
     libraryLayer,
     authenticationLayer,
@@ -1859,6 +1882,30 @@ export function accessRepositoryEffects(access: AccessRepository): AccessReposit
     upsertGrant: (command) => write(() => access.upsertGrant(command)),
     writeAccessPolicy: (command) => write(() => access.writeAccessPolicy(command)),
     writeProjectAccess: (command) => write(() => access.writeProjectAccess(command)),
+  };
+}
+
+/** Lift the share-link store into Effect with redacted repository failures. */
+export function shareLinkRepositoryEffects(store: ShareLinkRepository): ShareLinkRepositoryEffects {
+  const read = <A>(run: () => Promise<A>) =>
+    Effect.tryPromise({try: run, catch: (cause) => repositoryFailure("readAccess", cause)});
+  const write = <A>(run: () => Promise<A>) =>
+    Effect.tryPromise({try: run, catch: (cause) => repositoryFailure("writeAccess", cause)});
+  return {
+    createGuest: (command) => write(() => store.createGuest(command)),
+    createShareLink: (command) => write(() => store.createShareLink(command)),
+    findGuest: (installationId, guestId) => read(() => store.findGuest(installationId, guestId)),
+    findGuestSession: (installationId, tokenDigest) => read(() => store.findGuestSession(installationId, tokenDigest)),
+    findShareLink: (installationId, linkId) => read(() => store.findShareLink(installationId, linkId)),
+    findShareLinkByToken: (token) => read(() => store.findShareLinkByToken(token)),
+    listActiveShareLinks: (command) => read(() => store.listActiveShareLinks(command)),
+    listArtifactShareLinks: (installationId, projectId, artifactId) =>
+      read(() => store.listArtifactShareLinks(installationId, projectId, artifactId)),
+    revokeArtifactShareLinks: (command) => write(() => store.revokeArtifactShareLinks(command)),
+    revokeShareLink: (command) => write(() => store.revokeShareLink(command)),
+    rotateShareLink: (command) => write(() => store.rotateShareLink(command)),
+    setGuestIdentity: (command) => write(() => store.setGuestIdentity(command)),
+    updateShareLink: (command) => write(() => store.updateShareLink(command)),
   };
 }
 

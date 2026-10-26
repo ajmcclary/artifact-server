@@ -52,7 +52,8 @@ Prefer `artifact_get` over several discovery calls when the artifact ID is alrea
 
 Call `artifact_get` immediately before a write to obtain the current version ID. Generate a new opaque idempotency key for the action and reuse it only for an exact retry.
 
-- `artifact_set_visibility`: set `account_required` or `public_link` without changing file bytes.
+- `artifact_set_visibility`: set `account_required` or `public_link` without changing file bytes. Making an artifact `account_required` also ends its share links.
+- `artifact_share_link_list`, `artifact_share_link_create`, `artifact_share_link_revoke`: manage share links that let people without an account open one version in Review and, when the link allows `comment.read` and `comment.write`, comment as guests. A link opens the latest version, or the version named by `versionId`; it needs the artifact's share permission and follows the installation's share-link policy.
 - `artifact_rename`: change an existing artifact's display name without publishing. Read its name and current version first, then pass them as `expectedName` and `expectedCurrentVersionId` with a fresh idempotency key. Preserve identity and retry only with the same key and input.
 - `artifact_set_tags`: replace the complete tag set. Preserve existing tags the user did not ask to remove.
 - `artifact_restore_version`: make an existing saved version current. This restores an artifact version; it does not restore a server backup. When the user identifies the target relatively, such as "the older of the latest two," run `artifact_version_list` again immediately before the restore and confirm that the chosen version still has that relationship to the current version. An optimistic current-version guard alone does not preserve a relative description.
