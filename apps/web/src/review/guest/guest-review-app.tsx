@@ -150,7 +150,7 @@ function GuestReview({context, onContext, onEnded}: GuestReviewProps) {
     <div style={shellStyle}>
       <header style={bannerStyle}>
         <span style={bannerTextStyle}>
-          <i aria-hidden="true" className="bi bi-person-badge" />
+          <i aria-hidden="true" className="bi bi-person" />
           <span>{guestBanner(context.link.createdByName, context.link.expiresAt)}</span>
         </span>
         <span style={bannerTitleStyle}>
