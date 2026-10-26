@@ -74,6 +74,7 @@ describe("D1 activity-log writes", () => {
         prefix: "as_key_key_release_",
         principalId: "service:key_release",
         principalKind: "service" as const,
+        projectIds: [],
         revokedAt: null,
         rotatedFromId: null,
         secretDigest: "digest-release",

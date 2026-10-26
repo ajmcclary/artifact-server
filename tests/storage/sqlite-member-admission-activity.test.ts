@@ -181,6 +181,7 @@ describe("SQLite member admission and activity facts", () => {
       prefix: "as_key_key_member_prefix",
       principalId: "member_ada",
       principalKind: "human",
+      projectIds: [],
       secretDigest: "digest-member",
     }, systemAttribution);
     await identity.createApiKey({
@@ -190,6 +191,7 @@ describe("SQLite member admission and activity facts", () => {
       prefix: "as_key_key_service_prefix",
       principalId: "service:key_service",
       principalKind: "service",
+      projectIds: [],
       secretDigest: "digest-service",
     }, systemAttribution);
 
@@ -228,6 +230,7 @@ describe("SQLite member admission and activity facts", () => {
       expiresAt: "2099-01-01T00:00:00.000Z",
       installationId,
       principalKind: "service" as const,
+      projectIds: [],
       revokedAt: null,
     };
     await identity.createApiKey({

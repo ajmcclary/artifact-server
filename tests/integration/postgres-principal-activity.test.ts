@@ -101,6 +101,7 @@ describe("Postgres member admission and principal activity", () => {
       prefix: "as_key_key_service_prefix",
       principalId: "service:key_service",
       principalKind: "service",
+      projectIds: [],
       revokedAt: null,
       rotatedFromId: null,
       secretDigest: "digest-service",

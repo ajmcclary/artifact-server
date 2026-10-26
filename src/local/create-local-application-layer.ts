@@ -997,6 +997,10 @@ export function createApplicationLayer(
     issue: () => randomBase64Url(32),
   };
   const identityLayer = InstallationAccessService.layer({
+    findProject: (projectId) => Effect.tryPromise({
+      try: () => adapters.repository.findProject(projectId),
+      catch: (cause) => repositoryFailure("findProject", cause),
+    }),
     autoAdmitEmailDomains: adapters.autoAdmitEmailDomains,
     contentAccessRevocation: {
       revokeForPrincipals: (principalIds) =>

@@ -25,7 +25,9 @@ import {
   IdentityConflict,
   IdentityNotFound,
   InviteRejected,
+  ProjectNotFound,
 } from "../core/errors.js";
+import type {ProjectRecord} from "../core/model.js";
 import type {RedeemInviteRecord, RedeemInviteResult} from "../core/invitation-ports.js";
 import {
   type InviteOutcome,
@@ -225,6 +227,8 @@ export interface InstallationAccessDependencies {
    */
   readonly autoAdmitEmailDomains?: ReadonlyArray<string> | undefined;
   readonly bootstrapAdministratorEmail: string;
+  /** Project lookup used to validate an API key's project scope. */
+  readonly findProject: (projectId: string) => Effect.Effect<ProjectRecord | null, ArtifactRepositoryFailure>;
   readonly clock: {readonly now: () => Date};
   readonly ids: IdentityIdProvider;
   readonly installationId: string;
@@ -250,6 +254,8 @@ export interface IssueApiKeyCommand {
   readonly memberId?: string;
   readonly name: string;
   readonly principal: Principal;
+  /** Projects the key may reach; empty or absent means every project. */
+  readonly projectIds?: readonly string[];
 }
 
 /** One short-lived credential intended for a single local browser navigation. */
@@ -309,10 +315,12 @@ export interface InstallationAccessOperations {
     command: IssueApiKeyCommand,
   ) => Effect.Effect<
     IssuedManagedApiKey,
+    | ArtifactRepositoryFailure
     | AuthorizationDenied
     | IdentityConflict
     | IdentityNotFound
     | IdentityRepositoryFailure
+    | ProjectNotFound
   >;
   readonly listApiKeys: (
     principal: Principal,
@@ -739,6 +747,10 @@ function makeInstallationAccessService(
     ) {
       return yield* invalidApiKey();
     }
+    // A key bound to a member acts with that member's installation role, within its capabilities.
+    const owner = key.principalKind === principalKinds.human
+      ? yield* dependencies.repository.findMember(dependencies.installationId, key.principalId)
+      : null;
     const principal: Principal = {
       authorizedByPrincipalId: key.authorizedByPrincipalId,
       capabilities: key.capabilities,
@@ -746,8 +758,8 @@ function makeInstallationAccessService(
       id: key.principalId,
       installationId: key.installationId,
       kind: key.principalKind,
-      membershipRole: membershipRoles.member,
-      projectIds: [],
+      membershipRole: owner?.status === memberStatuses.active ? owner.role : membershipRoles.member,
+      projectIds: key.projectIds,
     };
     apiKeyCache?.set(
       cacheKey(presentedDigest),
@@ -847,6 +859,13 @@ function makeInstallationAccessService(
         message: "The active member for this API key does not exist.",
       }));
     }
+    const projectIds = [...new Set(command.projectIds ?? [])].toSorted();
+    for (const projectId of projectIds) {
+      const project = yield* dependencies.findProject(projectId);
+      if (project === null) {
+        return yield* new ProjectNotFound({message: "The project does not exist."});
+      }
+    }
     const key: StoredManagedApiKey = {
       authorizedByPrincipalId: command.principal.id,
       capabilities,
@@ -858,6 +877,7 @@ function makeInstallationAccessService(
       prefix: token.slice(0, Math.min(token.length, 32)),
       principalId: member?.id ?? `service:${id}`,
       principalKind: member === null ? principalKinds.service : principalKinds.human,
+      projectIds,
       revokedAt: null,
       rotatedFromId: null,
       secretDigest: dependencies.secrets.digest(token),

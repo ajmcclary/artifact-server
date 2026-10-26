@@ -88,6 +88,8 @@ export interface ManagedApiKey {
   readonly prefix: string;
   readonly principalId: string;
   readonly principalKind: PrincipalKind;
+  /** Projects the key may reach; empty means every project (ADR 0033). */
+  readonly projectIds: readonly string[];
   readonly revokedAt: string | null;
   readonly rotatedFromId: string | null;
 }

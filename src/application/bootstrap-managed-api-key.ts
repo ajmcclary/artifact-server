@@ -50,6 +50,7 @@ export async function ensureBootstrapManagedApiKey(input: {
     prefix: credential.slice(0, Math.min(credential.length, 32)),
     principalId: `service:${keyId}`,
     principalKind: principalKinds.service,
+    projectIds: [],
     revokedAt: null,
     rotatedFromId: null,
     secretDigest,

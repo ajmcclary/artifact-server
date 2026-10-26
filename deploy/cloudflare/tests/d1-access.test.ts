@@ -94,6 +94,7 @@ describe("D1 access repository", () => {
       prefix: "as_key_upgrade",
       principalId: "service:key_upgrade",
       principalKind: "service",
+      projectIds: [],
       revokedAt: null,
       rotatedFromId: null,
       secretDigest: "digest",

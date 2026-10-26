@@ -129,6 +129,7 @@ const sessionRowSchema = z.object({
 const apiKeyRowSchema = z.object({
   authorizedByPrincipalId: z.string(),
   capabilitiesJson: z.string(),
+  projectIdsJson: z.string(),
   createdAt: z.string(),
   expiresAt: z.string(),
   id: z.string(),
@@ -543,7 +544,7 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
         `SELECT managed.id, managed.installation_id AS "installationId", managed.name,
           managed.prefix, managed.secret_digest AS "secretDigest",
           managed.principal_id AS "principalId", managed.principal_kind AS "principalKind",
-          managed.capabilities_json AS "capabilitiesJson",
+          managed.capabilities_json AS "capabilitiesJson", managed.project_ids_json AS "projectIdsJson",
           managed.authorized_by_principal_id AS "authorizedByPrincipalId",
           managed.created_at AS "createdAt", managed.expires_at AS "expiresAt",
           managed.revoked_at AS "revokedAt", managed.rotated_from_id AS "rotatedFromId",
@@ -921,12 +922,13 @@ export class PostgresIdentityRepository implements BootstrapManagedApiKeyReposit
       const sql = yield* SqlClient;
       yield* sql`INSERT INTO managed_api_keys (
         installation_id, id, name, prefix, secret_digest, principal_id,
-        principal_kind, capabilities_json, authorized_by_principal_id,
+        principal_kind, capabilities_json, project_ids_json, authorized_by_principal_id,
         created_at, expires_at, revoked_at, rotated_from_id
       ) VALUES (
         ${key.installationId}, ${key.id}, ${key.name}, ${key.prefix},
         ${key.secretDigest}, ${key.principalId}, ${key.principalKind},
-        ${JSON.stringify(key.capabilities)}, ${key.authorizedByPrincipalId},
+        ${JSON.stringify(key.capabilities)}, ${JSON.stringify(key.projectIds)},
+        ${key.authorizedByPrincipalId},
         ${key.createdAt}, ${key.expiresAt}, ${key.revokedAt},
         ${key.rotatedFromId}
       )`;
@@ -945,7 +947,7 @@ function apiKeySelect(suffix: string): string {
   return `SELECT id, installation_id AS "installationId", name, prefix,
     secret_digest AS "secretDigest", principal_id AS "principalId",
     principal_kind AS "principalKind",
-    capabilities_json AS "capabilitiesJson",
+    capabilities_json AS "capabilitiesJson", project_ids_json AS "projectIdsJson",
     authorized_by_principal_id AS "authorizedByPrincipalId",
     created_at AS "createdAt", expires_at AS "expiresAt",
     revoked_at AS "revokedAt", rotated_from_id AS "rotatedFromId"
@@ -968,6 +970,7 @@ function parseApiKey(
     prefix: row.prefix,
     principalId: row.principalId,
     principalKind: row.principalKind,
+    projectIds: z.array(z.string()).parse(JSON.parse(row.projectIdsJson)),
     revokedAt: row.revokedAt,
     rotatedFromId: row.rotatedFromId,
     secretDigest: row.secretDigest,

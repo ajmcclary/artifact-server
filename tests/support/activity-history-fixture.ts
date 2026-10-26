@@ -126,6 +126,7 @@ export async function populateActivityHistory(
     prefix: "ask_ci_fixture",
     principalId: "service:key_ci",
     principalKind: "service",
+    projectIds: [],
     revokedAt: null,
     rotatedFromId: null,
     secretDigest: "digest-activity-fixture",
