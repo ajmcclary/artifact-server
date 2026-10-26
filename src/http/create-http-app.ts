@@ -89,6 +89,10 @@ import {
   liveContentToken,
   type LiveReadGrant,
 } from "../application/linked-artifacts.js";
+import {GuestReviewService} from "../application/guest-review.js";
+import {ShareLinkService} from "../application/share-links.js";
+import type {ShareLink} from "../core/share-links.js";
+import {GuestRateLimiter} from "./guest-rate-limiter.js";
 import {
   ArtifactNotFound,
   AuthenticationRequired,
@@ -97,6 +101,8 @@ import {
   CapabilityUnavailable,
   ContentBootstrapRejected,
   errorCodes,
+  GuestRateLimited,
+  GuestSessionRequired,
   InvalidPagination,
   InviteRejected,
   isArtifactServerFailure,
@@ -213,6 +219,31 @@ const createProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
 }).strict();
 const renameProjectSchema = createProjectSchema;
+const shareSessionBodySchema = z.object({token: z.string().min(1).max(200)}).strict();
+const guestIdentityBodySchema = z.object({
+  contactEmail: z.string().max(320).nullable(),
+  displayName: z.string().max(200),
+}).strict();
+const guestThreadPageQuerySchema = z.object({
+  cursor: z.string().max(1_024).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+const shareLinkTargetSchema = z.discriminatedUnion("kind", [
+  z.object({kind: z.literal("latest")}).strict(),
+  z.object({kind: z.literal("pinned"), versionId: z.string().min(1).max(200)}).strict(),
+]);
+const shareLinkBodySchema = z.object({
+  expiresAt: z.iso.datetime().nullable(),
+  label: z.string().max(200),
+  permissions: z.array(z.enum(["artifact.view", "comment.read", "comment.write"])).min(1).max(3),
+  target: shareLinkTargetSchema,
+}).strict();
+const shareLinkUpdateBodySchema = shareLinkBodySchema.extend({expectedRevision: z.number().int().positive()}).strict();
+const shareLinkRotateBodySchema = z.object({expectedRevision: z.number().int().positive()}).strict();
+const shareLinkPageQuerySchema = z.object({
+  cursor: z.string().max(1_024).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 const permissionSchema = z.enum(allPermissions);
 const projectRoleSchema = z.enum(Object.values(projectRoles));
 const accessPolicyBodySchema = z.object({
@@ -349,6 +380,12 @@ const createCommentReplySchema = z.object({
   body: commentBodySchema,
 }).strict();
 const updateCommentReplySchema = createCommentReplySchema;
+const guestUpdateThreadSchema = z.object({
+  body: commentBodySchema.optional(),
+  state: commentStateSchema.optional(),
+}).strict().refine((body) => (body.body === undefined) !== (body.state === undefined), {
+  message: "Change either the body or the state.",
+});
 const dispatchedThreadFilterSchema = z.enum([
   dispatchedThreadFilters.exclude,
   dispatchedThreadFilters.include,
@@ -893,6 +930,19 @@ export function createHttpApp(
       serveWebAsset(context, dependencies, "/review-frame.html", "review-frame"),
   );
 
+  // A share page carries its token in the URL: it must never be cached, indexed or sent as a
+  // referrer. Registered before /review/* so a reload of /review/shared/:linkId keeps these headers.
+  const shareShell = async (context: Context<HttpEnvironment>) => {
+    const shell = await serveWebAsset(context, dependencies, "/review.html", "application-shell");
+    const headers = new Headers(shell.headers);
+    headers.set("Cache-Control", "no-store");
+    headers.set("Referrer-Policy", "no-referrer");
+    headers.set("X-Robots-Tag", "noindex, nofollow");
+    return new Response(shell.body, {headers, status: shell.status});
+  };
+  app.on(["GET", "HEAD"], "/s/:token", shareShell);
+  app.on(["GET", "HEAD"], "/review/shared/:linkId", shareShell);
+
   app.on(
     ["GET", "HEAD"],
     ["/review", "/review/*"],
@@ -943,6 +993,10 @@ export function createHttpApp(
     // The upload URL carries its own authorization, and a gateway client never
     // sees the credential its caller used, so a stray header must not fail it.
     if (isStagedFileUpload(context.req.method, context.req.path)) {
+      return next();
+    }
+    // Guest routes read only the guest cookie; they never see a member credential (ADR 0033).
+    if (context.req.path.startsWith(guestApiPrefix)) {
       return next();
     }
     const authorization = context.req.header("authorization");
@@ -3052,6 +3106,351 @@ export function createHttpApp(
     }, 201);
   });
 
+  // --- Share links and guest review (ADR 0033 part B) ---
+
+  const guestLimiter = new GuestRateLimiter();
+  const shareLookupLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
+
+
+  const shareLinkResponse = (context: Context<HttpEnvironment>, link: ShareLink) => ({
+    ...link,
+    url: new URL(`/s/${link.token}`, responseApplicationUrl(context, dependencies)).toString(),
+  });
+
+  /** The guest behind this request; writes also need same-origin and the guest CSRF token. */
+  const authenticateGuest = async (context: Context<HttpEnvironment>) => {
+    const names = guestCookieNames(dependencies);
+    const token = getCookie(context, names.session);
+    if (token === undefined || token === "") {
+      throw new GuestSessionRequired({message: "Open the share link again to continue."});
+    }
+    const authenticated = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.authenticate({sessionToken: token})),
+    );
+    if (isUnsafeMethod(context.req.method)) {
+      requireApplicationOrigin(context, dependencies);
+      const header = context.req.header("x-csrf-token");
+      const cookie = getCookie(context, names.csrf);
+      if (
+        header === undefined || cookie === undefined || header !== cookie ||
+        digestIdentitySecret(header) !== authenticated.csrfDigest
+      ) {
+        throw new AuthorizationDenied({message: "A valid guest CSRF token is required."});
+      }
+    }
+    return authenticated;
+  };
+
+  const takeGuestSlot = (authenticated: {readonly context: {readonly link: {readonly id: string}}; readonly principal: Principal}) => {
+    const decision = guestLimiter.take(authenticated.context.link.id, authenticated.principal.id);
+    if (!decision.allowed) {
+      throw new GuestRateLimited({
+        message: "Too many comments through this link. Try again later.",
+        retryAfterSeconds: decision.retryAfterSeconds,
+      });
+    }
+  };
+
+  app.post("/api/v1/share/sessions", boundedJsonBody, async (context) => {
+    requireApplicationOrigin(context, dependencies);
+    const limited = shareLookupLimiter.retryAfterSeconds();
+    if (limited !== null) {
+      context.header("Retry-After", String(limited));
+      return context.json({error: {code: errorCodes.rateLimited, message: "Too many link attempts. Try again shortly."}}, 429);
+    }
+    const body = shareSessionBodySchema.parse(await context.req.json());
+    const started = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.startSession({token: body.token})).pipe(
+        Effect.tapError((failure) => Effect.sync(() => {
+          if (failure._tag === "ShareLinkNotFound") shareLookupLimiter.noteFailure();
+        })),
+      ),
+    );
+    const names = guestCookieNames(dependencies);
+    const secure = usesSecureApplicationCookies(dependencies);
+    const expires = new Date(started.expiresAt);
+    setCookie(context, names.session, started.sessionToken, {expires, httpOnly: true, path: "/", sameSite: "Lax", secure});
+    setCookie(context, names.csrf, started.csrfToken, {expires, httpOnly: false, path: "/", sameSite: "Lax", secure});
+    context.header("Cache-Control", "private, no-store");
+    return context.json({context: started.context, csrfToken: started.csrfToken}, 201);
+  });
+
+  app.get("/api/v1/share/session", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    context.header("Cache-Control", "private, no-store");
+    return context.json({context: authenticated.context});
+  });
+
+  app.put("/api/v1/share/session/identity", boundedJsonBody, async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const body = guestIdentityBodySchema.parse(await context.req.json());
+    const updated = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.setIdentity({...body, principal: authenticated.principal})),
+    );
+    return context.json({context: updated});
+  });
+
+  app.post("/api/v1/share/preview-lease", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const lease = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.issuePreviewLease({principal: authenticated.principal})),
+    );
+    return context.json({
+      baseUrl: previewLeaseBrowserUrl(
+        responseApplicationUrl(context, dependencies),
+        dependencies.contentDomain,
+        Redacted.value(lease.token),
+      ),
+      expiresAt: lease.expiresAt,
+      versionId: lease.versionId,
+    }, 201);
+  });
+
+  app.get("/api/v1/share/threads", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const query = guestThreadPageQuerySchema.parse(context.req.query());
+    const page = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.listThreads({
+        cursor: decodePageCursor(query.cursor),
+        limit: query.limit,
+        principal: authenticated.principal,
+      })),
+    );
+    return context.json(commentThreadPageResponse(responseApplicationUrl(context, dependencies), page));
+  });
+
+  app.post("/api/v1/share/threads", boundedJsonBody, async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const body = createCommentThreadSchema.parse(await context.req.json());
+    takeGuestSlot(authenticated);
+    const created = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.createThread({
+        anchor: body.anchor ?? null,
+        body: body.body,
+        idempotencyKey: requiredIdempotencyKey(context.req.header("idempotency-key")),
+        path: body.path ?? null,
+        principal: authenticated.principal,
+      })),
+    );
+    return context.json({
+      replayed: created.replayed,
+      thread: commentThreadResponse(responseApplicationUrl(context, dependencies), created.thread),
+    }, 201);
+  });
+
+  app.get("/api/v1/share/threads/:threadId", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const details = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.getThread({
+        principal: authenticated.principal,
+        threadId: context.req.param("threadId"),
+      })),
+    );
+    return context.json(commentThreadDetailsResponse(responseApplicationUrl(context, dependencies), details));
+  });
+
+  app.patch("/api/v1/share/threads/:threadId", boundedJsonBody, async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const body = guestUpdateThreadSchema.parse(await context.req.json());
+    const threadId = context.req.param("threadId");
+    if (body.body !== undefined) takeGuestSlot(authenticated);
+    const thread = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      body.state === undefined
+        ? GuestReviewService.use((guests) => guests.updateThread({
+          body: body.body ?? "",
+          principal: authenticated.principal,
+          threadId,
+        }))
+        : GuestReviewService.use((guests) => guests.setThreadState({
+          principal: authenticated.principal,
+          state: body.state ?? "open",
+          threadId,
+        })),
+    );
+    return context.json({thread: commentThreadResponse(responseApplicationUrl(context, dependencies), thread)});
+  });
+
+  for (const [action, state] of [["resolve", "resolved"], ["reopen", "open"]] as const) {
+    app.post(`/api/v1/share/threads/:threadId/${action}`, async (context) => {
+      const authenticated = await authenticateGuest(context);
+      const thread = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        GuestReviewService.use((guests) => guests.setThreadState({
+          principal: authenticated.principal,
+          state,
+          threadId: context.req.param("threadId"),
+        })),
+      );
+      return context.json({thread: commentThreadResponse(responseApplicationUrl(context, dependencies), thread)});
+    });
+  }
+
+  app.delete("/api/v1/share/threads/:threadId", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.deleteThread({
+        principal: authenticated.principal,
+        threadId: context.req.param("threadId"),
+      })),
+    );
+    return context.body(null, 204);
+  });
+
+  app.post("/api/v1/share/threads/:threadId/replies", boundedJsonBody, async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const body = createCommentReplySchema.parse(await context.req.json());
+    takeGuestSlot(authenticated);
+    const created = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.createReply({
+        body: body.body,
+        idempotencyKey: requiredIdempotencyKey(context.req.header("idempotency-key")),
+        principal: authenticated.principal,
+        threadId: context.req.param("threadId"),
+      })),
+    );
+    return context.json(created, 201);
+  });
+
+  app.patch("/api/v1/share/threads/:threadId/replies/:replyId", boundedJsonBody, async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const body = updateCommentReplySchema.parse(await context.req.json());
+    takeGuestSlot(authenticated);
+    const reply = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.updateReply({
+        body: body.body,
+        principal: authenticated.principal,
+        replyId: context.req.param("replyId"),
+        threadId: context.req.param("threadId"),
+      })),
+    );
+    return context.json({reply});
+  });
+
+  app.delete("/api/v1/share/threads/:threadId/replies/:replyId", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.deleteReply({
+        principal: authenticated.principal,
+        replyId: context.req.param("replyId"),
+        threadId: context.req.param("threadId"),
+      })),
+    );
+    return context.body(null, 204);
+  });
+
+  app.get("/api/v1/projects/:projectId/artifacts/:artifactId/share-links", async (context) => {
+    const links = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.listForArtifact({
+        artifactId: context.req.param("artifactId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({links: links.map((link) => shareLinkResponse(context, link))});
+  });
+
+  app.post("/api/v1/projects/:projectId/artifacts/:artifactId/share-links", boundedJsonBody, async (context) => {
+    const body = shareLinkBodySchema.parse(await context.req.json());
+    const link = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.create({
+        ...body,
+        artifactId: context.req.param("artifactId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({link: shareLinkResponse(context, link)}, 201);
+  });
+
+  app.patch("/api/v1/projects/:projectId/share-links/:linkId", boundedJsonBody, async (context) => {
+    const body = shareLinkUpdateBodySchema.parse(await context.req.json());
+    const link = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.update({
+        ...body,
+        linkId: context.req.param("linkId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({link: shareLinkResponse(context, link)});
+  });
+
+  app.post("/api/v1/projects/:projectId/share-links/:linkId/rotate", boundedJsonBody, async (context) => {
+    const body = shareLinkRotateBodySchema.parse(await context.req.json());
+    const link = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.rotate({
+        expectedRevision: body.expectedRevision,
+        linkId: context.req.param("linkId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({link: shareLinkResponse(context, link)});
+  });
+
+  app.delete("/api/v1/projects/:projectId/share-links/:linkId", async (context) => {
+    const link = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.revoke({
+        linkId: context.req.param("linkId"),
+        principal: context.get("principal"),
+        projectId: projectIdSchema.parse(context.req.param("projectId")),
+      })),
+    );
+    return context.json({link: shareLinkResponse(context, link)});
+  });
+
+  app.get("/api/v1/share-links", async (context) => {
+    const query = shareLinkPageQuerySchema.parse(context.req.query());
+    const page = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      ShareLinkService.use((service) => service.inventory({
+        cursor: decodePageCursor(query.cursor),
+        limit: query.limit,
+        principal: context.get("principal"),
+      })),
+    );
+    return context.json({
+      items: page.items.map((link) => shareLinkResponse(context, link)),
+      nextCursor: encodePageCursor(page.nextCursor),
+    });
+  });
+
   app.get("/artifacts/:artifactId", async (context) => {
     const current = await runHttpApplicationEffect(
       context,
@@ -3234,6 +3633,14 @@ function clearApplicationSessionCookies(
   const secure = usesSecureApplicationCookies(dependencies);
   deleteCookie(context, cookieNames.session, {path: "/", secure});
   deleteCookie(context, cookieNames.csrf, {path: "/", secure});
+}
+
+const guestApiPrefix = "/api/v1/share/";
+
+function guestCookieNames(dependencies: HttpAppDependencies): {readonly csrf: string; readonly session: string} {
+  return usesSecureApplicationCookies(dependencies)
+    ? {csrf: "__Host-artifact_guest_csrf", session: "__Host-artifact_guest"}
+    : {csrf: "artifact_guest_csrf", session: "artifact_guest"};
 }
 
 function applicationCookieNames(
