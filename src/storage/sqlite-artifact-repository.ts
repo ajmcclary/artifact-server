@@ -1,3 +1,4 @@
+import {artifactIdsJson} from "./access-rows.js";
 import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import { DatabaseSync } from "node:sqlite";
 
@@ -2254,6 +2255,7 @@ export class SqliteArtifactRepository implements
             FROM artifacts
             WHERE project_id = ?
               AND deleted_at IS NULL
+              AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))
               AND (
                 ? IS NULL
                 OR instr(search_name, ?) > 0
@@ -2278,6 +2280,8 @@ export class SqliteArtifactRepository implements
         )
         .all(
           command.projectId,
+          artifactIdsJson(command.artifactIds),
+          artifactIdsJson(command.artifactIds),
           command.search ?? null,
           command.search ?? null,
           command.search ?? null,

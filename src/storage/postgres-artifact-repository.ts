@@ -1,3 +1,4 @@
+import {artifactIdsJson} from "./access-rows.js";
 import {committedStagingCleanupRepository} from "./committed-staging-cleanup.js";
 import {Effect} from "effect";
 import {SqlClient} from "effect/unstable/sql/SqlClient";
@@ -2127,6 +2128,7 @@ export class PostgresArtifactRepository implements
             command.cursor?.id ?? null,
             command.cursor?.rank ?? null,
             command.limit + 1,
+            artifactIdsJson(command.artifactIds),
           ]
         : [
             installationId,
@@ -2136,8 +2138,10 @@ export class PostgresArtifactRepository implements
             command.cursor?.createdAt ?? null,
             command.cursor?.id ?? null,
             command.limit + 1,
+            artifactIdsJson(command.artifactIds),
           ];
       const limitPlaceholder = command.sort === "comments" ? "$8" : "$7";
+      const artifactIdsPlaceholder = command.sort === "comments" ? "$9" : "$8";
       const rows = yield* sql.unsafe<object>(
         `SELECT * FROM (
           SELECT id, project_id AS "projectId", name,
@@ -2159,6 +2163,8 @@ export class PostgresArtifactRepository implements
           FROM artifacts
           WHERE installation_id = $1 AND project_id = $2
             AND deleted_at IS NULL
+            AND (${artifactIdsPlaceholder}::jsonb IS NULL
+              OR id IN (SELECT jsonb_array_elements_text(${artifactIdsPlaceholder}::jsonb)))
             AND ($3::text IS NULL
               OR strpos(search_name, $3) > 0
               OR EXISTS (

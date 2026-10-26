@@ -1,3 +1,4 @@
+import {Cause, type Effect, Exit, Option} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
 import {ActivityService} from "../../src/application/activity.js";
@@ -28,7 +29,7 @@ async function visibleProjects(harness: AccessRuntime, principal: Principal) {
 async function listedArtifacts(harness: AccessRuntime, principal: Principal, projectId: string) {
   const page = await harness.runtime.runPromise(ArtifactManagementService.use((service) =>
     service.listArtifacts({cursor: null, limit: 100, principal, projectId, search: null, tags: []})));
-  return page.items.map((item) => item.artifact.id).toSorted();
+  return page.items.map((item) => item.id).toSorted();
 }
 
 async function feedProjects(harness: AccessRuntime, principal: Principal) {
@@ -105,4 +106,27 @@ describe("visibility filtering", () => {
     const library = await harness.runtime.runPromise(LibraryCatalogService.use((service) => service.read(sam)));
     expect(library.examined).toBe(0);
   });
+
+  test("a direct version, version list or manifest page of a hidden project answers not found", async () => {
+    const secret = await harness.createProject("Secret");
+    const hidden = await harness.publish(harness.administrator, secret, "Hidden");
+    await harness.setProjectAccess(secret, "restricted");
+    const sam = await harness.person("Sam");
+    const scope = {artifactId: hidden.artifact.id, principal: sam, projectId: secret};
+    const failureTag = async <A, E extends {readonly _tag: string}>(
+      effect: Effect.Effect<A, E, ArtifactManagementService>,
+    ): Promise<string | null> => {
+      const exit = await harness.runtime.runPromiseExit(effect);
+      if (Exit.isSuccess(exit)) return null;
+      return Option.getOrNull(Cause.findErrorOption(exit.cause).pipe(Option.map((error) => error._tag)));
+    };
+    expect(await failureTag(ArtifactManagementService.use((service) =>
+      service.getVersionDetails({...scope, versionId: hidden.version.id})))).toBe("ProjectNotFound");
+    expect(await failureTag(ArtifactManagementService.use((service) =>
+      service.listVersions({...scope, cursor: null, limit: 10})))).toBe("ProjectNotFound");
+    expect(await failureTag(ArtifactManagementService.use((service) =>
+      service.listManifestEntries({...scope, cursor: null, limit: 10, versionId: hidden.version.id}))))
+      .toBe("ProjectNotFound");
+  });
+
 });

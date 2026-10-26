@@ -16,6 +16,7 @@ export async function* currentVersionEntries(
     do {
       // eslint-disable-next-line no-await-in-loop -- each page names the next cursor
       const page = await catalog.listArtifacts({
+        artifactIds: null,
         comments: "all",
         cursor,
         limit: artifactPageSize,

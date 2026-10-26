@@ -329,3 +329,21 @@ export function computeVisibleScope(input: VisibleScopeInput): VisibleScope {
   }
   return {artifactIdsByProject, kind: "limited", projectIds};
 }
+
+/** The artifact filter for one project: null lists everything, a list (even empty) only those. */
+export function visibleArtifactIds(visible: VisibleScope, projectId: string): readonly string[] | null {
+  if (visible.kind === "all" || visible.projectIds.includes(projectId)) return null;
+  return visible.artifactIdsByProject.get(projectId) ?? [];
+}
+
+/** Whether any artifact of a project is visible. */
+export function isProjectVisible(visible: VisibleScope, projectId: string): boolean {
+  return visible.kind === "all" ||
+    visible.projectIds.includes(projectId) ||
+    visible.artifactIdsByProject.has(projectId);
+}
+
+/** Projects visible as a whole, for project-wide feeds; null means every project. */
+export function wholeProjectIds(visible: VisibleScope): readonly string[] | null {
+  return visible.kind === "all" ? null : visible.projectIds;
+}

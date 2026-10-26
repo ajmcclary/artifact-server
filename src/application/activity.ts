@@ -1,3 +1,4 @@
+import {wholeProjectIds} from "../core/permissions.js";
 import {Context, Effect, Layer} from "effect";
 
 import {
@@ -134,6 +135,7 @@ function normalizeActivitySearch(candidate: string | null): string | null {
 function countQuery(
   request: ActivityFilterRequest,
   includeAdministration: boolean,
+  visibleProjectIds: readonly string[] | null,
 ): ActivityCountQuery {
   return {
     actorIds: request.actorIds,
@@ -142,8 +144,17 @@ function countQuery(
     search: normalizeActivitySearch(request.search),
     segment: request.segment,
     types: request.types,
+    visibleProjectIds,
   };
 }
+
+const emptySummary: ActivitySummary = {
+  artifactsInReview: 0,
+  needsYou: 0,
+  openConversations: 0,
+  projects: [],
+  withAgent: 0,
+};
 
 function makeActivityService(
   dependencies: ActivityDependencies,
@@ -170,8 +181,9 @@ function makeActivityService(
   ) {
     yield* authorization.requireArtifactDiscovery(principal);
     const includeAdministration = isHumanAdministrator(principal);
+    const visible = wholeProjectIds(yield* authorization.visibleScope(principal));
     const page = yield* dependencies.persistence.listActivity({
-      ...countQuery(request, includeAdministration),
+      ...countQuery(request, includeAdministration, visible),
       cursor: request.cursor,
       limit: request.limit,
     });
@@ -191,8 +203,9 @@ function makeActivityService(
     request: ActivityFilterRequest,
   ) {
     yield* authorization.requireArtifactDiscovery(principal);
+    const visible = wholeProjectIds(yield* authorization.visibleScope(principal));
     return yield* dependencies.persistence.countActivity(
-      countQuery(request, isHumanAdministrator(principal)),
+      countQuery(request, isHumanAdministrator(principal), visible),
     );
   });
 
@@ -201,7 +214,14 @@ function makeActivityService(
     projectIds: readonly string[],
   ) {
     yield* authorization.requireArtifactDiscovery(principal);
-    return yield* dependencies.persistence.summarizeActivity(projectIds);
+    const visible = wholeProjectIds(yield* authorization.visibleScope(principal));
+    if (visible === null) return yield* dependencies.persistence.summarizeActivity(projectIds);
+    // An empty request means every project, so a limited reader asks for exactly the visible ones.
+    const allowed = projectIds.length === 0
+      ? visible
+      : projectIds.filter((projectId) => visible.includes(projectId));
+    if (allowed.length === 0) return emptySummary;
+    return yield* dependencies.persistence.summarizeActivity(allowed);
   });
 
   return {facets, list, summary};

@@ -222,6 +222,9 @@ function feedConditions(
   if (query.projectIds.length > 0) {
     where.push(`x.project_id IN ${values.bindList(query.projectIds)}`);
   }
+  if (query.visibleProjectIds !== null) {
+    where.push(`x.project_id IN ${values.bindList(query.visibleProjectIds)}`);
+  }
   // A conversation is kept when its newest comment or reply is by one of these people.
   if (query.actorIds.length > 0) {
     where.push(`x.principal_id IN ${values.bindList(query.actorIds)}`);
@@ -301,6 +304,7 @@ function unfiltered(query: ActivityCountQuery): ActivityCountQuery {
     search: null,
     segment: "all",
     types: [],
+    visibleProjectIds: query.visibleProjectIds,
   };
 }
 

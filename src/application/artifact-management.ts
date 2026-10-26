@@ -1,4 +1,4 @@
-import {permissions} from "../core/permissions.js";
+import {permissions, visibleArtifactIds} from "../core/permissions.js";
 import { createHash } from "node:crypto";
 
 import { Context, DateTime, Effect, Layer } from "effect";
@@ -543,7 +543,9 @@ function makeArtifactManagementService(
         command.projectId,
       );
       yield* authorization.requireArtifactListing(command.principal, {projectId: project.id});
+      const visible = yield* authorization.visibleScope(command.principal);
       return yield* dependencies.repository.listArtifacts({
+        artifactIds: visibleArtifactIds(visible, project.id),
         comments,
         cursor: command.cursor,
         limit,

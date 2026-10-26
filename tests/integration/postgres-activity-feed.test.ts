@@ -38,6 +38,7 @@ function query(overrides: Partial<ActivityQuery> = {}): ActivityQuery {
     search: null,
     segment: "all",
     types: [],
+    visibleProjectIds: null,
     ...overrides,
   };
 }
@@ -242,4 +243,25 @@ describe("Postgres activity read model", () => {
     const firstSummary = await first.summarizeActivity([]);
     expect(firstSummary.projects.map((project) => project.artifactCount)).toEqual([1]);
   });
+
+  test("Postgres filters artifacts by id and activity by visible projects", async () => {
+    await publishArtifact(first, "art_pg_visible_a", "Visible A", "2026-10-01T10:00:00.000Z");
+    await publishArtifact(first, "art_pg_visible_b", "Visible B", "2026-10-01T10:01:00.000Z");
+    const listed = (artifactIds: readonly string[] | null) => first.listArtifacts({
+      artifactIds,
+      comments: "all",
+      cursor: null,
+      limit: 10,
+      projectId: defaultProjectId,
+      sort: "newest",
+      tags: [],
+    }).then((page) => page.items.map((item) => item.id).toSorted());
+    expect(await listed(null)).toEqual(["art_pg_visible_a", "art_pg_visible_b"]);
+    expect(await listed(["art_pg_visible_b"])).toEqual(["art_pg_visible_b"]);
+    expect(await listed([])).toEqual([]);
+    expect((await first.listActivity(query({visibleProjectIds: []}))).items).toEqual([]);
+    expect((await first.listActivity(query({visibleProjectIds: [defaultProjectId]}))).items.length).toBeGreaterThan(0);
+    expect((await first.countActivity(query({visibleProjectIds: []}))).total).toBe(0);
+  });
+
 });

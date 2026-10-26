@@ -1,3 +1,4 @@
+import {artifactIdsJson} from "../../../src/storage/access-rows.js";
 import {committedStagingCleanupRepository} from "../../../src/storage/committed-staging-cleanup.js";
 import {z} from "zod";
 
@@ -3259,6 +3260,7 @@ export function createD1ArtifactRepository(
             ) AS versionCount
           FROM artifacts
           WHERE project_id = ? AND deleted_at IS NULL
+            AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))
             AND (? IS NULL
               OR instr(search_name, ?) > 0
               OR EXISTS (
@@ -3276,6 +3278,8 @@ export function createD1ArtifactRepository(
         ORDER BY ${orderSql} LIMIT ?
       `).bind(
         command.projectId,
+        artifactIdsJson(command.artifactIds),
+        artifactIdsJson(command.artifactIds),
         command.search ?? null,
         command.search ?? null,
         command.search ?? null,

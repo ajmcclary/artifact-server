@@ -1,3 +1,4 @@
+import {isProjectVisible} from "../core/permissions.js";
 import {Context, DateTime, Effect, Layer, Schema} from "effect";
 
 import type {ApplicationClock} from "./application-clock.js";
@@ -157,7 +158,9 @@ function makeProjectManagementService(
   const listProjects = Effect.fn("ProjectManagementService.listProjects")(
     function*(principal: Principal) {
       yield* authorization.requireProjectListing(principal);
-      return yield* dependencies.repository.listProjects();
+      const visible = yield* authorization.visibleScope(principal);
+      return (yield* dependencies.repository.listProjects())
+        .filter((project) => isProjectVisible(visible, project.id));
     },
   );
 

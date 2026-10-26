@@ -158,3 +158,8 @@ export function policyAction(
     projectId: null,
   });
 }
+
+/** Bind value for an optional artifact-id filter: null means unfiltered. */
+export function artifactIdsJson(artifactIds: readonly string[] | null): string | null {
+  return artifactIds === null ? null : JSON.stringify(artifactIds);
+}

@@ -305,6 +305,7 @@ describe("publication preparation", () => {
     );
     expect(reopened?.files[0]?.installedAt).toBeNull();
     const artifacts = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,
@@ -462,6 +463,7 @@ describe("publication preparation", () => {
     expect(Result.isFailure(midOutageResult)).toBe(true);
 
     const afterMidOutage = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,
@@ -583,6 +585,7 @@ describe("publication preparation", () => {
     }
 
     const artifactsBeforeFinalizeOutage = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,
@@ -617,6 +620,7 @@ describe("publication preparation", () => {
     expect(Result.isFailure(finalizeOutageResult)).toBe(true);
 
     const afterFinalizeOutage = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,
@@ -659,6 +663,7 @@ describe("publication preparation", () => {
     );
 
     const artifactsBeforeReplaced = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,
@@ -686,6 +691,7 @@ describe("publication preparation", () => {
     expect(Result.isFailure(replacedResult)).toBe(true);
 
     const afterReplaced = await repository.listArtifacts({
+      artifactIds: null,
       comments: "all",
       cursor: null,
       limit: 10,

@@ -37,6 +37,7 @@ function query(overrides: Partial<ActivityQuery> = {}): ActivityQuery {
     search: null,
     segment: "all",
     types: [],
+    visibleProjectIds: null,
     ...overrides,
   };
 }
@@ -198,4 +199,34 @@ describe("D1 activity read model", () => {
       await proxy.dispose();
     }
   });
+
+  it("D1 filters artifacts by id and activity by visible projects", async () => {
+    const proxy = await openLocalD1();
+    const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+    const installationId = "d1-visibility";
+    try {
+      await migrateD1(binding, installationId);
+      const store = createD1ArtifactRepository(binding, installationId);
+      await publishArtifact(store, "art_d1_visible_a", "2026-10-01T10:00:00.000Z");
+      await publishArtifact(store, "art_d1_visible_b", "2026-10-01T10:01:00.000Z");
+      const listed = (artifactIds: readonly string[] | null) => store.listArtifacts({
+        artifactIds,
+        comments: "all",
+        cursor: null,
+        limit: 10,
+        projectId: defaultProjectId,
+        sort: "newest",
+        tags: [],
+      }).then((page) => page.items.map((item) => item.id).toSorted());
+      expect(await listed(null)).toEqual(["art_d1_visible_a", "art_d1_visible_b"]);
+      expect(await listed(["art_d1_visible_b"])).toEqual(["art_d1_visible_b"]);
+      expect(await listed([])).toEqual([]);
+      expect((await store.listActivity(query({visibleProjectIds: []}))).items).toEqual([]);
+      expect((await store.listActivity(query({visibleProjectIds: [defaultProjectId]}))).items.length).toBeGreaterThan(0);
+      expect((await store.countActivity(query({visibleProjectIds: []}))).total).toBe(0);
+    } finally {
+      await proxy.dispose();
+    }
+  });
+
 });

@@ -1,3 +1,4 @@
+import {isProjectVisible, visibleArtifactIds} from "../core/permissions.js";
 import {Context, DateTime, Effect, Layer} from "effect";
 
 import type {
@@ -181,7 +182,9 @@ function makeLibraryCatalogService(
 
   const read = Effect.fn("LibraryCatalogService.read")(function*(principal: Principal) {
     yield* authorization.requireArtifactDiscovery(principal);
+    const visible = yield* authorization.visibleScope(principal);
     const projects = (yield* dependencies.listProjects())
+      .filter((project) => isProjectVisible(visible, project.id))
       .toSorted((left, right) => left.name.localeCompare(right.name));
     const listed: ListedArtifact[] = [];
     let truncated = false;
@@ -189,6 +192,7 @@ function makeLibraryCatalogService(
       let cursor: PageCursor | null = null;
       do {
         const page: ArtifactPage = yield* dependencies.listArtifacts({
+          artifactIds: visibleArtifactIds(visible, project.id),
           comments: "all",
           cursor,
           limit: artifactPageSize,

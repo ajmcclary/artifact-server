@@ -254,6 +254,8 @@ export interface DeleteArtifact {
 export interface ListArtifacts {
   readonly comments: "all" | "with" | "without";
   readonly cursor: PageCursor | null;
+  /** Null lists every artifact in the project; a list, even an empty one, lists only those (ADR 0033). */
+  readonly artifactIds: readonly string[] | null;
   readonly limit: number;
   readonly projectId: string;
   /** Normalized name-substring or exact-tag search, when supplied. */
@@ -291,6 +293,11 @@ export interface ActivityQuery {
   readonly limit: number;
   /** Empty means every project. Unknown IDs match nothing. */
   readonly projectIds: readonly string[];
+  /**
+   * Projects the reader may see as a whole (ADR 0033), applied even to unfiltered
+   * counts. Null means every project; an empty list matches nothing.
+   */
+  readonly visibleProjectIds: readonly string[] | null;
   /** Normalized with normalizeArtifactSearchText, or null. */
   readonly search: string | null;
   readonly segment: ActivitySegment;
