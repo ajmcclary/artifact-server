@@ -223,9 +223,15 @@ requirements:
       behavior: {id: PRM-001-B, description: "Upgrade populated SQLite, Postgres, and D1 installations and observe every project open at the editor default and every key unscoped."}
       failure: {id: PRM-001-F, description: "An upgraded bare public link serves exactly as before: current version only, no Review controls, no comments."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRM-001-B proves a populated SQLite v22 database upgrades with every project open at the editor default and every key unscoped; the shared repository cases also prove Postgres migration 25 and D1 schema 21 upgrades, but those tests carry no requirement ID. PRM-001-F (the bare public link is unchanged after upgrade) waits for share links in ADR 0033 part B."
     depends_on: [PRJ-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-001-B]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-002
     kind: security
@@ -236,9 +242,15 @@ requirements:
       behavior: {id: PRM-002-B, description: "A member without a grant sees no restricted project, artifact, activity, or library entry over HTTP and MCP, while an artifact grant lists exactly that artifact."}
       failure: {id: PRM-002-F, description: "A principal with empty visibility receives empty results, and a direct identifier for a hidden artifact or version returns not found without disclosure."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved at the application-service level on the local SQLite runtime (projects, artifacts, activity list, facets and summary, library, direct version and manifest reads); Postgres and D1 artifact and activity filters are proved by untagged repository cases. Hosted and multi-process deployments are not exercised."
     depends_on: [PRJ-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-002-B, PRM-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-003
     kind: security
@@ -249,9 +261,15 @@ requirements:
       behavior: {id: PRM-003-B, description: "Viewer, commenter, editor, and manager grants allow exactly their permissions on real application services."}
       failure: {id: PRM-003-F, description: "An override on one grant never leaks into another, no grant beats a policy ceiling or the archived state, and a member of a restricted project without a grant gets not found."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved on the local runtime through real services; the resolver's override, ceiling, archive and expiry rules are also covered by unit tests. Non-local deployments are not exercised."
     depends_on: [PRM-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-003-B, PRM-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-004
     kind: security
@@ -262,9 +280,15 @@ requirements:
       behavior: {id: PRM-004-B, description: "A manager grants a member a role and that member's access changes on the next request, with one action record."}
       failure: {id: PRM-004-F, description: "An editor cannot grant manager or add comment moderation through any interface, and invalid overrides, expiries, and unconfirmed restrictions are refused."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved through the access administration service and over HTTP with CSRF on a local private-team server; non-local deployments are not exercised."
     depends_on: [PRM-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-004-B, PRM-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-005
     kind: constraint
@@ -275,9 +299,15 @@ requirements:
       behavior: {id: PRM-005-B, description: "An administrator with no grants manages a restricted project."}
       failure: {id: PRM-005-F, description: "Granting to an administrator is refused."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved on the local runtime; the at-least-one-manager guarantee rests on the existing last-administrator rule."
     depends_on: [PRM-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-005-B, PRM-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-006
     kind: security
@@ -327,9 +357,15 @@ requirements:
       behavior: {id: PRM-009-B, description: "A key scoped to one project publishes there."}
       failure: {id: PRM-009-F, description: "The same key cannot list, read, or publish in another project over HTTP or MCP, and a member-bound key cannot exceed its member's grant."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "Proved through the key service and over HTTP on the local runtime; member-bound keys act with their member's role and grants. MCP uses the same services but has no separate case."
     depends_on: [PRM-003, AUTH-009]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-009-B, PRM-009-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRM-010
     kind: security
@@ -340,9 +376,15 @@ requirements:
       behavior: {id: PRM-010-B, description: "The effective-access route returns the caller's permissions and the Review controls follow them."}
       failure: {id: PRM-010-F, description: "An operation behind a hidden control is still refused by the server."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "The server route and refusal are proved in vitest; the Review controls, restriction confirmation and ended-access state are proved by the Chromium browser spec tests/browser/prm-010-access-controls.spec.ts."
     depends_on: [PRM-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRM-010-B, PRM-010-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-10-26T18:50:52.736Z"
 
   - id: PRD-004
     kind: constraint

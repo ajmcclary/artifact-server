@@ -109,6 +109,34 @@ choose any method the environment enables, such as a passkey, Google, GitHub
 or Magic Auth. The Node server prints a reminder about provider sign-up at
 startup in team mode.
 
+### Control project access
+
+Every project is either open to all members or restricted to the people
+listed on it (ADR 0033). Open projects give every member one default role;
+a member's own grant replaces that default, so a grant of No access blocks one
+person. Administrators manage every project and cannot receive a grant.
+
+| Role | Can |
+| --- | --- |
+| Viewer | Open artifacts and their history, read comments |
+| Commenter | Also write comments |
+| Editor | Also publish, rename, tag, restore, delete, share and send work to agents |
+| Manager | Also delete anyone's comment and manage the project and its access |
+
+Upgraded installations keep every project open with the Editor default, which
+is what every member could do before. A project manager changes access in the
+project's Access panel; restricting a project asks you to confirm how many
+members lose access. Customize adds or removes single permissions on one
+member's grant, and you can only grant what you hold yourself.
+
+Settings › Access policy holds the installation's limits: whether share links
+are allowed and what guests may do, the longest a link may last, who may create
+links, a ceiling no member can exceed, and whether new projects start open or
+restricted. Narrowing a limit applies to existing access on the next request.
+
+An API key may be limited to a list of projects. A key bound to a member never
+exceeds that member's access, whatever its capabilities.
+
 ### Use a generic OIDC issuer for MCP
 
 The issuer configured for browser login also protects `/mcp`. Agents present an
