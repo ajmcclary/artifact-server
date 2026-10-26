@@ -250,7 +250,7 @@ const commentAuthorSchema = z.object({
   authorizedByPrincipalId: z.string().nullable(),
   displayName: z.string(),
   principalId: z.string(),
-  principalKind: z.enum([principalKinds.human, principalKinds.service]),
+  principalKind: z.enum([principalKinds.guest, principalKinds.human, principalKinds.service]),
 }).strict();
 const commentThreadSchema = z.object({
   anchor: z.unknown(),

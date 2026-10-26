@@ -28,6 +28,11 @@ export const artifactActionKinds = {
   publish: "publish",
   relink: "relink",
   restore: "restore",
+  guestJoin: "guest_join",
+  shareLinkCreate: "share_link_create",
+  shareLinkRevoke: "share_link_revoke",
+  shareLinkRotate: "share_link_rotate",
+  shareLinkUpdate: "share_link_update",
 } as const;
 
 /** One persisted artifact mutation kind. */

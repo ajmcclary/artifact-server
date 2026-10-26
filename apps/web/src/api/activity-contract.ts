@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const accessSettingSchema = z.enum(["account_required", "public_link"]);
-const principalKindSchema = z.enum(["human", "service"]);
+const principalKindSchema = z.enum(["guest", "human", "service"]);
 const dispatchStateSchema = z.enum([
   "addressed",
   "canceled",

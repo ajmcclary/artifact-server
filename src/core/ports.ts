@@ -1077,6 +1077,10 @@ export interface IdGenerator {
   accessGrantId(): string;
   agentDispatchId(): string;
   artifactId(): string;
+  guestId(): string;
+  guestSessionId(): string;
+  shareLinkId(): string;
+  shareLinkToken(): string;
   commentReplyId(): string;
   commentThreadId(): string;
   contentToken(): string;

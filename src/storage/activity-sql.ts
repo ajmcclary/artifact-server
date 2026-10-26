@@ -40,6 +40,11 @@ export const feedKindsByType = {
   access: [
     artifactActionKinds.publicLinkEnable,
     artifactActionKinds.publicLinkDisable,
+    artifactActionKinds.shareLinkCreate,
+    artifactActionKinds.shareLinkUpdate,
+    artifactActionKinds.shareLinkRotate,
+    artifactActionKinds.shareLinkRevoke,
+    artifactActionKinds.guestJoin,
   ],
   admin: [
     installationActionKinds.memberAdmit,
@@ -96,7 +101,7 @@ const actionKindSchema = z.union([
 ]);
 
 const accessSettingSchema = z.enum(["account_required", "public_link"]);
-const principalKindSchema = z.enum(["human", "service"]);
+const principalKindSchema = z.enum(["guest", "human", "service"]);
 const dispatchStateSchema = z.enum([
   "addressed",
   "canceled",

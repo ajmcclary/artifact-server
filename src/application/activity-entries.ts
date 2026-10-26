@@ -77,6 +77,7 @@ const verbs = {
   comment_resolve: ["resolution", "resolved"],
   dispatch_addressed: ["agent", "answered"],
   dispatch_create: ["agent", "sent"],
+  guest_join: ["access", "joined as a guest"],
   grant_create: ["admin", "granted access"],
   grant_delete: ["admin", "removed access"],
   grant_update: ["admin", "changed access"],
@@ -97,6 +98,10 @@ const verbs = {
   public_link_enable: ["access", "enabled"],
   publish: ["version", "published"],
   restore: ["version", "restored"],
+  share_link_create: ["access", "created a share link"],
+  share_link_revoke: ["access", "ended a share link"],
+  share_link_rotate: ["access", "replaced a share link"],
+  share_link_update: ["access", "changed a share link"],
 } as const satisfies Record<string, readonly [ActivityEntryKind, string]>;
 
 type FeedKind = keyof typeof verbs;

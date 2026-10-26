@@ -31,7 +31,7 @@ export type {
 
 const accessSettingSchema = z.enum(["account_required", "public_link"]);
 const membershipRoleSchema = z.enum(["administrator", "member"]);
-const principalKindSchema = z.enum(["human", "service"]);
+const principalKindSchema = z.enum(["guest", "human", "service"]);
 const capabilitySchema = z.enum([
   "agent:connect",
   "artifact:create",

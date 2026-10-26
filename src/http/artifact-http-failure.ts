@@ -6,6 +6,23 @@ import {
 /** Stable protocol-safe projection shared by HTTP and MCP adapters. */
 export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
   switch (failure._tag) {
+    case "ShareLinkNotFound":
+      return {code: errorCodes.shareLinkNotFound, message: failure.message, status: 404};
+    case "ShareLinkInvalid":
+      return {code: errorCodes.shareLinkInvalid, message: failure.message, status: 422};
+    case "ShareLinksDisabled":
+      return {code: errorCodes.shareLinksDisabled, message: failure.message, status: 403};
+    case "GuestSessionRequired":
+      return {code: errorCodes.guestSessionRequired, message: failure.message, status: 401};
+    case "GuestIdentityRequired":
+      return {code: errorCodes.guestIdentityRequired, message: failure.message, status: 422};
+    case "GuestRateLimited":
+      return {
+        code: errorCodes.guestRateLimited,
+        details: {retryAfterSeconds: failure.retryAfterSeconds},
+        message: failure.message,
+        status: 429,
+      };
     case "AccessGrantInvalid":
       return {code: errorCodes.accessGrantInvalid, message: failure.message, status: 422};
     case "PermissionNotHeld":

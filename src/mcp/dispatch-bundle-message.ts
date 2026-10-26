@@ -11,6 +11,7 @@
  * same bundle — any drift between the copies fails that test.
  */
 
+import {stripInvisibleControls} from "../core/untrusted-text.js";
 import {z} from "zod";
 
 /**
@@ -18,16 +19,12 @@ import {z} from "zod";
  * otherwise invisible characters (U+200B–200F, U+2060, U+FEFF) that hostile
  * comment text could use to reorder or hide what the reading agent sees.
  */
-const invisibleDirectivePattern =
-  /[\u202A-\u202E\u2066-\u2069\u200B-\u200F\u2060\uFEFF]/gu;
-
 /**
  * Strip bidirectional-override and invisible Unicode from one piece of
- * untrusted text before it is composed into a bundle message. Pure and
- * idempotent; every visible character passes through unchanged.
+ * untrusted text before it is composed into a bundle message.
  */
 export function sanitizeBundleText(text: string): string {
-  return text.replace(invisibleDirectivePattern, "");
+  return stripInvisibleControls(text);
 }
 
 /**

@@ -3097,6 +3097,9 @@ export function createHttpApp(
       if (response.status === 401) {
         headers.set("Cache-Control", "private, no-store");
       }
+      if (error._tag === "GuestRateLimited") {
+        headers.set("Retry-After", String(error.retryAfterSeconds));
+      }
       if (error._tag === "AuthenticationRequired") {
         headers.set(
           "WWW-Authenticate",

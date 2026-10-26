@@ -1,5 +1,7 @@
 /** Principal kinds recognized by Artifact Server policy. */
 export const principalKinds = {
+  /** A person without an account, known only through one share link (ADR 0033). */
+  guest: "guest",
   human: "human",
   service: "service",
 } as const;

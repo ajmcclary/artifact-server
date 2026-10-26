@@ -24,6 +24,26 @@ export class SystemIdGenerator implements IdGenerator {
     return `art_${randomUUID()}`;
   }
 
+  /** Create one opaque guest principal identity. */
+  guestId(): string {
+    return `guest:gst_${randomHex(12)}`;
+  }
+
+  /** Create one opaque guest session identity. */
+  guestSessionId(): string {
+    return `gss_${randomHex(12)}`;
+  }
+
+  /** Create one opaque share-link identity. */
+  shareLinkId(): string {
+    return `shl_${randomHex(12)}`;
+  }
+
+  /** Create one unguessable share-link token (192 bits). */
+  shareLinkToken(): string {
+    return `shr_${randomHex(24)}`;
+  }
+
   /** Create one opaque comment reply identity. */
   commentReplyId(): string {
     return `rpl_${randomUUID()}`;

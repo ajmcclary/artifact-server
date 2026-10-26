@@ -5,6 +5,9 @@ export const errorCodes = {
   accessChangeUnconfirmed: "ACCESS_CHANGE_UNCONFIRMED",
   accessGrantInvalid: "ACCESS_GRANT_INVALID",
   accessRevisionConflict: "ACCESS_REVISION_CONFLICT",
+  guestIdentityRequired: "GUEST_IDENTITY_REQUIRED",
+  guestRateLimited: "GUEST_RATE_LIMITED",
+  guestSessionRequired: "GUEST_SESSION_REQUIRED",
   agentNotFound: "AGENT_NOT_FOUND",
   artifactNotFound: "ARTIFACT_NOT_FOUND",
   artifactMutationConflict: "ARTIFACT_MUTATION_CONFLICT",
@@ -45,6 +48,9 @@ export const errorCodes = {
   projectConflict: "PROJECT_CONFLICT",
   projectNotFound: "PROJECT_NOT_FOUND",
   projectSelectionRequired: "PROJECT_SELECTION_REQUIRED",
+  shareLinkInvalid: "SHARE_LINK_INVALID",
+  shareLinkNotFound: "SHARE_LINK_NOT_FOUND",
+  shareLinksDisabled: "SHARE_LINKS_DISABLED",
   uploadClosed: "UPLOAD_CLOSED",
   uploadExpired: "UPLOAD_EXPIRED",
   uploadFileNotFound: "UPLOAD_FILE_NOT_FOUND",
@@ -81,6 +87,42 @@ export class AccessRevisionConflict extends Schema.TaggedError<AccessRevisionCon
 export class AccessChangeUnconfirmed extends Schema.TaggedError<AccessChangeUnconfirmed>()(
   "AccessChangeUnconfirmed",
   {membersLosingAccess: Schema.Int, message: Schema.String},
+) {}
+
+/** A share link does not exist, ended, or no longer admits guests. */
+export class ShareLinkNotFound extends Schema.TaggedError<ShareLinkNotFound>()(
+  "ShareLinkNotFound",
+  messageField,
+) {}
+
+/** A share-link request broke a rule the caller can fix. */
+export class ShareLinkInvalid extends Schema.TaggedError<ShareLinkInvalid>()(
+  "ShareLinkInvalid",
+  messageField,
+) {}
+
+/** Installation policy turns share links off, or reserves them for administrators. */
+export class ShareLinksDisabled extends Schema.TaggedError<ShareLinksDisabled>()(
+  "ShareLinksDisabled",
+  messageField,
+) {}
+
+/** A share-link route needs a guest session that this request does not carry. */
+export class GuestSessionRequired extends Schema.TaggedError<GuestSessionRequired>()(
+  "GuestSessionRequired",
+  messageField,
+) {}
+
+/** A guest must give a name before commenting. */
+export class GuestIdentityRequired extends Schema.TaggedError<GuestIdentityRequired>()(
+  "GuestIdentityRequired",
+  messageField,
+) {}
+
+/** A guest or a share link wrote more comments this hour than allowed. */
+export class GuestRateLimited extends Schema.TaggedError<GuestRateLimited>()(
+  "GuestRateLimited",
+  {message: Schema.String, retryAfterSeconds: Schema.Int},
 ) {}
 
 /** The requested artifact does not exist in the installation. */
@@ -593,6 +635,12 @@ export class StagingStorageFailure extends Schema.TaggedError<StagingStorageFail
 ) {}
 
 const artifactServerFailureSchema = Schema.Union([
+  GuestIdentityRequired,
+  GuestRateLimited,
+  GuestSessionRequired,
+  ShareLinkInvalid,
+  ShareLinkNotFound,
+  ShareLinksDisabled,
   AccessChangeUnconfirmed,
   AccessGrantInvalid,
   AccessRevisionConflict,
