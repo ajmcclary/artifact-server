@@ -148,6 +148,8 @@ import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
 import {redactedFailureCause} from "../observability/failure-cause-summary.js";
 import {AccessAdministrationService} from "../application/access-administration.js";
+import {resolveActiveGuest} from "../application/guest-links.js";
+import {GuestReviewService} from "../application/guest-review.js";
 import {ShareLinkService, type ShareLinkRepositoryEffects} from "../application/share-links.js";
 import {InvitationService} from "../application/invitations.js";
 import { FileVerificationError } from "../storage/verified-file.js";
@@ -241,6 +243,7 @@ export function createApplicationLayer(
 ): Layer.Layer<
   | AccessAdministrationService
   | ShareLinkService
+  | GuestReviewService
   | ActivityService
   | AgentDispatchService
   | AuthenticationService
@@ -920,8 +923,33 @@ export function createApplicationLayer(
     },
   };
 
+  const guestValidity = {
+    access: accessRepositoryEffects(adapters.access),
+    clock,
+    installationId: adapters.installationId,
+    shareLinks: shareLinkRepositoryEffects(adapters.access),
+  };
   const contentDependencies: ContentAccessDependencies = {
     clock,
+    guestTarget: (guestId) => Effect.gen(function*() {
+      const active = yield* resolveActiveGuest(guestValidity, guestId);
+      if (active === null) return null;
+      const {link} = active;
+      if (link.target.kind === "pinned") {
+        return {artifactId: link.artifactId, projectId: link.projectId, versionId: link.target.versionId};
+      }
+      const current = yield* Effect.tryPromise({
+        try: () => adapters.repository.findCurrentVersion(link.projectId, link.artifactId),
+        catch: (cause) => repositoryFailure("findCurrentVersion", cause),
+      });
+      return current === null
+        ? null
+        : {artifactId: link.artifactId, projectId: link.projectId, versionId: current.version.id};
+    }),
+    publicLinksEnabled: () => Effect.map(
+      accessRepositoryEffects(adapters.access).readAccessPolicy(adapters.installationId),
+      (stored) => stored.policy.shareLinks.enabled,
+    ),
     repository: {
       createContentBootstrap: (command) =>
         Effect.tryPromise({
@@ -1320,6 +1348,7 @@ export function createApplicationLayer(
     access: accessRepositoryEffects(adapters.access),
     clock,
     installationId: adapters.installationId,
+    shareLinks: shareLinkRepositoryEffects(adapters.access),
   });
   const activityLayer = ActivityService.layer({
     directory: {
@@ -1506,6 +1535,26 @@ export function createApplicationLayer(
     installationId: adapters.installationId,
     shareLinks: shareLinkRepositoryEffects(adapters.access),
   }).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, managementLayer)));
+  const guestReviewLayer = GuestReviewService.layer({
+    access: accessRepositoryEffects(adapters.access),
+    clock,
+    findArtifact: (projectId, artifactId) => Effect.tryPromise({
+      try: () => adapters.repository.findArtifact(projectId, artifactId),
+      catch: (cause) => repositoryFailure("findArtifact", cause),
+    }),
+    findProject: (projectId) => Effect.tryPromise({
+      try: () => adapters.repository.findProject(projectId),
+      catch: (cause) => repositoryFailure("findProject", cause),
+    }),
+    findVersion: (projectId, artifactId, versionId) => Effect.tryPromise({
+      try: () => adapters.repository.findVersionMetadata(projectId, artifactId, versionId),
+      catch: (cause) => repositoryFailure("findVersionMetadata", cause),
+    }),
+    ids: adapters.ids,
+    installationId: adapters.installationId,
+    secrets: identitySecrets,
+    shareLinks: shareLinkRepositoryEffects(adapters.access),
+  }).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, commentLayer, contentLayer)));
   const libraryLayer = LibraryCatalogService.layer({
     clock,
     findVersionRecord: (projectId, artifactId, versionId) =>
@@ -1536,6 +1585,7 @@ export function createApplicationLayer(
   }).pipe(Layer.provideMerge(authorizationLayer));
   return Layer.mergeAll(
     accessAdministrationLayer,
+    guestReviewLayer,
     shareLinkLayer,
     activityLayer,
     libraryLayer,

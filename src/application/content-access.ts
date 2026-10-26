@@ -1,3 +1,4 @@
+import {guestPrincipalIdPrefix} from "../core/identity.js";
 import {
   Context,
   DateTime,
@@ -104,6 +105,13 @@ export type VersionContentFallback = "entry" | "none";
 /** Dependencies used to construct private and public content access. */
 export interface ContentAccessDependencies {
   readonly clock: ApplicationClock;
+  /** A guest's current link target, or null once the guest has no access (ADR 0033). */
+  readonly guestTarget: (guestId: string) => Effect.Effect<
+    {readonly artifactId: string; readonly projectId: string; readonly versionId: string} | null,
+    ArtifactRepositoryFailure
+  >;
+  /** Whether installation policy allows public and share links at all. */
+  readonly publicLinksEnabled: () => Effect.Effect<boolean, ArtifactRepositoryFailure>;
   readonly repository: ContentAccessRepository;
   readonly secrets: ContentSecretProvider;
 }
@@ -395,7 +403,8 @@ function makeContentAccessService(
     yield* Effect.annotateCurrentSpan({"artifact.project.id": content.projectId});
     if (
       content.accessSetting === accessSettings.publicLink &&
-      content.isCurrent
+      content.isCurrent &&
+      (yield* dependencies.publicLinksEnabled())
     ) {
       return content;
     }
@@ -420,6 +429,16 @@ function makeContentAccessService(
       now,
     );
     if (lease === null) return yield* sessionRequired();
+    // A guest's lease serves only while its link admits them and still targets this version.
+    if (lease.principalId.startsWith(guestPrincipalIdPrefix)) {
+      const target = yield* dependencies.guestTarget(lease.principalId);
+      if (
+        target === null || target.projectId !== lease.projectId ||
+        target.artifactId !== lease.artifactId || target.versionId !== lease.versionId
+      ) {
+        return yield* sessionRequired();
+      }
+    }
     const content = yield* dependencies.repository.findVersionContent(
       lease.contentToken,
       command.path,
@@ -448,7 +467,10 @@ function makeContentAccessService(
     yield* Effect.annotateCurrentSpan({
       "artifact.project.id": current.artifact.projectId,
     });
-    if (current.artifact.accessSetting !== accessSettings.publicLink) {
+    if (
+      current.artifact.accessSetting !== accessSettings.publicLink ||
+      !(yield* dependencies.publicLinksEnabled())
+    ) {
       return yield* sessionRequired();
     }
     return current;

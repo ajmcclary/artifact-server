@@ -26,6 +26,8 @@ import {
   type VisibleScope,
 } from "../core/permissions.js";
 import type {ApplicationClock} from "./application-clock.js";
+import {resolveActiveGuest} from "./guest-links.js";
+import type {ShareLinkRepositoryEffects} from "./share-links.js";
 
 /** The access store, with each operation lifted into Effect. */
 export type AccessRepositoryEffects = {
@@ -65,6 +67,8 @@ export interface AuthorizationDependencies {
   readonly access: AccessRepositoryEffects;
   readonly clock: ApplicationClock;
   readonly installationId: string;
+  /** Guests resolve through their share link (ADR 0033 part B). */
+  readonly shareLinks: Pick<ShareLinkRepositoryEffects, "findGuest">;
 }
 
 /** Permissions an artifact-management check may require. */
@@ -245,8 +249,46 @@ function makeAuthorizationService(
     });
   });
 
+  const guestValidity = {
+    access: dependencies.access,
+    clock: dependencies.clock,
+    installationId: dependencies.installationId,
+    shareLinks: dependencies.shareLinks,
+  };
+
+  /** A guest's access to one scope: only their link's artifact, only its link permissions. */
+  const resolveGuest = Effect.fnUntraced(function*(principal: Principal, scope: AccessScope) {
+    const active = yield* resolveActiveGuest(guestValidity, principal.id);
+    if (
+      active === null || active.link.projectId !== scope.projectId ||
+      (scope.artifactId !== null && scope.artifactId !== active.link.artifactId)
+    ) {
+      return null;
+    }
+    const project = yield* access.readProjectAccess(dependencies.installationId, scope.projectId);
+    if (project === null) return null;
+    return resolveEffectiveAccess({
+      artifactDeleted: false,
+      artifactGrants: [],
+      now: yield* now,
+      policy: active.policy,
+      project: {...project, archived: false},
+      projectGrant: null,
+      shareLinkId: active.link.id,
+      subject: {kind: "guest", linkPermissions: active.link.permissions},
+    });
+  });
+
   const visibleScope = Effect.fn("AuthorizationService.visibleScope")(
     function*(principal: Principal) {
+      if (principal.kind === principalKinds.guest) {
+        const active = yield* resolveActiveGuest(guestValidity, principal.id);
+        return {
+          artifactIdsByProject: new Map(active === null ? [] : [[active.link.projectId, [active.link.artifactId]]]),
+          kind: "limited",
+          projectIds: [],
+        } as const;
+      }
       if (principal.kind === principalKinds.service) {
         return principal.projectIds.length === 0
           ? {kind: "all"} as const
@@ -294,6 +336,17 @@ function makeAuthorizationService(
       yield* notFoundFor(scope);
       return;
     }
+    if (principal.kind === principalKinds.guest) {
+      const guest = yield* resolveGuest(principal, scope);
+      if (guest === null) {
+        yield* notFoundFor(scope);
+        return;
+      }
+      // A guest sees their link's project only through its one artifact.
+      if (permission === "visible") return;
+      if (scope.artifactId === null || !guest.permissions.has(permission)) yield* denied();
+      return;
+    }
     if (principal.kind === principalKinds.service) {
       if (!capabilityRule(principal)) yield* denied();
       return;
@@ -319,6 +372,11 @@ function makeAuthorizationService(
   const effectiveAccess = Effect.fn("AuthorizationService.effectiveAccess")(
     function*(principal: Principal, scope: AccessScope) {
       yield* requireInstallation(principal);
+      if (principal.kind === principalKinds.guest) {
+        const guest = yield* resolveGuest(principal, scope);
+        if (guest === null) return yield* notFoundFor(scope);
+        return guest;
+      }
       return yield* resolve(principal, scope);
     },
   );

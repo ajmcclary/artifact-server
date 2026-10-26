@@ -7,7 +7,7 @@ import {ManagedRuntime, Redacted} from "effect";
 
 import {InstallationAccessService} from "../../src/application/installation-access.js";
 import {ProjectManagementService} from "../../src/application/project-management.js";
-import {StagedUploadService} from "../../src/application/staged-upload.js";
+import {type CommitStagedUploadTarget, StagedUploadService} from "../../src/application/staged-upload.js";
 import type {AccessGrantDraft} from "../../src/core/access-ports.js";
 import {attributionOf} from "../../src/core/action-attribution.js";
 import type {MembershipRole, Principal} from "../../src/core/identity.js";
@@ -118,7 +118,27 @@ export async function startAccessRuntime() {
   };
 
   /** Publish one small private HTML artifact into `projectId` as `principal`. */
-  const publish = async (principal: Principal, projectId: string, name = "Fixture") => {
+  const publish = async (principal: Principal, projectId: string, name = "Fixture") =>
+    publishTo(principal, projectId, name, {accessSetting: "account_required", kind: "new_artifact", name});
+
+  /** Publish a new version of an existing artifact. */
+  const publishVersion = async (
+    principal: Principal,
+    projectId: string,
+    artifactId: string,
+    expectedCurrentVersionId: string,
+  ) => publishTo(principal, projectId, `Version after ${expectedCurrentVersionId}`, {
+    artifactId,
+    expectedCurrentVersionId,
+    kind: "new_version",
+  });
+
+  const publishTo = async (
+    principal: Principal,
+    projectId: string,
+    name: string,
+    target: CommitStagedUploadTarget,
+  ) => {
     const bytes = new TextEncoder().encode(`<!doctype html><title>${name}</title>`);
     const created = await runtime.runPromise(StagedUploadService.use((uploads) => uploads.createUpload({
       entryPath: "index.html",
@@ -150,7 +170,7 @@ export async function startAccessRuntime() {
       idempotencyKey: `access-fixture-${randomUUID()}`,
       principal,
       projectId,
-      target: {accessSetting: "account_required", kind: "new_artifact", name},
+      target,
       uploadId: created.upload.id,
     })));
     if (committed.kind !== "committed") throw new Error(`Fixture upload returned ${committed.kind}.`);
@@ -166,6 +186,7 @@ export async function startAccessRuntime() {
     installationId,
     person,
     publish,
+    publishVersion,
     runtime,
     setProjectAccess,
     stop: async () => {

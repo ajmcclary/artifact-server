@@ -12,7 +12,7 @@ import {
   principalKinds,
   type Principal,
 } from "../../src/core/identity.js";
-import {accessRepositoryEffects} from "../../src/local/create-local-application-layer.js";
+import {accessRepositoryEffects, shareLinkRepositoryEffects} from "../../src/local/create-local-application-layer.js";
 import {SqliteAccessRepository} from "../../src/storage/sqlite-access-repository.js";
 import {SqliteArtifactRepository} from "../../src/storage/sqlite-artifact-repository.js";
 
@@ -36,6 +36,7 @@ describe("authorization policy", () => {
         access: accessRepositoryEffects(access),
         clock: {now: Effect.sync(() => DateTime.makeUnsafe(clock.now()))},
         installationId: "installation-a",
+        shareLinks: shareLinkRepositoryEffects(access),
       }),
     ));
     await runtime.context();
