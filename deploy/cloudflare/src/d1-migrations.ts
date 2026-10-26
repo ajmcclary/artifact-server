@@ -17,11 +17,16 @@ import {
 } from "../../../src/storage/invitation-schema.js";
 import {normalizeArtifactSearchText} from
   "../../../src/application/artifact-tags.js";
+import {
+  sqliteAccessTableStatements,
+  sqliteKeyProjectScopeColumnSql,
+  sqliteProjectAccessColumns,
+} from "../../../src/storage/access-schema.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 20;
+export const requiredD1SchemaVersion = 21;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -674,6 +679,7 @@ export async function migrateD1(
   await widenMemberAdmissionIfNeeded(database);
   await widenActionKindsIfNeeded(database);
   await widenRenameIdempotencyIfNeeded(database);
+  await addLayeredProjectAccessIfMissing(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -1048,6 +1054,24 @@ async function widenRenameIdempotencyIfNeeded(database: D1Database): Promise<voi
     database.prepare("DROP TABLE idempotency_records"),
     database.prepare("ALTER TABLE idempotency_records_renamed RENAME TO idempotency_records"),
   ]);
+}
+
+// ADR 0033: existing projects stay open to every member at the editor role,
+// and existing keys stay unscoped.
+async function addLayeredProjectAccessIfMissing(database: D1Database): Promise<void> {
+  const columnsOf = async (table: "managed_api_keys" | "projects") =>
+    (await database.prepare(`PRAGMA table_info(${table})`).all<{name: string}>())
+      .results.map((column) => column.name);
+  const projectColumns = await columnsOf("projects");
+  const missing = sqliteProjectAccessColumns.filter(({column}) => !projectColumns.includes(column));
+  const keyStatements = (await columnsOf("managed_api_keys")).includes("project_ids_json")
+    ? []
+    : [sqliteKeyProjectScopeColumnSql];
+  await database.batch([
+    ...missing.map(({sql}) => sql),
+    ...keyStatements,
+    ...sqliteAccessTableStatements,
+  ].map((statement) => database.prepare(statement)));
 }
 
 async function addCommittedStagingCleanupIfMissing(database: D1Database): Promise<void> {

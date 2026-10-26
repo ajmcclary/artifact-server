@@ -175,6 +175,7 @@ import {
   snapshotThreadIds,
   type ActivityStatement,
 } from "./activity-sql.js";
+import {sqliteAccessTableStatements, sqliteProjectAccessColumns} from "./access-schema.js";
 import {requiredSqliteSchemaVersion} from "./sqlite-schema.js";
 import type {
   ListPublicLinks,
@@ -5937,52 +5938,12 @@ export class SqliteArtifactRepository implements
   // which is exactly what members could do before project access existed.
   #addLayeredProjectAccessIfMissing(): void {
     const projectColumns = this.#tableColumns("projects");
-    if (!projectColumns.includes("access_mode")) {
-      this.#database.exec(`ALTER TABLE projects ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'open'
-        CHECK (access_mode IN ('open', 'restricted'))`);
+    for (const {column, sql} of sqliteProjectAccessColumns) {
+      if (!projectColumns.includes(column)) this.#database.exec(sql);
     }
-    if (!projectColumns.includes("default_member_role")) {
-      this.#database.exec(`ALTER TABLE projects ADD COLUMN default_member_role TEXT NOT NULL DEFAULT 'editor'
-        CHECK (default_member_role IN ('none', 'viewer', 'commenter', 'editor', 'manager'))`);
-    }
-    if (!projectColumns.includes("access_revision")) {
-      this.#database.exec(
-        "ALTER TABLE projects ADD COLUMN access_revision INTEGER NOT NULL DEFAULT 0 CHECK (access_revision >= 0)",
-      );
-    }
-    this.#database.exec(`
-      CREATE TABLE IF NOT EXISTS installation_access_policy (
-        installation_id TEXT PRIMARY KEY,
-        policy_json TEXT NOT NULL,
-        revision INTEGER NOT NULL CHECK (revision > 0),
-        updated_at TEXT NOT NULL,
-        updated_by_principal_id TEXT NOT NULL
-      ) STRICT;
-
-      CREATE TABLE IF NOT EXISTS access_grants (
-        installation_id TEXT NOT NULL,
-        id TEXT NOT NULL,
-        project_id TEXT NOT NULL REFERENCES projects(id),
-        artifact_id TEXT,
-        member_id TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('none', 'viewer', 'commenter', 'editor', 'manager')),
-        add_permissions_json TEXT NOT NULL DEFAULT '[]',
-        remove_permissions_json TEXT NOT NULL DEFAULT '[]',
-        expires_at TEXT,
-        created_at TEXT NOT NULL,
-        created_by_principal_id TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        revision INTEGER NOT NULL CHECK (revision > 0),
-        PRIMARY KEY (installation_id, id),
-        CHECK (artifact_id IS NULL OR role <> 'none')
-      ) STRICT;
-
-      CREATE UNIQUE INDEX IF NOT EXISTS access_grants_subject
-        ON access_grants (installation_id, project_id, COALESCE(artifact_id, ''), member_id);
-      CREATE INDEX IF NOT EXISTS access_grants_member
-        ON access_grants (installation_id, member_id);
-    `);
+    for (const statement of sqliteAccessTableStatements) this.#database.exec(statement);
   }
+
 
   #addContentVariantsTableIfMissing(): void {
     this.#database.exec(`

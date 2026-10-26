@@ -1,3 +1,4 @@
+import {sqliteKeyProjectScopeColumnSql} from "./access-schema.js";
 import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 
 import { z } from "zod";
@@ -1112,9 +1113,7 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     }
     // ADR 0033: an empty list means the key reaches every project, as before.
     if (!this.#tableColumns("managed_api_keys").includes("project_ids_json")) {
-      this.#database.exec(
-        "ALTER TABLE managed_api_keys ADD COLUMN project_ids_json TEXT NOT NULL DEFAULT '[]'",
-      );
+      this.#database.exec(sqliteKeyProjectScopeColumnSql);
     }
   }
 
