@@ -1110,6 +1110,12 @@ export class SqliteIdentityRepository implements BootstrapManagedApiKeyRepositor
     if (!this.#tableColumns("managed_api_keys").includes("last_used_at")) {
       this.#database.exec("ALTER TABLE managed_api_keys ADD COLUMN last_used_at TEXT");
     }
+    // ADR 0033: an empty list means the key reaches every project, as before.
+    if (!this.#tableColumns("managed_api_keys").includes("project_ids_json")) {
+      this.#database.exec(
+        "ALTER TABLE managed_api_keys ADD COLUMN project_ids_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    }
   }
 
   #tableColumns(
