@@ -146,6 +146,7 @@ import type {IdentityRepository} from "../core/identity-ports.js";
 import type { ManifestEntry } from "../core/model.js";
 import {randomBase64Url} from "../core/random.js";
 import {redactedFailureCause} from "../observability/failure-cause-summary.js";
+import {AccessAdministrationService} from "../application/access-administration.js";
 import {InvitationService} from "../application/invitations.js";
 import { FileVerificationError } from "../storage/verified-file.js";
 import {defaultStagingCleanupPolicy} from
@@ -236,6 +237,7 @@ interface PublicLinkInventoryStore {
 export function createApplicationLayer(
   adapters: ApplicationAdapters,
 ): Layer.Layer<
+  | AccessAdministrationService
   | ActivityService
   | AgentDispatchService
   | AuthenticationService
@@ -1455,6 +1457,16 @@ export function createApplicationLayer(
   const comparisonLayer = CompareArtifactService.layer(
     comparisonDependencies,
   ).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)));
+  const accessAdministrationLayer = AccessAdministrationService.layer({
+    access: accessRepositoryEffects(adapters.access),
+    clock,
+    ids: adapters.ids,
+    installationId: adapters.installationId,
+    listMembers: () => identityEffect(
+      "listMembers",
+      () => adapters.identityRepository.listMembers(adapters.installationId),
+    ),
+  }).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, managementLayer, projectLayer)));
   const libraryLayer = LibraryCatalogService.layer({
     clock,
     findVersionRecord: (projectId, artifactId, versionId) =>
@@ -1484,6 +1496,7 @@ export function createApplicationLayer(
       }),
   }).pipe(Layer.provideMerge(authorizationLayer));
   return Layer.mergeAll(
+    accessAdministrationLayer,
     activityLayer,
     libraryLayer,
     authenticationLayer,

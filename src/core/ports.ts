@@ -1074,6 +1074,7 @@ export interface Clock {
 }
 
 export interface IdGenerator {
+  accessGrantId(): string;
   agentDispatchId(): string;
   artifactId(): string;
   commentReplyId(): string;

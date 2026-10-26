@@ -10,6 +10,11 @@ export class SystemClock implements Clock {
 }
 
 export class SystemIdGenerator implements IdGenerator {
+  /** Create one opaque access grant identity. */
+  accessGrantId(): string {
+    return `grt_${randomUUID()}`;
+  }
+
   /** Create one opaque agent dispatch identity. */
   agentDispatchId(): string {
     return `dsp_${randomUUID()}`;
