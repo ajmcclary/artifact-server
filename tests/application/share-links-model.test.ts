@@ -65,14 +65,14 @@ describe("share link model", () => {
   });
 
   test("guest display names are stripped of invisible controls and bounded", () => {
-    expect(normalizeGuestDisplayName("‮alice​ ")).toBe("alice");
+    expect(normalizeGuestDisplayName("\u202Ealice\u200B ")).toBe("alice");
     expect(normalizeGuestDisplayName("  ")).toBeInstanceOf(GuestIdentityRequired);
     expect(normalizeGuestDisplayName("x".repeat(61))).toBeInstanceOf(GuestIdentityRequired);
     expect(normalizeGuestDisplayName("x".repeat(60))).toBe("x".repeat(60));
   });
 
   test("labels are stripped and bounded", () => {
-    expect(normalizeShareLinkLabel(" Client⁦ review ")).toBe("Client review");
+    expect(normalizeShareLinkLabel(" Client\u2066 review ")).toBe("Client review");
     expect(normalizeShareLinkLabel("")).toBeInstanceOf(ShareLinkInvalid);
     expect(normalizeShareLinkLabel("x".repeat(81))).toBeInstanceOf(ShareLinkInvalid);
   });
@@ -90,10 +90,10 @@ describe("share link model", () => {
   });
 
   test("stripInvisibleControls matches the bundle sanitizer it replaces", () => {
-    for (const sample of ["plain", "‮evil‬", "a​b⁠c﻿", "⁦x⁩"]) {
+    for (const sample of ["plain", "\u202Eevil\u202C", "a\u200Bb\u2060c\uFEFF", "\u2066x\u2069"]) {
       expect(stripInvisibleControls(sample)).toBe(sanitizeBundleText(sample));
     }
-    expect(stripInvisibleControls("a​b")).toBe("ab");
+    expect(stripInvisibleControls("a\u200Bb")).toBe("ab");
   });
 
   test("share-link identifiers and tokens have their documented shapes", () => {

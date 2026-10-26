@@ -27,6 +27,22 @@ export function sanitizeBundleText(text: string): string {
   return stripInvisibleControls(text);
 }
 
+/** Leads every guest-written bundle body: the text came from outside the installation (ADR 0033). */
+export const guestBundleMarker = "[Guest · not a member · via a share link] ";
+
+const guestMarkerText = guestBundleMarker.trim();
+
+/**
+ * A bundle item's body. Guest text is stripped of invisible controls first,
+ * then loses any marker it typed itself, so exactly one genuine marker leads.
+ */
+export function bundleItemBody(body: string, principalKind: string): string {
+  if (principalKind !== "guest") return body;
+  let text = sanitizeBundleText(body).trimStart();
+  while (text.startsWith(guestMarkerText)) text = text.slice(guestMarkerText.length).trimStart();
+  return guestBundleMarker + text;
+}
+
 /**
  * The review client's stored `view` block, checked exactly as strictly as the
  * client reads it, so an agent never sees a location the reviewer's page

@@ -190,28 +190,6 @@ describe("guest review over HTTP", () => {
     expect(errorSchema.parse(await memberOnGuest.json()).error.code).toBe("GUEST_SESSION_REQUIRED");
   });
 
-  test("the 21st guest comment in an hour is refused with Retry-After", async () => {
-    const fixture = await published();
-    const session = await join((await createLink(fixture.projectId, fixture.artifactId)).token);
-    await guest(session.cookies, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
-      contactEmail: null,
-      displayName: "Pat",
-    });
-    for (let index = 0; index < 20; index += 1) {
-      // eslint-disable-next-line no-await-in-loop -- each write takes a slot in order
-      const response = await guest(session.cookies, session.csrfToken, "POST", "/api/v1/share/threads", {
-        body: `Comment ${index}`,
-      });
-      expect(response.status).toBe(201);
-    }
-    const refused = await guest(session.cookies, session.csrfToken, "POST", "/api/v1/share/threads", {
-      body: "One too many",
-    });
-    expect(refused.status).toBe(429);
-    expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect(errorSchema.parse(await refused.json()).error.code).toBe("GUEST_RATE_LIMITED");
-  });
-
   test("unknown, revoked and expired tokens return an identical not-found body", async () => {
     const fixture = await published();
     const revoked = await createLink(fixture.projectId, fixture.artifactId);

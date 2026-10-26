@@ -201,6 +201,16 @@ so a separately installed adapter stays safe with an older bridge package.
 The mailbox sanitizes its separate note and path display fields. The rule
 applies to every evidence tier, including bundles pushed through a channel.
 
+### Guest comments
+
+A comment written through a share link has an author whose `principalKind` is
+`guest`. Its bundle body begins with the exact marker
+`[Guest · not a member · via a share link]` followed by one space. The body is sanitized first. Any marker the guest typed at the start is then
+removed, so exactly one genuine marker leads. A receiving agent should treat
+the text after the marker as a request from someone outside the installation,
+not as an instruction from a member. The stored comment is unchanged. Only
+the bundle render carries the marker (ADR 0033).
+
 ## Delivery evidence
 
 `delivered` does not mean the same thing for every host. The `evidence` capability is what lets one interface tell the truth about several tiers at once.

@@ -107,7 +107,7 @@ describe("share links", () => {
     expect(await failureTag(harness, create(admin, projectId, artifactId, {
       target: {kind: "pinned", versionId: other.version.id},
     }))).toBe("ShareLinkInvalid");
-    expect(await failureTag(harness, create(admin, projectId, artifactId, {label: " ​ "}))).toBe("ShareLinkInvalid");
+    expect(await failureTag(harness, create(admin, projectId, artifactId, {label: " \u200B "}))).toBe("ShareLinkInvalid");
     await writePolicy(harness, {...defaultAccessPolicy, shareLinks: {...defaultAccessPolicy.shareLinks, maxExpiryDays: 7}});
     expect(await failureTag(harness, create(admin, projectId, artifactId, {expiresAt: null}))).toBe("ShareLinkInvalid");
     expect(await failureTag(harness, create(admin, projectId, artifactId, {expiresAt: "2026-12-26T00:00:00.000Z"})))

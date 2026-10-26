@@ -593,7 +593,7 @@ export interface ShareLinkRepository {
 
 - [ ] **Step 1: Write the failing tests.**
   - `validateShareLinkPermissions` rejects `[]`, `["comment.read"]`, `["artifact.view", "comment.write"]` and `["artifact.view", "artifact.publish"]`, and accepts `["artifact.view", "comment.read", "comment.write"]`.
-  - `normalizeGuestDisplayName("‮alice​ ")` returns `"alice"`, and a 61-character name fails.
+  - `normalizeGuestDisplayName("\u202Ealice\u200B ")` returns `"alice"`, and a 61-character name fails.
   - `guestSessionExpiry` with a link expiring in 2 days returns the link expiry.
   - `stripInvisibleControls` is byte-identical to the old `sanitizeBundleText` on the strings in `tests/conformance/dsp-011-bridge-bundle-render.test.ts`.
 - [ ] **Step 2: Run the tests.** Run `pnpm vitest run tests/application/share-links-model.test.ts tests/conformance/dsp-011-bridge-bundle-render.test.ts`. Expected: FAIL.

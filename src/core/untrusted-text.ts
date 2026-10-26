@@ -1,5 +1,5 @@
 const invisibleDirectivePattern =
-  /[‪-‮⁦-⁩​-‏⁠﻿]/gu;
+  /[\u202A-\u202E\u2066-\u2069\u200B-\u200F\u2060\uFEFF]/gu;
 
 /**
  * Strip bidirectional-override and invisible Unicode from one piece of

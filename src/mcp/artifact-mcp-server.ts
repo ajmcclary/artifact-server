@@ -107,6 +107,7 @@ import {
   bundleAnchorSchema,
   bundleLocationLine,
   renderBundleMessage,
+  bundleItemBody,
   sanitizeBundleText,
   type BundleItem,
   type RenderableBundle,
@@ -2400,7 +2401,7 @@ export function createArtifactMcpServer(
       items.push({
         artifactName: artifactNames.get(thread.artifactId) ??
           thread.artifactId,
-        body: thread.body,
+        body: bundleItemBody(thread.body, thread.author.principalKind),
         path: thread.path,
         location: viewAnchor.success ? bundleLocationLine(viewAnchor.data.view) : null,
         quotedSelection: anchor.success ? anchor.data.originalText : null,

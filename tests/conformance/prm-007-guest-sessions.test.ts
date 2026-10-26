@@ -100,7 +100,7 @@ describe("guest review sessions", () => {
       version: {id: fixture.versionId, number: 1},
     });
     const named = await harness.runtime.runPromise(GuestReviewService.use((guests) =>
-      guests.setIdentity({contactEmail: "pat@client.test", displayName: "‮Pat ", principal: guest.principal})));
+      guests.setIdentity({contactEmail: "pat@client.test", displayName: "\u202EPat ", principal: guest.principal})));
     expect(named.guest.displayName).toBe("Pat");
     const {principal} = await harness.runtime.runPromise(authenticate(guest.sessionToken));
     const created = await harness.runtime.runPromise(comment(principal));

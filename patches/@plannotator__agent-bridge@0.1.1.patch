@@ -1,11 +1,27 @@
 diff --git a/index.ts b/index.ts
-index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc57bb6acf 100644
+index 47153f0a446edfa3089c90f16c568eee67ebee2a..45370f4ee7406c80e68248a5fde5d36281cc47cb 100644
 --- a/index.ts
 +++ b/index.ts
-@@ -185,6 +185,55 @@ export function sanitizeBundleText(text: string): string {
+@@ -185,6 +185,71 @@ export function sanitizeBundleText(text: string): string {
    return text.replace(invisibleDirectivePattern, "");
  }
  
++/** Leads every guest-written bundle body: the text came from outside the installation. */
++export const guestBundleMarker = "[Guest · not a member · via a share link] ";
++
++const guestMarkerText = guestBundleMarker.trim();
++
++/**
++ * A bundle item's body. Guest text is stripped of invisible controls first,
++ * then loses any marker it typed itself, so exactly one genuine marker leads.
++ */
++export function bundleItemBody(body: string, principalKind: string): string {
++  if (principalKind !== "guest") return body;
++  let text = sanitizeBundleText(body).trimStart();
++  while (text.startsWith(guestMarkerText)) text = text.slice(guestMarkerText.length).trimStart();
++  return guestBundleMarker + text;
++}
++
 +/**
 + * The review client's stored `view` block, checked exactly as strictly as the
 + * client reads it, so an agent never sees a location the reviewer's page
@@ -58,7 +74,7 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc
  // ---------------------------------------------------------------------------
  // Bundle rendering
  // ---------------------------------------------------------------------------
-@@ -198,6 +247,8 @@ export interface BundleItem {
+@@ -198,6 +263,8 @@ export interface BundleItem {
    readonly body: string;
    readonly path: string | null;
    readonly quotedSelection: string | null;
@@ -67,7 +83,7 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc
    readonly threadId: string;
    readonly versionNumber: number;
  }
-@@ -251,20 +302,24 @@ export function renderBundleMessage(
+@@ -251,20 +318,24 @@ export function renderBundleMessage(
  ): string {
    const lines: string[] = [];
    lines.push(
@@ -95,7 +111,15 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc
      for (const bodyLine of sanitizeBundleText(item.body).split("\n")) {
        lines.push(`   ${bodyLine}`);
      }
-@@ -630,10 +685,12 @@ export async function fetchBundle(
+@@ -320,6 +391,7 @@ const artifactPageSchema = z.object({
+ const threadSchema = z.object({
+   anchor: z.unknown(),
+   artifactId: z.string(),
++  author: z.object({principalKind: z.string()}).loose().optional(),
+   body: z.string(),
+   id: z.string(),
+   path: z.string().nullable(),
+@@ -630,10 +702,12 @@ export async function fetchBundle(
        versionNumbers.set(location.artifactId, numbers);
      }
      const anchor = anchorSelectionSchema.safeParse(details.thread.anchor);
@@ -103,12 +127,13 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..d4249a17c56ff8203435509a3d2b86fc
      items.push({
        artifactName: artifactNames.get(location.artifactId) ??
          location.artifactId,
-       body: details.thread.body,
+-      body: details.thread.body,
++      body: bundleItemBody(details.thread.body, details.thread.author?.principalKind ?? "human"),
 +      location: viewAnchor.success ? bundleLocationLine(viewAnchor.data.view) : null,
        path: details.thread.path,
        quotedSelection: anchor.success ? anchor.data.originalText : null,
        threadId,
-@@ -1099,7 +1156,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+@@ -1099,7 +1173,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
      callPort(() =>
        options.host.notify(
          `Artifact Server: delivering ${dispatch.threadIds.length} ` +
