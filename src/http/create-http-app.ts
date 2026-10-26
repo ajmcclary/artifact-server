@@ -92,7 +92,7 @@ import {
 import {GuestReviewService} from "../application/guest-review.js";
 import {ShareLinkService} from "../application/share-links.js";
 import type {ShareLink} from "../core/share-links.js";
-import {GuestRateLimiter} from "./guest-rate-limiter.js";
+import {GuestAdmissionLimiter, GuestRateLimiter} from "./guest-rate-limiter.js";
 import {
   ArtifactNotFound,
   AuthenticationRequired,
@@ -104,6 +104,7 @@ import {
   GuestRateLimited,
   GuestSessionRequired,
   InvalidPagination,
+  ShareLinkNotFound,
   InviteRejected,
   isArtifactServerFailure,
   VersionNotFound,
@@ -3109,6 +3110,7 @@ export function createHttpApp(
   // --- Share links and guest review (ADR 0033 part B) ---
 
   const guestLimiter = new GuestRateLimiter();
+  const guestAdmissions = new GuestAdmissionLimiter();
   const shareLookupLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
 
 
@@ -3119,7 +3121,12 @@ export function createHttpApp(
 
   /** The guest behind this request; writes also need same-origin and the guest CSRF token. */
   const authenticateGuest = async (context: Context<HttpEnvironment>) => {
-    const names = guestCookieNames(dependencies);
+    // Each link keeps its own cookies, so two links open in one browser never collide.
+    const linkId = shareLinkIdSchema.safeParse(context.req.header("x-share-link"));
+    if (!linkId.success) {
+      throw new GuestSessionRequired({message: "Open the share link again to continue."});
+    }
+    const names = guestCookieNames(dependencies, linkId.data);
     const token = getCookie(context, names.session);
     if (token === undefined || token === "") {
       throw new GuestSessionRequired({message: "Open the share link again to continue."});
@@ -3129,6 +3136,12 @@ export function createHttpApp(
       dependencies,
       GuestReviewService.use((guests) => guests.authenticate({sessionToken: token})),
     );
+    if (authenticated.context.link.id !== linkId.data) {
+      throw new GuestSessionRequired({message: "Open the share link again to continue."});
+    }
+    // The version the page shows; a moved latest link refuses work aimed at the old one.
+    const viewing = viewingVersionSchema.safeParse(context.req.header("x-share-version"));
+    const viewingVersionId = viewing.success ? viewing.data : null;
     if (isUnsafeMethod(context.req.method)) {
       requireApplicationOrigin(context, dependencies);
       const header = context.req.header("x-csrf-token");
@@ -3140,7 +3153,7 @@ export function createHttpApp(
         throw new AuthorizationDenied({message: "A valid guest CSRF token is required."});
       }
     }
-    return authenticated;
+    return {...authenticated, viewingVersionId};
   };
 
   const takeGuestSlot = (authenticated: {readonly context: {readonly link: {readonly id: string}}; readonly principal: Principal}) => {
@@ -3155,22 +3168,41 @@ export function createHttpApp(
 
   app.post("/api/v1/share/sessions", boundedJsonBody, async (context) => {
     requireApplicationOrigin(context, dependencies);
-    const limited = shareLookupLimiter.retryAfterSeconds();
-    if (limited !== null) {
-      context.header("Retry-After", String(limited));
-      return context.json({error: {code: errorCodes.rateLimited, message: "Too many link attempts. Try again shortly."}}, 429);
-    }
     const body = shareSessionBodySchema.parse(await context.req.json());
-    const started = await runHttpApplicationEffect(
-      context,
-      dependencies,
-      GuestReviewService.use((guests) => guests.startSession({token: body.token})).pipe(
-        Effect.tapError((failure) => Effect.sync(() => {
-          if (failure._tag === "ShareLinkNotFound") shareLookupLimiter.noteFailure();
+    // Only unknown or ended tokens count toward the lookup limit, so a flood of bad
+    // tokens slows bad tokens and never stops a valid link from opening.
+    const refusedLookup = (): Response | null => {
+      shareLookupLimiter.noteFailure();
+      const wait = shareLookupLimiter.retryAfterSeconds();
+      if (wait === null) return null;
+      context.header("Retry-After", String(wait));
+      return context.json({error: {code: errorCodes.rateLimited, message: "Too many link attempts. Try again shortly."}}, 429);
+    };
+    let started;
+    try {
+      started = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        GuestReviewService.use((guests) => guests.startSession({
+          admissionWait: (linkId) => guestAdmissions.retryAfterSeconds(linkId),
+          existingSession: (linkId) => {
+            const names = guestCookieNames(dependencies, linkId);
+            const sessionToken = getCookie(context, names.session);
+            const csrfToken = getCookie(context, names.csrf);
+            return sessionToken === undefined || csrfToken === undefined ? null : {csrfToken, sessionToken};
+          },
+          token: body.token,
         })),
-      ),
-    );
-    const names = guestCookieNames(dependencies);
+      );
+    } catch (failure) {
+      if (failure instanceof ShareLinkNotFound) {
+        const refused = refusedLookup();
+        if (refused !== null) return refused;
+      }
+      throw failure;
+    }
+    if (!started.resumed) guestAdmissions.note(started.context.link.id);
+    const names = guestCookieNames(dependencies, started.context.link.id);
     const secure = usesSecureApplicationCookies(dependencies);
     const expires = new Date(started.expiresAt);
     setCookie(context, names.session, started.sessionToken, {expires, httpOnly: true, path: "/", sameSite: "Lax", secure});
@@ -3224,6 +3256,7 @@ export function createHttpApp(
         cursor: decodePageCursor(query.cursor),
         limit: query.limit,
         principal: authenticated.principal,
+        viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.json(commentThreadPageResponse(responseApplicationUrl(context, dependencies), page));
@@ -3242,6 +3275,7 @@ export function createHttpApp(
         idempotencyKey: requiredIdempotencyKey(context.req.header("idempotency-key")),
         path: body.path ?? null,
         principal: authenticated.principal,
+        viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.json({
@@ -3258,6 +3292,7 @@ export function createHttpApp(
       GuestReviewService.use((guests) => guests.getThread({
         principal: authenticated.principal,
         threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.json(commentThreadDetailsResponse(responseApplicationUrl(context, dependencies), details));
@@ -3276,11 +3311,13 @@ export function createHttpApp(
           body: body.body ?? "",
           principal: authenticated.principal,
           threadId,
+          viewingVersionId: authenticated.viewingVersionId,
         }))
         : GuestReviewService.use((guests) => guests.setThreadState({
           principal: authenticated.principal,
           state: body.state ?? "open",
           threadId,
+          viewingVersionId: authenticated.viewingVersionId,
         })),
     );
     return context.json({thread: commentThreadResponse(responseApplicationUrl(context, dependencies), thread)});
@@ -3296,6 +3333,7 @@ export function createHttpApp(
           principal: authenticated.principal,
           state,
           threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
         })),
       );
       return context.json({thread: commentThreadResponse(responseApplicationUrl(context, dependencies), thread)});
@@ -3310,6 +3348,7 @@ export function createHttpApp(
       GuestReviewService.use((guests) => guests.deleteThread({
         principal: authenticated.principal,
         threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.body(null, 204);
@@ -3327,6 +3366,7 @@ export function createHttpApp(
         idempotencyKey: requiredIdempotencyKey(context.req.header("idempotency-key")),
         principal: authenticated.principal,
         threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.json(created, 201);
@@ -3344,6 +3384,7 @@ export function createHttpApp(
         principal: authenticated.principal,
         replyId: context.req.param("replyId"),
         threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.json({reply});
@@ -3358,6 +3399,7 @@ export function createHttpApp(
         principal: authenticated.principal,
         replyId: context.req.param("replyId"),
         threadId: context.req.param("threadId"),
+          viewingVersionId: authenticated.viewingVersionId,
       })),
     );
     return context.body(null, 204);
@@ -3637,10 +3679,19 @@ function clearApplicationSessionCookies(
 
 const guestApiPrefix = "/api/v1/share/";
 
-function guestCookieNames(dependencies: HttpAppDependencies): {readonly csrf: string; readonly session: string} {
-  return usesSecureApplicationCookies(dependencies)
-    ? {csrf: "__Host-artifact_guest_csrf", session: "__Host-artifact_guest"}
-    : {csrf: "artifact_guest_csrf", session: "artifact_guest"};
+const shareLinkIdSchema = z.string().regex(/^shl_[0-9a-f]{24}$/u);
+const viewingVersionSchema = z.string().min(1).max(200);
+
+/** The two cookies one link's guest session uses in a browser. */
+interface GuestCookieNames {
+  readonly csrf: string;
+  readonly session: string;
+}
+
+/** One link's guest cookies; the id is validated and only ever names a cookie. */
+function guestCookieNames(dependencies: HttpAppDependencies, linkId: string): GuestCookieNames {
+  const prefix = usesSecureApplicationCookies(dependencies) ? "__Host-artifact_guest" : "artifact_guest";
+  return {csrf: `${prefix}_csrf_${linkId}`, session: `${prefix}_${linkId}`};
 }
 
 function applicationCookieNames(

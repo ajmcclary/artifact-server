@@ -8,6 +8,7 @@ export const errorCodes = {
   guestIdentityRequired: "GUEST_IDENTITY_REQUIRED",
   guestRateLimited: "GUEST_RATE_LIMITED",
   guestSessionRequired: "GUEST_SESSION_REQUIRED",
+  guestVersionChanged: "GUEST_VERSION_CHANGED",
   agentNotFound: "AGENT_NOT_FOUND",
   artifactNotFound: "ARTIFACT_NOT_FOUND",
   artifactMutationConflict: "ARTIFACT_MUTATION_CONFLICT",
@@ -104,6 +105,12 @@ export class ShareLinkInvalid extends Schema.TaggedError<ShareLinkInvalid>()(
 /** Installation policy turns share links off, or reserves them for administrators. */
 export class ShareLinksDisabled extends Schema.TaggedError<ShareLinksDisabled>()(
   "ShareLinksDisabled",
+  messageField,
+) {}
+
+/** A guest acted on a version their latest link no longer opens; they reload to the new one. */
+export class GuestVersionChanged extends Schema.TaggedError<GuestVersionChanged>()(
+  "GuestVersionChanged",
   messageField,
 ) {}
 
@@ -636,6 +643,7 @@ export class StagingStorageFailure extends Schema.TaggedError<StagingStorageFail
 
 const artifactServerFailureSchema = Schema.Union([
   GuestIdentityRequired,
+  GuestVersionChanged,
   GuestRateLimited,
   GuestSessionRequired,
   ShareLinkInvalid,

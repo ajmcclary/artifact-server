@@ -18,13 +18,21 @@ import {
 } from "../support/invites.js";
 import {publishNew} from "../support/publishing.js";
 
+interface GuestJar {
+  readonly context: {readonly link: {readonly id: string}};
+  readonly cookies: string;
+}
+
 type JsonValue = boolean | number | string | null | readonly JsonValue[] | {readonly [key: string]: JsonValue};
 
 const linkSchema = z.object({
   link: z.object({id: z.string(), revision: z.number(), token: z.string(), url: z.string()}),
 });
 const sessionSchema = z.object({
-  context: z.object({guest: z.object({displayName: z.string().nullable()}), link: z.object({id: z.string()})}),
+  context: z.object({
+    guest: z.object({displayName: z.string().nullable(), id: z.string()}),
+    link: z.object({id: z.string()}),
+  }),
   csrfToken: z.string(),
 });
 const errorSchema = z.object({error: z.object({code: z.string()})});
@@ -57,10 +65,13 @@ describe("guest review over HTTP", () => {
     return fetch(url(path), init);
   };
 
-  /** A guest request: the guest cookies, the guest CSRF token on writes, and same-origin headers. */
-  const guest = (cookies: string, csrf: string | null, method: string, path: string, body?: JsonValue) => {
+  /** A guest request: the browser's cookies, the link it acts for, the guest CSRF token on writes. */
+  const guest = (jar: GuestJar | null, csrf: string | null, method: string, path: string, body?: JsonValue) => {
     const headers = browserMutationHeaders(context.server.baseUrl, null);
-    headers.set("Cookie", cookies);
+    if (jar !== null) {
+      headers.set("Cookie", jar.cookies);
+      headers.set("X-Share-Link", jar.context.link.id);
+    }
     headers.set("Idempotency-Key", `guest-${randomUUID()}`);
     if (csrf !== null) headers.set("X-CSRF-Token", csrf);
     const init: RequestInit = {headers, method};
@@ -125,10 +136,14 @@ describe("guest review over HTTP", () => {
     return toolResultSchema.parse(await response.json()).result;
   };
 
-  const join = async (token: string) => {
-    const response = await guest("", null, "POST", "/api/v1/share/sessions", {token});
+  /** Open a link, in a browser that may already hold other cookies. */
+  const join = async (token: string, cookies = "") => {
+    const headers = browserMutationHeaders(context.server.baseUrl, null);
+    if (cookies !== "") headers.set("Cookie", cookies);
+    const response = await fetch(url("/api/v1/share/sessions"), {body: JSON.stringify({token}), headers, method: "POST"});
     expect(response.status).toBe(201);
-    return {cookies: cookieHeader(response), ...sessionSchema.parse(await response.json())};
+    const set = cookieHeader(response);
+    return {cookies: [cookies, set].filter((part) => part !== "").join("; "), ...sessionSchema.parse(await response.json())};
   };
 
   beforeEach(async () => {
@@ -160,30 +175,30 @@ describe("guest review over HTTP", () => {
     const fixture = await published();
     const link = await createLink(fixture.projectId, fixture.artifactId);
     const session = await join(link.token);
-    expect(session.cookies).toMatch(/artifact_guest=/u);
-    const current = await guest(session.cookies, null, "GET", "/api/v1/share/session");
+    expect(session.cookies).toMatch(/artifact_guest_shl_[0-9a-f]{24}=/u);
+    const current = await guest(session, null, "GET", "/api/v1/share/session");
     expect(current.status).toBe(200);
-    const named = await guest(session.cookies, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
+    const named = await guest(session, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
       contactEmail: null,
       displayName: "Pat",
     });
     expect(named.status).toBe(200);
     const thread = {body: "From the client."};
-    const withoutCsrf = await guest(session.cookies, null, "POST", "/api/v1/share/threads", thread);
+    const withoutCsrf = await guest(session, null, "POST", "/api/v1/share/threads", thread);
     expect(withoutCsrf.status).toBe(403);
-    const created = await guest(session.cookies, session.csrfToken, "POST", "/api/v1/share/threads", thread);
+    const created = await guest(session, session.csrfToken, "POST", "/api/v1/share/threads", thread);
     expect(created.status).toBe(201);
-    const listed = await guest(session.cookies, null, "GET", "/api/v1/share/threads");
+    const listed = await guest(session, null, "GET", "/api/v1/share/threads");
     expect(z.object({items: z.array(z.object({author: z.object({principalKind: z.string()})}))})
       .parse(await listed.json()).items.map((item) => item.author.principalKind)).toEqual(["guest"]);
-    const lease = await guest(session.cookies, session.csrfToken, "POST", "/api/v1/share/preview-lease");
+    const lease = await guest(session, session.csrfToken, "POST", "/api/v1/share/preview-lease");
     expect(lease.status).toBe(201);
   });
 
   test("guest and member credentials never cross", async () => {
     const fixture = await published();
     const session = await join((await createLink(fixture.projectId, fixture.artifactId)).token);
-    const asMember = await guest(session.cookies, null, "GET", `/api/v1/artifacts?projectId=${fixture.projectId}`);
+    const asMember = await guest(session, null, "GET", `/api/v1/artifacts?projectId=${fixture.projectId}`);
     expect(asMember.status).toBe(401);
     const memberOnGuest = await member("GET", "/api/v1/share/session");
     expect(memberOnGuest.status).toBe(401);
@@ -211,7 +226,7 @@ describe("guest review over HTTP", () => {
       setTimeout(resolve, 1_600);
     });
     const bodies = await Promise.all(["shr_unknown", revoked.token, rotated.token, expired.token].map(async (token) => {
-      const response = await guest("", null, "POST", "/api/v1/share/sessions", {token});
+      const response = await guest(null, null, "POST", "/api/v1/share/sessions", {token});
       return {body: await response.json(), status: response.status};
     }));
     expect(bodies[0]?.status).toBe(404);
@@ -243,16 +258,16 @@ describe("guest review over HTTP", () => {
   test("a guest resolves and reopens their own thread", async () => {
     const fixture = await published();
     const session = await join((await createLink(fixture.projectId, fixture.artifactId)).token);
-    await guest(session.cookies, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
+    await guest(session, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
       contactEmail: null,
       displayName: "Pat",
     });
-    const created = await guest(session.cookies, session.csrfToken, "POST", "/api/v1/share/threads", {body: "Done?"});
+    const created = await guest(session, session.csrfToken, "POST", "/api/v1/share/threads", {body: "Done?"});
     const threadId = z.object({thread: z.object({id: z.string()})}).parse(await created.json()).thread.id;
-    const resolved = await guest(session.cookies, session.csrfToken, "POST", `/api/v1/share/threads/${threadId}/resolve`);
+    const resolved = await guest(session, session.csrfToken, "POST", `/api/v1/share/threads/${threadId}/resolve`);
     expect(resolved.status).toBe(200);
     expect(await stateOf(resolved)).toBe("resolved");
-    const reopened = await guest(session.cookies, session.csrfToken, "POST", `/api/v1/share/threads/${threadId}/reopen`);
+    const reopened = await guest(session, session.csrfToken, "POST", `/api/v1/share/threads/${threadId}/reopen`);
     expect(await stateOf(reopened)).toBe("open");
   });
 
@@ -292,6 +307,56 @@ describe("guest review over HTTP", () => {
     });
     expect(mcpDenied.isError).toBe(true);
     expect(mcpDenied.content[0]?.text).toContain("AUTHORIZATION_DENIED");
+  });
+
+  test("two links opened in one browser keep separate guest sessions", async () => {
+    const fixture = await published();
+    const first = await createLink(fixture.projectId, fixture.artifactId);
+    const second = await createLink(fixture.projectId, fixture.artifactId);
+    const a = await join(first.token);
+    const b = await join(second.token, a.cookies);
+    const jar = b.cookies;
+    for (const [session, linkId] of [[a, first.id], [b, second.id]] as const) {
+      // eslint-disable-next-line no-await-in-loop -- each link is checked in turn
+      const current = await guest({...session, cookies: jar}, null, "GET", "/api/v1/share/session");
+      expect(current.status).toBe(200);
+      // eslint-disable-next-line no-await-in-loop -- each link is checked in turn
+      expect(z.object({context: z.object({link: z.object({id: z.string()})})}).parse(await current.json()).context.link.id)
+        .toBe(linkId);
+      // eslint-disable-next-line no-await-in-loop -- each link writes with its own token
+      const named = await guest({...session, cookies: jar}, session.csrfToken, "PUT", "/api/v1/share/session/identity", {
+        contactEmail: null,
+        displayName: "Pat",
+      });
+      expect(named.status).toBe(200);
+    }
+  });
+
+  test("a flood of bad tokens never stops a valid link from opening", async () => {
+    const fixture = await published();
+    const link = await createLink(fixture.projectId, fixture.artifactId);
+    const refused = [];
+    for (let index = 0; index < 40; index += 1) {
+      // eslint-disable-next-line no-await-in-loop -- the limiter counts failures in order
+      refused.push((await guest(null, null, "POST", "/api/v1/share/sessions", {token: `shr_bad${index}`})).status);
+    }
+    expect(refused.at(-1)).toBe(429);
+    expect((await join(link.token)).context.link.id).toBe(link.id);
+  });
+
+  test("reopening a link in the same browser keeps one guest, and a link admits at most 100 new guests an hour", async () => {
+    const fixture = await published();
+    const link = await createLink(fixture.projectId, fixture.artifactId);
+    const first = await join(link.token);
+    const reopened = await join(link.token, first.cookies);
+    expect(reopened.context.guest.id).toBe(first.context.guest.id);
+    for (let index = 1; index < 100; index += 1) {
+      // eslint-disable-next-line no-await-in-loop -- each join takes a slot in order
+      await join(link.token);
+    }
+    const refused = await guest(null, null, "POST", "/api/v1/share/sessions", {token: link.token});
+    expect(refused.status).toBe(429);
+    expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 
   test("an administrator lists and revokes share links across projects", async () => {

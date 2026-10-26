@@ -45,6 +45,9 @@ const instant = (iso: string): number => {
 };
 const firstLine = (text: string): string => text.split("\n")[0] ?? "";
 
+/** A guest's name always carries its label, so it never reads as a member's (ADR 0033). */
+export const guestLabeled = (name: string, kind: string | null): string => kind === "guest" ? `${name} · Guest` : name;
+
 /** The fields every event shares, plus the artifact, project and version facts the entry records. */
 type SharedFields = Pick<ActivityEvent,
   "actor" | "adminOnly" | "archived" | "artifactId" | "artifactName" | "at" | "needsYou"
@@ -52,7 +55,7 @@ type SharedFields = Pick<ActivityEvent,
 
 function about(entry: ActivityEntry): SharedFields {
   const fields: SharedFields = {
-    actor: entry.actor.name ?? unknownActor,
+    actor: entry.actor.name === null ? unknownActor : guestLabeled(entry.actor.name, entry.actor.kind),
     adminOnly: false,
     archived: entry.artifact?.archived ?? false,
     at: instant(entry.at),
@@ -72,7 +75,7 @@ function about(entry: ActivityEntry): SharedFields {
   return fields;
 }
 
-const shown = (record: WireComment) => ({at: record.createdAt, atMs: instant(record.createdAt), author: record.author.name, body: record.body, id: record.id});
+const shown = (record: WireComment) => ({at: record.createdAt, atMs: instant(record.createdAt), author: guestLabeled(record.author.name, record.author.kind), body: record.body, id: record.id});
 
 function feedThread(entry: ActivityEntry, thread: NonNullable<ActivityEntry["thread"]>): FeedThread {
   const base = {...shown(thread.opener), isResolved: thread.isResolved, key: thread.id, path: thread.path, replies: thread.replies.map(shown)};

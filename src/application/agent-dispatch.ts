@@ -648,7 +648,7 @@ function makeAgentDispatchService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactListing(command.principal, {projectId: project.id});
+      yield* authorization.requireProjectRead(command.principal, {projectId: project.id});
       const limit = yield* requirePageSize(command.limit);
       return yield* dependencies.repository.listDispatches({
         agentId: command.agentId,
@@ -668,7 +668,7 @@ function makeAgentDispatchService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactListing(command.principal, {projectId: project.id});
+      yield* authorization.requireProjectRead(command.principal, {projectId: project.id});
       return yield* requireProjectDispatch(
         project.id,
         command.dispatchId,

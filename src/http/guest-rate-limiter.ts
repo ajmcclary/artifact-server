@@ -63,3 +63,41 @@ export class GuestRateLimiter {
     return Math.max(1, Math.ceil((oldest + this.#policy.windowMilliseconds - now) / 1_000));
   }
 }
+
+/**
+ * New guests one share link may admit per sliding hour. Reopening a link in a
+ * browser that already holds its session takes no slot. Keys with no recent
+ * admission are dropped, so memory follows recent activity only.
+ */
+export class GuestAdmissionLimiter {
+  readonly #admissions = new Map<string, number[]>();
+  readonly #limit: number;
+  readonly #now: () => number;
+  readonly #windowMilliseconds: number;
+
+  constructor(limit = 100, windowMilliseconds = 3_600_000, now: () => number = () => Date.now()) {
+    this.#limit = limit;
+    this.#windowMilliseconds = windowMilliseconds;
+    this.#now = now;
+  }
+
+  /** Seconds until this link may admit another new guest, or null when it may now. */
+  retryAfterSeconds(linkId: string): number | null {
+    const now = this.#now();
+    const recent = this.#recent(linkId, now);
+    const oldest = recent[0];
+    if (recent.length < this.#limit || oldest === undefined) return null;
+    return Math.max(1, Math.ceil((oldest + this.#windowMilliseconds - now) / 1_000));
+  }
+
+  note(linkId: string): void {
+    const now = this.#now();
+    this.#admissions.set(linkId, [...this.#recent(linkId, now), now]);
+  }
+
+  #recent(linkId: string, now: number): number[] {
+    const kept = (this.#admissions.get(linkId) ?? []).filter((at) => at > now - this.#windowMilliseconds);
+    if (kept.length === 0) this.#admissions.delete(linkId);
+    return kept;
+  }
+}

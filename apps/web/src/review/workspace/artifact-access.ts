@@ -37,5 +37,5 @@ export async function changeArtifactAccess(
 export function accessChangeWarning(next: AccessSetting): string {
   return next === "public_link"
     ? "The link can be redistributed. Earlier versions and history stay account-required."
-    : "Downloaded or externally cached copies cannot be recalled.";
+    : "Share links to this artifact stop working. Downloaded or externally cached copies cannot be recalled.";
 }

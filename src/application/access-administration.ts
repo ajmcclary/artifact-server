@@ -63,6 +63,8 @@ export interface AccessAdministrationDependencies {
     readonly now: string;
   }) => Effect.Effect<{readonly items: readonly ShareLink[]; readonly nextCursor: PageCursor | null}, ArtifactRepositoryFailure>;
   readonly listMembers: () => Effect.Effect<readonly InstallationMember[], IdentityRepositoryFailure>;
+  /** End the preview leases and content sessions these members hold, so narrowed access applies now. */
+  readonly revokeContentSessions: (principalIds: readonly string[]) => Effect.Effect<void, ArtifactRepositoryFailure>;
 }
 
 /** Every expected failure of access administration. */
@@ -284,6 +286,9 @@ function makeAccessAdministrationService(
     const ceiling = command.policy.members.memberCeiling;
     let narrowedGrants = 0;
     if (ceiling !== null) {
+      yield* dependencies.revokeContentSessions(
+        (yield* activeMembers).filter((member) => member.role !== membershipRoles.administrator).map((member) => member.id),
+      );
       const allowed = new Set(ceiling);
       for (const project of yield* access.listProjectAccess(installationId)) {
         const grants = yield* access.listProjectGrants(installationId, project.projectId);
@@ -351,6 +356,7 @@ function makeAccessAdministrationService(
       defaultMemberRole: command.defaultMemberRole,
     };
     let membersLosingAccess = 0;
+    const narrowedMemberIds: string[] = [];
     for (const member of yield* activeMembers) {
       const subject = memberSubject(member);
       if (subject.kind === "administrator") continue;
@@ -358,6 +364,9 @@ function makeAccessAdministrationService(
       const after = yield* resolveFor(subject, member.id, next, null, policy);
       if (before.permissions.has(permissions.artifactView) && !after.permissions.has(permissions.artifactView)) {
         membersLosingAccess += 1;
+      }
+      if ([...before.permissions].some((permission) => !after.permissions.has(permission))) {
+        narrowedMemberIds.push(member.id);
       }
     }
     if (membersLosingAccess > 0 && command.confirmMembersLosingAccess !== membersLosingAccess) {
@@ -377,6 +386,7 @@ function makeAccessAdministrationService(
     if (written === "conflict") {
       return yield* new AccessRevisionConflict({message: "The project's access settings changed; reload them."});
     }
+    if (narrowedMemberIds.length > 0) yield* dependencies.revokeContentSessions(narrowedMemberIds);
     return written;
   });
 
@@ -447,6 +457,8 @@ function makeAccessAdministrationService(
     if (written === "conflict") {
       return yield* new AccessRevisionConflict({message: "This member's access changed; reload it and try again."});
     }
+    // Any grant change may narrow this member; their next preview request re-authorizes.
+    yield* dependencies.revokeContentSessions([command.memberId]);
     return written;
   });
 
@@ -479,7 +491,9 @@ function makeAccessAdministrationService(
     });
     if (deleted !== "deleted") {
       yield* new AccessRevisionConflict({message: "This member's access changed; reload it and try again."});
+      return;
     }
+    yield* dependencies.revokeContentSessions([command.memberId]);
   });
 
   const explain = Effect.fn("AccessAdministrationService.explain")(function*(command: {

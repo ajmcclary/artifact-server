@@ -1,4 +1,4 @@
-import {guestPrincipalIdPrefix} from "../core/identity.js";
+import {guestPrincipalIdPrefix, principalKinds} from "../core/identity.js";
 import {
   Context,
   DateTime,
@@ -281,6 +281,13 @@ function makeContentAccessService(
     if (target === undefined) {
       return yield* Effect.fail(
         new VersionNotFound({message: "The saved version does not exist on this artifact."}),
+      );
+    }
+    // Any version but the current one is history. A guest's version is bound by their link instead.
+    if (target.id !== current.version.id && command.principal.kind !== principalKinds.guest) {
+      yield* authorization.requireArtifactHistory(
+        command.principal,
+        {artifactId: current.artifact.id, projectId: project.id},
       );
     }
     return {artifact: current.artifact, project, target};

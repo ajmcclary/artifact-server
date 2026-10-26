@@ -438,9 +438,12 @@ directory hashing, upload progress, or browser retry orchestration.
 - `/s/<token>` and `/review/shared/<linkId>` serve the Review shell in guest
   mode. The shell exchanges the token once through `POST /api/v1/share/sessions`
   and replaces the address with `/review/shared/<linkId>` before rendering.
-- Guest requests use only `/api/v1/share/*` with the guest cookie and the guest
-  CSRF token. They never call member routes, and member routes never accept the
-  guest cookie.
+- Guest requests use only `/api/v1/share/*`. Each link has its own guest cookie
+  and CSRF cookie, so a guest request names its link in `X-Share-Link` and the
+  version on screen in `X-Share-Version`. A latest link that moved on answers
+  `409 GUEST_VERSION_CHANGED`, and the shell reloads to the new version. Guest
+  requests never call member routes, and member routes never accept the guest
+  cookie.
 - Share links are managed under
   `/api/v1/projects/<projectId>/artifacts/<artifactId>/share-links`, and
   administrators list every active link at `/api/v1/share-links`.

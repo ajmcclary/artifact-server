@@ -48,6 +48,17 @@ describe("toFeedEvents", () => {
     expect(events.every((event, index) => index === 0 || event.at <= (events[index - 1]?.at ?? Number.POSITIVE_INFINITY))).toBe(true);
   });
 
+  it("labels a guest actor and a guest's comment so a guest name never reads as a member's", () => {
+    const guestComment = {...comment("thr_1", "Jordan Lee", at(30, 10, 56), "From the client."), author: {kind: "guest" as const, name: "Jordan Lee"}};
+    const [event] = toFeedEvents([threadEntry({
+      actor: {kind: "guest", name: "Jordan Lee"},
+      thread: {...requiredThread(), opener: guestComment, replies: []},
+      verb: "commented",
+    })]);
+    expect(event?.actor).toBe("Jordan Lee · Guest");
+    expect(event?.thread?.author).toBe("Jordan Lee · Guest");
+  });
+
   it("ACT-005: a replied thread is one event at its newest reply, by the replier, keyed by thread", () => {
     const [event] = toFeedEvents([threadEntry({actor: {kind: "service", name: "Claude"}})]);
     expect(event).toMatchObject({actor: "Claude", id: "comment:thr_1", type: "comment", verb: "replied on"});

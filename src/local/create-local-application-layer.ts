@@ -1515,6 +1515,10 @@ export function createApplicationLayer(
     comparisonDependencies,
   ).pipe(Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)));
   const accessAdministrationLayer = AccessAdministrationService.layer({
+    revokeContentSessions: (principalIds) => Effect.tryPromise({
+      try: () => adapters.repository.revokeContentSessions(principalIds),
+      catch: (cause) => repositoryFailure("revokeContentSessions", cause),
+    }),
     access: accessRepositoryEffects(adapters.access),
     clock,
     ids: adapters.ids,

@@ -19,6 +19,13 @@ export function narrowedNotice(narrowed: {readonly grants: number; readonly shar
   return `Saved. This narrows ${grants} and ${links}.`;
 }
 
+/** What a draft would do that its administrator should know before saving, or null. */
+export function policyChangeWarning(saved: AccessPolicy, draft: AccessPolicy): string | null {
+  return saved.shareLinks.enabled && !draft.shareLinks.enabled
+    ? "Turning this off stops every share link and every public link from opening, including links already posted elsewhere, until you turn it back on."
+    : null;
+}
+
 /** Installation-wide limits: share links, guest permissions, member ceiling, and the default project mode. */
 export function AccessPolicyScreen() {
   const [stored, setStored] = useState<StoredAccessPolicy | null>(null);
@@ -81,9 +88,12 @@ export function AccessPolicyScreen() {
           <Switch
             checked={links.enabled}
             disabled={pending}
-            label="Allow share links"
+            label="Allow share links and public links"
             onChange={(event) => setDraft({...draft, shareLinks: {...links, enabled: event.currentTarget.checked}})}
           />
+          {policyChangeWarning(stored.policy, draft) === null ? null : (
+            <Alert density="compact" variant="warning">{policyChangeWarning(stored.policy, draft)}</Alert>
+          )}
           {guestHoldable.map((permission) => (
             <Checkbox
               checked={links.guestPermissionsMax.includes(permission)}

@@ -8,6 +8,7 @@ import {isPhoneWidth} from "@/review/workspace/workspace-layout";
 import {ActivityHeader, ActivityToolbar} from "@/ui/review-ui";
 import {CopyableCode} from "@/ui/copyable-code";
 
+import {guestLabeled} from "./activity-adapter";
 import {ActivityFeedBody} from "./activity-feed-section";
 import {useActivityFacets} from "./use-activity-facets";
 import {useActivityFeed} from "./use-activity-feed";
@@ -76,7 +77,8 @@ export function ActivityScreen({filters, projects, session}: {
   const command = "artifactserver publish ./dist";
   // People who acted, from the server's counts; agents are the service principals (API keys and bridges).
   const people = (facets?.people ?? []).map((person) => ({
-    agent: person.kind === "service", count: person.count, id: person.id, name: person.name, self: person.id === session.principal.id,
+    agent: person.kind === "service", count: person.count, id: person.id, name: guestLabeled(person.name, person.kind),
+    self: person.id === session.principal.id,
   }));
   // The server's entry counts (one per conversation) for these filters and in all; omitted until known.
   const counted = facets === null ? {} : {shown: facets.matching, total: facets.total};

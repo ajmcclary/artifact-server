@@ -4,7 +4,9 @@ import {
   type ArtifactRepositoryFailure,
   CommentNotFound,
   GuestIdentityRequired,
+  GuestRateLimited,
   GuestSessionRequired,
+  GuestVersionChanged,
   ShareLinkNotFound,
 } from "../core/errors.js";
 import {membershipRoles, principalKinds, type Principal} from "../core/identity.js";
@@ -79,13 +81,26 @@ export type GuestReviewFailure =
   | ArtifactRepositoryFailure
   | ContentAccessFailure
   | GuestIdentityRequired
+  | GuestRateLimited
   | GuestSessionRequired
+  | GuestVersionChanged
   | ScopedDenial
   | ShareLinkNotFound;
+
+/** Opening a link: the token, the browser's existing session for a link, and whether a new guest may join. */
+export interface StartGuestSessionCommand {
+  /** Seconds until this link may admit another new guest, or null to admit one now. */
+  readonly admissionWait: (linkId: string) => number | null;
+  /** The session and CSRF tokens this browser already holds for a link, if any. */
+  readonly existingSession: (linkId: string) => {readonly csrfToken: string; readonly sessionToken: string} | null;
+  readonly token: string;
+}
 
 interface GuestThreadCommand {
   readonly principal: Principal;
   readonly threadId: string;
+  /** The version the guest is looking at; null when the caller does not say. */
+  readonly viewingVersionId: string | null;
 }
 
 interface GuestReviewOperations {
@@ -105,6 +120,8 @@ interface GuestReviewOperations {
     readonly idempotencyKey: string;
     readonly path: string | null;
     readonly principal: Principal;
+    /** The version the guest is looking at; null when the caller does not say. */
+    readonly viewingVersionId: string | null;
   }) => Effect.Effect<Effect.Success<ReturnType<ArtifactCommentService["Service"]["createThread"]>>, GuestReviewFailure>;
   readonly deleteReply: (command: GuestThreadCommand & {readonly replyId: string}) => Effect.Effect<void, GuestReviewFailure>;
   readonly deleteThread: (command: GuestThreadCommand) => Effect.Effect<void, GuestReviewFailure>;
@@ -120,6 +137,7 @@ interface GuestReviewOperations {
     readonly cursor: Parameters<ArtifactCommentService["Service"]["listThreads"]>[0]["cursor"];
     readonly limit: number;
     readonly principal: Principal;
+    readonly viewingVersionId: string | null;
   }) => Effect.Effect<Effect.Success<ReturnType<ArtifactCommentService["Service"]["listThreads"]>>, GuestReviewFailure>;
   readonly setIdentity: (command: {
     readonly contactEmail: string | null;
@@ -129,10 +147,12 @@ interface GuestReviewOperations {
   readonly setThreadState: (command: GuestThreadCommand & {
     readonly state: CommentThreadState;
   }) => Effect.Effect<Effect.Success<ReturnType<ArtifactCommentService["Service"]["updateThread"]>>, GuestReviewFailure>;
-  readonly startSession: (command: {readonly token: string}) => Effect.Effect<{
+  readonly startSession: (command: StartGuestSessionCommand) => Effect.Effect<{
     readonly context: GuestContext;
     readonly csrfToken: string;
     readonly expiresAt: string;
+    /** True when the browser's existing session for this link was resumed; no new guest exists. */
+    readonly resumed: boolean;
     readonly sessionToken: string;
   }, GuestReviewFailure>;
   readonly updateReply: (command: GuestThreadCommand & {
@@ -236,7 +256,7 @@ function makeGuestReviewService(
     return {...active, target};
   });
 
-  const startSession = Effect.fn("GuestReviewService.startSession")(function*(command: {readonly token: string}) {
+  const startSession = Effect.fn("GuestReviewService.startSession")(function*(command: StartGuestSessionCommand) {
     const link = yield* dependencies.shareLinks.findShareLinkByToken(command.token);
     const at = yield* now;
     if (link === null || link.installationId !== installationId || !isShareLinkActive(link, at)) {
@@ -246,6 +266,37 @@ function makeGuestReviewService(
     if (!policy.shareLinks.enabled) return yield* linkEnded();
     const target = yield* targetOf(link);
     if (target === null) return yield* linkEnded();
+    // Reopening a link in the same browser keeps its guest, their name and their comments.
+    const existing = command.existingSession(link.id);
+    if (existing !== null) {
+      const resumed = yield* authenticate({sessionToken: existing.sessionToken}).pipe(
+        Effect.map((found) => found.context.link.id === link.id &&
+            found.csrfDigest === dependencies.secrets.digest(existing.csrfToken)
+          ? found
+          : null),
+        Effect.catchTag("GuestSessionRequired", () => Effect.succeed(null)),
+      );
+      if (resumed !== null) {
+        const session = yield* dependencies.shareLinks.findGuestSession(
+          installationId,
+          dependencies.secrets.digest(existing.sessionToken),
+        );
+        return {
+          context: resumed.context,
+          csrfToken: existing.csrfToken,
+          expiresAt: session?.session.expiresAt ?? guestSessionExpiry(link, at),
+          resumed: true,
+          sessionToken: existing.sessionToken,
+        };
+      }
+    }
+    const wait = command.admissionWait(link.id);
+    if (wait !== null) {
+      return yield* new GuestRateLimited({
+        message: "Too many people opened this link recently. Try again later.",
+        retryAfterSeconds: wait,
+      });
+    }
     const guest: GuestRecord = {
       contactEmail: null,
       createdAt: at,
@@ -277,7 +328,7 @@ function makeGuestReviewService(
     });
     const context = yield* contextOf(guest, link);
     if (context === null) return yield* linkEnded();
-    return {context, csrfToken, expiresAt, sessionToken};
+    return {context, csrfToken, expiresAt, resumed: false, sessionToken};
   });
 
   // No cache: a revoke, rotation, expiry or policy change applies to the very next request.
@@ -346,11 +397,24 @@ function makeGuestReviewService(
   /** A thread on the link's version target; any other thread is reported as missing. */
   const requireTargetThread = Effect.fnUntraced(function*(command: GuestThreadCommand) {
     const active = yield* requireActive(command.principal);
+    yield* requireViewing(active, command.viewingVersionId);
     const details = yield* comments.getThread({...scopeOf(active.link), principal: command.principal, threadId: command.threadId});
     if (details.thread.versionId !== active.target.version.id) {
       return yield* new CommentNotFound({message: "The comment does not exist."});
     }
     return {active, details};
+  });
+
+  /** A latest link that moved on refuses work aimed at the version the guest still sees. */
+  const requireViewing = Effect.fnUntraced(function*(
+    active: {readonly target: {readonly version: {readonly id: string; readonly number: number}}},
+    viewingVersionId: string | null,
+  ) {
+    if (viewingVersionId !== null && viewingVersionId !== active.target.version.id) {
+      yield* new GuestVersionChanged({
+        message: `This link now opens version ${active.target.version.number}. Reload to review it.`,
+      });
+    }
   });
 
   /** Writing needs the link's comment permission first, then a name. */
@@ -367,8 +431,10 @@ function makeGuestReviewService(
     readonly cursor: Parameters<ArtifactCommentService["Service"]["listThreads"]>[0]["cursor"];
     readonly limit: number;
     readonly principal: Principal;
+    readonly viewingVersionId: string | null;
   }) {
     const active = yield* requireActive(command.principal);
+    yield* requireViewing(active, command.viewingVersionId);
     return yield* comments.listThreads({
       ...scopeOf(active.link),
       cursor: command.cursor,
@@ -390,8 +456,10 @@ function makeGuestReviewService(
     readonly idempotencyKey: string;
     readonly path: string | null;
     readonly principal: Principal;
+    readonly viewingVersionId: string | null;
   }) {
     const active = yield* requireWriter(command.principal);
+    yield* requireViewing(active, command.viewingVersionId);
     return yield* comments.createThread({
       ...scopeOf(active.link),
       anchor: command.anchor,

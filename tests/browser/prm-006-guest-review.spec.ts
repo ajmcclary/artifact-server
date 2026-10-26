@@ -11,7 +11,7 @@ import {
   signInAs,
   startInviteServer,
 } from "../support/invites.js";
-import {publishNew} from "../support/publishing.js";
+import {publishNew, publishVersion} from "../support/publishing.js";
 
 const linkSchema = z.object({link: z.object({id: z.string(), url: z.string()})});
 const threadPageSchema = z.object({
@@ -67,6 +67,7 @@ test.describe("Guest review through a share link", () => {
       artifactId: published.artifact.id,
       link,
       projectId,
+      versionId: published.version.id,
       review: `/review?project=${projectId}&artifact=${published.artifact.id}&version=${published.version.id}`,
     };
   };
@@ -162,6 +163,65 @@ test.describe("Guest review through a share link", () => {
         .toBeVisible();
       await page.reload();
       await expect(page.getByRole("heading", {name: "This link has ended"})).toBeVisible();
+    } finally {
+      await guest.context.close();
+    }
+  });
+
+  test("the guest frame is sandboxed against navigating the guest's tab", async ({browser}) => {
+    const fixture = await share(["artifact.view"]);
+    const guest = await guestPage(browser, fixture.link.url);
+    try {
+      const frame = guest.page.locator('iframe[title="Landing page"]');
+      await expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
+      await expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    } finally {
+      await guest.context.close();
+    }
+  });
+
+  test("two share links open in one browser each keep working", async ({browser}) => {
+    const fixture = await share(["artifact.view", "comment.read", "comment.write"]);
+    const response = await call("POST", `/api/v1/projects/${fixture.projectId}/artifacts/${fixture.artifactId}/share-links`, JSON.stringify({
+      expiresAt: null,
+      label: "Agency review",
+      permissions: ["artifact.view", "comment.read", "comment.write"],
+      target: {kind: "latest"},
+    }));
+    const second = linkSchema.parse(await response.json()).link;
+    const guest = await guestPage(browser, fixture.link.url);
+    try {
+      const other = await guest.context.newPage();
+      await other.goto(second.url);
+      await expect(other).toHaveURL(new RegExp(`/review/shared/${second.id}$`, "u"));
+      await commentAsNewGuest(guest.page, "From the first link.", "Pat");
+      await commentAsNewGuest(other, "From the second link.", "Sam");
+      await guest.page.reload();
+      await expect(guest.page.getByRole("article", {name: "Comment by Pat"})).toBeVisible();
+    } finally {
+      await guest.context.close();
+    }
+  });
+
+  test("a guest on a latest link moves to the new version instead of commenting on it unseen", async ({browser}) => {
+    const fixture = await share(["artifact.view", "comment.read", "comment.write"]);
+    const guest = await guestPage(browser, fixture.link.url);
+    try {
+      const {page} = guest;
+      await commentAsNewGuest(page, "Version one note.", "Pat");
+      await publishVersion(server.server, server.installation, {
+        artifactId: fixture.artifactId,
+        content: "<!doctype html><title>Landing</title><h1>Hello from version two</h1>",
+        expectedCurrentVersionId: fixture.versionId,
+        idempotencyKey: `guest-v2-${randomUUID()}`,
+        projectId: fixture.projectId,
+      });
+      await page.getByLabel("Reply to Pat").fill("Another note.");
+      await page.getByRole("button", {exact: true, name: "Reply"}).click();
+      await expect(page.getByText("This link now opens version 2.")).toBeVisible();
+      await expect(page.getByText("Version 2", {exact: true})).toBeVisible();
+      await expect(page.frameLocator('iframe[title="Landing page"]').getByRole("heading", {name: "Hello from version two"}))
+        .toBeVisible();
     } finally {
       await guest.context.close();
     }

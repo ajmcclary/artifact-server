@@ -45,6 +45,7 @@ const comment = (principal: Principal, body = "From the client.") =>
     idempotencyKey: `guest-${randomUUID()}`,
     path: null,
     principal,
+    viewingVersionId: null,
   }));
 
 describe("guest review sessions", () => {
@@ -67,7 +68,7 @@ describe("guest review sessions", () => {
   })));
 
   const join = async (token: string) => {
-    const started = await harness.runtime.runPromise(GuestReviewService.use((guests) => guests.startSession({token})));
+    const started = await harness.runtime.runPromise(GuestReviewService.use((guests) => guests.startSession({admissionWait: () => null, existingSession: () => null, token})));
     const authenticated = await harness.runtime.runPromise(GuestReviewService.use((guests) =>
       guests.authenticate({sessionToken: started.sessionToken})));
     return {...started, principal: authenticated.principal};
@@ -111,16 +112,17 @@ describe("guest review sessions", () => {
       idempotencyKey: `guest-reply-${randomUUID()}`,
       principal,
       threadId: created.thread.id,
+      viewingVersionId: null,
     })));
     await harness.runtime.runPromise(GuestReviewService.use((guests) =>
-      guests.updateThread({body: "Edited.", principal, threadId: created.thread.id})));
+      guests.updateThread({body: "Edited.", principal, threadId: created.thread.id, viewingVersionId: null})));
     const page = await harness.runtime.runPromise(GuestReviewService.use((guests) =>
-      guests.listThreads({cursor: null, limit: 25, principal})));
+      guests.listThreads({cursor: null, limit: 25, principal, viewingVersionId: null})));
     expect(page.items.map((thread) => thread.body)).toEqual(["Edited."]);
     await harness.runtime.runPromise(GuestReviewService.use((guests) =>
-      guests.deleteThread({principal, threadId: created.thread.id})));
+      guests.deleteThread({principal, threadId: created.thread.id, viewingVersionId: null})));
     expect(await failureTag(harness, GuestReviewService.use((guests) =>
-      guests.getThread({principal, threadId: created.thread.id})))).toBe("CommentNotFound");
+      guests.getThread({principal, threadId: created.thread.id, viewingVersionId: null})))).toBe("CommentNotFound");
   });
 
   test("PRM-006-F: a guest cannot read history, another version's threads, another artifact, or a member operation", async () => {
@@ -144,7 +146,7 @@ describe("guest review sessions", () => {
         })),
     );
     expect(await failureTag(harness, GuestReviewService.use((guests) =>
-      guests.getThread({principal, threadId: memberThread.thread.id})))).toBe("CommentNotFound");
+      guests.getThread({principal, threadId: memberThread.thread.id, viewingVersionId: null})))).toBe("CommentNotFound");
     expect(await failureTag(harness, ArtifactManagementService.use((artifacts) =>
       artifacts.listVersions({artifactId: fixture.artifactId, cursor: null, limit: 10, principal, projectId: fixture.projectId}))))
       .toBe("AuthorizationDenied");
@@ -183,7 +185,7 @@ describe("guest review sessions", () => {
       projectId: fixture.projectId,
     })));
     expect(await failureTag(harness, authenticate(rotatedGuest.sessionToken))).toBe("GuestSessionRequired");
-    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({token: rotatedLink.token}))))
+    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({admissionWait: () => null, existingSession: () => null, token: rotatedLink.token}))))
       .toBe("ShareLinkNotFound");
 
     const expiringLink = await share(fixture.projectId, fixture.artifactId, undefined, {kind: "latest"}, "2026-10-26T11:00:00.000Z");
@@ -235,7 +237,7 @@ describe("guest review sessions", () => {
 
   test("unknown, revoked and policy-disabled links answer the same not-found, and the policy stops bare public links", async () => {
     const fixture = await setup();
-    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({token: "shr_unknown"}))))
+    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({admissionWait: () => null, existingSession: () => null, token: "shr_unknown"}))))
       .toBe("ShareLinkNotFound");
     const link = await share(fixture.projectId, fixture.artifactId);
     await harness.runtime.runPromise(ArtifactManagementService.use((artifacts) => artifacts.changeAccess({
@@ -253,7 +255,7 @@ describe("guest review sessions", () => {
       policy: {...defaultAccessPolicy, shareLinks: {...defaultAccessPolicy.shareLinks, enabled: false}},
       principal: harness.administrator,
     })));
-    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({token: link.token}))))
+    expect(await failureTag(harness, GuestReviewService.use((guests) => guests.startSession({admissionWait: () => null, existingSession: () => null, token: link.token}))))
       .toBe("ShareLinkNotFound");
     expect(await failureTag(harness, ContentAccessService.use((content) => content.resolvePublicArtifact(fixture.artifactId))))
       .toBe("ContentSessionRequired");

@@ -27,7 +27,10 @@ type GuestState =
   | {readonly kind: "ended"}
   | {readonly kind: "failed"; readonly message: string}
   | {readonly kind: "loading"}
-  | {readonly context: GuestContext; readonly kind: "ready"};
+  | {readonly context: GuestContext; readonly kind: "ready"; readonly notice: string | null};
+
+// How often an open guest page checks that its link still admits it and still opens this version.
+const contextCheckMilliseconds = 30_000;
 
 const platforms = {Desktop: null, Phone: 390, Tablet: 820} as const;
 type Platform = keyof typeof platforms;
@@ -49,6 +52,14 @@ function openLink(token: string): Promise<GuestContext> {
 /** Review for someone holding a share link: one artifact, one version, the link's controls only. */
 export function GuestReviewApp() {
   const [state, setState] = useState<GuestState>({kind: "loading"});
+  const updateContext = useCallback((context: GuestContext) => setState((previous) => ({
+    context,
+    kind: "ready",
+    notice: previous.kind === "ready" && previous.context.version.id !== context.version.id
+      ? `This link now opens version ${context.version.number}.`
+      : previous.kind === "ready" ? previous.notice : null,
+  })), []);
+  const endLink = useCallback(() => setState({kind: "ended"}), []);
 
   useEffect(() => {
     let current = true;
@@ -59,10 +70,10 @@ export function GuestReviewApp() {
         return;
       }
       try {
-        const context = path.kind === "open" ? await openLink(path.token) : await guestApi.session();
+        const context = path.kind === "open" ? await openLink(path.token) : await guestApi.session(path.linkId);
         // The token leaves the address bar, history and any later Referer before the page renders.
         if (path.kind === "open") window.history.replaceState(null, "", `/review/shared/${encodeURIComponent(context.link.id)}`);
-        if (current) setState({context, kind: "ready"});
+        if (current) setState({context, kind: "ready", notice: null});
       } catch (caught) {
         if (!current) return;
         const failure = caught instanceof Error ? caught : null;
@@ -95,19 +106,23 @@ export function GuestReviewApp() {
   return (
     <GuestReview
       context={state.context}
-      onContext={(context) => setState({context, kind: "ready"})}
-      onEnded={() => setState({kind: "ended"})}
+      // A new version is a fresh page: its own preview lease and its own comments.
+      key={state.context.version.id}
+      notice={state.notice}
+      onContext={updateContext}
+      onEnded={endLink}
     />
   );
 }
 
 interface GuestReviewProps {
   readonly context: GuestContext;
+  readonly notice: string | null;
   readonly onContext: (context: GuestContext) => void;
   readonly onEnded: () => void;
 }
 
-function GuestReview({context, onContext, onEnded}: GuestReviewProps) {
+function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
   const controls = guestShellControls(context.link.permissions);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFailure, setPreviewFailure] = useState<string | null>(null);
@@ -141,9 +156,24 @@ function GuestReview({context, onContext, onEnded}: GuestReviewProps) {
     };
   }, [context.version.id, onEnded]);
 
+  // Re-read where the link stands: on a refused action, and every half minute while open.
+  const refreshContext = useCallback(async () => {
+    try {
+      onContext(await guestApi.session(context.link.id));
+    } catch (caught) {
+      if (linkEnded(caught instanceof Error ? caught : null)) onEnded();
+    }
+  }, [context.link.id, onContext, onEnded]);
+
   useEffect(() => {
     if (linkEnded(session.error)) onEnded();
-  }, [onEnded, session.error]);
+    else if (session.error instanceof ApiError && session.error.code === "GUEST_VERSION_CHANGED") void refreshContext();
+  }, [onEnded, refreshContext, session.error]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => void refreshContext(), contextCheckMilliseconds);
+    return () => window.clearInterval(timer);
+  }, [refreshContext]);
 
   const width = platforms[platform];
   return (
@@ -180,6 +210,7 @@ function GuestReview({context, onContext, onEnded}: GuestReviewProps) {
           />
         </span>
       </header>
+      {notice === null ? null : <Alert variant="info">{notice}</Alert>}
       <div style={bodyStyle}>
         <main aria-label="Shared page" style={stageStyle}>
           {previewFailure !== null ? (
@@ -188,6 +219,9 @@ function GuestReview({context, onContext, onEnded}: GuestReviewProps) {
             <SurfaceState loadingTitle="Opening the page" noun="page" phase="loading" />
           ) : (
             <iframe
+              // Like the member preview: the page runs, but it cannot navigate or replace the guest's tab.
+              referrerPolicy="no-referrer"
+              sandbox="allow-scripts allow-same-origin"
               src={previewUrl}
               style={{...frameStyle, maxWidth: width ?? "100%", width: width ?? "100%"}}
               title={context.artifact.name}

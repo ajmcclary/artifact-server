@@ -14,6 +14,8 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
       return {code: errorCodes.shareLinksDisabled, message: failure.message, status: 403};
     case "GuestSessionRequired":
       return {code: errorCodes.guestSessionRequired, message: failure.message, status: 401};
+    case "GuestVersionChanged":
+      return {code: errorCodes.guestVersionChanged, message: failure.message, status: 409};
     case "GuestIdentityRequired":
       return {code: errorCodes.guestIdentityRequired, message: failure.message, status: 422};
     case "GuestRateLimited":

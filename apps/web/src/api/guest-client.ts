@@ -23,8 +23,12 @@ export type GuestContext = z.infer<typeof guestContextSchema>;
 
 const contextResponseSchema = z.object({context: guestContextSchema});
 
+// The link this page acts for. Each link has its own cookies, so two links in one browser never collide.
+let linkId: string | null = null;
 // The session answer carries the CSRF token; after a reload it is read back from its cookie.
 let csrfToken: string | null = null;
+// The version this page shows. A latest link that moved on refuses work aimed at it.
+let viewingVersionId: string | null = null;
 
 function cookieValue(name: string): string | null {
   for (const part of document.cookie.split(";")) {
@@ -35,11 +39,22 @@ function cookieValue(name: string): string | null {
 }
 
 function guestCsrf(): string {
-  return csrfToken ?? cookieValue("__Host-artifact_guest_csrf") ?? cookieValue("artifact_guest_csrf") ?? "";
+  if (csrfToken !== null) return csrfToken;
+  if (linkId === null) return "";
+  return cookieValue(`__Host-artifact_guest_csrf_${linkId}`) ?? cookieValue(`artifact_guest_csrf_${linkId}`) ?? "";
+}
+
+function readHeaders(): Headers {
+  const headers = new Headers();
+  if (linkId !== null) headers.set("X-Share-Link", linkId);
+  if (viewingVersionId !== null) headers.set("X-Share-Version", viewingVersionId);
+  return headers;
 }
 
 function writeHeaders(idempotencyKey?: string): Headers {
-  const headers = new Headers({"Content-Type": "application/json", "X-CSRF-Token": guestCsrf()});
+  const headers = readHeaders();
+  headers.set("Content-Type", "application/json");
+  headers.set("X-CSRF-Token", guestCsrf());
   if (idempotencyKey !== undefined) headers.set("Idempotency-Key", idempotencyKey);
   return headers;
 }
@@ -55,10 +70,20 @@ export const guestApi = {
       "/api/v1/share/sessions",
       {body: JSON.stringify({token}), headers: {"Content-Type": "application/json"}, method: "POST"},
     );
+    linkId = started.context.link.id;
     csrfToken = started.csrfToken;
+    viewingVersionId = started.context.version.id;
     return started.context;
   },
-  session: () => request(contextResponseSchema, "/api/v1/share/session").then(({context}) => context),
+  /** Resume this browser's session for one link, as after a reload of /review/shared/<linkId>. */
+  session: (forLinkId: string) => {
+    if (linkId !== forLinkId) csrfToken = null;
+    linkId = forLinkId;
+    return request(contextResponseSchema, "/api/v1/share/session", {headers: readHeaders()}).then(({context}) => {
+      viewingVersionId = context.version.id;
+      return context;
+    });
+  },
   setIdentity: (displayName: string, contactEmail: string | null) => request(
     contextResponseSchema,
     "/api/v1/share/session/identity",
@@ -92,9 +117,12 @@ export const guestCommentsTransport: CommentsTransport = {
     `${thread(threadId)}/replies/${encodeURIComponent(replyId)}`,
     {headers: writeHeaders(), method: "DELETE"},
   ),
-  getThread: (threadId) => request(commentSchemas.threadDetails, thread(threadId)),
-  listThreads: (_versionId, cursor) =>
-    request(commentSchemas.threadPage, `/api/v1/share/threads?${new URLSearchParams(cursor === null ? {} : {cursor})}`),
+  getThread: (threadId) => request(commentSchemas.threadDetails, thread(threadId), {headers: readHeaders()}),
+  listThreads: (_versionId, cursor) => request(
+    commentSchemas.threadPage,
+    `/api/v1/share/threads?${new URLSearchParams(cursor === null ? {} : {cursor})}`,
+    {headers: readHeaders()},
+  ),
   setThreadState: async (threadId, state) => {
     await request(
       z.object({thread: commentSchemas.thread}),

@@ -103,6 +103,11 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: ProjectScope,
   ) => Effect.Effect<void, ProjectScopedDenial>;
+  /** Project-wide reading, such as the dispatch feed: an artifact-only grant does not reach it. */
+  readonly requireProjectRead: (
+    principal: Principal,
+    scope: ProjectScope,
+  ) => Effect.Effect<void, ProjectScopedDenial>;
   readonly requireArtifactManagement: (
     principal: Principal,
     scope: ArtifactScope,
@@ -489,6 +494,7 @@ function makeAuthorizationService(
       readRule,
     ),
     requireArtifactListing: projectScoped("AuthorizationService.requireArtifactListing", "visible", readRule),
+    requireProjectRead: projectScoped("AuthorizationService.requireProjectRead", permissions.artifactView, readRule),
     requireArtifactManagement,
     requireArtifactRead: artifactScoped("AuthorizationService.requireArtifactRead", permissions.artifactView, readRule),
     requireCommentModeration: artifactScoped(

@@ -135,11 +135,13 @@ describe("guest comments in agent bundles", () => {
     });
     expect(joined.status).toBe(201);
     const cookies = joined.headers.getSetCookie().map((cookie) => cookie.split(";", 1)[0]).join("; ");
-    const {csrfToken} = z.object({csrfToken: z.string()}).parse(await joined.json());
+    const {context, csrfToken} = z.object({context: z.object({link: z.object({id: z.string()})}), csrfToken: z.string()})
+      .parse(await joined.json());
     const write = (method: string, path: string, body: GuestWriteBody) => {
       const headers = browserMutationHeaders(server.baseUrl, null);
       headers.set("Cookie", cookies);
       headers.set("X-CSRF-Token", csrfToken);
+      headers.set("X-Share-Link", context.link.id);
       headers.set("Idempotency-Key", `guest-${randomUUID()}`);
       return fetch(`${server.baseUrl}${path}`, {body: JSON.stringify(body), headers, method});
     };

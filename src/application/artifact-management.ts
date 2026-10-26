@@ -660,8 +660,12 @@ function makeArtifactManagementService(
         principalId: command.principal.id,
         projectId: project.id,
       });
-      // Making an artifact private also ends every share link to it (ADR 0033).
-      if (command.accessSetting === accessSettings.accountRequired) {
+      // Turning a public artifact private also ends every share link to it (ADR 0033). A
+      // request that changes nothing, including an idempotent replay, ends nothing.
+      if (
+        artifact.accessSetting === accessSettings.publicLink &&
+        command.accessSetting === accessSettings.accountRequired
+      ) {
         yield* dependencies.revokeShareLinks({
           artifactId: changed.artifact.id,
           attribution: attributionOf(command.principal),

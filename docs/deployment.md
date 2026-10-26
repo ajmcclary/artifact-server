@@ -159,9 +159,11 @@ Revoking, rotating or expiring a link ends every guest session on its next
 request, and making an artifact private revokes its share links. Settings ›
 Access policy sets what guests may hold at most, the longest a link may last,
 and whether only administrators may create links. Turning share links off also
-stops bare public links from serving. Guest comment writes are limited to 60
-an hour per link and 20 an hour per guest. Each server process keeps its own
-count, so several replicas admit proportionally more.
+stops bare public links from serving, and the policy screen says so before you
+save. Guest comment writes are limited to 60 an hour per link and 20 an hour per
+guest, and one link admits at most 100 new guests an hour; reopening a link in
+the same browser keeps the same guest. Each server process keeps its own
+counts, so several replicas admit proportionally more.
 
 A link is a bearer secret. The share page sends no referrer and is never
 cached or indexed, and the token leaves the address bar before the page
