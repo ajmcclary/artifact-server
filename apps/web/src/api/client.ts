@@ -212,7 +212,39 @@ const policyWriteSchema = z.object({
   policy: storedAccessPolicySchema,
 });
 
+const shareLinkSchema = z.object({
+  artifactId: z.string(),
+  createdAt: z.string(),
+  createdByName: z.string(),
+  expiresAt: z.string().nullable(),
+  guestCount: z.number().int().nonnegative(),
+  id: z.string(),
+  label: z.string(),
+  permissions: z.array(z.enum(["artifact.view", "comment.read", "comment.write"])),
+  projectId: z.string(),
+  revision: z.number().int().positive(),
+  revokedAt: z.string().nullable(),
+  target: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("latest") }),
+    z.object({ kind: z.literal("pinned"), versionId: z.string() }),
+  ]),
+  url: z.url(),
+});
+const shareLinkInventoryPageSchema = z.object({
+  items: z.array(shareLinkSchema.extend({ artifactName: z.string() })),
+  nextCursor: z.string().nullable(),
+});
+
 export type AccessPolicy = z.infer<typeof accessPolicySchema>;
+export type ShareLink = z.infer<typeof shareLinkSchema>;
+export type ShareLinkInventoryPage = z.infer<typeof shareLinkInventoryPageSchema>;
+/** What a sharer sets on a link. */
+export interface ShareLinkSettings {
+  readonly expiresAt: string | null;
+  readonly label: string;
+  readonly permissions: ShareLink["permissions"];
+  readonly target: ShareLink["target"];
+}
 export type StoredAccessPolicy = z.infer<typeof storedAccessPolicySchema>;
 export type ProjectAccess = z.infer<typeof projectAccessSchema>;
 export type AccessGrant = z.infer<typeof accessGrantSchema>;
@@ -1036,6 +1068,14 @@ function mutationHeaders(idempotencyKey?: string): Headers {
   return headers;
 }
 
+function shareLinksPath(projectId: string, artifactId: string): string {
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}/share-links`;
+}
+
+function shareLinkPath(link: Pick<ShareLink, "id" | "projectId">): string {
+  return `/api/v1/projects/${encodeURIComponent(link.projectId)}/share-links/${encodeURIComponent(link.id)}`;
+}
+
 async function request<T>(
   schema: z.ZodType<T>,
   path: string,
@@ -1225,6 +1265,35 @@ export const api = {
       effectiveAccessSchema,
       subject === undefined ? base : `${base}?subject=${encodeURIComponent(subject)}`,
     );
+  },
+  shareLinks: (projectId: string, artifactId: string) => request(
+    z.object({ links: z.array(shareLinkSchema) }),
+    shareLinksPath(projectId, artifactId),
+  ).then(({ links }) => links),
+  createShareLink: (projectId: string, artifactId: string, settings: ShareLinkSettings) => request(
+    z.object({ link: shareLinkSchema }),
+    shareLinksPath(projectId, artifactId),
+    { body: JSON.stringify(settings), headers: mutationHeaders(), method: "POST" },
+  ).then(({ link }) => link),
+  updateShareLink: (link: ShareLink, settings: ShareLinkSettings) => request(
+    z.object({ link: shareLinkSchema }),
+    shareLinkPath(link),
+    { body: JSON.stringify({ ...settings, expectedRevision: link.revision }), headers: mutationHeaders(), method: "PATCH" },
+  ).then(({ link: updated }) => updated),
+  rotateShareLink: (link: ShareLink) => request(
+    z.object({ link: shareLinkSchema }),
+    `${shareLinkPath(link)}/rotate`,
+    { body: JSON.stringify({ expectedRevision: link.revision }), headers: mutationHeaders(), method: "POST" },
+  ).then(({ link: rotated }) => rotated),
+  revokeShareLink: (link: Pick<ShareLink, "id" | "projectId">) => request(
+    z.object({ link: shareLinkSchema }),
+    shareLinkPath(link),
+    { headers: mutationHeaders(), method: "DELETE" },
+  ).then(({ link: revoked }) => revoked),
+  shareLinkInventory: (cursor: string | null) => {
+    const query = new URLSearchParams({ limit: "25" });
+    if (cursor !== null) query.set("cursor", cursor);
+    return request(shareLinkInventoryPageSchema, `/api/v1/share-links?${query}`);
   },
   memberGrants: (memberId: string) => request(
     z.object({ grants: z.array(accessGrantSchema) }),

@@ -40,7 +40,7 @@ test("new screens render no prototype annotation or disclaimer copy", async ({br
       ["/review/projects?project=prj_default", "Default"],
       ["/review/settings/members", "Members"],
       ["/review/settings/api-keys", "API keys"],
-      ["/review/settings/public-links", "Public links"],
+      ["/review/settings/public-links", "Share links"],
       ["/review/settings/mcp", "MCP & WebMCP"],
     ];
     // One page visits the screens in turn, collecting every offending line.

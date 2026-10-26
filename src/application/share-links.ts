@@ -61,6 +61,11 @@ export type ShareLinkFailure =
   | ShareLinkNotFound
   | ShareLinksDisabled;
 
+/** One inventory row: the link and the name of the artifact it opens. */
+export interface InventoryShareLink extends ShareLink {
+  readonly artifactName: string;
+}
+
 /** What a caller sets on a link. */
 export interface ShareLinkSettings {
   readonly expiresAt: string | null;
@@ -79,7 +84,7 @@ interface ShareLinkOperations {
     readonly cursor: PageCursor | null;
     readonly limit: number;
     readonly principal: Principal;
-  }) => Effect.Effect<{readonly items: readonly ShareLink[]; readonly nextCursor: PageCursor | null}, ShareLinkFailure>;
+  }) => Effect.Effect<{readonly items: readonly InventoryShareLink[]; readonly nextCursor: PageCursor | null}, ShareLinkFailure>;
   readonly listForArtifact: (command: {
     readonly artifactId: string;
     readonly principal: Principal;
@@ -339,12 +344,20 @@ function makeShareLinkService(
         message: `A share-link page must contain between 1 and ${maximumShareLinkPageSize} records.`,
       });
     }
-    return yield* shareLinks.listActiveShareLinks({
+    const page = yield* shareLinks.listActiveShareLinks({
       cursor: command.cursor,
       installationId,
       limit: command.limit,
       now: yield* now,
     });
+    // An artifact the administrator can no longer read keeps its id as its name.
+    const items = yield* Effect.forEach(page.items, (link) =>
+      artifacts.getArtifact({artifactId: link.artifactId, principal: command.principal, projectId: link.projectId}).pipe(
+        Effect.map((read) => read.artifact.name),
+        Effect.catchTag("ArtifactNotFound", () => Effect.succeed(link.artifactId)),
+        Effect.map((artifactName): InventoryShareLink => Object.assign({artifactName}, link)),
+      ));
+    return {items, nextCursor: page.nextCursor};
   });
 
   return ShareLinkService.of({create, inventory, listForArtifact, revoke, rotate, update});

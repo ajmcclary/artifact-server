@@ -25,6 +25,7 @@ import {
   type LedgerColumn,
 } from "./admin-parts.tsx";
 import {AdminConsole} from "./admin-console.tsx";
+import {ShareLinksPanel} from "./share-links-panel.tsx";
 import {dateOrDash} from "./admin-areas.ts";
 
 const maximumBulkSize = 100;
@@ -318,6 +319,14 @@ export function PublicLinksScreen() {
       width: "minmax(0, 1fr)",
     },
     {
+      align: "left",
+      cell: () => ({value: "Public link · current version"}),
+      key: "access",
+      kind: "field",
+      label: "Access",
+      width: "minmax(0, 1fr)",
+    },
+    {
       align: "right",
       cell: (item) => ({mono: true, value: `v${item.currentVersion.number}`}),
       key: "version",
@@ -378,6 +387,7 @@ export function PublicLinksScreen() {
 
   return (
     <AdminConsole administrator area="publicLinks">
+      <ShareLinksPanel />
       {error === null ? null : <RequestFailure error={error} onRetry={() => void loadFirstPage()} />}
       {notice === null ? null : (
         <Alert density={density} title="Public access changed" variant="success">{notice}</Alert>

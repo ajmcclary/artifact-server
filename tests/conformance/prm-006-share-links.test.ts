@@ -203,6 +203,7 @@ describe("share links", () => {
     const page = await harness.runtime.runPromise(ShareLinkService.use((links) =>
       links.inventory({cursor: null, limit: 25, principal: harness.administrator})));
     expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.artifactName).toBe(published.artifact.name);
     const member = await harness.person("Sam");
     expect(await failureTag(harness, ShareLinkService.use((links) =>
       links.inventory({cursor: null, limit: 25, principal: member})))).toBe("AuthorizationDenied");

@@ -59,8 +59,8 @@ export const adminAreas: readonly AdminArea[] = [
     href: "/review/settings/public-links",
     icon: "bi-link-45deg",
     id: "publicLinks",
-    label: "Public links",
-    lede: "Artifacts anyone with the link can open at their current version.",
+    label: "Share links",
+    lede: "Share links for people without an account, and public links to current versions.",
   },
   {
     administratorOnly: false,

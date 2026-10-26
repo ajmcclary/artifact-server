@@ -1,6 +1,14 @@
 import {useId, useState, type CSSProperties} from "react";
 
-import {api, type AccessSetting, type AdministeredInvite, type ArtifactDetails, type ArtifactVersion} from "@/api/client";
+import {
+  api,
+  type AccessPolicy,
+  type AccessSetting,
+  type AdministeredInvite,
+  type ArtifactDetails,
+  type ArtifactVersion,
+  type ShareLink,
+} from "@/api/client";
 import {
   Alert,
   Button,
@@ -28,10 +36,18 @@ import piLogoUrl from "../assets/agents/pi.svg";
 import piLightLogoUrl from "../assets/agents/pi-light.svg";
 import {InviteForm} from "../invites/invite-form.tsx";
 import {InviteLinkReady} from "../invites/invite-link-ready.tsx";
+import {AccessExplainer} from "../settings/access-explainer.tsx";
 import {focusButtonStyle} from "./focus-mode.tsx";
 import {accessChangeWarning, changeArtifactAccess} from "./artifact-access.ts";
+import {ShareLinkForm} from "./share-link-form.tsx";
+import {linkSummary, revokeLinkWarning} from "./share-link-model.ts";
 
-type ShareScreen = "access" | "agents" | "invite" | "inviteReady" | "overview";
+type ShareScreen = "access" | "agents" | "createLink" | "explain" | "invite" | "inviteReady" | "links" | "overview";
+
+interface ExplainableMember {
+  readonly displayName: string;
+  readonly memberId: string;
+}
 type ShareTarget = "latest" | "version";
 
 export interface SharePopoverProps {
@@ -79,6 +95,8 @@ const sectionStyle = {display: "flex", flexDirection: "column", gap: 8} satisfie
 const rowStyle = {alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8} satisfies CSSProperties;
 const logosStyle = {alignItems: "center", display: "inline-flex", gap: 4} satisfies CSSProperties;
 const logoStyle = {height: 18, width: 18} satisfies CSSProperties;
+const linkListStyle = {display: "flex", flexDirection: "column", gap: 12, listStyle: "none", margin: 0, padding: 0} satisfies CSSProperties;
+const linkItemStyle = {display: "flex", flexDirection: "column", gap: 6} satisfies CSSProperties;
 const fieldsetStyle = {border: 0, display: "flex", flexDirection: "column", gap: 10, margin: 0, padding: 0} satisfies CSSProperties;
 const visuallyHiddenStyle = {
   border: 0,
@@ -113,6 +131,11 @@ export function SharePopover({
   const [notice, setNotice] = useState<string | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
   const [issued, setIssued] = useState<{readonly invite: AdministeredInvite; readonly url: string} | null>(null);
+  // Null until loaded, and stays null for someone who cannot share this artifact.
+  const [shareLinks, setShareLinks] = useState<readonly ShareLink[] | null>(null);
+  const [policy, setPolicy] = useState<AccessPolicy | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [explainMembers, setExplainMembers] = useState<readonly ExplainableMember[] | null>(null);
   const headingId = useId();
 
   const updateOpen = (next: boolean): void => {
@@ -122,8 +145,46 @@ export function SharePopover({
       setScreen("overview");
       setFailure(null);
       setIssued(null);
+      setRevoking(null);
       if (canInvite) void countMembers();
+      void loadSharing();
     }
+  };
+
+  const loadSharing = async (): Promise<void> => {
+    if (details === null) return;
+    const {id: artifactId, projectId} = details.artifact;
+    const [links, access, stored] = await Promise.allSettled([
+      api.shareLinks(projectId, artifactId),
+      api.projectAccess(projectId),
+      canInvite ? api.accessPolicy() : Promise.reject(new Error("Only administrators read the policy.")),
+    ]);
+    setShareLinks(links.status === "fulfilled" ? links.value.filter((link) => link.revokedAt === null) : null);
+    setExplainMembers(access.status === "fulfilled" ? access.value.members : null);
+    setPolicy(stored.status === "fulfilled" ? stored.value.policy : null);
+  };
+
+  const revokeLink = async (link: ShareLink): Promise<void> => {
+    setPending(true);
+    setFailure(null);
+    try {
+      await api.revokeShareLink(link);
+      setShareLinks((current) => current?.filter((held) => held.id !== link.id) ?? null);
+      setNotice(`“${link.label}” no longer opens.`);
+      setRevoking(null);
+    } catch (caught) {
+      setFailure(caught instanceof Error ? caught.message : "The link could not be revoked.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  /** The version number a link opens, when this popover knows it. */
+  const targetNumber = (link: ShareLink): number | null => {
+    if (link.target.kind === "latest") return null;
+    if (link.target.versionId === selectedVersion?.version.id) return selectedVersion.version.number;
+    if (link.target.versionId === details?.current.version.id) return details.current.version.number;
+    return null;
   };
 
   const countMembers = async (): Promise<void> => {
@@ -180,6 +241,9 @@ export function SharePopover({
     : screen === "access" ? "Artifact access"
     : screen === "invite" ? "Invite People"
     : screen === "inviteReady" ? "Invite Link Ready"
+    : screen === "links" ? "Share Links"
+    : screen === "createLink" ? "New Share Link"
+    : screen === "explain" ? "Why Can They?"
     : "Connect MCP";
   const subtitle = screen === "overview"
     ? `Exact version · Version ${selectedVersion?.version.number ?? "—"}`
@@ -280,9 +344,40 @@ export function SharePopover({
                 Manage Access
               </Button>
             </div>
+            {explainMembers === null || explainMembers.length === 0 ? null : (
+              <Button flush onClick={() => setScreen("explain")} size="xs" variant="link">
+                Why can they?
+              </Button>
+            )}
             {failure === null ? null : <Alert variant="danger">{failure}</Alert>}
             {notice === null ? null : <Alert variant="success">{notice}</Alert>}
           </PanelSection>
+          {shareLinks === null ? null : (
+            <PanelSection gap={8} padding="12px 16px">
+              <div style={inviteRowStyle}>
+                <i aria-hidden="true" className="bi bi-link-45deg" />
+                <span style={bandTextStyle}>
+                  <span style={bandTitleStyle}>
+                    {shareLinks.length === 0
+                      ? "Share links"
+                      : `${shareLinks.length} share ${shareLinks.length === 1 ? "link" : "links"}`}
+                  </span>
+                  <span style={subtleStyle}>People without an account review and comment through a link.</span>
+                </span>
+                <Button
+                  onClick={() => {
+                    setFailure(null);
+                    setScreen("links");
+                  }}
+                  outline
+                  size="sm"
+                  variant="primary"
+                >
+                  Manage
+                </Button>
+              </div>
+            </PanelSection>
+          )}
           {canInvite ? (
             <PanelSection gap={8} padding="12px 16px">
               <div style={inviteRowStyle}>
@@ -329,6 +424,80 @@ export function SharePopover({
             </div>
           </PanelSection>
         </>
+      ) : screen === "links" ? (
+        <>
+          {notice === null ? null : <Alert variant="success">{notice}</Alert>}
+          {shareLinks === null || shareLinks.length === 0 ? (
+            <p style={subtleStyle}>No active share links open this artifact.</p>
+          ) : (
+            <ul aria-label="Share links" style={linkListStyle}>
+              {shareLinks.map((link) => (
+                <li key={link.id} style={linkItemStyle}>
+                  <span style={bandTextStyle}>
+                    <span style={bandTitleStyle}>{link.label}</span>
+                    <span style={subtleStyle}>{linkSummary(link, new Date().toISOString(), targetNumber(link))}</span>
+                  </span>
+                  <div style={rowStyle}>
+                    <CopyAction copiedLabel="Link copied" label={`Copy ${link.label} link`} text={link.url} variant="outline">
+                      Copy Link
+                    </CopyAction>
+                    <Button disabled={pending} onClick={() => setRevoking(link.id)} size="sm" variant="link">
+                      Revoke
+                    </Button>
+                  </div>
+                  {revoking === link.id ? (
+                    <Alert variant="warning">
+                      <span style={linkItemStyle}>
+                        <span>{revokeLinkWarning}</span>
+                        <span style={rowStyle}>
+                          <Button disabled={pending} onClick={() => setRevoking(null)} outline size="xs" variant="secondary">
+                            Cancel
+                          </Button>
+                          <Button disabled={pending} onClick={() => void revokeLink(link)} size="xs" variant="danger">
+                            {pending ? "Revoking…" : "Revoke Link"}
+                          </Button>
+                        </span>
+                      </span>
+                    </Alert>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {failure === null ? null : <Alert variant="danger">{failure}</Alert>}
+          <div style={rowStyle}>
+            <Button
+              disabled={details === null || selectedVersion === null}
+              icon="bi-plus-lg"
+              onClick={() => {
+                setNotice(null);
+                setScreen("createLink");
+              }}
+              size="sm"
+            >
+              New Link
+            </Button>
+          </div>
+        </>
+      ) : screen === "createLink" && details !== null && selectedVersion !== null ? (
+        <ShareLinkForm
+          details={details}
+          onCancel={() => setScreen("links")}
+          onCreated={(link) => {
+            setShareLinks((current) => [link, ...(current ?? [])]);
+            setNotice(`“${link.label}” is ready. Copy it below.`);
+            setScreen("links");
+          }}
+          policy={policy}
+          selectedVersion={selectedVersion}
+        />
+      ) : screen === "explain" && details !== null && explainMembers !== null ? (
+        <AccessExplainer
+          artifactId={details.artifact.id}
+          members={explainMembers}
+          projectId={details.artifact.projectId}
+          projectName="this project"
+        />
       ) : screen === "invite" ? (
         <InviteForm
           onCancel={() => setScreen("overview")}

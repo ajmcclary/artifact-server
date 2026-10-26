@@ -18,7 +18,7 @@ describe("administration areas", () => {
       ["People and access", "Invites"],
       ["People and access", "API keys"],
       ["People and access", "Access policy"],
-      ["Sharing", "Public links"],
+      ["Sharing", "Share links"],
       ["Integrations", "MCP & WebMCP"],
     ]);
     expect(visibleAdminAreas(false).map((area) => area.id)).toEqual(["mcp"]);

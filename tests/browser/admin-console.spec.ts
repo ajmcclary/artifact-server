@@ -36,7 +36,7 @@ test.describe("Admin console", () => {
       await expect(page.getByRole("heading", {level: 1, name: "Members"})).toBeVisible();
       await expect(page.getByText("Members open each project according to that project's access.")).toBeVisible();
       const areas = page.getByRole("navigation", {name: "Administration areas"});
-      await Promise.all(["Members", "API keys", "Public links", "MCP & WebMCP"].map((label) =>
+      await Promise.all(["Members", "API keys", "Share links", "MCP & WebMCP"].map((label) =>
         expect(areas.getByRole("link", {exact: true, name: label})).toBeVisible()));
       // The pinned menu's header names Administration, so the heading carries no breadcrumb.
       await expect(page.getByRole("main").getByRole("link", {exact: true, name: "Administration"})).toHaveCount(0);
@@ -96,7 +96,7 @@ test.describe("Admin console", () => {
       await noWcagViolations(page);
 
       // Public links: made-public date, then Make private from the row menu.
-      await areas.getByRole("link", {exact: true, name: "Public links"}).click();
+      await areas.getByRole("link", {exact: true, name: "Share links"}).click();
       const inventory = page.getByRole("table", {name: "Public links inventory"});
       const linkRow = inventory.getByRole("row").filter({hasText: "Console public link"});
       await expect(linkRow).toContainText(/\d{2}\/\d{2}\/\d{4}/u);
