@@ -1,13 +1,32 @@
+import {z} from "zod";
+
 import type {AccessRepository} from "../../../src/core/access-ports.js";
+import type {ActionAttribution} from "../../../src/core/action-attribution.js";
+import type {PageCursor} from "../../../src/core/model.js";
+import type {ShareLinkRepository} from "../../../src/core/share-link-ports.js";
+import type {GuestRecord, ShareLink} from "../../../src/core/share-links.js";
 import {defaultAccessPolicy} from "../../../src/core/access-policy.js";
 import type {AccessGrant, ProjectAccess} from "../../../src/core/permissions.js";
 import type {Clock} from "../../../src/core/ports.js";
 import {
+  positionalActionInsertSql,
   positionalActionInsertWhereSql,
   positionalActionValues,
   type ActionInsert,
 } from "../../../src/storage/action-insert.js";
 import {
+  guestFromRow,
+  guestJoinAction,
+  guestRowSchema,
+  guestSelectColumns,
+  guestSessionRowSchema,
+  guestSessionSelectColumns,
+  shareLinkAction,
+  shareLinkFromRow,
+  shareLinkInsertColumns,
+  shareLinkInsertValues,
+  shareLinkRowSchema,
+  shareLinkSelectColumns,
   grantAction,
   grantFromRow,
   grantRowSchema,
@@ -26,7 +45,10 @@ import {
  * D1 access store. D1 batches cannot branch, so each action row is written only
  * when the guarded statement immediately before it changed exactly one row.
  */
-export function createD1AccessRepository(database: D1Database, clock: Clock): AccessRepository {
+export function createD1AccessRepository(
+  database: D1Database,
+  clock: Clock,
+): AccessRepository & ShareLinkRepository {
   const now = () => clock.now().toISOString();
   const actionAfterChange = (insert: ActionInsert): D1PreparedStatement =>
     database.prepare(positionalActionInsertWhereSql("changes() = 1")).bind(...positionalActionValues(insert));
@@ -49,7 +71,211 @@ export function createD1AccessRepository(database: D1Database, clock: Clock): Ac
     return rows.results.map((row) => grantFromRow(grantRowSchema.parse(row)));
   };
 
+  const actionStatement = (insert: ActionInsert): D1PreparedStatement =>
+    database.prepare(positionalActionInsertSql).bind(...positionalActionValues(insert));
+
+  const findShareLink = async (installationId: string, linkId: string): Promise<ShareLink | null> => {
+    const row = await database.prepare(`SELECT ${shareLinkSelectColumns} FROM share_links l
+      WHERE l.installation_id = ? AND l.id = ?`).bind(installationId, linkId).first();
+    return row === null ? null : shareLinkFromRow(shareLinkRowSchema.parse(row));
+  };
+
+  const findGuestRecord = async (installationId: string, guestId: string): Promise<GuestRecord | null> => {
+    const row = await database.prepare(`SELECT ${guestSelectColumns} FROM guest_principals g
+      WHERE g.installation_id = ? AND g.id = ?`).bind(installationId, guestId).first();
+    return row === null ? null : guestFromRow(guestRowSchema.parse(row));
+  };
+
+  const revokeStatements = (
+    installationId: string,
+    link: ShareLink,
+    versionId: string,
+    attribution: ActionAttribution,
+    at: string,
+  ): readonly D1PreparedStatement[] => [
+    database.prepare(`UPDATE share_links SET revoked_at = ?, revoked_by_principal_id = ?, revision = revision + 1
+      WHERE installation_id = ? AND id = ? AND revoked_at IS NULL`)
+      .bind(at, attribution.principalId ?? "system", installationId, link.id),
+    actionAfterChange(shareLinkAction("share_link_revoke", {...link, revision: link.revision + 1}, versionId, attribution, at)),
+  ];
+
+  const shareLinkMethods: ShareLinkRepository = {
+    createGuest: async (command) => {
+      const link = await findShareLink(command.installationId, command.guest.shareLinkId);
+      if (link === null) throw new Error("A guest needs an existing share link.");
+      await database.batch([
+        database.prepare(`INSERT INTO guest_principals
+            (installation_id, id, share_link_id, generation, display_name, contact_email, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
+          command.installationId, command.guest.id, command.guest.shareLinkId, command.guest.generation,
+          command.guest.displayName, command.guest.contactEmail, command.guest.createdAt,
+        ),
+        database.prepare(`INSERT INTO guest_sessions
+            (installation_id, id, guest_id, share_link_id, token_digest, csrf_digest, created_at, expires_at, revoked_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+          command.installationId, command.session.id, command.guest.id, command.guest.shareLinkId,
+          command.session.tokenDigest, command.session.csrfDigest, command.guest.createdAt,
+          command.session.expiresAt, command.session.revokedAt,
+        ),
+        actionStatement(guestJoinAction(command.guest, link, command.versionId, command.attribution)),
+      ]);
+    },
+    createShareLink: async (command) => {
+      const draft = command.link;
+      // The action is built from the values this batch writes; the read-back confirms them.
+      const written: ShareLink = {...draft, generation: 0, guestCount: 0, revision: 1, revokedAt: null};
+      await database.batch([
+        database.prepare(`INSERT INTO share_links (${shareLinkInsertColumns})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(...shareLinkInsertValues(command.installationId, draft)),
+        actionStatement(shareLinkAction("share_link_create", written, command.versionId, command.attribution, draft.createdAt)),
+      ]);
+      const created = await findShareLink(command.installationId, draft.id);
+      if (created === null) throw new Error("The share link was not stored.");
+      return created;
+    },
+    findGuest: async (installationId, guestId) => {
+      const guest = await findGuestRecord(installationId, guestId);
+      if (guest === null) return null;
+      const link = await findShareLink(installationId, guest.shareLinkId);
+      return link === null ? null : {guest, link};
+    },
+    findGuestSession: async (installationId, tokenDigest) => {
+      const row = await database.prepare(`SELECT ${guestSessionSelectColumns}, ${guestSelectColumns}
+        FROM guest_sessions s JOIN guest_principals g
+          ON g.installation_id = s.installation_id AND g.id = s.guest_id
+        WHERE s.installation_id = ? AND s.token_digest = ?`).bind(installationId, tokenDigest).first();
+      if (row === null) return null;
+      const guest = guestFromRow(guestRowSchema.parse(row));
+      const link = await findShareLink(installationId, guest.shareLinkId);
+      if (link === null) return null;
+      const session = guestSessionRowSchema.parse(row);
+      return {
+        guest,
+        link,
+        session: {
+          csrfDigest: session.csrfDigest,
+          expiresAt: session.sessionExpiresAt,
+          guestId: session.sessionGuestId,
+          id: session.sessionId,
+          revokedAt: session.sessionRevokedAt,
+        },
+      };
+    },
+    findShareLink,
+    findShareLinkByToken: async (token) => {
+      const row = await database.prepare(`SELECT ${shareLinkSelectColumns}, l.installation_id AS installationId
+        FROM share_links l WHERE l.token = ?`).bind(token).first();
+      if (row === null) return null;
+      const {installationId} = z.object({installationId: z.string()}).parse(row);
+      return {...shareLinkFromRow(shareLinkRowSchema.parse(row)), installationId};
+    },
+    listActiveShareLinks: async (command) => {
+      const rows = await database.prepare(`SELECT ${shareLinkSelectColumns} FROM share_links l
+        WHERE l.installation_id = ? AND l.revoked_at IS NULL
+          AND (l.expires_at IS NULL OR l.expires_at > ?)
+          AND (? IS NULL OR l.created_at < ? OR (l.created_at = ? AND l.id < ?))
+        ORDER BY l.created_at DESC, l.id DESC LIMIT ?`).bind(
+        command.installationId,
+        command.now,
+        command.cursor?.createdAt ?? null,
+        command.cursor?.createdAt ?? null,
+        command.cursor?.createdAt ?? null,
+        command.cursor?.id ?? null,
+        command.limit + 1,
+      ).all();
+      const links = rows.results.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+      const items = links.slice(0, command.limit);
+      const last = items.at(-1);
+      const nextCursor: PageCursor | null = links.length > command.limit && last !== undefined
+        ? {createdAt: last.createdAt, id: last.id}
+        : null;
+      return {items, nextCursor};
+    },
+    listArtifactShareLinks: async (installationId, projectId, artifactId) => {
+      const rows = await database.prepare(`SELECT ${shareLinkSelectColumns} FROM share_links l
+        WHERE l.installation_id = ? AND l.project_id = ? AND l.artifact_id = ?
+        ORDER BY l.created_at, l.id`).bind(installationId, projectId, artifactId).all();
+      return rows.results.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+    },
+    revokeArtifactShareLinks: async (command) => {
+      const at = now();
+      const rows = await database.prepare(`SELECT ${shareLinkSelectColumns} FROM share_links l
+        WHERE l.installation_id = ? AND l.project_id = ? AND l.artifact_id = ? AND l.revoked_at IS NULL`)
+        .bind(command.installationId, command.projectId, command.artifactId).all();
+      const active = rows.results.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+      if (active.length === 0) return 0;
+      await database.batch(active.flatMap((link) =>
+        revokeStatements(command.installationId, link, command.versionId, command.attribution, at)));
+      return active.length;
+    },
+    revokeShareLink: async (command) => {
+      const existing = await findShareLink(command.installationId, command.linkId);
+      if (existing === null) return "missing";
+      if (existing.revokedAt !== null) return existing;
+      await database.batch([...revokeStatements(command.installationId, existing, command.versionId, command.attribution, now())]);
+      return (await findShareLink(command.installationId, command.linkId)) ?? existing;
+    },
+    rotateShareLink: async (command) => {
+      const existing = await findShareLink(command.installationId, command.linkId);
+      if (existing === null) return "missing";
+      const written: ShareLink = {
+        ...existing,
+        generation: existing.generation + 1,
+        revision: command.expectedRevision + 1,
+        token: command.token,
+      };
+      const [result] = await database.batch([
+        database.prepare(`UPDATE share_links SET token = ?, generation = generation + 1, revision = revision + 1
+          WHERE installation_id = ? AND id = ? AND revision = ? AND revoked_at IS NULL`)
+          .bind(command.token, command.installationId, command.linkId, command.expectedRevision),
+        actionAfterChange(shareLinkAction("share_link_rotate", written, command.versionId, command.attribution, now())),
+      ]);
+      if (result?.meta.changes !== 1) return "conflict";
+      return (await findShareLink(command.installationId, command.linkId)) ?? "missing";
+    },
+    setGuestIdentity: async (command) => {
+      await database.prepare(`UPDATE guest_principals SET display_name = ?, contact_email = ?
+        WHERE installation_id = ? AND id = ?`)
+        .bind(command.displayName, command.contactEmail, command.installationId, command.guestId).run();
+      const guest = await findGuestRecord(command.installationId, command.guestId);
+      if (guest === null) throw new Error("The guest does not exist.");
+      return guest;
+    },
+    updateShareLink: async (command) => {
+      const existing = await findShareLink(command.installationId, command.linkId);
+      if (existing === null) return "missing";
+      const written: ShareLink = {
+        ...existing,
+        expiresAt: command.expiresAt,
+        label: command.label,
+        permissions: command.permissions,
+        revision: command.expectedRevision + 1,
+        target: command.target,
+      };
+      const [result] = await database.batch([
+        database.prepare(`UPDATE share_links
+          SET label = ?, permissions_json = ?, expires_at = ?, target_kind = ?, pinned_version_id = ?,
+            revision = revision + 1
+          WHERE installation_id = ? AND id = ? AND revision = ? AND revoked_at IS NULL`).bind(
+          command.label,
+          JSON.stringify(command.permissions),
+          command.expiresAt,
+          command.target.kind,
+          command.target.kind === "pinned" ? command.target.versionId : null,
+          command.installationId,
+          command.linkId,
+          command.expectedRevision,
+        ),
+        actionAfterChange(shareLinkAction("share_link_update", written, command.versionId, command.attribution, now())),
+      ]);
+      if (result?.meta.changes !== 1) return "conflict";
+      return (await findShareLink(command.installationId, command.linkId)) ?? "missing";
+    },
+  };
+
   return {
+    ...shareLinkMethods,
     deleteGrant: async (command) => {
       const existing = await findGrant(command.installationId, command.grantId);
       if (existing === null) return "missing";

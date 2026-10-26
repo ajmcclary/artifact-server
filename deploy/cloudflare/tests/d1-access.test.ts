@@ -9,6 +9,7 @@ import {systemAttribution} from "../../../src/core/action-attribution.js";
 import {
   accessRepositoryCases,
   caseManager,
+  shareLinkRepositoryCases,
   type AccessFixture,
 } from "../../../tests/support/access-repository-cases.js";
 import {createD1AccessRepository} from "../src/d1-access-repository.js";
@@ -78,6 +79,15 @@ describe("D1 access repository", () => {
 
   it.for(accessRepositoryCases)("$name", async ({run}) => {
     await expect(run(fixture)).resolves.toBeUndefined();
+  });
+
+  it.for(shareLinkRepositoryCases)("share links: $name", async ({run}) => {
+    const binding = proxy.env.ARTIFACT_SERVER_D1_DATABASE;
+    await expect(run({
+      ...fixture,
+      artifacts: createD1ArtifactRepository(binding, installationId),
+      store: createD1AccessRepository(binding, clock),
+    })).resolves.toBeUndefined();
   });
 
   it("an existing schema-20 database upgrades with every project open/editor and every key unscoped", async () => {

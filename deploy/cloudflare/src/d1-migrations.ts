@@ -21,12 +21,13 @@ import {
   sqliteAccessTableStatements,
   sqliteKeyProjectScopeColumnSql,
   sqliteProjectAccessColumns,
+  sqliteShareLinkTableStatements,
 } from "../../../src/storage/access-schema.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 21;
+export const requiredD1SchemaVersion = 22;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -1071,6 +1072,7 @@ async function addLayeredProjectAccessIfMissing(database: D1Database): Promise<v
     ...missing.map(({sql}) => sql),
     ...keyStatements,
     ...sqliteAccessTableStatements,
+    ...sqliteShareLinkTableStatements,
   ].map((statement) => database.prepare(statement)));
 }
 

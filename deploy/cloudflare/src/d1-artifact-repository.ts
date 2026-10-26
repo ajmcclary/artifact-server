@@ -1409,7 +1409,7 @@ export function createD1ArtifactRepository(
     entry.threadId,
     entry.replyId,
     entry.actor.displayName,
-    entry.actor.kind,
+    storedPrincipalKind(entry.actor.kind),
     ...sourceBindings,
   );
 
