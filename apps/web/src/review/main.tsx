@@ -10,6 +10,8 @@ import {AnnouncerProvider} from "@/ui/announcer";
 import {DensityProvider} from "@/ui/density";
 import {ToastProvider} from "@/ui/toasts";
 
+import {GuestReviewApp} from "./guest/guest-review-app.tsx";
+import {sharePathOf} from "./guest/guest-model.ts";
 import {JoinApp} from "./join/join-app.tsx";
 import {ReviewApp} from "./review-app.tsx";
 import {startReviewHistory} from "./review-history.ts";
@@ -43,7 +45,9 @@ createRoot(rootElement).render(
       <AnnouncerProvider>
         <ToastProvider>
           <PaletteProvider>
-            {window.location.pathname === "/review/join" ? <JoinApp /> : <ReviewApp />}
+            {sharePathOf(window.location.pathname) !== null
+              ? <GuestReviewApp />
+              : window.location.pathname === "/review/join" ? <JoinApp /> : <ReviewApp />}
           </PaletteProvider>
         </ToastProvider>
       </AnnouncerProvider>

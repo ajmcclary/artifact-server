@@ -707,6 +707,15 @@ const createdCommentReplySchema = z.object({
 });
 
 /** Client-owned anchor JSON; Artifact Server stores and returns it unread. */
+/** The comment wire contracts, shared by the guest client. */
+export const commentSchemas = {
+  createdReply: createdCommentReplySchema,
+  createdThread: createdCommentThreadSchema,
+  thread: commentThreadSchema,
+  threadDetails: commentThreadDetailsSchema,
+  threadPage: commentThreadPageSchema,
+} as const;
+
 export type CommentAnchor = z.infer<typeof commentAnchorSchema>;
 export type CommentThreadState = z.infer<typeof commentThreadStateSchema>;
 export type CommentAuthor = z.infer<typeof commentAuthorSchema>;
@@ -1076,7 +1085,8 @@ function shareLinkPath(link: Pick<ShareLink, "id" | "projectId">): string {
   return `/api/v1/projects/${encodeURIComponent(link.projectId)}/share-links/${encodeURIComponent(link.id)}`;
 }
 
-async function request<T>(
+/** Fetch one JSON response and parse it against its contract; failures become ApiError. */
+export async function request<T>(
   schema: z.ZodType<T>,
   path: string,
   init?: RequestInit,
@@ -1123,7 +1133,8 @@ async function requestHead(path: string): Promise<void> {
   if (!response.ok) throw await parseFailure(response);
 }
 
-async function requestNoContent(path: string, init: RequestInit): Promise<void> {
+/** Send one request whose success carries no body; failures become ApiError. */
+export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, {
     ...init,
     credentials: "same-origin",

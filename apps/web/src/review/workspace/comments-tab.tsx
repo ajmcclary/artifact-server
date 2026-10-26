@@ -20,6 +20,7 @@ import {
 import {Alert, Button, type CommentItem, CommentThread, IconButton, SegmentedControl, SurfaceState} from "@/arkcase";
 import {CommentComposer} from "@/components/comments/comment-composer";
 import {useCommentDraft} from "@/components/comments/comment-drafts";
+import {GuestBadge} from "@/components/comments/guest-badge";
 import {maximumCommentBodyCharacters} from "@/components/comments/comment-limits";
 import {useCommentPoll} from "@/components/comments/comment-poll";
 import {bundleOfThreads} from "@/components/dispatch/dispatch-bundle";
@@ -247,10 +248,16 @@ export function CommentsTab({
       const last = replies.at(-1);
       const item: CommentItem = {
         author: thread.author.displayName,
-        badge: <ThreadMark thread={thread} />,
+        badge: (
+          <>
+            <ThreadMark thread={thread} />
+            {thread.author.principalKind === "guest" ? <GuestBadge /> : null}
+          </>
+        ),
         id: thread.id,
         replies: replies.map((reply) => ({
           author: reply.author.displayName,
+          badge: reply.author.principalKind === "guest" ? <GuestBadge /> : null,
           id: reply.id,
           text: (
             <ReplyBody

@@ -14,7 +14,9 @@ import {
   type CommentReply,
   type CommentThread,
   type CommentThreadDetails,
+  type CommentThreadPage,
   type CommentThreadQuery,
+  type CommentThreadState,
 } from "@/api/client";
 import {
   useCommentListOwnership,
@@ -61,6 +63,42 @@ function threadQuery(
   };
 }
 
+/** Where one Review comment session reads and writes. Members and guests differ only here. */
+export interface CommentsTransport {
+  readonly createReply: (threadId: string, body: string, idempotencyKey: string) => Promise<void>;
+  readonly createThread: (
+    versionId: string,
+    draft: {readonly anchor: CommentAnchor; readonly body: string; readonly path: string | null},
+    idempotencyKey: string,
+  ) => Promise<CommentThread>;
+  readonly deleteReply: (threadId: string, replyId: string) => Promise<void>;
+  readonly getThread: (threadId: string) => Promise<CommentThreadDetails>;
+  readonly listThreads: (versionId: string, cursor: string | null, revision: number | null) => Promise<CommentThreadPage>;
+  readonly setThreadState: (threadId: string, state: CommentThreadState) => Promise<void>;
+  readonly updateReply: (threadId: string, replyId: string, body: string) => Promise<void>;
+}
+
+/** A member's comment calls for one artifact, through the member API. */
+export function memberCommentsTransport(projectId: string, artifactId: string): CommentsTransport {
+  return {
+    createReply: async (threadId, body, idempotencyKey) => {
+      await api.createCommentReply(projectId, artifactId, threadId, body, idempotencyKey);
+    },
+    createThread: async (versionId, draft, idempotencyKey) =>
+      (await api.createComment(projectId, artifactId, versionId, draft, idempotencyKey)).thread,
+    deleteReply: (threadId, replyId) => api.deleteCommentReply(projectId, artifactId, threadId, replyId),
+    getThread: (threadId) => api.comment(projectId, artifactId, threadId),
+    listThreads: (versionId, cursor, revision) =>
+      api.comments(projectId, artifactId, threadQuery(versionId, cursor, null, revision)),
+    setThreadState: async (threadId, state) => {
+      await api.updateComment(projectId, artifactId, threadId, {state});
+    },
+    updateReply: async (threadId, replyId, body) => {
+      await api.updateCommentReply(projectId, artifactId, threadId, replyId, body);
+    },
+  };
+}
+
 export async function loadAllThreads(
   projectId: string,
   artifactId: string,
@@ -94,11 +132,18 @@ export async function loadConversations(
   artifactId: string,
   threads: readonly CommentThread[],
 ): Promise<readonly CommentThreadDetails[]> {
+  return loadTransportConversations(memberCommentsTransport(projectId, artifactId), threads);
+}
+
+async function loadTransportConversations(
+  transport: CommentsTransport,
+  threads: readonly CommentThread[],
+): Promise<readonly CommentThreadDetails[]> {
   const conversations = new Map<string, CommentThreadDetails>();
   const worker = async (index: number): Promise<void> => {
     const thread = threads[index];
     if (thread === undefined) return;
-    const details = await api.comment(projectId, artifactId, thread.id);
+    const details = await transport.getThread(thread.id);
     conversations.set(thread.id, details);
     await worker(index + conversationLoadConcurrency);
   };
@@ -152,13 +197,20 @@ export function useReviewComments({
   artifactId,
   onVersionChanged,
   projectId,
+  transport: suppliedTransport,
   versionId,
 }: {
   readonly artifactId: string | null;
   readonly onVersionChanged: (versionId: string) => void;
   readonly projectId: string;
+  /** Guests supply their own; a stable reference keeps the session from reloading. */
+  readonly transport?: CommentsTransport;
   readonly versionId: string | null;
 }): ReviewCommentSession {
+  const transport = useMemo(
+    () => suppliedTransport ?? (artifactId === null ? null : memberCommentsTransport(projectId, artifactId)),
+    [artifactId, projectId, suppliedTransport],
+  );
   const [threads, setThreads] = useState<readonly CommentThread[]>([]);
   const [repliesByThread, setRepliesByThread] = useState<ReadonlyMap<
     string,
@@ -187,7 +239,7 @@ export function useReviewComments({
     const {withLoading = true} = options;
     const generation = reloadGenerationRef.current + 1;
     reloadGenerationRef.current = generation;
-    if (artifactId === null || projectId === "" || versionId === null) {
+    if (artifactId === null || projectId === "" || versionId === null || transport === null) {
       setThreads([]);
       setRepliesByThread(new Map());
       setSelectedThreadId(null);
@@ -202,12 +254,11 @@ export function useReviewComments({
     setError(null);
     try {
       return await ownership.own(async () => {
-        const listed = await loadAllThreads(projectId, artifactId, versionId);
-        const conversations = await loadConversations(
-          projectId,
-          artifactId,
-          listed.threads,
+        const listed = await loadAllThreadsPaged(
+          (cursor) => transport.listThreads(versionId, cursor, null),
+          null,
         );
+        const conversations = await loadTransportConversations(transport, listed.threads);
         if (reloadGenerationRef.current !== generation) return null;
         setThreads(conversations.map(({thread}) => thread));
         setRepliesByThread(new Map(
@@ -226,7 +277,7 @@ export function useReviewComments({
         setLoading(false);
       }
     }
-  }, [artifactId, ownership, projectId, versionId]);
+  }, [artifactId, ownership, projectId, transport, versionId]);
 
   const reload = useCallback(async (): Promise<void> => {
     const revision = await replaceAllThreads({withLoading: true});
@@ -255,15 +306,11 @@ export function useReviewComments({
   }, [selectedThreadId, threads]);
 
   const poll = useCallback(async (): Promise<void> => {
-    if (artifactId === null || projectId === "" || versionId === null) return;
+    if (artifactId === null || projectId === "" || versionId === null || transport === null) return;
     const token = ownership.open();
     if (token < 0) return;
     try {
-      const page = await api.comments(
-        projectId,
-        artifactId,
-        threadQuery(versionId, null, null, revisionRef.current),
-      );
+      const page = await transport.listThreads(versionId, null, revisionRef.current);
       if (page.revision === revisionRef.current || !ownership.settled(token)) return;
       const revision = await replaceAllThreads({withLoading: false});
       if (revision !== null) {
@@ -272,7 +319,7 @@ export function useReviewComments({
     } catch {
       // A failed background refresh leaves the last readable thread set intact.
     }
-  }, [artifactId, ownership, projectId, replaceAllThreads, versionId]);
+  }, [artifactId, ownership, projectId, replaceAllThreads, transport, versionId]);
 
   useCommentPoll(poll, active);
 
@@ -281,24 +328,18 @@ export function useReviewComments({
     anchor: ReviewAnchor | null,
     path: string | null,
   ): Promise<boolean> => {
-    if (artifactId === null || projectId === "" || versionId === null) return false;
+    if (artifactId === null || projectId === "" || versionId === null || transport === null) return false;
     setError(null);
     try {
       const storedAnchor: CommentAnchor = z.json().parse(anchor);
       const created = await ownership.own(() =>
-        api.createComment(
-          projectId,
-          artifactId,
-          versionId,
-          {anchor: storedAnchor, body, path},
-          crypto.randomUUID(),
-        )
+        transport.createThread(versionId, {anchor: storedAnchor, body, path}, crypto.randomUUID())
       );
-      if (created.thread.versionId !== versionId) {
-        onVersionChanged(created.thread.versionId);
+      if (created.versionId !== versionId) {
+        onVersionChanged(created.versionId);
       } else {
         await reload();
-        setSelectedThreadId(created.thread.id);
+        setSelectedThreadId(created.id);
       }
       return true;
     } catch (caught) {
@@ -307,85 +348,64 @@ export function useReviewComments({
       );
       return false;
     }
-  }, [artifactId, onVersionChanged, ownership, projectId, reload, versionId]);
+  }, [artifactId, onVersionChanged, ownership, projectId, reload, transport, versionId]);
 
   const changeState = useCallback(async (thread: CommentThread): Promise<void> => {
-    if (artifactId === null || projectId === "") return;
+    if (artifactId === null || projectId === "" || transport === null) return;
     setError(null);
     try {
-      await ownership.own(() =>
-        api.updateComment(projectId, artifactId, thread.id, {
-          state: thread.state === "open" ? "resolved" : "open",
-        })
-      );
+      await ownership.own(() => transport.setThreadState(thread.id, thread.state === "open" ? "resolved" : "open"));
       await reload();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught : new Error("Comment state change failed."),
       );
     }
-  }, [artifactId, ownership, projectId, reload]);
+  }, [artifactId, ownership, projectId, reload, transport]);
 
   const createReply = useCallback(async (
     thread: CommentThread,
     body: string,
     idempotencyKey: string,
   ): Promise<boolean> => {
-    if (artifactId === null || projectId === "" || thread.state !== "open") return false;
+    if (artifactId === null || projectId === "" || thread.state !== "open" || transport === null) return false;
     setError(null);
     try {
-      await ownership.own(() => api.createCommentReply(
-        projectId,
-        artifactId,
-        thread.id,
-        body,
-        idempotencyKey,
-      ));
+      await ownership.own(() => transport.createReply(thread.id, body, idempotencyKey));
       await reload();
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error("Reply creation failed."));
       return false;
     }
-  }, [artifactId, ownership, projectId, reload]);
+  }, [artifactId, ownership, projectId, reload, transport]);
 
   const updateReply = useCallback(async (
     reply: CommentReply,
     body: string,
   ): Promise<boolean> => {
-    if (artifactId === null || projectId === "") return false;
+    if (artifactId === null || projectId === "" || transport === null) return false;
     setError(null);
     try {
-      await ownership.own(() => api.updateCommentReply(
-        projectId,
-        artifactId,
-        reply.threadId,
-        reply.id,
-        body,
-      ));
+      await ownership.own(() => transport.updateReply(reply.threadId, reply.id, body));
       await reload();
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error("Reply edit failed."));
       return false;
     }
-  }, [artifactId, ownership, projectId, reload]);
+  }, [artifactId, ownership, projectId, reload, transport]);
 
   const deleteReply = useCallback(async (reply: CommentReply): Promise<void> => {
-    if (artifactId === null || projectId === "") return;
+    if (artifactId === null || projectId === "" || transport === null) return;
     setError(null);
     try {
-      await ownership.own(() => api.deleteCommentReply(
-        projectId,
-        artifactId,
-        reply.threadId,
-        reply.id,
-      ));
+      await ownership.own(() => transport.deleteReply(reply.threadId, reply.id));
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error("Reply deletion failed."));
     }
-  }, [artifactId, ownership, projectId, reload]);
+  }, [artifactId, ownership, projectId, reload, transport]);
 
   const annotations = useMemo(
     () => threads.filter((thread) => thread.state === "open").map(toAnnotation),
