@@ -1105,6 +1105,73 @@ const addLayeredProjectAccess = Effect.gen(function*() {
   for (const statement of statements) yield* sql.unsafe(statement);
 });
 
+// ADR 0033 part B: share links, the guests who open them, and guest sessions.
+const addShareLinksAndGuests = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS share_links (
+      installation_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      artifact_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      target_kind TEXT NOT NULL CHECK (target_kind IN ('latest', 'pinned')),
+      pinned_version_id TEXT,
+      permissions_json TEXT NOT NULL,
+      expires_at TEXT,
+      generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      created_at TEXT NOT NULL,
+      created_by_principal_id TEXT NOT NULL,
+      created_by_name TEXT NOT NULL,
+      revoked_at TEXT,
+      revoked_by_principal_id TEXT,
+      PRIMARY KEY (installation_id, id),
+      FOREIGN KEY (installation_id, project_id) REFERENCES projects(installation_id, id),
+      CHECK ((target_kind = 'pinned') = (pinned_version_id IS NOT NULL)),
+      CHECK ((revoked_at IS NULL) = (revoked_by_principal_id IS NULL))
+    )`,
+    `CREATE INDEX IF NOT EXISTS share_links_artifact
+      ON share_links (installation_id, project_id, artifact_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS share_links_active
+      ON share_links (installation_id, revoked_at, created_at DESC, id DESC)`,
+    `CREATE TABLE IF NOT EXISTS guest_principals (
+      installation_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      share_link_id TEXT NOT NULL,
+      generation INTEGER NOT NULL CHECK (generation >= 0),
+      display_name TEXT,
+      contact_email TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (installation_id, id),
+      FOREIGN KEY (installation_id, share_link_id) REFERENCES share_links(installation_id, id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS guest_principals_link
+      ON guest_principals (installation_id, share_link_id, generation)`,
+    `CREATE TABLE IF NOT EXISTS guest_sessions (
+      installation_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      guest_id TEXT NOT NULL,
+      share_link_id TEXT NOT NULL,
+      token_digest TEXT NOT NULL,
+      csrf_digest TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      PRIMARY KEY (installation_id, id),
+      UNIQUE (installation_id, token_digest),
+      FOREIGN KEY (installation_id, guest_id) REFERENCES guest_principals(installation_id, id)
+    )`,
+    `ALTER TABLE actions
+      DROP CONSTRAINT IF EXISTS actions_action_check,
+      ADD CONSTRAINT actions_action_check CHECK (${actionRowChecks[0]}),
+      DROP CONSTRAINT IF EXISTS actions_scope_check,
+      ADD CONSTRAINT actions_scope_check CHECK (${actionRowChecks[1]})`,
+  ] as const;
+  for (const statement of statements) yield* sql.unsafe(statement);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1131,10 +1198,11 @@ const migrationLoader = Migrator.fromRecord({
   "0023_artifact_rename": addArtifactRename,
   "0024_committed_staging_cleanup": addCommittedStagingCleanup,
   "0025_layered_project_access": addLayeredProjectAccess,
+  "0026_share_links_and_guests": addShareLinksAndGuests,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 25;
+export const requiredPostgresSchemaVersion = 26;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1264,6 +1332,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 25,
     name: "layered_project_access",
+  }, {
+    migration_id: 26,
+    name: "share_links_and_guests",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

@@ -1,11 +1,29 @@
 import {Effect} from "effect";
 import {SqlClient} from "effect/unstable/sql/SqlClient";
 
+import {z} from "zod";
+
 import type {AccessGrantDraft, AccessRepository} from "../core/access-ports.js";
+import type {ActionAttribution} from "../core/action-attribution.js";
+import type {PageCursor} from "../core/model.js";
+import type {ShareLinkRepository} from "../core/share-link-ports.js";
+import type {GuestRecord, ShareLink} from "../core/share-links.js";
 import {defaultAccessPolicy, type StoredAccessPolicy} from "../core/access-policy.js";
 import type {AccessGrant, ProjectAccess} from "../core/permissions.js";
 import type {Clock} from "../core/ports.js";
 import {
+  guestFromRow,
+  guestJoinAction,
+  guestRowSchema,
+  guestSelectColumns,
+  guestSessionRowSchema,
+  guestSessionSelectColumns,
+  shareLinkAction,
+  shareLinkFromRow,
+  shareLinkInsertColumns,
+  shareLinkInsertValues,
+  shareLinkRowSchema,
+  shareLinkSelectColumns,
   grantAction,
   grantFromRow,
   grantRowSchema,
@@ -53,8 +71,54 @@ const listGrants = (where: string, values: readonly string[]) =>
     return rows.map((row) => grantFromRow(grantRowSchema.parse(row)));
   });
 
+const findShareLink = (installationId: string, linkId: string) =>
+  Effect.gen(function*() {
+    const sql = yield* SqlClient;
+    const rows = yield* sql.unsafe<object>(
+      `SELECT ${shareLinkSelectColumns} FROM share_links l WHERE l.installation_id = $1 AND l.id = $2`,
+      [installationId, linkId],
+    );
+    return rows[0] === undefined ? null : shareLinkFromRow(shareLinkRowSchema.parse(rows[0]));
+  });
+
+const findGuestRecord = (installationId: string, guestId: string) =>
+  Effect.gen(function*() {
+    const sql = yield* SqlClient;
+    const rows = yield* sql.unsafe<object>(
+      `SELECT ${guestSelectColumns} FROM guest_principals g WHERE g.installation_id = $1 AND g.id = $2`,
+      [installationId, guestId],
+    );
+    return rows[0] === undefined ? null : guestFromRow(guestRowSchema.parse(rows[0]));
+  });
+
+const revokeLink = (
+  installationId: string,
+  link: ShareLink,
+  versionId: string,
+  attribution: ActionAttribution,
+  at: string,
+) =>
+  Effect.gen(function*() {
+    const sql = yield* SqlClient;
+    yield* sql.unsafe(
+      `UPDATE share_links SET revoked_at = $1, revoked_by_principal_id = $2, revision = revision + 1
+       WHERE installation_id = $3 AND id = $4 AND revoked_at IS NULL`,
+      [at, attribution.principalId ?? "system", installationId, link.id],
+    );
+    yield* insertPostgresAction(installationId, shareLinkAction(
+      "share_link_revoke",
+      {...link, revision: link.revision + 1},
+      versionId,
+      attribution,
+      at,
+    ));
+  });
+
+const placeholders = (count: number): string =>
+  Array.from({length: count}, (_, index) => `$${index + 1}`).join(", ");
+
 /** Postgres access store for stateless external-storage processes. */
-export class PostgresAccessRepository implements AccessRepository {
+export class PostgresAccessRepository implements AccessRepository, ShareLinkRepository {
   readonly #clock: Clock;
   readonly #database: PostgresDatabase;
 
@@ -239,6 +303,293 @@ export class PostgresAccessRepository implements AccessRepository {
         yield* insertPostgresAction(command.installationId, grantAction("grant_delete", existing, command.attribution, at));
         return "deleted" as const;
       }));
+    }));
+  }
+
+  async createShareLink(
+    command: Parameters<ShareLinkRepository["createShareLink"]>[0],
+  ): ReturnType<ShareLinkRepository["createShareLink"]> {
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        yield* sql.unsafe(
+          `INSERT INTO share_links (${shareLinkInsertColumns}) VALUES (${placeholders(15)})`,
+          [...shareLinkInsertValues(command.installationId, command.link)],
+        );
+        const created = yield* findShareLink(command.installationId, command.link.id);
+        if (created === null) return yield* Effect.die(new Error("The share link was not stored."));
+        yield* insertPostgresAction(command.installationId, shareLinkAction(
+          "share_link_create",
+          created,
+          command.versionId,
+          command.attribution,
+          command.link.createdAt,
+        ));
+        return created;
+      }));
+    }));
+  }
+
+  async updateShareLink(
+    command: Parameters<ShareLinkRepository["updateShareLink"]>[0],
+  ): ReturnType<ShareLinkRepository["updateShareLink"]> {
+    const at = this.#clock.now().toISOString();
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        if ((yield* findShareLink(command.installationId, command.linkId)) === null) return "missing" as const;
+        const changed = yield* sql.unsafe<object>(
+          `UPDATE share_links
+           SET label = $1, permissions_json = $2, expires_at = $3, target_kind = $4, pinned_version_id = $5,
+             revision = revision + 1
+           WHERE installation_id = $6 AND id = $7 AND revision = $8 AND revoked_at IS NULL RETURNING id`,
+          [
+            command.label,
+            JSON.stringify(command.permissions),
+            command.expiresAt,
+            command.target.kind,
+            command.target.kind === "pinned" ? command.target.versionId : null,
+            command.installationId,
+            command.linkId,
+            command.expectedRevision,
+          ],
+        );
+        if (changed.length === 0) return "conflict" as const;
+        const updated = yield* findShareLink(command.installationId, command.linkId);
+        if (updated === null) return "missing" as const;
+        yield* insertPostgresAction(command.installationId, shareLinkAction(
+          "share_link_update",
+          updated,
+          command.versionId,
+          command.attribution,
+          at,
+        ));
+        return updated;
+      }));
+    }));
+  }
+
+  async rotateShareLink(
+    command: Parameters<ShareLinkRepository["rotateShareLink"]>[0],
+  ): ReturnType<ShareLinkRepository["rotateShareLink"]> {
+    const at = this.#clock.now().toISOString();
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        if ((yield* findShareLink(command.installationId, command.linkId)) === null) return "missing" as const;
+        const changed = yield* sql.unsafe<object>(
+          `UPDATE share_links SET token = $1, generation = generation + 1, revision = revision + 1
+           WHERE installation_id = $2 AND id = $3 AND revision = $4 AND revoked_at IS NULL RETURNING id`,
+          [command.token, command.installationId, command.linkId, command.expectedRevision],
+        );
+        if (changed.length === 0) return "conflict" as const;
+        const rotated = yield* findShareLink(command.installationId, command.linkId);
+        if (rotated === null) return "missing" as const;
+        yield* insertPostgresAction(command.installationId, shareLinkAction(
+          "share_link_rotate",
+          rotated,
+          command.versionId,
+          command.attribution,
+          at,
+        ));
+        return rotated;
+      }));
+    }));
+  }
+
+  async revokeShareLink(
+    command: Parameters<ShareLinkRepository["revokeShareLink"]>[0],
+  ): ReturnType<ShareLinkRepository["revokeShareLink"]> {
+    const at = this.#clock.now().toISOString();
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        const existing = yield* findShareLink(command.installationId, command.linkId);
+        if (existing === null) return "missing" as const;
+        if (existing.revokedAt !== null) return existing;
+        yield* revokeLink(command.installationId, existing, command.versionId, command.attribution, at);
+        return (yield* findShareLink(command.installationId, command.linkId)) ?? existing;
+      }));
+    }));
+  }
+
+  async revokeArtifactShareLinks(
+    command: Parameters<ShareLinkRepository["revokeArtifactShareLinks"]>[0],
+  ): ReturnType<ShareLinkRepository["revokeArtifactShareLinks"]> {
+    const at = this.#clock.now().toISOString();
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen(function*() {
+        const rows = yield* sql.unsafe<object>(
+          `SELECT ${shareLinkSelectColumns} FROM share_links l
+           WHERE l.installation_id = $1 AND l.project_id = $2 AND l.artifact_id = $3 AND l.revoked_at IS NULL
+           FOR UPDATE OF l`,
+          [command.installationId, command.projectId, command.artifactId],
+        );
+        const active = rows.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+        for (const link of active) {
+          yield* revokeLink(command.installationId, link, command.versionId, command.attribution, at);
+        }
+        return active.length;
+      }));
+    }));
+  }
+
+  async findShareLink(installationId: string, linkId: string): Promise<ShareLink | null> {
+    return this.#database.run(findShareLink(installationId, linkId));
+  }
+
+  async findShareLinkByToken(token: string): ReturnType<ShareLinkRepository["findShareLinkByToken"]> {
+    const rows = await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.unsafe<object>(
+        `SELECT ${shareLinkSelectColumns}, l.installation_id AS "installationId"
+         FROM share_links l WHERE l.token = $1`,
+        [token],
+      );
+    }));
+    if (rows[0] === undefined) return null;
+    const {installationId} = z.object({installationId: z.string()}).parse(rows[0]);
+    return {...shareLinkFromRow(shareLinkRowSchema.parse(rows[0])), installationId};
+  }
+
+  async listArtifactShareLinks(installationId: string, projectId: string, artifactId: string): Promise<readonly ShareLink[]> {
+    const rows = await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.unsafe<object>(
+        `SELECT ${shareLinkSelectColumns} FROM share_links l
+         WHERE l.installation_id = $1 AND l.project_id = $2 AND l.artifact_id = $3
+         ORDER BY l.created_at, l.id`,
+        [installationId, projectId, artifactId],
+      );
+    }));
+    return rows.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+  }
+
+  async listActiveShareLinks(
+    command: Parameters<ShareLinkRepository["listActiveShareLinks"]>[0],
+  ): ReturnType<ShareLinkRepository["listActiveShareLinks"]> {
+    const rows = await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.unsafe<object>(
+        `SELECT ${shareLinkSelectColumns} FROM share_links l
+         WHERE l.installation_id = $1 AND l.revoked_at IS NULL
+           AND (l.expires_at IS NULL OR l.expires_at > $2)
+           AND ($3::text IS NULL OR l.created_at < $3 OR (l.created_at = $3 AND l.id < $4))
+         ORDER BY l.created_at DESC, l.id DESC
+         LIMIT $5`,
+        [command.installationId, command.now, command.cursor?.createdAt ?? null, command.cursor?.id ?? null, command.limit + 1],
+      );
+    }));
+    const links = rows.map((row) => shareLinkFromRow(shareLinkRowSchema.parse(row)));
+    const items = links.slice(0, command.limit);
+    const last = items.at(-1);
+    const nextCursor: PageCursor | null = links.length > command.limit && last !== undefined
+      ? {createdAt: last.createdAt, id: last.id}
+      : null;
+    return {items, nextCursor};
+  }
+
+  async createGuest(
+    command: Parameters<ShareLinkRepository["createGuest"]>[0],
+  ): ReturnType<ShareLinkRepository["createGuest"]> {
+    await this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql.withTransaction(Effect.gen(function*() {
+        const link = yield* findShareLink(command.installationId, command.guest.shareLinkId);
+        if (link === null) return yield* Effect.die(new Error("A guest needs an existing share link."));
+        yield* sql.unsafe(
+          `INSERT INTO guest_principals
+             (installation_id, id, share_link_id, generation, display_name, contact_email, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            command.installationId,
+            command.guest.id,
+            command.guest.shareLinkId,
+            command.guest.generation,
+            command.guest.displayName,
+            command.guest.contactEmail,
+            command.guest.createdAt,
+          ],
+        );
+        yield* sql.unsafe(
+          `INSERT INTO guest_sessions
+             (installation_id, id, guest_id, share_link_id, token_digest, csrf_digest, created_at, expires_at, revoked_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            command.installationId,
+            command.session.id,
+            command.guest.id,
+            command.guest.shareLinkId,
+            command.session.tokenDigest,
+            command.session.csrfDigest,
+            command.guest.createdAt,
+            command.session.expiresAt,
+            command.session.revokedAt,
+          ],
+        );
+        yield* insertPostgresAction(
+          command.installationId,
+          guestJoinAction(command.guest, link, command.versionId, command.attribution),
+        );
+      }));
+    }));
+  }
+
+  async findGuestSession(
+    installationId: string,
+    tokenDigest: string,
+  ): ReturnType<ShareLinkRepository["findGuestSession"]> {
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      const rows = yield* sql.unsafe<object>(
+        `SELECT ${guestSessionSelectColumns}, ${guestSelectColumns}
+         FROM guest_sessions s JOIN guest_principals g
+           ON g.installation_id = s.installation_id AND g.id = s.guest_id
+         WHERE s.installation_id = $1 AND s.token_digest = $2`,
+        [installationId, tokenDigest],
+      );
+      if (rows[0] === undefined) return null;
+      const guest = guestFromRow(guestRowSchema.parse(rows[0]));
+      const link = yield* findShareLink(installationId, guest.shareLinkId);
+      if (link === null) return null;
+      const session = guestSessionRowSchema.parse(rows[0]);
+      return {
+        guest,
+        link,
+        session: {
+          csrfDigest: session.csrfDigest,
+          expiresAt: session.sessionExpiresAt,
+          guestId: session.sessionGuestId,
+          id: session.sessionId,
+          revokedAt: session.sessionRevokedAt,
+        },
+      };
+    }));
+  }
+
+  async findGuest(installationId: string, guestId: string): ReturnType<ShareLinkRepository["findGuest"]> {
+    return this.#database.run(Effect.gen(function*() {
+      const guest = yield* findGuestRecord(installationId, guestId);
+      if (guest === null) return null;
+      const link = yield* findShareLink(installationId, guest.shareLinkId);
+      return link === null ? null : {guest, link};
+    }));
+  }
+
+  async setGuestIdentity(
+    command: Parameters<ShareLinkRepository["setGuestIdentity"]>[0],
+  ): ReturnType<ShareLinkRepository["setGuestIdentity"]> {
+    return this.#database.run(Effect.gen(function*() {
+      const sql = yield* SqlClient;
+      yield* sql.unsafe(
+        `UPDATE guest_principals SET display_name = $1, contact_email = $2
+         WHERE installation_id = $3 AND id = $4`,
+        [command.displayName, command.contactEmail, command.installationId, command.guestId],
+      );
+      const guest: GuestRecord | null = yield* findGuestRecord(command.installationId, command.guestId);
+      if (guest === null) return yield* Effect.die(new Error("The guest does not exist."));
+      return guest;
     }));
   }
 }

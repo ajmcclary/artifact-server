@@ -12,6 +12,7 @@ import {requiredPostgresSchemaVersion} from "../../src/storage/postgres-migratio
 import {
   accessRepositoryCases,
   caseManager,
+  shareLinkRepositoryCases,
   type AccessFixture,
 } from "../support/access-repository-cases.js";
 
@@ -94,6 +95,14 @@ describe("Postgres access repository", () => {
 
   test.for(accessRepositoryCases)("$name", async ({run}) => {
     await expect(run(fixture)).resolves.toBeUndefined();
+  });
+
+  test.for(shareLinkRepositoryCases)("share links: $name", async ({run}) => {
+    await expect(run({
+      ...fixture,
+      artifacts,
+      store: new PostgresAccessRepository(database, clock),
+    })).resolves.toBeUndefined();
   });
 
   test("the database refuses a none-role artifact grant written directly", async () => {
