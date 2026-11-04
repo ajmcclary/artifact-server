@@ -916,9 +916,15 @@ requirements:
       behavior: {id: PUB-005-B, description: "Commit a publish and observe all database records and the current pointer together after every blob exists."}
       failure: {id: PUB-005-F, description: "Inject failures before and during the transaction and confirm that no partial visible version or dangling current pointer exists."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PUB-005-B/F prove on SQLite with local blob storage that a committed new version shows its version row, manifest entries, idempotency record, publish action, and moved current pointer together with every named blob stored; that a commit missing a declared blob is refused before the transaction; and that an injected abort on the version, manifest-entry, idempotency, action, or current-pointer write each returns 5xx and leaves the artifact's records exactly as before, after which the same idempotency key commits exactly one version. Postgres and D1 transactions and the non-local deployments are not exercised."
     depends_on: [PUB-004, MAN-001, AUD-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-005-B, PUB-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: PUB-006
     kind: behavior
