@@ -2191,10 +2191,15 @@ requirements:
       behavior: {id: GIT-001-B, description: "Run with the provider variable absent and set to off; observe the disabled capability shape, identical artifact behavior, and no Git implementation load or provider request."}
       failure: {id: GIT-001-F, description: "Missing, invalid, or inaccessible optional Git configuration cannot prevent the server from starting, publishing, opening, or comparing, and cannot trigger automatic provider selection."}
     deployments: *all
-    status: implementing
-    proof_gap: Provider-off behavior, explicit configuration, and fail-open application startup are implemented for Node and Workers runtimes. The complete no-load/no-call and malformed-configuration acceptance matrix across every deployment remains unproved.
+    status: behavior_verified
+    proof_gap: "GIT-001-B/F prove on the local runtime, from configurations parsed out of real environment maps, that with the provider absent or off (companions present but never read) the session reports the disabled capability, the project setting stays disabled and cannot be enabled, publish, open, and compare behave identically, readiness stays 200, and an injected provider and health probe receive no call; and that unsupported, missing, direct-secret, invalid-limit, and unreadable-secret configurations each start the server, keep publish, open, compare, and readiness working, report misconfigured with no provider unless one was named, and never check or call a provider. \"No implementation load\" is proved as never constructing or starting the provider, monitor, or mirror worker; the Cloudflare adapter modules are still statically imported. Workers, D1, and the non-local deployments are not exercised here."
     depends_on: [DIF-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [GIT-001-B, GIT-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: GIT-002
     kind: behavior
