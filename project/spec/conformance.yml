@@ -2509,9 +2509,20 @@ requirements:
       behavior: {id: AUTH-005-B, description: "Inspect a public response and the visibility UI for the indexing header and redistribution warning."}
       failure: {id: AUTH-005-F, description: "No product copy or authorization check treats robots directives or URL secrecy as a security boundary."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-005-B proves in a local Chromium run that choosing Public link in the artifact's Details shows \"The link can be redistributed. Earlier versions and history stay account-required.\" before saving, and that the saved public response sends X-Robots-Tag noindex, nofollow. AUTH-005-F proves that no web, CLI, MCP, or skill copy calls a public link secret, secure, private, protected, hidden, or unindexed (the detector is checked against hostile samples), and that crawler user agents get identical outcomes: the public version opens for all of them and an account-required version stays 401 by stable or exact URL. Non-local deployments are not exercised."
     depends_on: [AUTH-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-005-B]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "RECORDED_AT_PENDING"
+      - deployment: local
+        tests: [AUTH-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: AUTH-006
     kind: behavior
