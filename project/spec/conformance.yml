@@ -5042,9 +5042,15 @@ requirements:
       behavior: {id: ARC-001-B, description: "Run core service tests with in-memory or fake ports and replace each provider through its documented adapter."}
       failure: {id: ARC-001-F, description: "A dependency-boundary test fails when core product code imports a concrete infrastructure provider or deployment framework."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: "ARC-001-F proves that every module reachable from src/core and src/application imports only effect, node:crypto, node:path, unicode-case-folding, and zod, and never an adapter directory, and that the check catches direct, dynamic, and transitive provider imports. ARC-001-B is unproved: no in-memory or fake implementation of the repository, blob, staging, and identity ports exists, so core services are exercised only through the SQLite and local-disk adapters."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [ARC-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: ARC-002
     kind: constraint
