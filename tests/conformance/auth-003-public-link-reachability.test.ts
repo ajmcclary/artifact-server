@@ -1,5 +1,4 @@
 import {glob, readFile} from "node:fs/promises";
-import {connect} from "node:net";
 import {networkInterfaces} from "node:os";
 import path from "node:path";
 
@@ -15,6 +14,7 @@ import {
   type RunningTestServer,
   type TestInstallation,
 } from "../support/runtime-harness.js";
+import {acceptsConnections} from "../support/server-activity.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -22,22 +22,6 @@ const accessChangeSchema = z.object({
   artifact: z.object({accessSetting: z.literal("public_link")}).loose(),
   links: z.object({version: z.url()}).loose(),
 }).loose();
-
-/** Whether a TCP connection to `host:port` is accepted. */
-function accepts(host: string, port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = connect({host, port, timeout: 1_000});
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", () => resolve(false));
-  });
-}
 
 /** IPv4 addresses of this machine that other hosts could route to. */
 function externalAddresses(): readonly string[] {
@@ -106,16 +90,16 @@ describe("a public link removes sign-in without changing network reachability", 
 
   test("AUTH-003-F: enabling a public link opens no new listener, tunnel, or process and leaves the link unenumerable", async () => {
     const externalBefore = await Promise.all(
-      externalAddresses().map((address) => accepts(address, server.port)),
+      externalAddresses().map((address) => acceptsConnections(address, server.port)),
     );
     const shared = await enablePublicLink();
 
     // Reachability is unchanged: the server still listens only on loopback,
     // and no external interface accepts the application port.
     expect(server.hostname).toBe("127.0.0.1");
-    expect(await accepts("127.0.0.1", server.port)).toBe(true);
+    expect(await acceptsConnections("127.0.0.1", server.port)).toBe(true);
     const externalAfter = await Promise.all(
-      externalAddresses().map((address) => accepts(address, server.port)),
+      externalAddresses().map((address) => acceptsConnections(address, server.port)),
     );
     const unreachable = externalAddresses().map(() => false);
     expect({after: externalAfter, before: externalBefore}).toEqual({after: unreachable, before: unreachable});

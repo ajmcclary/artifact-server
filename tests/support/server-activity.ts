@@ -42,6 +42,9 @@ export function acceptsConnections(host: string, port: number): Promise<boolean>
       socket.destroy();
       resolve(false);
     });
-    socket.once("error", () => resolve(false));
+    socket.once("error", () => {
+      socket.destroy();
+      resolve(false);
+    });
   });
 }

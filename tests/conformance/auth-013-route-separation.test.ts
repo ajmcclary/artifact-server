@@ -37,7 +37,7 @@ async function applicationRoutes(): Promise<readonly ApplicationRoute[]> {
     const methods = kind === "on"
       ? [...(methodList ?? "").matchAll(/"([A-Z]+)"/gu)].map((method) => method[1] ?? "")
       : kind === "all"
-        ? ["GET", "POST", "DELETE"]
+        ? ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
         : [kind.toUpperCase()];
     for (const pathMatch of pathList.matchAll(/"(\/[^"]*)"/gu)) {
       for (const method of methods) {
