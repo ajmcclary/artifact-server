@@ -5892,9 +5892,15 @@ requirements:
       behavior: {id: SCP-005-B, description: "Extend only through documented deployment, storage, auth, Git, MCP, and integration contracts."}
       failure: {id: SCP-005-F, description: "Configuration or uploaded content cannot load arbitrary server plugins, native modules, hooks, or executable extensions."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: "SCP-005-F proves that no server source uses dynamic import, require, createRequire, dlopen, eval, the Function constructor, the vm module, module loader hooks, or worker evaluation (the detector is checked against hostile samples), and that an uploaded plugin module, native addon, and plugin declaration are stored and served as exact bytes and never loaded. SCP-005-B (extending only through documented deployment, storage, auth, Git, MCP, and integration contracts) has no observable acceptance test; it needs the owner to name the contract inventory a test could check."
     depends_on: [ARC-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: SCP-006
     kind: exclusion
