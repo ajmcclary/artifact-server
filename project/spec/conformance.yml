@@ -1931,15 +1931,15 @@ requirements:
       behavior: {id: CNT-006-B, description: "Install a service worker in one fixture version and confirm that its scope is limited to that version origin."}
       failure: {id: CNT-006-F, description: "Attempts to register a scope for the application or another version do not gain control."}
     deployments: *all
-    status: implementing
-    proof_gap: A Chromium browser test proves a service worker installed by one version controls only its own origin (scope equals the version origin, distinct from a second version's), and that cross-origin registration for the application or another version is refused with a SecurityError. The Firefox/WebKit and per-deployment browser matrix remains unrecorded, and release proof remains a deployment qualification.
+    status: behavior_verified
+    proof_gap: "CNT-006-B/F prove in a local Chromium run that a service worker registered by one version is served from and scoped to that version's origin, that a second version on its own origin has no registration from the first, and that cross-origin registration for the application or another version is refused with a SecurityError. Firefox and WebKit run only in the opt-in critical-engines slice, which does not include this spec, and per-deployment browser runs remain a deployment qualification."
     depends_on: [CNT-004]
     evidence:
       - deployment: local
-        tests: [CNT-006-F]
+        tests: [CNT-006-B, CNT-006-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-09-30T15:39:53.728Z"
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: CNT-007
     kind: behavior
