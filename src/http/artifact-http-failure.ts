@@ -100,6 +100,12 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
       return {code: errorCodes.idempotencyConflict, message: failure.message, status: 409};
     case "PublishConflict":
       return {code: errorCodes.publishConflict, message: failure.message, status: 409};
+    case "CandidateStale":
+      return {code: errorCodes.candidateStale, message: failure.message, status: 409};
+    case "CandidateNotOpen":
+      return {code: errorCodes.candidateNotOpen, message: failure.message, status: 409};
+    case "VersionNotRestorable":
+      return {code: errorCodes.versionNotRestorable, message: failure.message, status: 409};
     case "ProjectArchived":
       return {code: errorCodes.projectArchived, message: failure.message, status: 409};
     case "ProjectConflict":

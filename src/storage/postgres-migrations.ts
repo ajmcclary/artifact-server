@@ -11,6 +11,10 @@ import {
   activityDetailJsonMaxBytes,
 } from "./activity-log-schema.js";
 import {admissionMethodCheckSql} from "./invitation-schema.js";
+import {
+  acceptedVersionStateSqlList,
+  versionStateSqlList,
+} from "./version-state-sql.js";
 
 const initialSchema = Effect.gen(function*() {
   const sql = yield* SqlClient;
@@ -1172,6 +1176,64 @@ const addShareLinksAndGuests = Effect.gen(function*() {
   for (const statement of statements) yield* sql.unsafe(statement);
 });
 
+// CND-001: every existing version is mainline. A candidate records the base it
+// was staged on; the trigger keeps current on accepted history even if a
+// future write path forgets the state check (CND-003).
+const addCandidateVersions = Effect.gen(function*() {
+  const sql = yield* SqlClient;
+  const statements = [
+    // Every step is repeatable: upgrade fixtures replay migrations on a schema
+    // that already carries these columns.
+    `ALTER TABLE IF EXISTS versions
+      ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'mainline',
+      ADD COLUMN IF NOT EXISTS base_version_id TEXT,
+      DROP CONSTRAINT IF EXISTS versions_state_check,
+      ADD CONSTRAINT versions_state_check CHECK (state IN (${versionStateSqlList})),
+      DROP CONSTRAINT IF EXISTS versions_base_version_fk,
+      ADD CONSTRAINT versions_base_version_fk
+        FOREIGN KEY (installation_id, base_version_id)
+        REFERENCES versions(installation_id, id)`,
+    `ALTER TABLE IF EXISTS idempotency_records
+      DROP CONSTRAINT IF EXISTS idempotency_records_operation_check,
+      ADD CONSTRAINT idempotency_records_operation_check
+        CHECK (operation IN ('publish', 'restore', 'change_access', 'change_tags', 'rename', 'delete', 'promote', 'reject'))`,
+    `ALTER TABLE IF EXISTS actions
+      DROP CONSTRAINT IF EXISTS actions_action_check,
+      ADD CONSTRAINT actions_action_check CHECK (${actionRowChecks[0]}),
+      DROP CONSTRAINT IF EXISTS actions_scope_check,
+      ADD CONSTRAINT actions_scope_check CHECK (${actionRowChecks[1]})`,
+  ] as const;
+  for (const statement of statements) yield* sql.unsafe(statement);
+  // Partial fixtures from earlier migration tests may lack these tables.
+  const present = yield* sql<{readonly artifacts: boolean; readonly versions: boolean}>`
+    SELECT to_regclass('artifacts') IS NOT NULL AS artifacts,
+      to_regclass('versions') IS NOT NULL AS versions
+  `.withoutTransform;
+  const tables = present[0];
+  if (tables === undefined || !tables.artifacts || !tables.versions) return;
+  const triggerStatements = [
+    `CREATE OR REPLACE FUNCTION artifacts_current_version_accepted() RETURNS trigger
+      LANGUAGE plpgsql AS $body$
+      BEGIN
+        IF NEW.current_version_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM versions
+          WHERE installation_id = NEW.installation_id
+            AND id = NEW.current_version_id
+            AND state NOT IN (${acceptedVersionStateSqlList})
+        ) THEN
+          RAISE EXCEPTION 'current version must be accepted history';
+        END IF;
+        RETURN NEW;
+      END
+      $body$`,
+    "DROP TRIGGER IF EXISTS artifacts_current_version_accepted ON artifacts",
+    `CREATE TRIGGER artifacts_current_version_accepted
+      BEFORE INSERT OR UPDATE OF current_version_id ON artifacts
+      FOR EACH ROW EXECUTE FUNCTION artifacts_current_version_accepted()`,
+  ] as const;
+  for (const statement of triggerStatements) yield* sql.unsafe(statement);
+});
+
 const migrationLoader = Migrator.fromRecord({
   "0001_initial_shared_schema": initialSchema,
   "0002_project_scoped_artifacts": addProjectScope,
@@ -1199,10 +1261,11 @@ const migrationLoader = Migrator.fromRecord({
   "0024_committed_staging_cleanup": addCommittedStagingCleanup,
   "0025_layered_project_access": addLayeredProjectAccess,
   "0026_share_links_and_guests": addShareLinksAndGuests,
+  "0027_candidate_versions": addCandidateVersions,
 });
 
 /** Schema revision required by this Artifact Server build. */
-export const requiredPostgresSchemaVersion = 26;
+export const requiredPostgresSchemaVersion = 27;
 
 /** Migration compatibility observed without changing Postgres. */
 export interface PostgresMigrationStatus {
@@ -1335,6 +1398,9 @@ export const readPostgresMigrationStatus = Effect.gen(function*() {
   }, {
     migration_id: 26,
     name: "share_links_and_guests",
+  }, {
+    migration_id: 27,
+    name: "candidate_versions",
   }] as const;
   const observedRequiredHistory = rows.filter(
     (row) => row.migration_id <= requiredPostgresSchemaVersion,

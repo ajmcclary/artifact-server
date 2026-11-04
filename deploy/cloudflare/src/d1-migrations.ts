@@ -25,9 +25,13 @@ import {
 } from "../../../src/storage/access-schema.js";
 import {defaultGitHistoryMaximumCopiedFiles} from
   "../../../src/git-history/git-history-capability.js";
+import {
+  acceptedVersionStateSqlList,
+  versionStateSqlList,
+} from "../../../src/storage/version-state-sql.js";
 
 /** D1 schema revision required by the Cloudflare runtime. */
-export const requiredD1SchemaVersion = 22;
+export const requiredD1SchemaVersion = 23;
 
 /** SQL literal list of every action kind the ledger accepts. */
 const actionKindList = [
@@ -681,6 +685,7 @@ export async function migrateD1(
   await widenActionKindsIfNeeded(database);
   await widenRenameIdempotencyIfNeeded(database);
   await addLayeredProjectAccessIfMissing(database);
+  await addCandidateVersionsIfMissing(database);
   await database.batch([
     database.prepare(`
       INSERT INTO artifact_server_schema (component, version)
@@ -1055,6 +1060,45 @@ async function widenRenameIdempotencyIfNeeded(database: D1Database): Promise<voi
     database.prepare("DROP TABLE idempotency_records"),
     database.prepare("ALTER TABLE idempotency_records_renamed RENAME TO idempotency_records"),
   ]);
+}
+
+// CND-001: every existing version is mainline. A candidate records the base it
+// was staged on, and the trigger keeps current on accepted history even if a
+// future write path forgets the state check (CND-003).
+async function addCandidateVersionsIfMissing(database: D1Database): Promise<void> {
+  const columns = new Set((await database.prepare("PRAGMA table_info(versions)").all<{name: string}>())
+    .results.map((column) => column.name));
+  const statements: string[] = [];
+  if (!columns.has("state")) {
+    statements.push(`ALTER TABLE versions ADD COLUMN state TEXT NOT NULL DEFAULT 'mainline'
+      CHECK (state IN (${versionStateSqlList}))`);
+  }
+  if (!columns.has("base_version_id")) {
+    statements.push("ALTER TABLE versions ADD COLUMN base_version_id TEXT REFERENCES versions(id)");
+  }
+  statements.push(`CREATE TRIGGER IF NOT EXISTS artifacts_current_version_accepted
+    BEFORE UPDATE OF current_version_id ON artifacts
+    WHEN NEW.current_version_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM versions
+      WHERE id = NEW.current_version_id
+        AND state NOT IN (${acceptedVersionStateSqlList})
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'current version must be accepted history');
+    END`);
+  const idempotencySql = await database.prepare(
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'idempotency_records'",
+  ).first<string>("sql");
+  if (idempotencySql !== null && !idempotencySql.includes("'promote'")) {
+    statements.push(
+      idempotencySql.replace(/CREATE TABLE(?: IF NOT EXISTS)? "?idempotency_records"?/iu,
+        "CREATE TABLE idempotency_records_candidates").replace("'delete'", "'delete', 'promote', 'reject'"),
+      "INSERT INTO idempotency_records_candidates SELECT * FROM idempotency_records",
+      "DROP TABLE idempotency_records",
+      "ALTER TABLE idempotency_records_candidates RENAME TO idempotency_records",
+    );
+  }
+  await database.batch(statements.map((statement) => database.prepare(statement)));
 }
 
 // ADR 0033: existing projects stay open to every member at the editor role,

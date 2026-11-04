@@ -23,6 +23,8 @@ import {type ActionAttribution, actorSnapshotOf, attributionOf} from "../core/ac
 import {
   ArtifactNotFound,
   type ArtifactMutationConflict,
+  type CandidateNotOpen,
+  type CandidateStale,
   type ArtifactRepositoryFailure,
   type AuthorizationDenied,
   type IdempotencyConflict,
@@ -33,12 +35,16 @@ import {
   ProjectArchived,
   ShareLinksDisabled,
   VersionNotFound,
+  VersionNotRestorable,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
 import {
   accessSettings,
   type AccessSetting,
   type ArtifactActionPage,
+  type CandidateClosure,
+  isAcceptedVersionState,
+  type VersionListFilter,
   type ArtifactDeletion,
   type ArtifactPage,
   type ArtifactRecord,
@@ -52,6 +58,8 @@ import {
 import type {
   ChangeArtifactAccessSetting,
   ChangeArtifactTags,
+  CloseCandidateVersion,
+  PromoteCandidateVersion,
   RenameArtifact,
   DeleteArtifact,
   ListArtifactActions,
@@ -83,6 +91,8 @@ export interface ReadArtifactCommand {
 /** Input for listing one artifact's saved versions with optional pagination. */
 export interface ListArtifactVersionsCommand extends ReadArtifactCommand {
   readonly cursor: PageCursor | null;
+  /** Accepted history by default; candidates are listed only when asked for (CND-001). */
+  readonly filter?: VersionListFilter;
   readonly limit: number | null;
 }
 
@@ -101,6 +111,16 @@ export interface ListManifestEntriesCommand extends ReadArtifactVersionCommand {
 export interface RestoreArtifactVersionCommand extends ReadArtifactVersionCommand {
   readonly expectedCurrentVersionId: string;
   readonly idempotencyKey: string;
+}
+
+/** Input for promoting one open candidate to current (CND-002). */
+export interface PromoteCandidateCommand extends ReadArtifactVersionCommand {
+  readonly idempotencyKey: string;
+}
+
+/** Input for closing one open candidate as rejected or superseded (CND-005). */
+export interface CloseCandidateCommand extends PromoteCandidateCommand {
+  readonly outcome: CandidateClosure;
 }
 
 /** Input for changing one artifact's read setting. */
@@ -202,12 +222,14 @@ export interface ArtifactManagementRepository {
   readonly listArtifactVersions: (
     projectId: string,
     artifactId: string,
+    filter: VersionListFilter,
   ) => Effect.Effect<readonly VersionRecord[], ArtifactRepositoryFailure>;
   readonly listArtifactVersionsPage: (
     projectId: string,
     artifactId: string,
     cursor: PageCursor | null,
     limit: number,
+    filter: VersionListFilter,
   ) => Effect.Effect<VersionPage, ArtifactRepositoryFailure>;
   readonly listManifestEntriesPage: (
     projectId: string,
@@ -230,9 +252,25 @@ export interface ArtifactManagementRepository {
     | ArtifactNotFound
     | IdempotencyConflict
     | VersionNotFound
+    | VersionNotRestorable
     | ArtifactRepositoryFailure
   >;
+  readonly promoteCandidate: (
+    command: PromoteCandidateVersion,
+  ) => Effect.Effect<ArtifactState, CandidateRepositoryFailure>;
+  readonly closeCandidate: (
+    command: CloseCandidateVersion,
+  ) => Effect.Effect<ArtifactState, CandidateRepositoryFailure>;
 }
+
+/** Expected failures a candidate decision can return from persistence. */
+export type CandidateRepositoryFailure =
+  | ArtifactNotFound
+  | CandidateNotOpen
+  | CandidateStale
+  | IdempotencyConflict
+  | VersionNotFound
+  | ArtifactRepositoryFailure;
 
 /** Dependencies used to construct artifact management operations. */
 export interface ArtifactManagementDependencies {
@@ -254,6 +292,9 @@ export type ArtifactManagementFailure =
   | ShareLinksDisabled
   | ArtifactNotFound
   | VersionNotFound
+  | VersionNotRestorable
+  | CandidateNotOpen
+  | CandidateStale
   | ArtifactMutationConflict
   | IdempotencyConflict
   | InvalidIdempotencyKey
@@ -301,6 +342,12 @@ interface ArtifactManagementOperations {
   ) => Effect.Effect<ArtifactPage, ArtifactManagementFailure>;
   readonly restoreVersion: (
     command: RestoreArtifactVersionCommand,
+  ) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
+  readonly promoteCandidate: (
+    command: PromoteCandidateCommand,
+  ) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
+  readonly closeCandidate: (
+    command: CloseCandidateCommand,
   ) => Effect.Effect<ArtifactState, ArtifactManagementFailure>;
 }
 
@@ -480,6 +527,7 @@ function makeArtifactManagementService(
           dependencies.repository.listArtifactVersions(
             project.id,
             command.artifactId,
+            command.filter ?? "accepted",
           ),
         ], {concurrency: 2});
         if (artifact === null) {
@@ -497,6 +545,7 @@ function makeArtifactManagementService(
           command.artifactId,
           command.cursor,
           limit,
+          command.filter ?? "accepted",
         ),
       ], {concurrency: 2});
       if (artifact === null) {
@@ -603,7 +652,13 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      yield* requireVersion(project.id, artifact.id, command.versionId);
+      const target = yield* requireVersion(project.id, artifact.id, command.versionId);
+      // Restore cannot be used to get around review (CND-005).
+      if (!isAcceptedVersionState(target.version.state)) {
+        return yield* new VersionNotRestorable({
+          message: "Only accepted versions can be restored; promote a candidate instead.",
+        });
+      }
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.restoreVersion({
@@ -625,6 +680,57 @@ function makeArtifactManagementService(
         projectId: project.id,
         versionId: command.versionId,
       });
+    },
+  );
+
+  const candidateDecision = Effect.fn("ArtifactManagementService.candidateDecision")(
+    function*(command: PromoteCandidateCommand, operation: "promote" | "reject", outcome: CandidateClosure | null) {
+      const project = yield* resolveProjectForRead(command.principal, command.projectId);
+      const scope = {artifactId: command.artifactId, projectId: project.id};
+      if (operation === "promote") {
+        yield* authorization.requireCandidatePromotion(command.principal, scope);
+      } else {
+        yield* authorization.requireVersionPublication(command.principal, scope);
+      }
+      const artifact = yield* requireArtifact(project.id, command.artifactId);
+      if (project.archivedAt !== null) {
+        return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      }
+      const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
+      const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
+      const decision = {
+        actor: actorSnapshotOf(command.principal),
+        artifactId: artifact.id,
+        authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
+        createdAt,
+        idempotencyKey,
+        inputDigest: managementInputDigest({
+          artifactId: artifact.id,
+          expectedCurrentVersionId: "",
+          operation,
+          principalId: command.principal.id,
+          projectId: project.id,
+          value: outcome === null ? command.versionId : `${command.versionId}:${outcome}`,
+        }),
+        principalId: command.principal.id,
+        projectId: project.id,
+        versionId: command.versionId,
+      };
+      return outcome === null
+        ? yield* dependencies.repository.promoteCandidate(decision)
+        : yield* dependencies.repository.closeCandidate({...decision, outcome});
+    },
+  );
+
+  const promoteCandidate = Effect.fn("ArtifactManagementService.promoteCandidate")(
+    function*(command: PromoteCandidateCommand) {
+      return yield* candidateDecision(command, "promote", null);
+    },
+  );
+
+  const closeCandidate = Effect.fn("ArtifactManagementService.closeCandidate")(
+    function*(command: CloseCandidateCommand) {
+      return yield* candidateDecision(command, "reject", command.outcome);
     },
   );
 
@@ -789,6 +895,8 @@ function makeArtifactManagementService(
     listVersions,
     listManifestEntries,
     restoreVersion,
+    promoteCandidate,
+    closeCandidate,
   });
 }
 
@@ -800,6 +908,8 @@ interface ManagementInputDigest {
     | "rename"
     | "change_tags"
     | "delete"
+    | "promote"
+    | "reject"
     | "restore";
   readonly principalId: string;
   readonly projectId: string;

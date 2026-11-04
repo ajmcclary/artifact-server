@@ -109,6 +109,17 @@ export interface BundleItem {
   readonly location?: string | null;
   readonly threadId: string;
   readonly versionNumber: number;
+  /**
+   * Set when the thread sits on a version that is not accepted history, so
+   * the agent knows it is commenting on unaccepted output (CND-001).
+   */
+  readonly candidate?: BundleCandidate;
+}
+
+/** The unaccepted state of the version a bundle item's thread sits on. */
+export interface BundleCandidate {
+  readonly baseVersionNumber: number | null;
+  readonly state: "candidate" | "rejected" | "superseded";
 }
 
 /** Everything the message template needs, already fetched and ordered. */
@@ -167,9 +178,12 @@ export function renderBundleMessage(
   if (note !== "") lines.push(note);
   lines.push("");
   bundle.items.forEach((item, index) => {
+    const candidate = item.candidate === undefined
+      ? ""
+      : ` · ${item.candidate.state}${item.candidate.baseVersionNumber === null ? "" : ` based on version ${item.candidate.baseVersionNumber}`}`;
     const place = sanitizeBundleText(item.path === null
-      ? `[${item.artifactName} · version ${item.versionNumber}]`
-      : `[${item.artifactName} · version ${item.versionNumber} · ${item.path}]`);
+      ? `[${item.artifactName} · version ${item.versionNumber}${candidate}]`
+      : `[${item.artifactName} · version ${item.versionNumber}${candidate} · ${item.path}]`);
     const quoted = item.quotedSelection === null
       ? ""
       : ` ${quotedSelectionFragment(item.quotedSelection)}`;

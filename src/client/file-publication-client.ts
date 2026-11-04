@@ -138,6 +138,9 @@ const versionSchema = Schema.Struct({
   publisherPrincipalId: Schema.String,
   projectId: Schema.String,
   routingMode: Schema.Literals(["static", "spa"]),
+  // Candidate versions (CND-001); optional so an older server still parses.
+  baseVersionId: Schema.optional(Schema.NullOr(Schema.String)),
+  state: Schema.optional(Schema.Literals(["mainline", "candidate", "promoted", "rejected", "superseded"])),
 });
 const publishResponseSchema = Schema.Struct({
   artifact: artifactSchema,
@@ -301,6 +304,8 @@ export type FilePublicationTarget =
     readonly artifactId: string;
     readonly expectedCurrentVersionId: string;
     readonly kind: "new_version";
+    /** Commit a candidate that does not move current; omitted for an ordinary version. */
+    readonly stage?: true;
   };
 
 /** One user-facing file or directory publication request. */
@@ -390,6 +395,8 @@ type CommitPublicationTarget =
     readonly artifactId: string;
     readonly expectedCurrentVersionId: string;
     readonly kind: "new_version";
+    /** Commit a candidate that does not move current; omitted for an ordinary version. */
+    readonly stage?: true;
   };
 
 interface CommitUploadRequestBody {

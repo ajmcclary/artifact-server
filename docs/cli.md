@@ -11,6 +11,8 @@ Single-path publication prints JSON on success. Group publication accepts `--jso
 | Command | Purpose |
 | --- | --- |
 | `rename <artifact> <name>` | Rename an existing artifact without publishing. |
+| `candidate stage <path> --artifact <id>` | Publish a candidate version that waits for review without becoming current. |
+| `candidate list <artifact>` / `promote` / `reject` | List open candidates, promote one (people only), or close one. |
 | `publish <path>` | Publish one file, a finished directory, or an explicit local file inventory. |
 | `link <path>` | Link a file on this machine as an artifact that tracks it. |
 | `auth login <server>` | Sign in to one exact origin and save a profile. |
@@ -352,3 +354,24 @@ From Library, open an artifact and choose **Details**. Managers can edit **Artif
 in place, then **Save name** or **Cancel**. Failed edits preserve the entered text;
 **Reload current details** refreshes stale expectations before retrying. Returning
 to Library reads the updated name.
+
+## Stage a candidate for review
+
+```sh
+artifactserver candidate stage ./dist --artifact art_example --profile team
+```
+
+A candidate is an immutable version of the same artifact that does not move
+current. It takes the next version number, opens by its exact review link, and
+records the version that was current as its base. The stable link, public link,
+Library and default version list keep showing the accepted version. Staging
+never changes the source's remembered publication.
+
+`candidate list <artifact>` shows open candidates; `--all` adds promoted,
+rejected and superseded ones. `candidate reject <artifact> <version>` closes a
+candidate (`--superseded` records that another replaced it); its bytes and
+comments are kept. `candidate promote <artifact> <version>` makes that exact
+version current, and only when current still equals its base; otherwise it
+fails with `CANDIDATE_STALE`. Promotion is acceptance, so only a person signed in
+directly can promote: an API key or agent is refused with `AUTHORIZATION_DENIED`.
+Reviewers usually promote from the candidate banner in Review.

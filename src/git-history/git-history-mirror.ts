@@ -3,7 +3,7 @@ import {createHash} from "node:crypto";
 import {Clock, Duration, Effect, Fiber, Schedule} from "effect";
 
 import type {BlobStore} from "../core/ports.js";
-import type {ArtifactVersion} from "../core/model.js";
+import {type ArtifactVersion, isAcceptedVersionState} from "../core/model.js";
 import {
   defaultGitHistoryMaximumCopiedFiles,
   type GitHistoryCapabilityReader,
@@ -148,10 +148,15 @@ export interface GitHistoryMirrorStore {
     artifactId: string,
     versionId: string,
   ): Promise<GitHistoryMapping | null>;
+  /**
+   * The mapping of the previous accepted (mainline or promoted) version, the
+   * highest-numbered one below `beforeVersionNumber`, or null when that
+   * version is not mapped yet. Candidates are never parents (CND-006).
+   */
   findGitHistoryPredecessorMapping(
     projectId: string,
     artifactId: string,
-    versionNumber: number,
+    beforeVersionNumber: number,
   ): Promise<GitHistoryMapping | null>;
   findGitHistoryRepository(
     projectId: string,
@@ -345,12 +350,18 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   if (version === null) {
     return yield* Effect.fail(new Error("version-unavailable"));
   }
+  // Candidates are never mirrored; a job can only exist for accepted history.
+  if (!isAcceptedVersionState(version.version.state)) {
+    return yield* Effect.fail(new Error("version-not-accepted"));
+  }
+  // Version 1 is always mainline, so every later accepted version has an
+  // accepted predecessor; rejected candidates leave gaps that are skipped.
   const predecessor = version.version.number === 1
     ? null
     : yield* Effect.tryPromise(() => dependencies.store.findGitHistoryPredecessorMapping(
       job.projectId,
       job.artifactId,
-      version.version.number - 1,
+      version.version.number,
     ));
   if (version.version.number > 1 && predecessor === null) {
     return yield* Effect.fail(new Error("predecessor-unavailable"));

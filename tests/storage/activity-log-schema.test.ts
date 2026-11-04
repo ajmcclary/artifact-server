@@ -65,7 +65,7 @@ describe("activity log schema", () => {
   test("the kind groups partition every installation kind and history includes artifact rename", () => {
     expect([...projectScopedActionKinds, ...installationScopedActionKinds].toSorted())
       .toEqual(Object.values(installationActionKinds).toSorted());
-    expect(artifactHistoryActionKinds).toHaveLength(15);
+    expect(artifactHistoryActionKinds).toHaveLength(18);
     expect(artifactHistoryActionKinds).toContain(artifactActionKinds.rename);
     expect(artifactHistoryActionKinds).not.toContain(artifactActionKinds.publicLinkEnable);
     expect(artifactHistoryActionKinds).not.toContain(artifactActionKinds.publicLinkDisable);

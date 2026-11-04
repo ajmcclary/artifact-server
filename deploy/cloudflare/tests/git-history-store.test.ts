@@ -122,7 +122,7 @@ describe("D1 Git history claim ownership", () => {
         "prj_default", "art_d1_git_lease", "ver_d1_git_lease",
       )).toMatchObject({commitId: mapping.commitId});
       expect(await store.findGitHistoryPredecessorMapping(
-        "prj_default", "art_d1_git_lease", 1,
+        "prj_default", "art_d1_git_lease", 2,
       )).toMatchObject({commitId: mapping.commitId});
 
       await binding.prepare(`

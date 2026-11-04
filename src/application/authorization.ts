@@ -163,6 +163,15 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: ArtifactScope,
   ) => Effect.Effect<void, ScopedDenial>;
+  /**
+   * Promotion is acceptance, so it needs a person signed in directly with
+   * publication authority. A service key or agent, delegated or not, is refused
+   * even when it may publish (CND-004).
+   */
+  readonly requireCandidatePromotion: (
+    principal: Principal,
+    scope: ArtifactScope,
+  ) => Effect.Effect<void, ScopedDenial>;
   readonly visibleScope: (
     principal: Principal,
   ) => Effect.Effect<VisibleScope, ArtifactRepositoryFailure>;
@@ -479,8 +488,26 @@ function makeAuthorizationService(
     yield* denied();
   });
 
+  const requireVersionPublication = artifactScoped(
+    "AuthorizationService.requireVersionPublication",
+    permissions.artifactPublish,
+    anyCapability(principalCapabilities.publishAnyArtifact),
+  );
+
+  const requireCandidatePromotion = Effect.fn("AuthorizationService.requireCandidatePromotion")(
+    function*(principal: Principal, scope: ArtifactScope) {
+      yield* requireVersionPublication(principal, scope);
+      if (!isDirectHumanPrincipal(principal)) {
+        yield* new AuthorizationDenied({
+          message: "Only a person signed in directly can promote a candidate; agents and keys can stage and comment.",
+        });
+      }
+    },
+  );
+
   return AuthorizationService.of({
     effectiveAccess,
+    requireCandidatePromotion,
     requireAgentConnection,
     requireArtifactDiscovery,
     requireArtifactCreation: projectScoped(
@@ -530,11 +557,7 @@ function makeAuthorizationService(
       anyCapability(principalCapabilities.manageProjects),
     ),
     requirePublicationPreparation,
-    requireVersionPublication: artifactScoped(
-      "AuthorizationService.requireVersionPublication",
-      permissions.artifactPublish,
-      anyCapability(principalCapabilities.publishAnyArtifact),
-    ),
+    requireVersionPublication,
     visibleScope,
   });
 }

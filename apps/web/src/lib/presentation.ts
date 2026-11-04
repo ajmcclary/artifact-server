@@ -68,6 +68,12 @@ export function accessSettingLabel(value: "account_required" | "public_link"): s
 /** Converts one action kind into compact action-history text. */
 export function actionLabel(value: ArtifactAction["action"]): string {
   switch (value) {
+    case "candidate_promote":
+      return "Promoted candidate";
+    case "candidate_reject":
+      return "Closed candidate";
+    case "candidate_stage":
+      return "Staged candidate";
     case "capture":
       return "Captured linked file";
     case "link":

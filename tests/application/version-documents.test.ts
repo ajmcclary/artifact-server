@@ -66,6 +66,7 @@ function versionWith(entries: readonly ManifestEntry[], id: string): ArtifactVer
     manifest: {digest: "d".repeat(64), entries, entryPath: "index.html", routingMode: "static", serialized: "{}"},
     version: {
       artifactId: "art_fixture",
+      baseVersionId: null,
       contentToken: "token",
       createdAt: "2026-10-06T00:00:00.000Z",
       entryPath: "index.html",
@@ -75,6 +76,7 @@ function versionWith(entries: readonly ManifestEntry[], id: string): ArtifactVer
       projectId: "prj_default",
       publisherPrincipalId: "member_fixture",
       routingMode: "static",
+      state: "mainline",
     },
   };
 }
