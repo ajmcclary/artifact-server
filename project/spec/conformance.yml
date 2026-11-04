@@ -108,9 +108,15 @@ requirements:
       behavior: {id: PRD-001-B, description: "Publish and open both a complete client-side site and one ordinary file."}
       failure: {id: PRD-001-F, description: "Reject input that is neither a valid file nor a valid finished client-side directory without creating an artifact."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-001-B/F prove on the local runtime, through the file publication client, that a complete client-side site (entry page, second page, stylesheet, script) and one ordinary PDF each publish as their own artifact and open from their version links with exact bytes and media types, and that a missing path, an empty directory, a directory with no entry document, a named entry that is absent, and a FIFO are each rejected with a typed reason while the artifact list stays unchanged. Browser rendering and the non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-001-B, PRD-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRD-002
     kind: exclusion
@@ -121,9 +127,15 @@ requirements:
       behavior: {id: PRD-002-B, description: "Serve already-finished files without starting an artifact-specific runtime or conversion job."}
       failure: {id: PRD-002-F, description: "Publishing source that requires Node.js, Python, a database, a server function, or a conversion step does not cause the server to execute it."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-002-B/F prove on the local runtime that finished HTML, JavaScript, CSS, and JSON are served byte for byte, and that a published source tree with package.json lifecycle scripts, a Node server entry, a server function, a build config, Python, a Makefile, a Dockerfile, SQL, and a Prisma schema is stored and served as exact bytes after all publish-queued work runs, with no marker any of those programs would write, no child process of the server, no listener on the port the server entry would bind, and no installed, built, or provisioned state in the data directory. Non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-002-B, PRD-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRD-003
     kind: behavior
@@ -134,9 +146,15 @@ requirements:
       behavior: {id: PRD-003-B, description: "Complete publish, open, compare, and visibility operations against one stable artifact identity."}
       failure: {id: PRD-003-F, description: "Repeating the workflow does not create an unrelated deployment, project, or artifact identity."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-003-B/F prove on the local runtime that publishing, privately opening, publishing again, comparing, making public, and publicly opening all act on one artifact ID in prj_default, with each version served by the same server under its own localhost content host, and that running the whole workflow twice (replaying the first publish) leaves one artifact, the same project list, no new child process, and no content host outside the server's own port. Non-local deployments are not exercised."
     depends_on: [ART-001, VER-001, DIF-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-003-B, PRD-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRJ-001
     kind: behavior
@@ -769,9 +787,15 @@ requirements:
       behavior: {id: MAN-004-B, description: "Publish a directory containing only regular files and directories."}
       failure: {id: MAN-004-F, description: "Attempt every supported special-file type and confirm that the publish fails before a version is committed."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "MAN-004-B/F prove locally, through the file publication client the CLI uses, that a directory of only regular files and nested directories publishes every file, and that a root or nested symbolic link (file, directory, or dangling), FIFO, Unix socket, and the /dev/null character device each fail with a typed input error before any upload or artifact exists. A block device and a device node nested inside a directory need privileges the suite does not assume and are not exercised; HTTP and MCP never receive client paths, and non-local client platforms are not run."
     depends_on: [MAN-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [MAN-004-B, MAN-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: MAN-005
     kind: security
@@ -782,15 +806,15 @@ requirements:
       behavior: {id: MAN-005-B, description: "Publish distinct normalized names that remain distinct on every supported storage system."}
       failure: {id: MAN-005-F, description: "Reject case-only and normalization-equivalent path pairs before storing the version."}
     deployments: *all
-    status: implementing
-    proof_gap: MAN-005-F proves local rejection of case-only and normalization-equivalent collisions, but no behavior test publishes distinct normalized names across every supported storage system.
+    status: behavior_verified
+    proof_gap: "MAN-005-B proves locally that ten names which differ by accent, script, or separator placement survive case folding and NFC normalization as distinct manifest entries with their own bytes; MAN-005-F proves local rejection of case-only and normalization-equivalent collisions before upload creation. Only SQLite with local blob storage is exercised; Postgres, D1, and remote object stores are not."
     depends_on: [MAN-003]
     evidence:
       - deployment: local
-        tests: [MAN-005-F]
+        tests: [MAN-005-B, MAN-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-08-17T03:17:21.421Z"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: MAN-006
     kind: security
@@ -892,9 +916,15 @@ requirements:
       behavior: {id: PUB-005-B, description: "Commit a publish and observe all database records and the current pointer together after every blob exists."}
       failure: {id: PUB-005-F, description: "Inject failures before and during the transaction and confirm that no partial visible version or dangling current pointer exists."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PUB-005-B/F prove on SQLite with local blob storage that a committed new version shows its version row, manifest entries, idempotency record, publish action, and moved current pointer together with every named blob stored; that a commit missing a declared blob is refused before the transaction; and that an injected abort on the version, manifest-entry, idempotency, action, or current-pointer write each returns 5xx and leaves the artifact's records exactly as before, after which the same idempotency key commits exactly one version. Postgres and D1 transactions and the non-local deployments are not exercised."
     depends_on: [PUB-004, MAN-001, AUD-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-005-B, PUB-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PUB-006
     kind: behavior
@@ -998,9 +1028,15 @@ requirements:
       behavior: {id: PUB-010-B, description: "Publish a regular local file through the client and confirm that later source changes do not change the saved version."}
       failure: {id: PUB-010-F, description: "Reject symlinks, special files, forbidden manifest paths, and paths inaccessible to the client's operating-system identity before creating an upload."}
     deployments: [local, single_server]
-    status: specified
+    status: behavior_verified
+    proof_gap: "PUB-010-B/F prove locally that the file publication client publishes a regular file's bytes as read at upload time, that a later edit of the source leaves the saved version unchanged, and that the artifact, version, and action records carry the derived file name but never the client path; and that a symbolic link, a FIFO, a .git directory, a backslash, .artifactserver, or non-NFC name, and a file the client's operating-system identity cannot read are each refused with a typed input error before any upload exists. When the suite runs as root the unreadable case runs under the unprivileged 65534 effective identity, because root bypasses permission bits. The single_server deployment, Windows and macOS clients, and MCP's own refusal of client paths are not exercised here."
     depends_on: [MAN-004, PUB-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-010-B, PUB-010-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PUB-011
     kind: security
@@ -1864,15 +1900,15 @@ requirements:
       behavior: {id: CNT-004-B, description: "Publish two versions and confirm that they receive different origins and continue serving their exact files."}
       failure: {id: CNT-004-F, description: "One version cannot read origin storage, cookies, caches, or service-worker control belonging to another version or the application."}
     deployments: *all
-    status: implementing
-    proof_gap: The local conformance tests prove two versions receive distinct immutable origins that each serve their exact hash-pinned bytes, and that one version's host-only content session cannot read another version or the application surface. Origin and browser-isolation release proof remains a deployment qualification.
+    status: behavior_verified
+    proof_gap: "CNT-004-B/F prove locally that two versions receive distinct immutable origins under their own localhost hostnames, that each keeps serving its exact hash-pinned bytes after a later publish, and that one version's host-only content session cannot read another version or the application surface. Browser storage, cache, and service-worker isolation on every engine and the non-local deployments remain a deployment qualification."
     depends_on: [ART-004]
     evidence:
       - deployment: local
-        tests: [CNT-004-F]
+        tests: [CNT-004-B, CNT-004-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-22T18:58:40.000Z"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: CNT-005
     kind: behavior
@@ -1901,15 +1937,15 @@ requirements:
       behavior: {id: CNT-006-B, description: "Install a service worker in one fixture version and confirm that its scope is limited to that version origin."}
       failure: {id: CNT-006-F, description: "Attempts to register a scope for the application or another version do not gain control."}
     deployments: *all
-    status: implementing
-    proof_gap: A Chromium browser test proves a service worker installed by one version controls only its own origin (scope equals the version origin, distinct from a second version's), and that cross-origin registration for the application or another version is refused with a SecurityError. The Firefox/WebKit and per-deployment browser matrix remains unrecorded, and release proof remains a deployment qualification.
+    status: behavior_verified
+    proof_gap: "CNT-006-B/F prove in a local Chromium run that a service worker registered by one version is served from and scoped to that version's origin, that a second version on its own origin has no registration from the first, and that cross-origin registration for the application or another version is refused with a SecurityError. Firefox and WebKit run only in the opt-in critical-engines slice, which does not include this spec, and per-deployment browser runs remain a deployment qualification."
     depends_on: [CNT-004]
     evidence:
       - deployment: local
-        tests: [CNT-006-F]
+        tests: [CNT-006-B, CNT-006-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "2026-09-30T15:39:53.728Z"
+        recorded_at: "2026-11-04T18:19:20.522Z"
 
   - id: CNT-007
     kind: behavior
@@ -1971,9 +2007,15 @@ requirements:
       behavior: {id: CNT-009-B, description: "Load a permitted external dependency from the artifact origin without changing its URL or bytes."}
       failure: {id: CNT-009-F, description: "A blocked external dependency remains blocked and is not silently proxied or copied by Artifact Server."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "CNT-009-B/F prove in a local Chromium run against a second loopback origin that a published page is served byte for byte with its external script URL unchanged, that the browser fetches and runs that script directly from its own origin, and that a cross-origin JSON read without CORS stays blocked in the page while the only request the external origin receives comes from the browser with the artifact's origin; content-host relay paths answer 404 and the version holds only the published page. Firefox, WebKit, and the non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [CNT-009-B, CNT-009-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-11-04T18:19:20.522Z"
 
   - id: CNT-010
     kind: behavior
@@ -2149,10 +2191,15 @@ requirements:
       behavior: {id: GIT-001-B, description: "Run with the provider variable absent and set to off; observe the disabled capability shape, identical artifact behavior, and no Git implementation load or provider request."}
       failure: {id: GIT-001-F, description: "Missing, invalid, or inaccessible optional Git configuration cannot prevent the server from starting, publishing, opening, or comparing, and cannot trigger automatic provider selection."}
     deployments: *all
-    status: implementing
-    proof_gap: Provider-off behavior, explicit configuration, and fail-open application startup are implemented for Node and Workers runtimes. The complete no-load/no-call and malformed-configuration acceptance matrix across every deployment remains unproved.
+    status: behavior_verified
+    proof_gap: "GIT-001-B/F prove on the local runtime, from configurations parsed out of real environment maps, that with the provider absent or off (companions present but never read) the session reports the disabled capability, the project setting stays disabled and cannot be enabled, publish, open, and compare behave identically, readiness stays 200, and an injected provider and health probe receive no call; and that unsupported, missing, direct-secret, invalid-limit, and unreadable-secret configurations each start the server, keep publish, open, compare, and readiness working, report misconfigured with no provider unless one was named, and never check or call a provider. \"No implementation load\" is proved as never constructing or starting the provider, monitor, or mirror worker; the Cloudflare adapter modules are still statically imported. Workers, D1, and the non-local deployments are not exercised here."
     depends_on: [DIF-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [GIT-001-B, GIT-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: GIT-002
     kind: behavior
@@ -2230,15 +2277,15 @@ requirements:
       behavior: {id: GIT-005-B, description: "Make an artifact public and confirm that only its current content path is available without authentication."}
       failure: {id: GIT-005-F, description: "Probe Git protocols, repository paths, commit IDs, and earlier versions from a public session and receive no access."}
     deployments: *all
-    status: implementing
-    proof_gap: "Local GIT-005-F proves public-link sessions cannot obtain clone access; the October 6 live run proved repository read tokens cannot push, anonymous ls-remote is refused, and sub-minute token lifetimes are refused. GIT-005-B (public access exposing only the current content path) has no test, and the complete protocol, timing, and log-redaction probe matrix remains unproved."
+    status: behavior_verified
+    proof_gap: "GIT-005-B proves locally that a public artifact whose versions are mirrored to Git serves only its current content path anonymously: the stable link redirects to the current version, the earlier version's content path answers 401, and version listing, version detail, comparison, history, and clone-token routes all answer 401. GIT-005-F proves public-link sessions cannot obtain clone access; the October 6 live run proved repository read tokens cannot push, anonymous ls-remote is refused, and sub-minute token lifetimes are refused. The complete protocol, timing, and log-redaction probe matrix and non-local deployments remain unproved."
     depends_on: [GIT-001, AUTH-004]
     evidence:
       - deployment: local
-        tests: [GIT-005-F]
+        tests: [GIT-005-B, GIT-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-06T15:11:17.477Z"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: GIT-006
     kind: deployment
@@ -2436,9 +2483,15 @@ requirements:
       behavior: {id: AUTH-003-B, description: "Open a public current-version link without an account from a network that can reach the installation."}
       failure: {id: AUTH-003-F, description: "Enabling a public link does not open firewall rules, create a tunnel, expose an unreachable server, or make the link enumerable."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-003-B/F prove on the local runtime that a public link opens its current version anonymously over the loopback network that reaches the installation, and that enabling it leaves the server listening only on loopback with no external interface accepting the port, that server code outside the operator CLI imports no process or raw-socket API and only the two server entry points listen, and that no anonymous listing, library, project, activity, artifact, or version route reveals the link, whose identifier is a random UUID. Firewall state on deployed hosts and the non-local deployments are not exercised."
     depends_on: [CNT-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-003-B, AUTH-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-004
     kind: security
@@ -2467,9 +2520,20 @@ requirements:
       behavior: {id: AUTH-005-B, description: "Inspect a public response and the visibility UI for the indexing header and redistribution warning."}
       failure: {id: AUTH-005-F, description: "No product copy or authorization check treats robots directives or URL secrecy as a security boundary."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-005-B proves in a local Chromium run that choosing Public link in the artifact's Details shows \"The link can be redistributed. Earlier versions and history stay account-required.\" before saving, and that the saved public response sends X-Robots-Tag noindex, nofollow. AUTH-005-F proves that no web, CLI, MCP, or skill copy calls a public link secret, secure, private, protected, hidden, or unindexed (the detector is checked against hostile samples), and that crawler user agents get identical outcomes: the public version opens for all of them and an account-required version stays 401 by stable or exact URL. Non-local deployments are not exercised."
     depends_on: [AUTH-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-005-B]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "2026-11-04T18:19:20.522Z"
+      - deployment: local
+        tests: [AUTH-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-006
     kind: behavior
@@ -2480,9 +2544,15 @@ requirements:
       behavior: {id: AUTH-006-B, description: "Disable public links and confirm that new and existing artifacts cannot be made or remain publicly readable under server policy."}
       failure: {id: AUTH-006-F, description: "Members, agents, API keys, and Plannotator cannot bypass the administrator's public-link policy."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-006-B/F prove on the local runtime in private-team mode that an administrator disabling public links stops anonymous reads of an existing public artifact through both the stable link and its content origin, keeps newly published public artifacts unreadable, and refuses making an artifact public with SHARE_LINKS_DISABLED, and that re-enabling restores the stored setting; and that an invited member, a scoped API key, and that key's MCP agent, each shown able to make an artifact public while the policy allows it, cannot lift the policy or make an artifact public once it is disabled. Publishing a new artifact as public_link still stores that setting while it stays unreadable. No Plannotator request path exists yet, so its clause is unexercised, and non-local deployments are not run."
     depends_on: [AUTH-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-006-B, AUTH-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-007
     kind: behavior
@@ -2602,9 +2672,15 @@ requirements:
       behavior: {id: AUTH-013-B, description: "Enumerate application and content routes and confirm the required separation."}
       failure: {id: AUTH-013-F, description: "No content host exposes login callback, OAuth, metadata mutation, administration, or MCP endpoints."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-013-B/F prove locally, from the complete route list registered by the HTTP application, that login, callback, OAuth metadata, MCP, administration, and artifact metadata routes answer on the application origin, and that every one of them, probed on a version content host with the application bearer token and browser session attached, answers only as read-only content (404 for GET/HEAD, 405 for other methods) with no challenge, cookie, or redirect. Non-local deployments, the hosted Worker router, and preview-lease and live-origin hosts are not exercised."
     depends_on: [CNT-003, CNT-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-013-B, AUTH-013-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-014
     kind: security
@@ -5024,9 +5100,15 @@ requirements:
       behavior: {id: ARC-001-B, description: "Run core service tests with in-memory or fake ports and replace each provider through its documented adapter."}
       failure: {id: ARC-001-F, description: "A dependency-boundary test fails when core product code imports a concrete infrastructure provider or deployment framework."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: "ARC-001-F proves that every module reachable from src/core and src/application imports only effect, node:crypto, node:path, unicode-case-folding, and zod, and never an adapter directory, and that the check catches direct, dynamic, and transitive provider imports. ARC-001-B is unproved: no in-memory or fake implementation of the repository, blob, staging, and identity ports exists, so core services are exercised only through the SQLite and local-disk adapters."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [ARC-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: ARC-002
     kind: constraint
@@ -5736,9 +5818,15 @@ requirements:
       behavior: {id: REL-006-B, description: "Validate the ledger and compute complete evidence coverage for every requirement in a release and deployment."}
       failure: {id: REL-006-F, description: "The validator rejects missing tests, missing deployments, malformed evidence, unresolved dependencies, and a verified status without complete passing evidence."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "REL-006-B/F run scripts/validate-conformance.rb on fixture ledgers: it reports status counts and per-deployment coverage, the --require-verified release gate names exactly the requirements lacking complete proof and passes a fully proved deployment, and it rejects missing or misnamed acceptance tests, empty or unknown deployments, inapplicable, incomplete, foreign, missing-file, failed-report, and unproved evidence, unknown and cyclic dependencies, verified status without every deployment's proof, and statuses that contradict their evidence. The validator does not inspect test sources; scripts/check-conformance-test-ids.rb owns unknown and duplicate test-ID claims and is not exercised here."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [REL-006-B, REL-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: REL-007
     kind: release_gate
@@ -5762,9 +5850,15 @@ requirements:
       behavior: {id: SCP-001-B, description: "Publish and serve only finished browser files while the server process list and network activity show no artifact-specific runtime."}
       failure: {id: SCP-001-F, description: "Build manifests, package files, server entry points, and backend dependencies cannot cause package installation, compilation, process execution, or database provisioning."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "SCP-001-B/F share the PRD-002 local proof: finished browser files are served byte for byte with no new child process or build output, and build manifests, package files, server entry points, and backend dependencies never install, compile, execute, listen, or provision. Process and network observation covers the local server's own process and one reserved port; non-local deployments are not exercised."
     depends_on: [PRD-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-001-B, SCP-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-002
     kind: exclusion
@@ -5775,9 +5869,15 @@ requirements:
       behavior: {id: SCP-002-B, description: "Open browser-supported media directly and download unsupported files using only generic content delivery."}
       failure: {id: SCP-002-F, description: "Uploading a document, archive, image, audio, or video file cannot enqueue conversion, extraction, analysis, rendering, or preview work."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "SCP-002-B/F prove on the local runtime that PNG, MP4, MP3, PDF, and Markdown files are delivered inline and ZIP and DOCX files as attachments, each with its published media type, nosniff, and exact bytes, and that after every publish-queued job runs the version holds only the uploaded entries, an archive member is not addressable, the blob store holds exactly the uploaded digests with no thumbnail, poster, transcode, rendering, or extracted member, and no helper process ran. Fixtures are format headers rather than playable media, browser presentation is not exercised here, and non-local deployments are not run."
     depends_on: [PRD-002, CNT-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-002-B, SCP-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-003
     kind: exclusion
@@ -5814,9 +5914,15 @@ requirements:
       behavior: {id: SCP-005-B, description: "Extend only through documented deployment, storage, auth, Git, MCP, and integration contracts."}
       failure: {id: SCP-005-F, description: "Configuration or uploaded content cannot load arbitrary server plugins, native modules, hooks, or executable extensions."}
     deployments: *all
-    status: specified
+    status: implementing
+    proof_gap: "SCP-005-F proves that no server source uses dynamic import, require, createRequire, dlopen, eval, the Function constructor, the vm module, module loader hooks, or worker evaluation (the detector is checked against hostile samples), and that an uploaded plugin module, native addon, and plugin declaration are stored and served as exact bytes and never loaded. SCP-005-B (extending only through documented deployment, storage, auth, Git, MCP, and integration contracts) has no observable acceptance test; it needs the owner to name the contract inventory a test could check."
     depends_on: [ARC-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-006
     kind: exclusion
@@ -6132,10 +6238,15 @@ requirements:
       behavior: {id: LNK-001-B, description: "Enable linked artifacts on a local deployment, observe the advertised capability, link a file through the MCP tool and the HTTP endpoint, and verify the file stays at its original path and is never copied, moved, watched, or scanned into an artifact without that explicit call."}
       failure: {id: LNK-001-F, description: "With the feature off or on any non-local deployment, the capability is absent, every linked-artifact route answers the stable capability-unavailable shape, and enabling the flag outside the local runtime fails startup; no file on disk becomes an artifact without an explicit link call."}
     deployments: *all
-    status: implementing
-    proof_gap: The acceptance-ID tests prove the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP, and the absence of scanning on the local deployment, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
+    status: behavior_verified
+    proof_gap: "LNK-001-B/F prove on the local deployment the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP (same inode, no copy), and that an unlinked file never becomes an artifact; a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites assert the capability-absence shape directly, and the external-storage runtime refuses startup when the flag is enabled, but those runs do not claim these IDs. Route-level live absence on deployed AWS and GCP instances remains open."
     depends_on: [ART-001, VER-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-001-B, LNK-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-007
     kind: security
@@ -6146,10 +6257,15 @@ requirements:
       behavior: {id: LNK-007-B, description: "As an admitted local member, read a linked artifact's live view, edit the file on disk, re-read, and observe the current bytes with no-store caching while captured-version routes keep immutable caching."}
       failure: {id: LNK-007-F, description: "Public-link possession, anonymous requests, non-member sessions, content-origin version routes, and every non-local deployment never receive a live disk byte, and a missing or unreadable source degrades the live view to the last captured version without an error."}
     deployments: *all
-    status: implementing
-    proof_gap: The acceptance-ID tests prove no-store live delivery to an admitted local member, the 401 for anonymous and version-cookie callers, the captured-only public path under drift, and the degrade-to-captured behavior, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
+    status: behavior_verified
+    proof_gap: "LNK-007-B/F prove on the local deployment no-store live delivery of current disk bytes to an admitted member while the captured version keeps serving captured bytes and its exact-version file route stays private immutable; anonymous, version-cookie, public-link, and non-member callers never receive a live byte; and a missing source degrades to the capture. A worker runtime test proves the Cloudflare absence, and the compact-compose, Helm, and Pulumi suites assert capability absence without claiming these IDs. Route-level live absence on deployed AWS and GCP instances remains open."
     depends_on: [LNK-001, AUTH-008]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-007-B, LNK-007-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-008
     kind: behavior
@@ -6232,15 +6348,15 @@ requirements:
       behavior: {id: LNK-005-B, description: "Move the source file, relink with the expected hash, and observe the same artifact ID, version list, and comment threads with a healthy binding at the new path."}
       failure: {id: LNK-005-F, description: "A relink whose target bytes do not match the expected hash is rejected and changes nothing, and a relink to a path outside the link roots or inside the data directory is refused."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests prove a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing. The attachment clause of the behavior is not exercised because standalone artifact attachment remains undecided under GATE-014; identity, versions, and comments preservation are the proved surface.
+    status: behavior_verified
+    proof_gap: "LNK-005-B/F prove locally that a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing. The attachment clause of the behavior is not exercised because standalone artifact attachment remains undecided under GATE-014."
     depends_on: [LNK-002]
     evidence:
       - deployment: local
-        tests: [LNK-005-F]
+        tests: [LNK-005-B, LNK-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-22T17:59:28.000Z"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-006
     kind: security

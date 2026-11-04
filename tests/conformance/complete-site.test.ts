@@ -268,6 +268,66 @@ describe("complete-site publishing", () => {
     expect(replay.body.version.id).toBe(committed.body.version.id);
   });
 
+  test("MAN-005-B: names that stay distinct after case folding and normalization publish as distinct entries with their own bytes", async () => {
+    // Each pair differs by an accent, script, or separator that survives
+    // case folding and NFC normalization, so none is a portable collision.
+    const names = [
+      "cafe.txt",
+      "café.txt",
+      "resume.html",
+      "résumé.html",
+      "Angstrom.txt",
+      "Ångström.txt",
+      "notes/a-b.txt",
+      "notes-a/b.txt",
+      "日本/索引.txt",
+      "σ-sigma.txt",
+    ];
+    const files = names.map((name): TestSiteFile => ({
+      bytes: utf8(`bytes for ${name}`),
+      mediaType: name.endsWith(".html") ? "text/html; charset=utf-8" : "text/plain; charset=utf-8",
+      path: name,
+    }));
+    const plan = await createStagedUpload(server, installation, "resume.html", files);
+    expect(plan.response.status).toBe(201);
+    await uploadEveryStagedFile(installation, plan.body, files);
+    const committed = await commitStagedUpload(
+      installation,
+      plan.body,
+      "man-005-distinct-portable-names",
+      {
+        accessSetting: "account_required",
+        kind: "new_artifact",
+        name: "Portable names",
+      },
+    );
+    expect(committed.response.status).toBe(201);
+    const artifactId = committed.body.artifact.id;
+    const versionId = committed.body.version.id;
+
+    const version = z.object({
+      manifest: z.object({
+        entries: z.array(z.object({path: z.string(), sha256: z.string()}).loose()),
+      }).loose(),
+    }).loose().parse(await (await fetch(
+      `${server.baseUrl}/api/v1/artifacts/${artifactId}/versions/${versionId}`,
+      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+    )).json());
+    expect(version.manifest.entries.map((entry) => entry.path).toSorted())
+      .toEqual(names.toSorted());
+    expect(new Set(version.manifest.entries.map((entry) => entry.sha256)).size)
+      .toBe(names.length);
+
+    const served = await Promise.all(names.map(async (name) => {
+      const response = await fetch(
+        `${server.baseUrl}/api/v1/artifacts/${artifactId}/versions/${versionId}/file?${new URLSearchParams({path: name})}`,
+        {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+      );
+      return [name, response.status, await response.text()] as const;
+    }));
+    expect(served).toEqual(names.map((name) => [name, 200, `bytes for ${name}`]));
+  });
+
   test("MAN-005-F: absent entries, duplicate paths, and portable-name collisions are rejected before upload creation", async () => {
     const bytes = utf8("content");
     const fingerprint = createHash("sha256").update(bytes).digest("hex");

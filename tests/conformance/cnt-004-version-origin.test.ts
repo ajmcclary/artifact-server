@@ -52,6 +52,14 @@ describe("every saved version owns an immutable content origin", () => {
     const firstOrigin = new URL(first.body.links.version).origin;
     const secondOrigin = new URL(second.body.links.version).origin;
     expect(firstOrigin).not.toBe(secondOrigin);
+    // Local mode isolates each version under its own localhost hostname,
+    // separate from the application host.
+    const applicationHost = new URL(server.baseUrl).hostname;
+    for (const origin of [firstOrigin, secondOrigin]) {
+      const hostname = new URL(origin).hostname;
+      expect(hostname).toMatch(/^[a-z0-9-]+\.localhost$/u);
+      expect(hostname).not.toBe(applicationHost);
+    }
 
     // Each immutable origin serves its own exact bytes.
     expect(await readPrivateBytes(

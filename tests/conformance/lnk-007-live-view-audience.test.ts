@@ -144,6 +144,21 @@ describe("the live view reaches only authenticated local members", () => {
     expect(versionRead.status).toBe(200);
     expect(versionRead.headers.get("artifact-source-freshness")).toBeNull();
     expect(await versionRead.text()).toBe(capturedBytes);
+
+    // The captured version's exact-version file route keeps immutable caching
+    // and the captured bytes while the live view above is no-store.
+    const capturedFile = await fetch(
+      new URL(
+        `/api/v1/artifacts/${linked.artifact.id}/versions/${linked.version.id}/file?path=live.md`,
+        server.baseUrl,
+      ),
+      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+    );
+    expect(capturedFile.status).toBe(200);
+    expect(capturedFile.headers.get("cache-control")).toBe(
+      "private, max-age=31536000, immutable",
+    );
+    expect(await capturedFile.text()).toBe(capturedBytes);
   });
 
   test("LNK-007-F: anonymous, cross-origin, public-link, and non-member readers never receive a live byte, and a missing source degrades to the capture", async () => {
