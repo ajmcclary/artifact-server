@@ -6146,10 +6146,15 @@ requirements:
       behavior: {id: LNK-007-B, description: "As an admitted local member, read a linked artifact's live view, edit the file on disk, re-read, and observe the current bytes with no-store caching while captured-version routes keep immutable caching."}
       failure: {id: LNK-007-F, description: "Public-link possession, anonymous requests, non-member sessions, content-origin version routes, and every non-local deployment never receive a live disk byte, and a missing or unreadable source degrades the live view to the last captured version without an error."}
     deployments: *all
-    status: implementing
-    proof_gap: The acceptance-ID tests prove no-store live delivery to an admitted local member, the 401 for anonymous and version-cookie callers, the captured-only public path under drift, and the degrade-to-captured behavior, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
+    status: behavior_verified
+    proof_gap: "LNK-007-B/F prove on the local deployment no-store live delivery of current disk bytes to an admitted member while the captured version keeps serving captured bytes and its exact-version file route stays private immutable; anonymous, version-cookie, public-link, and non-member callers never receive a live byte; and a missing source degrades to the capture. A worker runtime test proves the Cloudflare absence, and the compact-compose, Helm, and Pulumi suites assert capability absence without claiming these IDs. Route-level live absence on deployed AWS and GCP instances remains open."
     depends_on: [LNK-001, AUTH-008]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-007-B, LNK-007-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: LNK-008
     kind: behavior
