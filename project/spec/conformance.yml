@@ -1864,15 +1864,15 @@ requirements:
       behavior: {id: CNT-004-B, description: "Publish two versions and confirm that they receive different origins and continue serving their exact files."}
       failure: {id: CNT-004-F, description: "One version cannot read origin storage, cookies, caches, or service-worker control belonging to another version or the application."}
     deployments: *all
-    status: implementing
-    proof_gap: The local conformance tests prove two versions receive distinct immutable origins that each serve their exact hash-pinned bytes, and that one version's host-only content session cannot read another version or the application surface. Origin and browser-isolation release proof remains a deployment qualification.
+    status: behavior_verified
+    proof_gap: "CNT-004-B/F prove locally that two versions receive distinct immutable origins under their own localhost hostnames, that each keeps serving its exact hash-pinned bytes after a later publish, and that one version's host-only content session cannot read another version or the application surface. Browser storage, cache, and service-worker isolation on every engine and the non-local deployments remain a deployment qualification."
     depends_on: [ART-004]
     evidence:
       - deployment: local
-        tests: [CNT-004-F]
+        tests: [CNT-004-B, CNT-004-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-22T18:58:40.000Z"
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: CNT-005
     kind: behavior
