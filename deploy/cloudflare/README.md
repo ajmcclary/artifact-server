@@ -42,8 +42,8 @@ proves configuration only; it does not replace the live client-flow gate.
 | Tool | Version |
 | --- | --- |
 | Alchemy | `2.0.0-beta.72` |
-| Wrangler | `4.123.0` |
-| Cloudflare Workers types | `5.20260815.1` |
+| Wrangler | `4.151.3` |
+| Cloudflare Workers types | `5.20261019.1` |
 | Effect | `4.0.0-rc.108` |
 | TypeScript | `7.0.2` |
 | Worker compatibility date | `2026-08-15` |

@@ -167,7 +167,8 @@ namespace empty ([report](project/evidence/cloudflare-artifacts-node-postgres-qu
 - **T03 remaining:** live D1 multi-worker proof on a deployed Worker, controlled
   repeated live backlog measurements, the Workers-binding path on this account,
   and deployment-specific production evidence. The Workers-binding path needs
-  Wrangler ≥ 4.145.0; `deploy/cloudflare` pins 4.123.0. Keep the Node REST/Git
+  Wrangler ≥ 4.145.0; `deploy/cloudflare` now pins 4.151.3, so the tooling
+  prerequisite is met but nothing has run live on it yet. Keep the Node REST/Git
   and Workers-binding/D1 results separate.
 
 ## Review-to-change workflow
