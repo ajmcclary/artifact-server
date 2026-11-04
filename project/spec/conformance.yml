@@ -146,9 +146,15 @@ requirements:
       behavior: {id: PRD-003-B, description: "Complete publish, open, compare, and visibility operations against one stable artifact identity."}
       failure: {id: PRD-003-F, description: "Repeating the workflow does not create an unrelated deployment, project, or artifact identity."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-003-B/F prove on the local runtime that publishing, privately opening, publishing again, comparing, making public, and publicly opening all act on one artifact ID in prj_default, with each version served by the same server under its own localhost content host, and that running the whole workflow twice (replaying the first publish) leaves one artifact, the same project list, no new child process, and no content host outside the server's own port. Non-local deployments are not exercised."
     depends_on: [ART-001, VER-001, DIF-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-003-B, PRD-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: PRJ-001
     kind: behavior
