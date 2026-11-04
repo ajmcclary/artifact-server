@@ -2007,9 +2007,15 @@ requirements:
       behavior: {id: CNT-009-B, description: "Load a permitted external dependency from the artifact origin without changing its URL or bytes."}
       failure: {id: CNT-009-F, description: "A blocked external dependency remains blocked and is not silently proxied or copied by Artifact Server."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "CNT-009-B/F prove in a local Chromium run against a second loopback origin that a published page is served byte for byte with its external script URL unchanged, that the browser fetches and runs that script directly from its own origin, and that a cross-origin JSON read without CORS stays blocked in the page while the only request the external origin receives comes from the browser with the artifact's origin; content-host relay paths answer 404 and the version holds only the published page. Firefox, WebKit, and the non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [CNT-009-B, CNT-009-F]
+        result: pass
+        run: project/evidence/browser.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: CNT-010
     kind: behavior
