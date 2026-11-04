@@ -782,15 +782,15 @@ requirements:
       behavior: {id: MAN-005-B, description: "Publish distinct normalized names that remain distinct on every supported storage system."}
       failure: {id: MAN-005-F, description: "Reject case-only and normalization-equivalent path pairs before storing the version."}
     deployments: *all
-    status: implementing
-    proof_gap: MAN-005-F proves local rejection of case-only and normalization-equivalent collisions, but no behavior test publishes distinct normalized names across every supported storage system.
+    status: behavior_verified
+    proof_gap: "MAN-005-B proves locally that ten names which differ by accent, script, or separator placement survive case folding and NFC normalization as distinct manifest entries with their own bytes; MAN-005-F proves local rejection of case-only and normalization-equivalent collisions before upload creation. Only SQLite with local blob storage is exercised; Postgres, D1, and remote object stores are not."
     depends_on: [MAN-003]
     evidence:
       - deployment: local
-        tests: [MAN-005-F]
+        tests: [MAN-005-B, MAN-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-08-17T03:17:21.421Z"
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: MAN-006
     kind: security
