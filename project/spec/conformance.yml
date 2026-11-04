@@ -5829,9 +5829,15 @@ requirements:
       behavior: {id: SCP-002-B, description: "Open browser-supported media directly and download unsupported files using only generic content delivery."}
       failure: {id: SCP-002-F, description: "Uploading a document, archive, image, audio, or video file cannot enqueue conversion, extraction, analysis, rendering, or preview work."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "SCP-002-B/F prove on the local runtime that PNG, MP4, MP3, PDF, and Markdown files are delivered inline and ZIP and DOCX files as attachments, each with its published media type, nosniff, and exact bytes, and that after every publish-queued job runs the version holds only the uploaded entries, an archive member is not addressable, the blob store holds exactly the uploaded digests with no thumbnail, poster, transcode, rendering, or extracted member, and no helper process ran. Fixtures are format headers rather than playable media, browser presentation is not exercised here, and non-local deployments are not run."
     depends_on: [PRD-002, CNT-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-002-B, SCP-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: SCP-003
     kind: exclusion
