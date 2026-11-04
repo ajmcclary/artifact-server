@@ -5742,9 +5742,15 @@ requirements:
       behavior: {id: REL-006-B, description: "Validate the ledger and compute complete evidence coverage for every requirement in a release and deployment."}
       failure: {id: REL-006-F, description: "The validator rejects missing tests, missing deployments, malformed evidence, unresolved dependencies, and a verified status without complete passing evidence."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "REL-006-B/F run scripts/validate-conformance.rb on fixture ledgers: it reports status counts and per-deployment coverage, the --require-verified release gate names exactly the requirements lacking complete proof and passes a fully proved deployment, and it rejects missing or misnamed acceptance tests, empty or unknown deployments, inapplicable, incomplete, foreign, missing-file, failed-report, and unproved evidence, unknown and cyclic dependencies, verified status without every deployment's proof, and statuses that contradict their evidence. The validator does not inspect test sources; scripts/check-conformance-test-ids.rb owns unknown and duplicate test-ID claims and is not exercised here."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [REL-006-B, REL-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: REL-007
     kind: release_gate
