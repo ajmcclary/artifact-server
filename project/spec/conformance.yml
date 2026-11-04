@@ -6510,3 +6510,117 @@ requirements:
         result: pass
         run: project/evidence/browser.json
         recorded_at: "2026-09-30T15:39:53.728Z"
+
+  - id: CND-001
+    kind: behavior
+    behavior: A staged publish creates an immutable candidate version that does not move current. The stable link, public link, Library and default versions list are unchanged.
+    owner: artifact-core
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: requirements-proposed-ids}
+    acceptance:
+      behavior: {id: CND-001-B, description: "Stage a candidate and confirm it takes the next number with its base recorded, opens only by its exact version for an authorized reviewer, and leaves current, the stable and public links, the artifact list count, and the default versions list on the accepted version."}
+      failure: {id: CND-001-F, description: "A staged publish on a stale base is refused and creates nothing, an ordinary publish cannot replay a staged one under the same key, and a staged gallery never reaches the Library."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved over HTTP and MCP against the local SQLite runtime (cnd-candidate-versions) with the CLI exercised in candidate-cli. Postgres and D1 pass the shared candidate store cases (postgres-candidate-versions, d1-candidate-versions) with no requirement ID; no single_server or deployed Cloudflare runtime evidence exists yet. The Review banner is built but no browser spec drives it."
+    depends_on: [VER-001, ART-005, AUTH-004]
+    evidence:
+      - deployment: local
+        tests: [CND-001-B, CND-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
+
+  - id: CND-002
+    kind: behavior
+    behavior: Promotion repoints current to the candidate's own version ID with no new version. It is idempotent and audited as its own action.
+    owner: artifact-core
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: requirements-proposed-ids}
+    acceptance:
+      behavior: {id: CND-002-B, description: "A person promotes a candidate and current becomes the candidate's exact ID, bytes and manifest with no version created; a replay returns the same result and the history records candidate_promote, not restore."}
+      failure: {id: CND-002-F, description: "A reused idempotency key, a mainline version, an unknown version, or a missing key is refused and current does not move."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved over HTTP against the local SQLite runtime. Postgres and D1 pass the shared store cases with no requirement ID; no single_server or deployed Cloudflare runtime evidence exists yet."
+    depends_on: [CND-001]
+    evidence:
+      - deployment: local
+        tests: [CND-002-B, CND-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
+
+  - id: CND-003
+    kind: security
+    behavior: Promotion is refused when current no longer equals the candidate's base. A late build can never advance past newer accepted state.
+    owner: artifact-core
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: requirements-proposed-ids}
+    acceptance:
+      behavior: {id: CND-003-B, description: "After an accepted publish moves current past a candidate's base, promoting the candidate is refused with CANDIDATE_STALE and the accepted change and the candidate are both unchanged."}
+      failure: {id: CND-003-F, description: "Racing promotions of two candidates on one base accept exactly one; the loser stays a candidate and cannot be restored past the winner."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved over HTTP against the local SQLite runtime. SQLite, Postgres and D1 each also refuse at the database (a trigger keeps current on mainline or promoted versions), proved by store tests with no requirement ID. Deployed D1 concurrency and single_server evidence are unproved."
+    depends_on: [CND-002]
+    evidence:
+      - deployment: local
+        tests: [CND-003-B, CND-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
+
+  - id: CND-004
+    kind: security
+    behavior: Only a direct human principal with publication authority can promote. A service key or agent, delegated or not, can stage and comment but never promote.
+    owner: authorization
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: owner-decisions-2026-10-08}
+    acceptance:
+      behavior: {id: CND-004-B, description: "An agent stages and comments on a candidate and is refused promotion; a person signed in directly with publication authority promotes it."}
+      failure: {id: CND-004-F, description: "The installation key, a service key with publish capability, and a delegated human are refused promotion; a caller scoped to another project or naming another project finds nothing; MCP exposes no promotion tool."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved over HTTP and MCP against the local SQLite runtime with injected principals; the CLI test proves an API key is refused. A real OIDC or WorkOS session promoting through the hosted Review is unproved."
+    depends_on: [CND-002, PRM-003]
+    evidence:
+      - deployment: local
+        tests: [CND-004-B, CND-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
+
+  - id: CND-005
+    kind: behavior
+    behavior: Reject and supersede are terminal and keep the candidate's bytes, comments and provenance. Restore never targets a candidate.
+    owner: artifact-core
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: requirements-proposed-ids}
+    acceptance:
+      behavior: {id: CND-005-B, description: "Reject one candidate and supersede another; both keep their bytes, metadata and comments, are hidden from the default and open-candidate lists, and appear under the all filter."}
+      failure: {id: CND-005-F, description: "A closed candidate cannot be promoted or closed again, an invalid outcome is refused, and restore over HTTP or MCP refuses both open and closed candidates."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved over HTTP and MCP against the local SQLite runtime. Postgres and D1 pass the shared store cases with no requirement ID. Committed-blob retention for closed candidates remains deferred to T25."
+    depends_on: [CND-001, ART-005]
+    evidence:
+      - deployment: local
+        tests: [CND-005-B, CND-005-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
+
+  - id: CND-006
+    kind: behavior
+    behavior: Candidates are not mirrored; a version is mirrored when it becomes mainline or is promoted, with the previous mirrored version as its parent. A rejected candidate never becomes an ancestor on main.
+    owner: git-history
+    source: {file: ../../docs/superpowers/specs/2026-10-08-candidate-versions-design.md, anchor: owner-decisions-2026-10-08}
+    acceptance:
+      behavior: {id: CND-006-B, description: "With Git history enabled, a candidate is mirrored only when promoted, its parent is the previous mirrored version's commit, and the next mainline version takes the promoted commit as its parent."}
+      failure: {id: CND-006-F, description: "Open, stale and rejected candidates are never pushed, re-enabling Git history backfills none of them, and the next mainline version's parent skips their numbers."}
+    deployments: *all
+    status: behavior_verified
+    proof_gap: "Proved against the local runtime with a recording provider that checks each push's parent against the branch head. Postgres and D1 pass the shared store cases for job queueing and the predecessor rule with no requirement ID. No live Cloudflare Artifacts push of a promoted candidate has run."
+    depends_on: [CND-002, GIT-002]
+    evidence:
+      - deployment: local
+        tests: [CND-006-B, CND-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "2026-11-04T17:47:25.134Z"
