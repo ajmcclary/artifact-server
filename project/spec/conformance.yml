@@ -6132,10 +6132,15 @@ requirements:
       behavior: {id: LNK-001-B, description: "Enable linked artifacts on a local deployment, observe the advertised capability, link a file through the MCP tool and the HTTP endpoint, and verify the file stays at its original path and is never copied, moved, watched, or scanned into an artifact without that explicit call."}
       failure: {id: LNK-001-F, description: "With the feature off or on any non-local deployment, the capability is absent, every linked-artifact route answers the stable capability-unavailable shape, and enabling the flag outside the local runtime fails startup; no file on disk becomes an artifact without an explicit link call."}
     deployments: *all
-    status: implementing
-    proof_gap: The acceptance-ID tests prove the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP, and the absence of scanning on the local deployment, and a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites now assert the capability-absence shape directly (no advertised capability, stable 501 CAPABILITY_UNAVAILABLE on every linked route, and no ARTIFACT_SERVER_LINKED_FILES in the stack definition), and the external-storage runtime refuses startup when the flag is enabled. Route-level live absence on deployed AWS and GCP instances, and a recorded run attached to these IDs, remain open.
+    status: behavior_verified
+    proof_gap: "LNK-001-B/F prove on the local deployment the off-by-default 501 shape, capability discovery, reference-in-place linking over MCP and HTTP (same inode, no copy), and that an unlinked file never becomes an artifact; a worker runtime test proves the Cloudflare absence. The compact-compose, Helm, and AWS/GCP Pulumi suites assert the capability-absence shape directly, and the external-storage runtime refuses startup when the flag is enabled, but those runs do not claim these IDs. Route-level live absence on deployed AWS and GCP instances remains open."
     depends_on: [ART-001, VER-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [LNK-001-B, LNK-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: LNK-007
     kind: security
