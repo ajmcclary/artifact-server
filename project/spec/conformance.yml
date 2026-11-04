@@ -2492,9 +2492,15 @@ requirements:
       behavior: {id: AUTH-006-B, description: "Disable public links and confirm that new and existing artifacts cannot be made or remain publicly readable under server policy."}
       failure: {id: AUTH-006-F, description: "Members, agents, API keys, and Plannotator cannot bypass the administrator's public-link policy."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-006-B/F prove on the local runtime in private-team mode that an administrator disabling public links stops anonymous reads of an existing public artifact through both the stable link and its content origin, keeps newly published public artifacts unreadable, and refuses making an artifact public with SHARE_LINKS_DISABLED, and that re-enabling restores the stored setting; and that an invited member, a scoped API key, and that key's MCP agent, each shown able to make an artifact public while the policy allows it, cannot lift the policy or make an artifact public once it is disabled. Publishing a new artifact as public_link still stores that setting while it stays unreadable. No Plannotator request path exists yet, so its clause is unexercised, and non-local deployments are not run."
     depends_on: [AUTH-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-006-B, AUTH-006-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: AUTH-007
     kind: behavior
