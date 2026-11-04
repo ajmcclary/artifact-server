@@ -650,6 +650,8 @@ function ProjectReview({
   // Controls follow the server's effective access for this artifact (ADR 0033); the server still refuses.
   const canComment = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("comment.write");
   const canManageArtifacts = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("artifact.edit");
+  // Candidate decisions are publication authority on the server (CND-004), not edit authority.
+  const canPublishVersions = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("artifact.publish");
   const canShare = effectiveAccess.permissions.has("artifact.share");
   const canDeleteAnyComment = effectiveAccess.permissions.has("comment.moderate");
   const previewKind = reviewPreviewKind(selectedVersion, selectedPath);
@@ -1372,9 +1374,9 @@ function ProjectReview({
                   <CandidateBanner
                     baseVersionNumber={versions.find(({version}) => version.id === selectedVersion.version.baseVersionId)
                       ?.version.number ?? null}
-                    canPromote={canManageArtifacts && session.principal.kind === "human" &&
+                    canPromote={canPublishVersions && session.principal.kind === "human" &&
                       session.principal.authorizedByPrincipalId === null}
-                    canReject={canManageArtifacts}
+                    canReject={canPublishVersions}
                     onPromote={() => void decideCandidate("promote")}
                     onReject={() => void decideCandidate("reject")}
                     pending={candidatePending}
