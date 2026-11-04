@@ -2448,9 +2448,15 @@ requirements:
       behavior: {id: AUTH-003-B, description: "Open a public current-version link without an account from a network that can reach the installation."}
       failure: {id: AUTH-003-F, description: "Enabling a public link does not open firewall rules, create a tunnel, expose an unreachable server, or make the link enumerable."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-003-B/F prove on the local runtime that a public link opens its current version anonymously over the loopback network that reaches the installation, and that enabling it leaves the server listening only on loopback with no external interface accepting the port, that server code outside the operator CLI imports no process or raw-socket API and only the two server entry points listen, and that no anonymous listing, library, project, activity, artifact, or version route reveals the link, whose identifier is a random UUID. Firewall state on deployed hosts and the non-local deployments are not exercised."
     depends_on: [CNT-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-003-B, AUTH-003-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: AUTH-004
     kind: security
