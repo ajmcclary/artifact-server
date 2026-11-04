@@ -108,9 +108,15 @@ requirements:
       behavior: {id: PRD-001-B, description: "Publish and open both a complete client-side site and one ordinary file."}
       failure: {id: PRD-001-F, description: "Reject input that is neither a valid file nor a valid finished client-side directory without creating an artifact."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-001-B/F prove on the local runtime, through the file publication client, that a complete client-side site (entry page, second page, stylesheet, script) and one ordinary PDF each publish as their own artifact and open from their version links with exact bytes and media types, and that a missing path, an empty directory, a directory with no entry document, a named entry that is absent, and a FIFO are each rejected with a typed reason while the artifact list stays unchanged. Browser rendering and the non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-001-B, PRD-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: PRD-002
     kind: exclusion
