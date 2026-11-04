@@ -116,7 +116,7 @@ requirements:
         tests: [PRD-001-B, PRD-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRD-002
     kind: exclusion
@@ -135,7 +135,7 @@ requirements:
         tests: [PRD-002-B, PRD-002-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRD-003
     kind: behavior
@@ -154,7 +154,7 @@ requirements:
         tests: [PRD-003-B, PRD-003-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PRJ-001
     kind: behavior
@@ -795,7 +795,7 @@ requirements:
         tests: [MAN-004-B, MAN-004-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: MAN-005
     kind: security
@@ -814,7 +814,7 @@ requirements:
         tests: [MAN-005-B, MAN-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: MAN-006
     kind: security
@@ -924,7 +924,7 @@ requirements:
         tests: [PUB-005-B, PUB-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PUB-006
     kind: behavior
@@ -1036,7 +1036,7 @@ requirements:
         tests: [PUB-010-B, PUB-010-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: PUB-011
     kind: security
@@ -1908,7 +1908,7 @@ requirements:
         tests: [CNT-004-B, CNT-004-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: CNT-005
     kind: behavior
@@ -1945,7 +1945,7 @@ requirements:
         tests: [CNT-006-B, CNT-006-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T18:19:20.522Z"
 
   - id: CNT-007
     kind: behavior
@@ -2015,7 +2015,7 @@ requirements:
         tests: [CNT-009-B, CNT-009-F]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T18:19:20.522Z"
 
   - id: CNT-010
     kind: behavior
@@ -2199,7 +2199,7 @@ requirements:
         tests: [GIT-001-B, GIT-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: GIT-002
     kind: behavior
@@ -2285,7 +2285,7 @@ requirements:
         tests: [GIT-005-B, GIT-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: GIT-006
     kind: deployment
@@ -2491,7 +2491,7 @@ requirements:
         tests: [AUTH-003-B, AUTH-003-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-004
     kind: security
@@ -2528,12 +2528,12 @@ requirements:
         tests: [AUTH-005-B]
         result: pass
         run: project/evidence/browser.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T18:19:20.522Z"
       - deployment: local
         tests: [AUTH-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-006
     kind: behavior
@@ -2552,7 +2552,7 @@ requirements:
         tests: [AUTH-006-B, AUTH-006-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-007
     kind: behavior
@@ -2680,7 +2680,7 @@ requirements:
         tests: [AUTH-013-B, AUTH-013-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: AUTH-014
     kind: security
@@ -5108,7 +5108,7 @@ requirements:
         tests: [ARC-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: ARC-002
     kind: constraint
@@ -5826,7 +5826,7 @@ requirements:
         tests: [REL-006-B, REL-006-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: REL-007
     kind: release_gate
@@ -5858,7 +5858,7 @@ requirements:
         tests: [SCP-001-B, SCP-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-002
     kind: exclusion
@@ -5877,7 +5877,7 @@ requirements:
         tests: [SCP-002-B, SCP-002-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-003
     kind: exclusion
@@ -5922,7 +5922,7 @@ requirements:
         tests: [SCP-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: SCP-006
     kind: exclusion
@@ -6246,7 +6246,7 @@ requirements:
         tests: [LNK-001-B, LNK-001-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-007
     kind: security
@@ -6265,7 +6265,7 @@ requirements:
         tests: [LNK-007-B, LNK-007-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-008
     kind: behavior
@@ -6356,7 +6356,7 @@ requirements:
         tests: [LNK-005-B, LNK-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "RECORDED_AT_PENDING"
+        recorded_at: "2026-11-04T17:46:18.127Z"
 
   - id: LNK-006
     kind: security
