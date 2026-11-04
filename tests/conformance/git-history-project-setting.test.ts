@@ -29,6 +29,7 @@ import type {NodeGitHistoryConfiguration} from
   "../../src/git-history/node-git-history-configuration.js";
 import {
   createTestInstallation,
+  fetchVersion,
   removeTestInstallation,
   type RunningTestServer,
   startTestServer,
@@ -876,6 +877,75 @@ describe("simple per-project Git history setting", () => {
     expect(deletion.status).toBe(200);
     await expect.poll(() => provider.deleteCalls, {timeout: 8_000}).toBe(1);
     expect(provider.repositories.has(published.body.artifact.id)).toBe(false);
+  });
+
+  test("GIT-005-B: a public artifact with mirrored Git history exposes only its current content path without authentication", async () => {
+    const provider = new RecordingGitHistoryProvider();
+    server = await startTestServer(installation, {
+      gitHistory: configuredGitHistory(),
+      gitHistoryHealthProbe: availableHealthProbe,
+      gitHistoryProvider: provider,
+    });
+    const activeServer = server;
+    await waitForAvailable(activeServer, installation.apiToken);
+    const first = await publishNew(activeServer, installation, {
+      accessSetting: "public_link",
+      content: "<!doctype html><title>Earlier public version</title>",
+      idempotencyKey: "git-005-b-first-version",
+      projectId: "prj_default",
+    });
+    await enableGitHistory(activeServer, installation, "prj_default");
+    const second = await publishVersion(activeServer, installation, {
+      artifactId: first.body.artifact.id,
+      content: "<!doctype html><title>Current public version</title>",
+      expectedCurrentVersionId: first.body.version.id,
+      idempotencyKey: "git-005-b-second-version",
+    });
+    // Both versions are mirrored, so a private derivative of the earlier
+    // version exists while the artifact is public.
+    await expect.poll(() => provider.commitCalls, {timeout: 8_000}).toBe(2);
+    const artifactId = first.body.artifact.id;
+    const anonymous = (target: string, init?: RequestInit) =>
+      fetch(new URL(target, activeServer.baseUrl), {redirect: "manual", ...init});
+
+    // The stable link resolves to the current version's content path, which
+    // serves without authentication.
+    const opened = await anonymous(`/artifacts/${artifactId}`);
+    expect(opened.status).toBe(302);
+    expect(opened.headers.get("location")).toBe(second.body.links.version);
+    const current = await fetchVersion(activeServer, second.body.links.version);
+    expect(current.status).toBe(200);
+    expect(await current.text()).toContain("Current public version");
+
+    // The earlier version's content path is not public.
+    const earlier = await fetchVersion(activeServer, first.body.links.version);
+    expect(earlier.status).toBe(401);
+    expect(await earlier.text()).not.toContain("Earlier public version");
+
+    // No history, version listing, comparison, or Git handoff is reachable
+    // without authentication.
+    const privateTargets = [
+      `/api/v1/artifacts/${artifactId}/versions`,
+      `/api/v1/artifacts/${artifactId}/versions/${first.body.version.id}`,
+      `/api/v1/artifacts/${artifactId}/comparisons?fromVersionId=${first.body.version.id}&toVersionId=${second.body.version.id}`,
+      `/api/v1/projects/prj_default/artifacts/${artifactId}/history`,
+    ];
+    const privateStatuses = await Promise.all(privateTargets.map(async (target) => {
+      const response = await anonymous(target);
+      await response.arrayBuffer();
+      return [target, response.status] as const;
+    }));
+    expect(privateStatuses).toEqual(privateTargets.map((target) => [target, 401]));
+    const clone = await anonymous(
+      `/api/v1/projects/prj_default/artifacts/${artifactId}/history/clone-token`,
+      {
+        body: JSON.stringify({ttlSeconds: 60}),
+        headers: {"Content-Type": "application/json"},
+        method: "POST",
+      },
+    );
+    expect(clone.status).toBe(401);
+    expect(provider.repositories.has(artifactId)).toBe(true);
   });
 
   test("GIT-004-B GIT-004-F: copy limits produce deterministic files and pointers across retry", async () => {

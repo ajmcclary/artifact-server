@@ -2230,15 +2230,15 @@ requirements:
       behavior: {id: GIT-005-B, description: "Make an artifact public and confirm that only its current content path is available without authentication."}
       failure: {id: GIT-005-F, description: "Probe Git protocols, repository paths, commit IDs, and earlier versions from a public session and receive no access."}
     deployments: *all
-    status: implementing
-    proof_gap: "Local GIT-005-F proves public-link sessions cannot obtain clone access; the October 6 live run proved repository read tokens cannot push, anonymous ls-remote is refused, and sub-minute token lifetimes are refused. GIT-005-B (public access exposing only the current content path) has no test, and the complete protocol, timing, and log-redaction probe matrix remains unproved."
+    status: behavior_verified
+    proof_gap: "GIT-005-B proves locally that a public artifact whose versions are mirrored to Git serves only its current content path anonymously: the stable link redirects to the current version, the earlier version's content path answers 401, and version listing, version detail, comparison, history, and clone-token routes all answer 401. GIT-005-F proves public-link sessions cannot obtain clone access; the October 6 live run proved repository read tokens cannot push, anonymous ls-remote is refused, and sub-minute token lifetimes are refused. The complete protocol, timing, and log-redaction probe matrix and non-local deployments remain unproved."
     depends_on: [GIT-001, AUTH-004]
     evidence:
       - deployment: local
-        tests: [GIT-005-F]
+        tests: [GIT-005-B, GIT-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-10-06T15:11:17.477Z"
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: GIT-006
     kind: deployment
