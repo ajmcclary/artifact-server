@@ -104,18 +104,14 @@ Set `versionIdentity: "content"` in group defaults, or use `--version-identity c
 
 ## Use a remote server
 
-Sign in once, save a named profile, and use it when publishing:
+Sign in once with an API key, save a named profile, and use it when publishing. An administrator creates the key in Settings › API keys. Pipe the key to `--api-key-stdin` rather than typing it, so it stays out of shell history; the CLI refuses to read a key from an interactive terminal.
 
 ```sh
-artifactserver auth login https://artifacts.example.com --name team
+artifactserver auth login https://artifacts.example.com --name team --api-key-stdin < team-api-key.txt
 artifactserver publish ./dist --profile team
 ```
 
-`auth login` opens a browser. For a self-hosted server that issues administrator API keys instead, pipe the key in rather than typing it:
-
-```sh
-artifactserver auth login https://artifacts.example.com --name team --api-key-stdin
-```
+`--api-key-stdin` is the supported way to sign the CLI in. Without it, `auth login` tries a browser sign-in, which works only when the server's HTTP API advertises an OAuth resource (the `apiOAuthResource` setting). No production entry point sets it: [decision 0028](../project/spec/decisions/0028-oidc-mcp-oauth.md) keeps `/api/` on managed API keys. A production server therefore answers the browser attempt with a 404, and the CLI stops and asks for `--api-key-stdin`. MCP clients sign in separately; see [Use a generic OIDC issuer for MCP](./deployment.md#use-a-generic-oidc-issuer-for-mcp).
 
 `auth status` verifies saved profiles and never prints credentials. It exits `2` when any profile is invalid.
 
