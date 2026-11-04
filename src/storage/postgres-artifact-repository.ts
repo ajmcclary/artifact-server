@@ -18,6 +18,9 @@ import {
   ProjectArchived,
   ProjectNotFound,
   PublishConflict,
+  CandidateNotOpen,
+  CandidateStale,
+  VersionNotRestorable,
   UploadClosed,
   UploadExpired,
   UploadFileNotFound,
@@ -38,6 +41,10 @@ import {
   preparationStates,
   routingModes,
   uploadStatuses,
+  versionStates,
+  isAcceptedVersionState,
+  type ActivityDetail,
+  type VersionListFilter,
   type AgentDispatchCreation,
   type AgentDispatchPage,
   type AgentDispatchRecord,
@@ -119,6 +126,8 @@ import type {
   RegisterAgent,
   RenameProject,
   RestoreArtifactVersion,
+  PromoteCandidateVersion,
+  CloseCandidateVersion,
   SetProjectArchive,
   StagedUploadRepository,
   StagedUploadFileSlot,
@@ -127,6 +136,7 @@ import type {
   UploadPreparationClaim,
 } from "../core/ports.js";
 import {principalKinds, type PrincipalKind} from "../core/identity.js";
+import {acceptedVersionSql, versionListFilterSql} from "./version-state-sql.js";
 import {UploadPreparationLeaseLost} from "../core/upload-preparation.js";
 import type {
   ProjectGitHistoryProgress,
@@ -196,6 +206,7 @@ const dispositionSchema = z.enum([
   fileDispositions.inline,
 ]);
 const routingModeSchema = z.enum([routingModes.static, routingModes.spa]);
+const versionStateSchema = z.enum(versionStates);
 const uploadStatusSchema = z.enum([
   uploadStatuses.committed,
   uploadStatuses.open,
@@ -206,6 +217,9 @@ const preparationStateSchema = z.enum([
   preparationStates.prepared,
 ]);
 const artifactActionKindSchema = z.enum([
+  artifactActionKinds.candidatePromote,
+  artifactActionKinds.candidateReject,
+  artifactActionKinds.candidateStage,
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
   artifactActionKinds.rename,
@@ -288,6 +302,7 @@ const artifactListRowSchema = artifactRowSchema.extend({
 const artifactTagRowSchema = z.object({artifactId: z.string(), tag: z.string()});
 const versionRowSchema = z.object({
   artifactId: z.string(),
+  baseVersionId: z.string().nullable(),
   contentToken: z.string(),
   createdAt: z.string(),
   entryPath: z.string(),
@@ -297,6 +312,7 @@ const versionRowSchema = z.object({
   publisherPrincipalId: z.string(),
   projectId: z.string(),
   routingMode: routingModeSchema,
+  state: versionStateSchema,
 });
 const publishedRowSchema = z.object({
   accessSetting: accessSettingSchema,
@@ -304,6 +320,7 @@ const publishedRowSchema = z.object({
   artifactDeletedAt: z.string().nullable(),
   artifactId: z.string(),
   artifactName: z.string(),
+  baseVersionId: z.string().nullable(),
   contentToken: z.string(),
   currentVersionId: z.string(),
   entryPath: z.string(),
@@ -314,6 +331,7 @@ const publishedRowSchema = z.object({
   versionCreatedAt: z.string(),
   versionId: z.string(),
   versionNumber: positiveIntegerSchema,
+  versionState: versionStateSchema,
 });
 const storedManifestEntryRowSchema = z.object({
   disposition: dispositionSchema,
@@ -346,6 +364,8 @@ const idempotencyRowSchema = z.object({
     "delete",
     "publish",
     "restore",
+    "promote",
+    "reject",
   ]),
   tagsJson: z.string().nullable(),
   versionId: z.string(),
@@ -801,6 +821,7 @@ export class PostgresArtifactRepository implements
               AND mapping.status = 'recorded'
             WHERE version.installation_id = $1 AND version.project_id = $2
               AND artifact.deleted_at IS NULL
+              AND ${acceptedVersionSql("version")}
           ) AS "mappedVersions",
           (SELECT COUNT(*)
             FROM versions version
@@ -816,6 +837,7 @@ export class PostgresArtifactRepository implements
               AND mapping.status = 'recorded'
             WHERE version.installation_id = $1 AND version.project_id = $2
               AND artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+              AND ${acceptedVersionSql("version")}
           ) AS "unmappedVersions",
           (SELECT COUNT(*) FROM git_history_jobs
             WHERE installation_id = $1 AND project_id = $2
@@ -854,6 +876,7 @@ export class PostgresArtifactRepository implements
           WHERE version.installation_id = $1
             AND version.project_id = $2
             AND artifact.deleted_at IS NULL
+            AND ${acceptedVersionSql("version")}
         ), version_totals AS (
           SELECT active.id,
             COALESCE(SUM(entry.size), 0) AS total_bytes,
@@ -973,6 +996,7 @@ export class PostgresArtifactRepository implements
               AND queued.version_id = version.id
             WHERE version.installation_id = $1 AND artifact.deleted_at IS NULL
               AND mapping.version_id IS NULL
+              AND ${acceptedVersionSql("version")}
           ) candidate
           WHERE candidate."artifactRank" = 1
             AND candidate."existingJobId" IS NULL
@@ -1050,6 +1074,7 @@ export class PostgresArtifactRepository implements
           WHERE job.installation_id = $1 AND job.state = 'queued'
             AND job.available_at <= $2
             AND (job.kind = 'delete-repository' OR setting.enabled = TRUE)
+            AND (job.kind = 'delete-repository' OR ${acceptedVersionSql("version")})
             AND NOT EXISTS (
               SELECT 1 FROM git_history_jobs claimed
               WHERE claimed.installation_id = job.installation_id
@@ -1068,6 +1093,7 @@ export class PostgresArtifactRepository implements
                 AND predecessor.project_id = job.project_id
                 AND predecessor.artifact_id = job.artifact_id
                 AND predecessor.number < version.number
+                AND ${acceptedVersionSql("predecessor")}
                 AND mapped.version_id IS NULL
             ))
           ORDER BY job.created_at, version.number, job.id
@@ -1172,7 +1198,7 @@ export class PostgresArtifactRepository implements
   async findGitHistoryPredecessorMapping(
     projectId: string,
     artifactId: string,
-    versionNumber: number,
+    beforeVersionNumber: number,
   ): Promise<GitHistoryMapping | null> {
     const rows = await this.#database.run(Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
@@ -1191,8 +1217,15 @@ export class PostgresArtifactRepository implements
           AND mapping.version_id = version.id
           AND mapping.status = 'recorded'
         WHERE version.installation_id = $1 AND version.project_id = $2
-          AND version.artifact_id = $3 AND version.number = $4
-      `, [this.#installationId, projectId, artifactId, versionNumber]);
+          AND version.artifact_id = $3 AND version.number = (
+            SELECT MAX(previous.number) FROM versions previous
+            WHERE previous.installation_id = version.installation_id
+              AND previous.project_id = version.project_id
+              AND previous.artifact_id = version.artifact_id
+              AND previous.number < $4
+              AND ${acceptedVersionSql("previous")}
+          )
+      `, [this.#installationId, projectId, artifactId, beforeVersionNumber]);
     }));
     return gitHistoryMappingRowSchema.nullable().parse(rows[0] ?? null);
   }
@@ -1666,6 +1699,7 @@ export class PostgresArtifactRepository implements
           command.inputDigest,
         );
         if (replayed !== null) return replayed;
+        const staged = command.stage === true;
         yield* this.#assertProjectActive(command.projectId);
         yield* this.#assertStagedUploadReady(
           command.source,
@@ -1708,21 +1742,30 @@ export class PostgresArtifactRepository implements
           command.manifest,
           command.principalId,
           command.source.uploadId,
+          staged ? command.expectedCurrentVersionId : null,
         );
-        const updated = yield* sql`UPDATE artifacts
-          SET current_version_id = ${command.versionId}
-          WHERE installation_id = ${installationId}
-            AND project_id = ${command.projectId}
-            AND id = ${command.artifactId}
-            AND current_version_id = ${command.expectedCurrentVersionId}
-            AND deleted_at IS NULL
-          RETURNING id`;
-        if (updated.length !== 1) {
-          return yield* new PublishConflict({
-            message: "The artifact changed during publication.",
-          });
+        // A candidate leaves current where it is (CND-001). The artifact row is
+        // locked FOR UPDATE above, so the base check cannot interleave.
+        if (!staged) {
+          const updated = yield* sql`UPDATE artifacts
+            SET current_version_id = ${command.versionId}
+            WHERE installation_id = ${installationId}
+              AND project_id = ${command.projectId}
+              AND id = ${command.artifactId}
+              AND current_version_id = ${command.expectedCurrentVersionId}
+              AND deleted_at IS NULL
+            RETURNING id`;
+          if (updated.length !== 1) {
+            return yield* new PublishConflict({
+              message: "The artifact changed during publication.",
+            });
+          }
         }
-        yield* this.#insertAction(command, "publish", command.versionId);
+        yield* this.#insertAction(
+          command,
+          staged ? artifactActionKinds.candidateStage : artifactActionKinds.publish,
+          command.versionId,
+        );
         yield* this.#insertIdempotency({
           accessSetting: null,
           artifactId: command.artifactId,
@@ -1735,12 +1778,15 @@ export class PostgresArtifactRepository implements
           versionId: command.versionId,
         });
         yield* this.#sealStagedUpload(command.source, command.versionId);
-        yield* this.#queueGitHistoryMirrorIfEnabled(
-          command.projectId,
-          command.artifactId,
-          command.versionId,
-          command.createdAt,
-        );
+        // Candidates are never mirrored (CND-006); promotion queues the job.
+        if (!staged) {
+          yield* this.#queueGitHistoryMirrorIfEnabled(
+            command.projectId,
+            command.artifactId,
+            command.versionId,
+            command.createdAt,
+          );
+        }
         return yield* this.#readPublishedVersion(
           command.projectId,
           command.versionId,
@@ -1991,6 +2037,7 @@ export class PostgresArtifactRepository implements
   async listArtifactVersions(
     projectId: string,
     artifactId: string,
+    filter: VersionListFilter,
   ): Promise<readonly VersionRecord[]> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {
@@ -2011,9 +2058,11 @@ export class PostgresArtifactRepository implements
           routing_mode AS "routingMode",
           content_token AS "contentToken",
           publisher_principal_id AS "publisherPrincipalId",
-          project_id AS "projectId", created_at AS "createdAt"
+          project_id AS "projectId", created_at AS "createdAt",
+          state, base_version_id AS "baseVersionId"
          FROM versions
          WHERE installation_id = $1 AND project_id = $2 AND artifact_id = $3
+           AND ${versionListFilterSql(filter)}
          ORDER BY number DESC`,
         [installationId, projectId, artifactId],
       );
@@ -2026,6 +2075,7 @@ export class PostgresArtifactRepository implements
     artifactId: string,
     cursor: PageCursor | null,
     limit: number,
+    filter: VersionListFilter,
   ): Promise<PageResult<VersionRecord>> {
     const installationId = this.#installationId;
     return this.#database.run(Effect.gen({self: this}, function*() {
@@ -2046,9 +2096,11 @@ export class PostgresArtifactRepository implements
           routing_mode AS "routingMode",
           content_token AS "contentToken",
           publisher_principal_id AS "publisherPrincipalId",
-          project_id AS "projectId", created_at AS "createdAt"
+          project_id AS "projectId", created_at AS "createdAt",
+          state, base_version_id AS "baseVersionId"
          FROM versions
          WHERE installation_id = $1 AND project_id = $2 AND artifact_id = $3
+           AND ${versionListFilterSql(filter)}
            AND ($4::text IS NULL OR created_at < $4::text
              OR (created_at = $4::text AND id < $5))
          ORDER BY created_at DESC, id DESC
@@ -2160,6 +2212,7 @@ export class PostgresArtifactRepository implements
               WHERE versions.installation_id = artifacts.installation_id
                 AND versions.project_id = artifacts.project_id
                 AND versions.artifact_id = artifacts.id
+                AND ${acceptedVersionSql("versions")}
             ) AS "versionCount"
           FROM artifacts
           WHERE installation_id = $1 AND project_id = $2
@@ -2221,6 +2274,8 @@ export class PostgresArtifactRepository implements
           version.content_token AS "contentToken",
           version.publisher_principal_id AS "publisherPrincipalId",
           version.created_at AS "versionCreatedAt",
+          version.state AS "versionState",
+          version.base_version_id AS "baseVersionId",
           (
             SELECT entry.created_at FROM actions AS entry
             WHERE entry.installation_id = artifact.installation_id
@@ -2417,6 +2472,9 @@ export class PostgresArtifactRepository implements
             message: "The saved version does not exist on this artifact.",
           });
         }
+        if (!isAcceptedVersionState(restoredVersion.state)) {
+          return yield* versionNotRestorable();
+        }
         const updated = yield* sql`UPDATE artifacts
           SET current_version_id = ${command.versionId}
           WHERE installation_id = ${installationId}
@@ -2447,6 +2505,151 @@ export class PostgresArtifactRepository implements
         );
       }));
     }));
+  }
+
+  async promoteCandidate(command: PromoteCandidateVersion): Promise<ArtifactState> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        yield* lockIdempotency(sql, installationId, command.projectId, command.idempotencyKey);
+        const replayed = yield* this.#findIdempotentManagementResult(
+          command.projectId,
+          "promote",
+          command.idempotencyKey,
+          command.inputDigest,
+        );
+        if (replayed !== null) return replayed;
+        const artifact = yield* this.#readArtifact(command.projectId, command.artifactId, true);
+        const candidate = yield* this.#readOpenCandidate(command);
+        if (artifact.currentVersionId !== candidate.baseVersionId) {
+          return yield* candidateStale(candidate.number);
+        }
+        yield* sql`UPDATE versions SET state = ${versionStates.promoted}
+          WHERE installation_id = ${installationId}
+            AND project_id = ${command.projectId}
+            AND artifact_id = ${command.artifactId}
+            AND id = ${command.versionId}
+            AND state = ${versionStates.candidate}`;
+        const updated = yield* sql`UPDATE artifacts
+          SET current_version_id = ${command.versionId}
+          WHERE installation_id = ${installationId}
+            AND project_id = ${command.projectId}
+            AND id = ${command.artifactId}
+            AND current_version_id = ${candidate.baseVersionId}
+            AND deleted_at IS NULL
+          RETURNING id`;
+        if (updated.length !== 1) return yield* candidateStale(candidate.number);
+        yield* this.#insertAction(command, artifactActionKinds.candidatePromote, command.versionId);
+        yield* this.#insertIdempotency({
+          accessSetting: artifact.accessSetting,
+          artifactId: command.artifactId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          inputDigest: command.inputDigest,
+          operation: "promote",
+          projectId: command.projectId,
+          tagsJson: null,
+          versionId: command.versionId,
+        });
+        yield* this.#queueGitHistoryMirrorIfEnabled(
+          command.projectId,
+          command.artifactId,
+          command.versionId,
+          command.createdAt,
+        );
+        return yield* this.#readArtifactState(
+          command.projectId,
+          command.artifactId,
+          command.versionId,
+          artifact.accessSetting,
+          false,
+        );
+      }));
+    }));
+  }
+
+  async closeCandidate(command: CloseCandidateVersion): Promise<ArtifactState> {
+    const installationId = this.#installationId;
+    return this.#database.run(Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      return yield* sql.withTransaction(Effect.gen({self: this}, function*() {
+        yield* lockIdempotency(sql, installationId, command.projectId, command.idempotencyKey);
+        const prior = yield* this.#findIdempotency(command.projectId, command.idempotencyKey);
+        if (prior !== null) {
+          if (prior.inputDigest !== command.inputDigest || prior.operation !== "reject") {
+            return yield* new IdempotencyConflict({
+              message: "The idempotency key was already used with different input.",
+            });
+          }
+          return yield* this.#readCandidateState(command.projectId, prior.artifactId, prior.versionId, true);
+        }
+        const artifact = yield* this.#readArtifact(command.projectId, command.artifactId, true);
+        yield* this.#readOpenCandidate(command);
+        yield* sql`UPDATE versions SET state = ${command.outcome}
+          WHERE installation_id = ${installationId}
+            AND project_id = ${command.projectId}
+            AND artifact_id = ${command.artifactId}
+            AND id = ${command.versionId}
+            AND state = ${versionStates.candidate}`;
+        yield* this.#insertAction(
+          command,
+          artifactActionKinds.candidateReject,
+          command.versionId,
+          {how: command.outcome},
+        );
+        yield* this.#insertIdempotency({
+          accessSetting: artifact.accessSetting,
+          artifactId: command.artifactId,
+          createdAt: command.createdAt,
+          idempotencyKey: command.idempotencyKey,
+          inputDigest: command.inputDigest,
+          operation: "reject",
+          projectId: command.projectId,
+          tagsJson: null,
+          versionId: command.versionId,
+        });
+        return yield* this.#readCandidateState(command.projectId, command.artifactId, command.versionId, false);
+      }));
+    }));
+  }
+
+  // The candidate row is locked so a concurrent promote and close serialize.
+  #readOpenCandidate(
+    command: PromoteCandidateVersion,
+  ): Effect.Effect<VersionRecord & {readonly baseVersionId: string}, unknown, SqlClient> {
+    const installationId = this.#installationId;
+    return Effect.gen({self: this}, function*() {
+      const sql = yield* SqlClient;
+      yield* sql`SELECT id FROM versions
+        WHERE installation_id = ${installationId} AND project_id = ${command.projectId}
+          AND artifact_id = ${command.artifactId} AND id = ${command.versionId}
+        FOR UPDATE`;
+      const version = yield* this.#readVersionOrNull(command.projectId, command.versionId, command.artifactId);
+      if (version === null) {
+        return yield* new VersionNotFound({message: "The saved version does not exist on this artifact."});
+      }
+      if (version.state !== versionStates.candidate || version.baseVersionId === null) {
+        return yield* candidateNotOpen(version);
+      }
+      return {...version, baseVersionId: version.baseVersionId};
+    });
+  }
+
+  #readCandidateState(
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    replayed: boolean,
+  ): Effect.Effect<ArtifactState, unknown, SqlClient> {
+    return Effect.gen({self: this}, function*() {
+      const artifact = yield* this.#readArtifact(projectId, artifactId, false);
+      const version = yield* this.#readVersionOrNull(projectId, versionId, artifactId);
+      if (version === null) {
+        throw new Error(`Candidate state references missing version ${versionId}.`);
+      }
+      return {artifact, replayed, version};
+    });
   }
 
   async findIdempotentPublication(
@@ -4609,7 +4812,8 @@ export class PostgresArtifactRepository implements
           manifest_digest AS "manifestDigest", entry_path AS "entryPath",
           routing_mode AS "routingMode", content_token AS "contentToken",
           publisher_principal_id AS "publisherPrincipalId",
-          project_id AS "projectId", created_at AS "createdAt"
+          project_id AS "projectId", created_at AS "createdAt",
+          state, base_version_id AS "baseVersionId"
          FROM versions
          WHERE installation_id = $1 AND project_id = $2
            AND id = $3 AND artifact_id = $4`,
@@ -4680,7 +4884,8 @@ export class PostgresArtifactRepository implements
           v.manifest_digest AS "manifestDigest", v.entry_path AS "entryPath",
           v.routing_mode AS "routingMode", v.content_token AS "contentToken",
           v.publisher_principal_id AS "publisherPrincipalId",
-          v.created_at AS "versionCreatedAt"
+          v.created_at AS "versionCreatedAt",
+          v.state AS "versionState", v.base_version_id AS "baseVersionId"
          FROM versions v
          JOIN artifacts a
            ON a.installation_id = v.installation_id AND a.id = v.artifact_id
@@ -4704,6 +4909,7 @@ export class PostgresArtifactRepository implements
         replayed,
         version: {
           artifactId: parsed.artifactId,
+          baseVersionId: parsed.baseVersionId,
           contentToken: parsed.contentToken,
           createdAt: parsed.versionCreatedAt,
           entryPath: parsed.entryPath,
@@ -4713,6 +4919,7 @@ export class PostgresArtifactRepository implements
           publisherPrincipalId: parsed.publisherPrincipalId,
           projectId: parsed.projectId,
           routingMode: parsed.routingMode,
+          state: parsed.versionState,
         },
       };
     });
@@ -4790,7 +4997,7 @@ export class PostgresArtifactRepository implements
 
   #findIdempotentManagementResult(
     projectId: string,
-    operation: "change_access" | "rename" | "restore",
+    operation: "change_access" | "promote" | "rename" | "restore",
     idempotencyKey: string,
     inputDigest: string,
   ): Effect.Effect<ArtifactState | null, unknown, SqlClient> {
@@ -4938,17 +5145,21 @@ export class PostgresArtifactRepository implements
     manifest: CommitNewArtifact["manifest"],
     publisherPrincipalId: string,
     uploadId: string,
+    baseVersionId: string | null = null,
   ): Effect.Effect<void, unknown, SqlClient> {
     const installationId = this.#installationId;
+    const state = baseVersionId === null ? versionStates.mainline : versionStates.candidate;
     return Effect.gen({self: this}, function*() {
       const sql = yield* SqlClient;
       yield* sql`INSERT INTO versions (
         installation_id, project_id, id, artifact_id, number, manifest_digest, entry_path,
-        routing_mode, content_token, publisher_principal_id, created_at
+        routing_mode, content_token, publisher_principal_id, created_at,
+        state, base_version_id
       ) VALUES (
         ${installationId}, ${projectId}, ${versionId}, ${artifactId}, ${number},
         ${manifest.digest}, ${manifest.entryPath}, ${manifest.routingMode},
-        ${contentToken}, ${publisherPrincipalId}, ${createdAt}
+        ${contentToken}, ${publisherPrincipalId}, ${createdAt},
+        ${state}, ${baseVersionId}
       )`;
       yield* sql.unsafe(
         `INSERT INTO manifest_entries (
@@ -4994,6 +5205,7 @@ export class PostgresArtifactRepository implements
     },
     action: ArtifactActionKind,
     versionId: string,
+    detail: ActivityDetail | null = null,
   ): Effect.Effect<void, unknown, SqlClient> {
     return insertPostgresAction(this.#installationId, {
       accessFrom: command.accessFrom ?? null,
@@ -5004,6 +5216,7 @@ export class PostgresArtifactRepository implements
       artifactId: command.artifactId,
       authorizedByPrincipalId: command.authorizedByPrincipalId,
       createdAt: command.createdAt,
+      detail,
       idempotencyKey: command.idempotencyKey,
       principalId: command.principalId,
       projectId: command.projectId,
@@ -6095,6 +6308,24 @@ const assertExpectedVersion = Effect.fn(
   }
   return yield* Effect.void;
 });
+
+function candidateStale(number: number): CandidateStale {
+  return new CandidateStale({
+    message: `Current moved past the base of candidate version ${number}; stage a new candidate on the current version.`,
+  });
+}
+
+function candidateNotOpen(version: VersionRecord): CandidateNotOpen {
+  return new CandidateNotOpen({
+    message: `Version ${version.number} is ${version.state}, not an open candidate.`,
+  });
+}
+
+function versionNotRestorable(): VersionNotRestorable {
+  return new VersionNotRestorable({
+    message: "Only accepted versions can be restored; promote a candidate instead.",
+  });
+}
 
 function changedDuringManagement(): ArtifactMutationConflict {
   return new ArtifactMutationConflict({

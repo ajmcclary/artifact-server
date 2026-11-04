@@ -36,6 +36,7 @@ import {
 import {
   type ArtifactManagementDependencies,
   ArtifactManagementService,
+  type CandidateRepositoryFailure,
 } from "../application/artifact-management.js";
 import { type AccessRepositoryEffects, AuthorizationService } from "../application/authorization.js";
 import {
@@ -108,6 +109,8 @@ import {
   InvalidComment,
   InvalidDispatch,
   PublishConflict,
+  CandidateNotOpen,
+  CandidateStale,
   ProjectConflict,
   ProjectArchived,
   ProjectNotFound,
@@ -120,6 +123,7 @@ import {
   UploadNotFound,
   UploadedFileMismatch,
   VersionNotFound,
+  VersionNotRestorable,
 } from "../core/errors.js";
 import {
   membershipRoles,
@@ -729,12 +733,12 @@ export function createApplicationLayer(
             ),
           catch: (cause) => repositoryFailure("findVersionMetadata", cause),
         }),
-      listArtifactVersions: (projectId, artifactId) =>
+      listArtifactVersions: (projectId, artifactId, filter) =>
         Effect.tryPromise({
-          try: () => adapters.repository.listArtifactVersions(projectId, artifactId),
+          try: () => adapters.repository.listArtifactVersions(projectId, artifactId, filter),
           catch: (cause) => repositoryFailure("listArtifactVersions", cause),
         }),
-      listArtifactVersionsPage: (projectId, artifactId, cursor, limit) =>
+      listArtifactVersionsPage: (projectId, artifactId, cursor, limit, filter) =>
         Effect.tryPromise({
           try: () =>
             adapters.repository.listArtifactVersionsPage(
@@ -742,6 +746,7 @@ export function createApplicationLayer(
               artifactId,
               cursor,
               limit,
+              filter,
             ),
           catch: (cause) => repositoryFailure("listArtifactVersionsPage", cause),
         }),
@@ -771,6 +776,16 @@ export function createApplicationLayer(
         Effect.tryPromise({
           try: () => adapters.repository.restoreVersion(command),
           catch: classifyRestoreFailure,
+        }),
+      promoteCandidate: (command) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.promoteCandidate(command),
+          catch: (cause) => classifyCandidateFailure("promoteCandidate", cause),
+        }),
+      closeCandidate: (command) =>
+        Effect.tryPromise({
+          try: () => adapters.repository.closeCandidate(command),
+          catch: (cause) => classifyCandidateFailure("closeCandidate", cause),
         }),
     },
   };
@@ -1833,17 +1848,35 @@ function classifyRenameFailure(cause: unknown):
   return repositoryFailure("renameArtifact", cause);
 }
 
+function classifyCandidateFailure(
+  operation: "promoteCandidate" | "closeCandidate",
+  cause: unknown,
+): CandidateRepositoryFailure {
+  if (
+    cause instanceof ArtifactNotFound ||
+    cause instanceof CandidateNotOpen ||
+    cause instanceof CandidateStale ||
+    cause instanceof IdempotencyConflict ||
+    cause instanceof VersionNotFound
+  ) {
+    return cause;
+  }
+  return repositoryFailure(operation, cause);
+}
+
 function classifyRestoreFailure(cause: unknown):
   | ArtifactNotFound
   | ArtifactMutationConflict
   | IdempotencyConflict
   | VersionNotFound
+  | VersionNotRestorable
   | ArtifactRepositoryFailure {
   if (
     cause instanceof ArtifactNotFound ||
     cause instanceof ArtifactMutationConflict ||
     cause instanceof IdempotencyConflict ||
-    cause instanceof VersionNotFound
+    cause instanceof VersionNotFound ||
+    cause instanceof VersionNotRestorable
   ) {
     return cause;
   }

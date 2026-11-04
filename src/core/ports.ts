@@ -15,6 +15,7 @@ import type {
   ArtifactState,
   ArtifactVersion,
   ArtifactRecord,
+  CandidateClosure,
   CanonicalManifest,
   CommentAuthor,
   DispatchedThreadFilter,
@@ -43,6 +44,7 @@ import type {
   StagedUpload,
   StagedUploadFile,
   UploadStatus,
+  VersionListFilter,
   VersionPage,
   VersionRecord,
   VersionContent,
@@ -173,7 +175,30 @@ export interface CommitArtifactVersion {
   readonly projectId: string;
   readonly authorizedByPrincipalId: string | null;
   readonly source: PublicationSource;
+  /**
+   * Commit the version as a candidate that does not move current (CND-001).
+   * `expectedCurrentVersionId` must still be current and becomes its base.
+   */
+  readonly stage?: boolean;
   readonly versionId: string;
+}
+
+/** Values used to atomically repoint current to one open candidate (CND-002). */
+export interface PromoteCandidateVersion {
+  readonly actor: ActorSnapshot;
+  readonly artifactId: string;
+  readonly authorizedByPrincipalId: string | null;
+  readonly createdAt: string;
+  readonly idempotencyKey: string;
+  readonly inputDigest: string;
+  readonly principalId: string;
+  readonly projectId: string;
+  readonly versionId: string;
+}
+
+/** Values used to close one open candidate as rejected or superseded (CND-005). */
+export interface CloseCandidateVersion extends PromoteCandidateVersion {
+  readonly outcome: CandidateClosure;
 }
 
 /** Values used to atomically restore one existing saved version. */
@@ -901,12 +926,14 @@ export interface ArtifactRepository {
   listArtifactVersions(
     projectId: string,
     artifactId: string,
+    filter: VersionListFilter,
   ): Promise<readonly VersionRecord[]>;
   listArtifactVersionsPage(
     projectId: string,
     artifactId: string,
     cursor: PageCursor | null,
     limit: number,
+    filter: VersionListFilter,
   ): Promise<VersionPage>;
   listManifestEntriesPage(
     projectId: string,
@@ -916,6 +943,13 @@ export interface ArtifactRepository {
     limit: number,
   ): Promise<ManifestEntryPage>;
   restoreVersion(command: RestoreArtifactVersion): Promise<ArtifactState>;
+  /**
+   * Repoint current to an open candidate when current still equals its base.
+   * Returns the artifact with the promoted version.
+   */
+  promoteCandidate(command: PromoteCandidateVersion): Promise<ArtifactState>;
+  /** Close an open candidate. Returns the unchanged artifact with the closed candidate. */
+  closeCandidate(command: CloseCandidateVersion): Promise<ArtifactState>;
 }
 
 /** Persistent capabilities required by private browser content sessions. */

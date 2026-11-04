@@ -144,15 +144,15 @@ describe("D1 version pagination", () => {
       const third = await commitVersion(store, binding, "upl_v3", "ver_v3", "2026-09-20T00:02:00.000Z", second.version.id);
       const expectedIds = [third.version.id, second.version.id, first.version.id];
 
-      const page1 = await store.listArtifactVersionsPage(projectId, artifactId, null, 1);
+      const page1 = await store.listArtifactVersionsPage(projectId, artifactId, null, 1, "accepted");
       expect(page1.items.map((version) => version.id)).toEqual([expectedIds[0]]);
       expect(page1.nextCursor).not.toBeNull();
 
-      const page2 = await store.listArtifactVersionsPage(projectId, artifactId, page1.nextCursor, 1);
+      const page2 = await store.listArtifactVersionsPage(projectId, artifactId, page1.nextCursor, 1, "accepted");
       expect(page2.items.map((version) => version.id)).toEqual([expectedIds[1]]);
       expect(page2.nextCursor).not.toBeNull();
 
-      const page3 = await store.listArtifactVersionsPage(projectId, artifactId, page2.nextCursor, 1);
+      const page3 = await store.listArtifactVersionsPage(projectId, artifactId, page2.nextCursor, 1, "accepted");
       expect(page3.items.map((version) => version.id)).toEqual([expectedIds[2]]);
       expect(page3.nextCursor).toBeNull();
 
@@ -169,6 +169,7 @@ describe("D1 version pagination", () => {
         artifactId,
         {createdAt: "2026-09-19T00:00:00.000Z", id: "zzzzzzzz"},
         1,
+        "accepted",
       );
       expect(emptyPage.items).toHaveLength(0);
       expect(emptyPage.nextCursor).toBeNull();

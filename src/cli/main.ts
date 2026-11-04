@@ -32,6 +32,7 @@ import {configureLinkCommand} from "./link-command.js";
 import {configureMcpOnboardingCommands} from "./mcp-onboarding-commands.js";
 import {configurePublicationCommands} from "./publication-commands.js";
 import {configureRenameCommand} from "./rename-command.js";
+import {configureCandidateCommands} from "./candidate-commands.js";
 import {configurePublishCommand} from "./publish-command.js";
 import {configureGitHistoryCommands} from "./git-history-commands.js";
 import {waitForProcessSignal} from "./wait-for-process-signal.js";
@@ -73,6 +74,7 @@ configureCliAuthCommands(program, {
 });
 configurePublicationCommands(program, defaultUserDataDirectory);
 configureRenameCommand(program, defaultUserDataDirectory);
+configureCandidateCommands(program, defaultUserDataDirectory);
 configurePublishCommand(program, {
   defaultProfileDirectory: defaultUserDataDirectory,
 });

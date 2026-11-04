@@ -1,7 +1,7 @@
 # Candidate versions — design
 
 Date: 2026-10-08
-Status: approved (owner answered the four questions on 2026-10-08, all as recommended). Records ROADMAP decision 3. The CND requirement IDs below are proposed and enter the ledger with their tests.
+Status: approved (owner answered the four questions on 2026-10-08, all as recommended). Records ROADMAP decision 3. CND-001 … CND-006 are in the conformance ledger with their tests (implemented November 2026; see each row's proof gap).
 
 ## Intent
 

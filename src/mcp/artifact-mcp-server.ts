@@ -109,6 +109,7 @@ import {
   renderBundleMessage,
   bundleItemBody,
   sanitizeBundleText,
+  type BundleCandidate,
   type BundleItem,
   type RenderableBundle,
 } from "./dispatch-bundle-message.js";
@@ -149,8 +150,10 @@ const artifactRecordSchema = z.object({
   projectId: z.string(),
   tags: z.array(z.string()),
 }).strict();
+const versionStateSchema = z.enum(["mainline", "candidate", "promoted", "rejected", "superseded"]);
 const versionRecordSchema = z.object({
   artifactId: z.string(),
+  baseVersionId: z.string().nullable(),
   contentToken: z.string(),
   createdAt: z.string(),
   entryPath: z.string(),
@@ -160,6 +163,7 @@ const versionRecordSchema = z.object({
   publisherPrincipalId: z.string(),
   projectId: z.string(),
   routingMode: z.enum(["static", "spa"]),
+  state: versionStateSchema,
 }).strict();
 const projectProjectionSchema = z.object({
   archivedAt: z.string().nullable(),
@@ -1138,10 +1142,11 @@ export function createArtifactMcpServer(
     {
       title: "List saved versions",
       description:
-        "List immutable saved versions of one artifact, newest first. Pass cursor and limit to page; omit both to return every version. The returned content URLs identify exact versions; use artifact_open when the user needs an authorized browser URL.",
+        "List immutable saved versions of one artifact, newest first. Pass cursor and limit to page; omit both to return every version. By default only accepted history (mainline and promoted versions) is listed; pass filter \"candidates\" for open candidates awaiting review, or \"all\" to include rejected and superseded ones. The returned content URLs identify exact versions; use artifact_open when the user needs an authorized browser URL.",
       inputSchema: z.object({
         artifactId: artifactIdSchema,
         cursor: z.string().max(1_024).nullable().default(null),
+        filter: z.enum(["accepted", "candidates", "all"]).default("accepted"),
         limit: z.number().int().min(1).max(maximumListedArtifacts).nullable().default(null),
         projectId: optionalProjectIdSchema,
       }).strict(),
@@ -1149,6 +1154,7 @@ export function createArtifactMcpServer(
         artifactId: z.string(),
         nextCursor: z.string().nullable(),
         versions: z.array(z.object({
+          baseVersionId: z.string().nullable(),
           contentUrl: z.url(),
           createdAt: z.string(),
           entryPath: z.string(),
@@ -1156,11 +1162,12 @@ export function createArtifactMcpServer(
           manifestDigest: z.string(),
           number: z.number().int().positive(),
           publisherPrincipalId: z.string(),
+          state: versionStateSchema,
         }).strict()),
       }).strict(),
       annotations: readOnlyAnnotations,
     },
-    async ({artifactId, cursor, limit, projectId}) => toolResult(async () => {
+    async ({artifactId, cursor, filter, limit, projectId}) => toolResult(async () => {
       const decodedCursor = decodePageCursor(cursor);
       const result = await runMcpApplicationEffect(
         dependencies,
@@ -1168,6 +1175,7 @@ export function createArtifactMcpServer(
           management.listVersions({
             artifactId,
             cursor: decodedCursor,
+            filter,
             limit,
             principal: identity.principal,
             projectId,
@@ -1181,6 +1189,7 @@ export function createArtifactMcpServer(
         artifactId,
         nextCursor: encodePageCursor(page.nextCursor),
         versions: page.versions.map((version) => ({
+          baseVersionId: version.baseVersionId,
           contentUrl: versionBrowserUrl(
             applicationUrl,
             dependencies.contentDomain,
@@ -1192,6 +1201,7 @@ export function createArtifactMcpServer(
           manifestDigest: version.manifestDigest,
           number: version.number,
           publisherPrincipalId: version.publisherPrincipalId,
+          state: version.state,
         })),
       };
     }),
@@ -1431,7 +1441,7 @@ export function createArtifactMcpServer(
     {
       title: "Commit an uploaded version",
       description:
-        "After every upload-plan URL has received its exact file bytes, commit the upload as a new artifact or an optimistic new version. Returns a durable review URL for the exact version; give that URL to the user first. Retrying the same idempotency key and input returns the original result.",
+        "After every upload-plan URL has received its exact file bytes, commit the upload as a new artifact or an optimistic new version. Set stage to true on a new_version target to commit a candidate: it gets the next version number and a review URL but does not become current until a person promotes it in the web app. Returns a durable review URL for the exact version; give that URL to the user first. Retrying the same idempotency key and input returns the original result.",
       inputSchema: z.object({
         idempotencyKey: idempotencyKeySchema,
         projectId: optionalProjectIdSchema,
@@ -1448,6 +1458,7 @@ export function createArtifactMcpServer(
             artifactId: artifactIdSchema,
             expectedCurrentVersionId: expectedVersionSchema,
             kind: z.literal("new_version"),
+            stage: z.boolean().default(false),
           }).strict(),
         ]),
         uploadId: z.string().min(1).max(200),
@@ -1701,7 +1712,7 @@ export function createArtifactMcpServer(
     {
       title: "Restore a saved version",
       description:
-        "Make an existing immutable saved version current again. The saved version is not edited and no file bytes are copied.",
+        "Make an existing immutable saved version current again. The saved version is not edited and no file bytes are copied. Only accepted versions (mainline or promoted) can be restored; a candidate is promoted by a person, never restored.",
       inputSchema: z.object({
         artifactId: artifactIdSchema,
         expectedCurrentVersionId: expectedVersionSchema,
@@ -2358,7 +2369,7 @@ export function createArtifactMcpServer(
     const artifactNames = new Map(
       artifacts.map((artifact) => [artifact.id, artifact.name]),
     );
-    const versionNumbers = new Map<string, ReadonlyMap<string, number>>();
+    const versionNumbers = new Map<string, ReadonlyMap<string, VersionRecord>>();
     const items: BundleItem[] = [];
     const threads: {
       artifactId: string;
@@ -2382,6 +2393,8 @@ export function createArtifactMcpServer(
             management.listVersions({
               artifactId: thread.artifactId,
               cursor: null,
+              // Threads may sit on candidates, so every version is numbered.
+              filter: "all",
               limit: null,
               principal: identity.principal,
               projectId: dispatch.projectId,
@@ -2392,13 +2405,13 @@ export function createArtifactMcpServer(
           throw new Error("The version list response was not an array.");
         }
         numbers = new Map(
-          versions.map((version) => [version.id, version.number]),
+          versions.map((version) => [version.id, version]),
         );
         versionNumbers.set(thread.artifactId, numbers);
       }
       const anchor = mailboxAnchorSchema.safeParse(thread.anchor);
       const viewAnchor = bundleAnchorSchema.safeParse(thread.anchor);
-      items.push({
+      const item: BundleItem = {
         artifactName: artifactNames.get(thread.artifactId) ??
           thread.artifactId,
         body: bundleItemBody(thread.body, thread.author.principalKind),
@@ -2406,8 +2419,10 @@ export function createArtifactMcpServer(
         location: viewAnchor.success ? bundleLocationLine(viewAnchor.data.view) : null,
         quotedSelection: anchor.success ? anchor.data.originalText : null,
         threadId,
-        versionNumber: numbers.get(thread.versionId) ?? 0,
-      });
+        versionNumber: numbers.get(thread.versionId)?.number ?? 0,
+      };
+      const candidate = bundleCandidate(numbers, thread.versionId);
+      items.push(candidate === null ? item : {...item, candidate});
       threads.push({
         artifactId: thread.artifactId,
         path: thread.path === null ? null : sanitizeBundleText(thread.path),
@@ -2771,6 +2786,17 @@ function projectProjection(project: ProjectRecord) {
     id: project.id,
     name: project.name,
   };
+}
+
+/** Name a thread's candidate state and base for the bundle, or nothing for accepted history. */
+function bundleCandidate(
+  versions: ReadonlyMap<string, VersionRecord>,
+  versionId: string,
+): BundleCandidate | null {
+  const version = versions.get(versionId);
+  if (version === undefined || version.state === "mainline" || version.state === "promoted") return null;
+  const base = version.baseVersionId === null ? undefined : versions.get(version.baseVersionId);
+  return {baseVersionNumber: base?.number ?? null, state: version.state};
 }
 
 function publishedVersionProjection(

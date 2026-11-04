@@ -75,6 +75,8 @@ export interface PublishPreparedVersionCommand {
   readonly principal: Principal;
   readonly projectId: string;
   readonly source: PublicationSource;
+  /** Commit a candidate that does not move current (CND-001). */
+  readonly stage?: boolean;
 }
 
 type SourceReadinessFailure =
@@ -323,12 +325,14 @@ function makePublishArtifactService(
       {artifactId: current.artifact.id, projectId: command.projectId},
     );
     const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
+    const stage = command.stage === true;
     const inputDigest = artifactVersionInputDigest({
       artifactId: command.artifactId,
       expectedCurrentVersionId: command.expectedCurrentVersionId,
       manifest: command.manifest,
       principalId: command.principal.id,
       projectId: command.projectId,
+      stage,
     });
     const replayed = yield* dependencies.repository.findIdempotentPublication(
       command.projectId,
@@ -360,6 +364,7 @@ function makePublishArtifactService(
       actor: actorSnapshotOf(command.principal),
       authorizedByPrincipalId: command.principal.authorizedByPrincipalId,
       source: command.source,
+      stage,
       versionId: dependencies.ids.versionId(),
     });
     notifyPublished(dependencies, published, command.manifest);
@@ -388,6 +393,7 @@ interface ArtifactVersionDigestInput {
   readonly manifest: CanonicalManifest;
   readonly principalId: string;
   readonly projectId: string;
+  readonly stage: boolean;
 }
 
 function newArtifactInputDigest(input: NewArtifactDigestInput): string {
@@ -403,13 +409,17 @@ function newArtifactInputDigest(input: NewArtifactDigestInput): string {
 }
 
 function artifactVersionInputDigest(input: ArtifactVersionDigestInput): string {
-  const canonicalInput = JSON.stringify({
+  const identity = {
     artifactId: input.artifactId,
     expectedCurrentVersionId: input.expectedCurrentVersionId,
     manifestDigest: input.manifest.digest,
     principalId: input.principalId,
     projectId: input.projectId,
-  });
+  };
+  // The replay identity gains `stage` only when set, so an ordinary publish
+  // keeps its existing digest and a staged publish of the same bytes is a
+  // different operation.
+  const canonicalInput = JSON.stringify(input.stage ? {...identity, stage: true} : identity);
   return createHash("sha256").update(canonicalInput).digest("hex");
 }
 

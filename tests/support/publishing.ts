@@ -31,6 +31,9 @@ const publishResponseSchema = z.object({
     publisherPrincipalId: z.string(),
     projectId: z.string(),
     routingMode: z.enum(["static", "spa"]),
+    // Candidate versions (CND-001); optional so older hosted servers still parse.
+    baseVersionId: z.string().nullable().optional(),
+    state: z.enum(["mainline", "candidate", "promoted", "rejected", "superseded"]).optional(),
   }),
 });
 
@@ -250,6 +253,7 @@ const commitTargetSchema = z.discriminatedUnion("kind", [
     artifactId: z.string(),
     expectedCurrentVersionId: z.string(),
     kind: z.literal("new_version"),
+    stage: z.boolean().optional(),
   }),
 ]);
 

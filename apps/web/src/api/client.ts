@@ -344,6 +344,9 @@ const versionSchema = z.object({
   projectId: z.string(),
   publisherPrincipalId: z.string(),
   routingMode: z.enum(["static", "spa"]),
+  // Candidate versions (CND-001): absent on servers that predate them.
+  baseVersionId: z.string().nullable().default(null),
+  state: z.enum(["mainline", "candidate", "promoted", "rejected", "superseded"]).default("mainline"),
 });
 
 const manifestSchema = z.object({
@@ -483,6 +486,9 @@ export interface ArtifactDetails {
 
 export interface ArtifactAction {
   readonly action:
+    | "candidate_promote"
+    | "candidate_reject"
+    | "candidate_stage"
     | "capture"
     | "change_access"
     | "change_tags"
@@ -583,6 +589,9 @@ export type LinkedPublication = z.infer<typeof linkedPublicationSchema>;
 
 const actionSchema: z.ZodType<ArtifactAction> = z.object({
   action: z.enum([
+    "candidate_promote",
+    "candidate_reject",
+    "candidate_stage",
     "capture",
     "change_access",
     "change_tags",
@@ -1423,6 +1432,18 @@ export const api = {
       headers: mutationHeaders(idempotencyKey),
       method: "POST",
     },
+  ),
+  /** Make an open candidate current; the server refuses keys and agents (CND-004). */
+  promoteCandidate: (projectId: string, artifactId: string, versionId: string, idempotencyKey: string) => request(
+    artifactStateSchema,
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/promote?${projectQuery(projectId)}`,
+    {headers: mutationHeaders(idempotencyKey), method: "POST"},
+  ),
+  /** Close an open candidate without making it current; its bytes and comments are kept (CND-005). */
+  rejectCandidate: (projectId: string, artifactId: string, versionId: string, idempotencyKey: string) => request(
+    artifactStateSchema,
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions/${encodeURIComponent(versionId)}/reject?${projectQuery(projectId)}`,
+    {body: JSON.stringify({outcome: "rejected"}), headers: mutationHeaders(idempotencyKey), method: "POST"},
   ),
   changeAccess: (
     projectId: string,

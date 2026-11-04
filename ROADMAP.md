@@ -182,9 +182,11 @@ provenance contracts this depends on are done (DSN-007 … DSN-011). What remain
   of the same artifact that does not move current; promotion repoints current
   to that exact version. Candidates are not mirrored to Git, promotion requires
   current to still equal the candidate's base, only a human can promote, and
-  rejected candidates are kept but hidden. Next: add the proposed CND-001 …
-  CND-006 to the ledger with their tests, then implement across SQLite,
-  Postgres and D1 ([design](docs/superpowers/specs/2026-10-08-candidate-versions-design.md)).
+  rejected candidates are kept but hidden. CND-001 … CND-006 are implemented
+  across SQLite, Postgres and D1 with HTTP, MCP, CLI and a Review banner;
+  remaining proof is single_server and deployed Cloudflare runtime evidence
+  and a browser spec for the banner
+  ([design](docs/superpowers/specs/2026-10-08-candidate-versions-design.md)).
 
 - **Agent delivery.** Extend the existing
   [dispatch](project/spec/agent-dispatch-spec.md) and

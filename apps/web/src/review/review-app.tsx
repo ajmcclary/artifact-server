@@ -42,6 +42,7 @@ import {ReviewToolbar} from "./workspace/review-toolbar.tsx";
 import {exactReviewLink, SharePopover} from "./workspace/share-popover.tsx";
 import {useEffectiveAccess} from "./workspace/use-effective-access.ts";
 import {VersionsTab} from "./workspace/versions-tab.tsx";
+import {CandidateBanner} from "./workspace/candidate-banner.tsx";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useArtifactCatalog} from "./workspace/use-artifact-catalog.ts";
 import {useArtifactActivity, useVersionComparison} from "./workspace/use-artifact-history.ts";
@@ -752,6 +753,28 @@ function ProjectReview({
       return false;
     }
   };
+  const [candidatePending, setCandidatePending] = useState(false);
+  const decideCandidate = async (action: "promote" | "reject"): Promise<void> => {
+    if (details === null || selectedVersion === null) return;
+    setCandidatePending(true);
+    setDetailError(null);
+    try {
+      const decide = action === "promote" ? api.promoteCandidate : api.rejectCandidate;
+      const decided = await decide(
+        details.artifact.projectId,
+        details.artifact.id,
+        selectedVersion.version.id,
+        crypto.randomUUID(),
+      );
+      updateArtifact(decided.artifact);
+      await record.reload();
+      setSelectedVersionId(action === "promote" ? decided.version.id : decided.artifact.currentVersionId);
+    } catch (caught) {
+      setDetailError(caught instanceof Error ? caught : new Error("The candidate decision failed."));
+    } finally {
+      setCandidatePending(false);
+    }
+  };
   const captureLinkedArtifact = async (): Promise<void> => {
     if (details === null) return;
     setDetailLoading(true);
@@ -1345,6 +1368,19 @@ function ProjectReview({
                 />
               )}
               <div ref={canvasSlotRef} style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
+                {selectedVersion?.version.state === "candidate" && details !== null ? (
+                  <CandidateBanner
+                    baseVersionNumber={versions.find(({version}) => version.id === selectedVersion.version.baseVersionId)
+                      ?.version.number ?? null}
+                    canPromote={canManageArtifacts && session.principal.kind === "human" &&
+                      session.principal.authorizedByPrincipalId === null}
+                    canReject={canManageArtifacts}
+                    onPromote={() => void decideCandidate("promote")}
+                    onReject={() => void decideCandidate("reject")}
+                    pending={candidatePending}
+                    stale={details.artifact.currentVersionId !== selectedVersion.version.baseVersionId}
+                  />
+                ) : null}
                 <PreviewCanvas
                   accessSetting={details?.artifact.accessSetting ?? "account_required"}
                   annotateModeActive={htmlAnnotateModeActive}

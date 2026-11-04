@@ -1574,6 +1574,7 @@ describe("modern MCP HTTP", () => {
       artifactId: z.string(),
       nextCursor: z.string().nullable(),
       versions: z.array(z.object({
+        baseVersionId: z.null(),
         contentUrl: z.url(),
         createdAt: z.string(),
         entryPath: z.string(),
@@ -1581,6 +1582,7 @@ describe("modern MCP HTTP", () => {
         manifestDigest: z.string(),
         number: z.number().int().positive(),
         publisherPrincipalId: z.string(),
+        state: z.literal("mainline"),
       }).strict()),
     }).strict();
 

@@ -187,6 +187,7 @@ describe("publication preparation", () => {
     const versions = await repository.listArtifactVersions(
       upload.projectId,
       committed.artifact.id,
+      "accepted",
     );
     expect(versions).toHaveLength(1);
 
