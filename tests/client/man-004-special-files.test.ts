@@ -62,7 +62,10 @@ describe("publishing accepts only regular files and directories", () => {
   beforeAll(async () => {
     installation = await createTestInstallation();
     server = await startTestServer(installation);
-    fixtures = await mkdtemp(path.join(tmpdir(), "man-004-special-files-"));
+    // Unix socket paths are capped at 104 bytes on macOS, and its per-user
+    // tmpdir() (/var/folders/…) leaves too little room for the nested socket.
+    const fixtureRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
+    fixtures = await mkdtemp(path.join(fixtureRoot, "man-004-"));
   });
 
   afterAll(async () => {

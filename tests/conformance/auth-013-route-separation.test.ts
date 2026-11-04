@@ -183,7 +183,7 @@ describe("application and content routes stay on separate origins", () => {
     };
     const contentOrigin = new URL(published.body.links.version).origin;
 
-    const observed = await Promise.all(routes.map(async (route) => {
+    const probe = async (route: ApplicationRoute) => {
       const target = new URL(concretePath(route.path, identities), contentOrigin);
       const response = await fetchVersion(
         server,
@@ -201,7 +201,14 @@ describe("application and content routes stay on separate origins", () => {
         status: response.status,
         wwwAuthenticate: response.headers.get("www-authenticate"),
       };
-    }));
+    };
+    // Probe one route at a time: over a hundred simultaneous connections
+    // overflow macOS's default listen backlog (128) and come back as ECONNRESET.
+    const observed: Awaited<ReturnType<typeof probe>>[] = [];
+    for (const route of routes) {
+      // eslint-disable-next-line no-await-in-loop
+      observed.push(await probe(route));
+    }
     // A content host serves only manifest entries for GET and HEAD, so an
     // application path is absent from the version (except the entry document
     // at "/"), and every other method is refused with 405.
