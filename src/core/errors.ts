@@ -10,6 +10,8 @@ export const errorCodes = {
   guestSessionRequired: "GUEST_SESSION_REQUIRED",
   guestVersionChanged: "GUEST_VERSION_CHANGED",
   agentNotFound: "AGENT_NOT_FOUND",
+  candidateNotOpen: "CANDIDATE_NOT_OPEN",
+  candidateStale: "CANDIDATE_STALE",
   artifactNotFound: "ARTIFACT_NOT_FOUND",
   artifactMutationConflict: "ARTIFACT_MUTATION_CONFLICT",
   authorizationDenied: "AUTHORIZATION_DENIED",
@@ -59,6 +61,7 @@ export const errorCodes = {
   uploadInterrupted: "UPLOAD_INTERRUPTED",
   uploadNotFound: "UPLOAD_NOT_FOUND",
   versionNotFound: "VERSION_NOT_FOUND",
+  versionNotRestorable: "VERSION_NOT_RESTORABLE",
 } as const;
 
 /** One stable error code exposed by an Artifact Server protocol. */
@@ -383,6 +386,24 @@ export class PublishConflict extends Schema.TaggedError<PublishConflict>()(
   messageField,
 ) {}
 
+/** Current moved past a candidate's base, so promoting it would discard accepted work (CND-003). */
+export class CandidateStale extends Schema.TaggedError<CandidateStale>()(
+  "CandidateStale",
+  messageField,
+) {}
+
+/** The version is not an open candidate: it is mainline, promoted, rejected, or superseded. */
+export class CandidateNotOpen extends Schema.TaggedError<CandidateNotOpen>()(
+  "CandidateNotOpen",
+  messageField,
+) {}
+
+/** Restore targets accepted history only; a candidate is promoted, never restored (CND-005). */
+export class VersionNotRestorable extends Schema.TaggedError<VersionNotRestorable>()(
+  "VersionNotRestorable",
+  messageField,
+) {}
+
 /** The requested staged upload has already committed. */
 export class UploadClosed extends Schema.TaggedError<UploadClosed>()(
   "UploadClosed",
@@ -564,6 +585,8 @@ export class ArtifactRepositoryFailure extends Schema.TaggedError<ArtifactReposi
       "removeExpiredStagedFile",
       "removeExpiredStagedUpload",
       "restoreVersion",
+      "promoteCandidate",
+      "closeCandidate",
       "summarizeActivity",
       "updateCommentReply",
       "updateCommentThread",
@@ -688,6 +711,9 @@ const artifactServerFailureSchema = Schema.Union([
   UploadedFileMismatch,
   IdempotencyConflict,
   PublishConflict,
+  CandidateStale,
+  CandidateNotOpen,
+  VersionNotRestorable,
   ProjectArchived,
   ProjectConflict,
   ProjectNotFound,

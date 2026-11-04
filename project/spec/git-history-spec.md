@@ -17,13 +17,15 @@ enable one project after reviewing an on-demand planning estimate. There is no
 installation policy, inheritance, or mode that automatically enables future
 projects. Only explicitly enabled projects are copied.
 
-For an enabled project, every saved version of every artifact is
-asynchronously copied into a private Git repository — one repository per
+For an enabled project, every accepted version (mainline or promoted) of every
+artifact is asynchronously copied into a private Git repository — one repository per
 artifact — that a member can clone with a short-lived read token. Enabling a
 project with existing versions schedules a bounded, resumable backfill of its
 prior versions, oldest first per artifact, so a clone never silently presents
 a forward-only history. Repositories are created lazily by their first history
 job; selecting a provider or enabling an empty project creates none.
+Candidate versions are never copied: a candidate is copied when it is promoted,
+and a rejected or superseded candidate never is (CND-006).
 
 Git here is a **mirror, never truth**. The authoritative database and blob store remain the only source of publication, currency, comparison, and delivery; Git receives a private copy only after the primary version is durable, and a Git failure of any kind changes nothing but history status (`GIT-002`, `GIT-003`). Comparisons continue to use primary version manifests, never Git. History disabled is a first-class state on every deployment: the product starts, publishes, opens, and compares identically with the feature off, and the off state adds no Git dependency of any kind (`GIT-001`).
 
@@ -108,7 +110,7 @@ a Cloudflare repository limit.
 
 ### Commit identity
 
-- **Parent:** the mapped commit of the artifact's previous version (the first version has no parent). Versions are serialized per artifact by the existing `expectedCurrentVersionId` discipline, so the parent is always known.
+- **Parent:** the mapped commit of the artifact's previous mainline-or-promoted version, the highest-numbered accepted version below this one (the first version has no parent). Candidates share the artifact's number sequence, so a rejected or still-open candidate leaves a gap that the parent rule skips and never becomes an ancestor on `main` (CND-006). Accepted versions are serialized per artifact by the existing `expectedCurrentVersionId` discipline, and promotion requires current to equal the candidate's base, so accepted numbers only increase and the parent is always known.
 - **Author and committer:** one fixed deterministic identity ("Artifact Server"); the publishing principal is recorded in `version.json`, not in Git author fields.
 - **Timestamps:** the version's `createdAt` for both author and committer dates.
 - **Message:** a fixed template over Artifact Server identifiers only (version number and version ID).

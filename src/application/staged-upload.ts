@@ -138,6 +138,8 @@ export type CommitStagedUploadTarget =
     readonly artifactId: string;
     readonly expectedCurrentVersionId: string;
     readonly kind: "new_version";
+    /** Commit a candidate that does not move current (CND-001). */
+    readonly stage?: boolean;
   };
 
 /** Input for committing a complete staged upload. */
@@ -814,6 +816,7 @@ function makeStagedUploadService(
             principal: command.principal,
             projectId: project.id,
             source,
+            stage: command.target.stage === true,
             }));
           return {kind: "committed" as const, publication};
         }

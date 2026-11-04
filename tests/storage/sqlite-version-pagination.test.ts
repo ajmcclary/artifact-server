@@ -166,6 +166,7 @@ describe("sqlite version pagination", () => {
       artifactId,
       null,
       1,
+      "accepted",
     );
     expect(page1.items.map((version) => version.id)).toEqual([expectedIds[0]]);
     expect(page1.nextCursor).not.toBeNull();
@@ -175,6 +176,7 @@ describe("sqlite version pagination", () => {
       artifactId,
       page1.nextCursor,
       1,
+      "accepted",
     );
     expect(page2.items.map((version) => version.id)).toEqual([expectedIds[1]]);
     expect(page2.nextCursor).not.toBeNull();
@@ -184,6 +186,7 @@ describe("sqlite version pagination", () => {
       artifactId,
       page2.nextCursor,
       1,
+      "accepted",
     );
     expect(page3.items.map((version) => version.id)).toEqual([expectedIds[2]]);
     expect(page3.nextCursor).toBeNull();
@@ -201,6 +204,7 @@ describe("sqlite version pagination", () => {
       artifactId,
       {createdAt: "2026-09-19T00:00:00.000Z", id: "zzzzzzzz"},
       1,
+      "accepted",
     );
     expect(emptyPage.items).toHaveLength(0);
     expect(emptyPage.nextCursor).toBeNull();
@@ -213,6 +217,7 @@ describe("sqlite version pagination", () => {
       "art_missing",
       null,
       1,
+      "accepted",
     );
     expect(page.items).toHaveLength(0);
     expect(page.nextCursor).toBeNull();

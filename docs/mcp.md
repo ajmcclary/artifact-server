@@ -90,6 +90,14 @@ callers that expect the full list. Passing `limit` pages newest-first; each page
 includes a `nextCursor` for the following page, or `null` on the final page.
 Pages are read with a bounded keyset query at the store boundary, so mid-traversal
 publications do not duplicate or omit the original set.
+
+By default `artifact_version_list` lists accepted history only: mainline and
+promoted versions. Pass `filter: "candidates"` for open candidates or
+`filter: "all"` to include rejected and superseded ones; each version carries
+its `state` and `baseVersionId`. An agent stages a candidate by committing a
+`new_version` target with `stage: true`: the version is saved and reviewable by
+its exact link, but current does not move. There is no MCP promotion tool, and
+`artifact_restore_version` refuses candidates; a person promotes in Review.
 Modern stateless MCP HTTP and legacy compatibility are both supported.
 Subscriptions remain unavailable until a shared event service has its own
 replay, authorization, and recovery proof.

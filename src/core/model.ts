@@ -11,6 +11,9 @@ export type AccessSetting = (typeof accessSettings)[keyof typeof accessSettings]
 
 /** Artifact mutation kinds persisted in the standalone action history. */
 export const artifactActionKinds = {
+  candidatePromote: "candidate_promote",
+  candidateReject: "candidate_reject",
+  candidateStage: "candidate_stage",
   capture: "capture",
   changeAccess: "change_access",
   changeTags: "change_tags",
@@ -44,6 +47,9 @@ export type ArtifactActionKind =
  * kinds duplicate `change_access` for the activity feed and stay out of it.
  */
 export const artifactHistoryActionKinds: readonly ArtifactActionKind[] = [
+  artifactActionKinds.candidatePromote,
+  artifactActionKinds.candidateReject,
+  artifactActionKinds.candidateStage,
   artifactActionKinds.capture,
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
@@ -296,8 +302,43 @@ export interface CanonicalManifest {
   readonly serialized: string;
 }
 
+/**
+ * Lifecycle of one immutable version (CND-001..CND-006). Only `mainline` and
+ * `promoted` versions are accepted history: they can be current, are listed by
+ * default, are restorable, and are mirrored to Git.
+ */
+export const versionStates = {
+  candidate: "candidate",
+  mainline: "mainline",
+  promoted: "promoted",
+  rejected: "rejected",
+  superseded: "superseded",
+} as const;
+
+/** One version lifecycle state. */
+export type VersionState = (typeof versionStates)[keyof typeof versionStates];
+
+/** States that belong to an artifact's accepted history. */
+export const acceptedVersionStates: readonly VersionState[] = [
+  versionStates.mainline,
+  versionStates.promoted,
+];
+
+/** Terminal states a reviewer may close an open candidate with. */
+export type CandidateClosure = typeof versionStates.rejected | typeof versionStates.superseded;
+
+/** Which versions a version listing returns. */
+export type VersionListFilter = "accepted" | "all" | "candidates";
+
+/** Whether a version is part of the artifact's accepted history. */
+export function isAcceptedVersionState(state: VersionState): boolean {
+  return acceptedVersionStates.includes(state);
+}
+
 export interface VersionRecord {
   readonly artifactId: string;
+  /** The version that was current when a candidate was staged; null for mainline. */
+  readonly baseVersionId: string | null;
   readonly contentToken: string;
   readonly createdAt: string;
   readonly entryPath: string;
@@ -307,6 +348,7 @@ export interface VersionRecord {
   readonly publisherPrincipalId: string;
   readonly projectId: string;
   readonly routingMode: RoutingMode;
+  readonly state: VersionState;
 }
 
 /** One saved version together with the canonical manifest it references. */

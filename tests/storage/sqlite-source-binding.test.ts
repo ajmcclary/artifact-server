@@ -81,7 +81,7 @@ describe("sqlite source bindings", () => {
     expect(observed.freshness).toBe("modified");
     expect(observed.fingerprint).toBe(firstFingerprint);
     expect(observed.lastVerifiedAt).toBe("2026-08-19T01:00:00.000Z");
-    expect(await repository.listArtifactVersions(defaultProjectId, linkedArtifactId))
+    expect(await repository.listArtifactVersions(defaultProjectId, linkedArtifactId, "accepted"))
       .toHaveLength(1);
     expect(await actionKinds(repository, linkedArtifactId)).toEqual(["link"]);
   });
@@ -103,6 +103,7 @@ describe("sqlite source bindings", () => {
     const versions = await repository.listArtifactVersions(
       defaultProjectId,
       linkedArtifactId,
+      "accepted",
     );
     expect(versions.map((version) => version.number)).toEqual([2, 1]);
     expect(await repository.findSourceBinding(defaultProjectId, linkedArtifactId))
@@ -132,6 +133,7 @@ describe("sqlite source bindings", () => {
     const versions = await repository.listArtifactVersions(
       defaultProjectId,
       linkedArtifactId,
+      "accepted",
     );
     expect(versions.map((version) => version.number)).toEqual([2, 1]);
     const artifact = await repository.findArtifact(
@@ -177,7 +179,7 @@ describe("sqlite source bindings", () => {
       uploadId: "upl_capture_plain",
     })).rejects.toMatchObject({_tag: "ArtifactNotFound"});
 
-    expect(await repository.listArtifactVersions(defaultProjectId, plainArtifactId))
+    expect(await repository.listArtifactVersions(defaultProjectId, plainArtifactId, "accepted"))
       .toHaveLength(1);
     expect(await actionKinds(repository, plainArtifactId)).toEqual(["publish"]);
   });

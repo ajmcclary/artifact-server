@@ -4,6 +4,7 @@ import type {PublicLinkInventoryPage} from "../application/public-link-administr
 import {
   accessSettings,
   routingModes,
+  versionStates,
   type ArtifactRecord,
 } from "../core/model.js";
 
@@ -17,6 +18,7 @@ export const publicLinkInventoryRowSchema = z.object({
   artifactDeletedAt: z.string().nullable(),
   artifactId: z.string(),
   artifactName: z.string(),
+  baseVersionId: z.string().nullable(),
   contentToken: z.string(),
   currentVersionId: z.string(),
   entryPath: z.string(),
@@ -33,6 +35,7 @@ export const publicLinkInventoryRowSchema = z.object({
   versionCreatedAt: z.string(),
   versionId: z.string(),
   versionNumber: z.coerce.number().int().positive(),
+  versionState: z.enum(versionStates),
 });
 
 /** Projects validated inventory rows onto existing artifact, version, and project views. */
@@ -52,6 +55,7 @@ export function publicLinkPageFromRows(
       artifact,
       currentVersion: {
         artifactId: row.artifactId,
+        baseVersionId: row.baseVersionId,
         contentToken: row.contentToken,
         createdAt: row.versionCreatedAt,
         entryPath: row.entryPath,
@@ -61,6 +65,7 @@ export function publicLinkPageFromRows(
         projectId: row.projectId,
         publisherPrincipalId: row.publisherPrincipalId,
         routingMode: row.routingMode,
+        state: row.versionState,
       },
       madePublicAt: row.madePublicAt,
       madePublicByName: row.madePublicByName,

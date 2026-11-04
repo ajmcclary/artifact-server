@@ -167,7 +167,8 @@ namespace empty ([report](project/evidence/cloudflare-artifacts-node-postgres-qu
 - **T03 remaining:** live D1 multi-worker proof on a deployed Worker, controlled
   repeated live backlog measurements, the Workers-binding path on this account,
   and deployment-specific production evidence. The Workers-binding path needs
-  Wrangler ≥ 4.145.0; `deploy/cloudflare` pins 4.123.0. Keep the Node REST/Git
+  Wrangler ≥ 4.145.0; `deploy/cloudflare` now pins 4.151.3, so the tooling
+  prerequisite is met but nothing has run live on it yet. Keep the Node REST/Git
   and Workers-binding/D1 results separate.
 
 ## Review-to-change workflow
@@ -182,9 +183,11 @@ provenance contracts this depends on are done (DSN-007 … DSN-011). What remain
   of the same artifact that does not move current; promotion repoints current
   to that exact version. Candidates are not mirrored to Git, promotion requires
   current to still equal the candidate's base, only a human can promote, and
-  rejected candidates are kept but hidden. Next: add the proposed CND-001 …
-  CND-006 to the ledger with their tests, then implement across SQLite,
-  Postgres and D1 ([design](docs/superpowers/specs/2026-10-08-candidate-versions-design.md)).
+  rejected candidates are kept but hidden. CND-001 … CND-006 are implemented
+  across SQLite, Postgres and D1 with HTTP, MCP, CLI and a Review banner;
+  remaining proof is single_server and deployed Cloudflare runtime evidence
+  and a browser spec for the banner
+  ([design](docs/superpowers/specs/2026-10-08-candidate-versions-design.md)).
 
 - **Agent delivery.** Extend the existing
   [dispatch](project/spec/agent-dispatch-spec.md) and
@@ -237,8 +240,10 @@ views/SDK) are done.
 - **Deferred.** Cross-artifact shared-asset deduplication waits until
   measurements show per-artifact DS copies still cost enough. A digest is not an
   access grant.
-- **Design-side cleanups.** The DS generator still has `minify: false` (1.74 →
-  1.01 MB in an experiment). NYCourts' `AGENTS.md` says Design's publish groups
+- **Design-side cleanups.** The DS generator's minification is in review in
+  [ajmcclary/Design#1](https://github.com/ajmcclary/Design/pull/1)
+  (`ds-bundle.js` 1.81 → 1.12 MB with names kept); its gallery thumbnails need
+  recapturing on the owner's machine after it merges. NYCourts' `AGENTS.md` says Design's publish groups
   include `court-of-claims`; that is stale, so correct it separately. NY Courts
   has no preview index, so it still needs its fragment routes registered as views.
 

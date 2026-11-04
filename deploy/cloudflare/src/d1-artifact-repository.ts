@@ -1,6 +1,10 @@
 import {principalKindFromStorage, storedPrincipalKind, storedPrincipalKindOrNull} from "../../../src/core/identity.js";
 import {artifactIdsJson} from "../../../src/storage/access-rows.js";
 import {committedStagingCleanupRepository} from "../../../src/storage/committed-staging-cleanup.js";
+import {
+  acceptedVersionSql,
+  versionListFilterSql,
+} from "../../../src/storage/version-state-sql.js";
 import {z} from "zod";
 
 import type {
@@ -11,6 +15,8 @@ import {
   AgentDispatchNotFound,
   ArtifactMutationConflict,
   ArtifactNotFound,
+  CandidateNotOpen,
+  CandidateStale,
   CommentNotFound,
   CommentResolved,
   DispatchStateConflict,
@@ -26,6 +32,7 @@ import {
   UploadIncomplete,
   UploadNotFound,
   VersionNotFound,
+  VersionNotRestorable,
 } from "../../../src/core/errors.js";
 import {principalKinds} from "../../../src/core/identity.js";
 import {UploadPreparationLeaseLost} from "../../../src/core/upload-preparation.js";
@@ -80,6 +87,9 @@ import {
   type StagedUploadFile,
   type VersionContent,
   type VersionRecord,
+  type VersionListFilter,
+  isAcceptedVersionState,
+  versionStates,
   type AccessSetting,
   type ActorSnapshot,
   type ArtifactActionKind,
@@ -99,7 +109,9 @@ import type {
   RenameArtifact,
   ClearCommentThreads,
   CommentRepository,
+  CloseCandidateVersion,
   CommitArtifactVersion,
+  PromoteCandidateVersion,
   CommitNewArtifact,
   ContentSessionRepository,
   CreateAgentDispatch,
@@ -208,6 +220,9 @@ const preparationStateSchema = z.enum([
   preparationStates.prepared,
 ]);
 const actionSchema = z.enum([
+  artifactActionKinds.candidatePromote,
+  artifactActionKinds.candidateReject,
+  artifactActionKinds.candidateStage,
   artifactActionKinds.changeAccess,
   artifactActionKinds.changeTags,
   artifactActionKinds.rename,
@@ -221,6 +236,9 @@ const actionSchema = z.enum([
   artifactActionKinds.publish,
   artifactActionKinds.restore,
 ]);
+/** Idempotency operations: publication and management kinds plus the candidate decisions. */
+const idempotencyOperationSchema = z.enum([...actionSchema.options, "promote", "reject"]);
+type IdempotencyOperation = z.infer<typeof idempotencyOperationSchema>;
 const projectRowSchema = z.object({
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -344,6 +362,7 @@ const artifactListRowSchema = artifactRowSchema.extend({
 const tagRowSchema = z.object({artifactId: z.string(), tag: z.string()});
 const versionRowSchema = z.object({
   artifactId: z.string(),
+  baseVersionId: z.string().nullable(),
   contentToken: z.string(),
   createdAt: z.string(),
   entryPath: z.string(),
@@ -353,6 +372,7 @@ const versionRowSchema = z.object({
   projectId: z.string(),
   publisherPrincipalId: z.string(),
   routingMode: routingModeSchema,
+  state: z.enum(versionStates),
 });
 const entryRowSchema = z.object({
   disposition: dispositionSchema,
@@ -365,7 +385,7 @@ const idempotencyRowSchema = z.object({
   accessSetting: accessSettingSchema.nullable(),
   artifactId: z.string(),
   inputDigest: z.string(),
-  operation: actionSchema,
+  operation: idempotencyOperationSchema,
   tagsJson: z.string().nullable(),
   versionId: z.string(),
 });
@@ -588,7 +608,8 @@ const versionSelect = `
   SELECT id, project_id AS projectId, artifact_id AS artifactId, number,
     manifest_digest AS manifestDigest, entry_path AS entryPath,
     routing_mode AS routingMode, content_token AS contentToken,
-    publisher_principal_id AS publisherPrincipalId, created_at AS createdAt
+    publisher_principal_id AS publisherPrincipalId, created_at AS createdAt,
+    state, base_version_id AS baseVersionId
   FROM versions
 `;
 const commentThreadSelect = `
@@ -1097,7 +1118,7 @@ export function createD1ArtifactRepository(
       readonly projectId: string;
     },
     versionId: string,
-    operation: ArtifactActionRecord["action"],
+    operation: IdempotencyOperation,
     accessSetting: ArtifactRecord["accessSetting"] | null = null,
     tagsJson: string | null = null,
   ) => database.prepare(`
@@ -1129,6 +1150,7 @@ export function createD1ArtifactRepository(
   ];
   const publicationGuardStatements = (
     command: CommitNewArtifact | CommitArtifactVersion,
+    currentVersionId: string = command.versionId,
   ): readonly D1PreparedStatement[] => mutationGuardStatements(
     `publish:${command.projectId}:${command.idempotencyKey}`,
     `SELECT 1 FROM artifacts a JOIN staged_uploads u ON u.id = ?
@@ -1145,7 +1167,7 @@ export function createD1ArtifactRepository(
       command.idempotencyKey,
       command.projectId,
       command.artifactId,
-      command.versionId,
+      currentVersionId,
       command.source.projectId,
       command.source.principalId,
       command.versionId,
@@ -1190,12 +1212,14 @@ export function createD1ArtifactRepository(
   const versionStatements = (
     command: CommitNewArtifact | CommitArtifactVersion,
     versionNumber: number,
+    baseVersionId: string | null = null,
   ): readonly D1PreparedStatement[] => [
     database.prepare(`
       INSERT INTO versions (
         id, project_id, artifact_id, number, manifest_digest, entry_path,
-        routing_mode, content_token, publisher_principal_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        routing_mode, content_token, publisher_principal_id, created_at,
+        state, base_version_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       command.versionId,
       command.projectId,
@@ -1207,6 +1231,8 @@ export function createD1ArtifactRepository(
       command.contentToken,
       command.principalId,
       command.createdAt,
+      baseVersionId === null ? versionStates.mainline : versionStates.candidate,
+      baseVersionId,
     ),
     database.prepare(`
       INSERT INTO manifest_entries (
@@ -1256,7 +1282,7 @@ export function createD1ArtifactRepository(
   const managementReplay = async (
     command: {readonly idempotencyKey: string; readonly inputDigest: string; readonly projectId: string},
     operation: typeof artifactActionKinds.rename | typeof artifactActionKinds.changeAccess | typeof artifactActionKinds.changeTags |
-      typeof artifactActionKinds.restore,
+      typeof artifactActionKinds.restore | "promote",
   ): Promise<ArtifactState | null> => {
     const record = await readIdempotency(command.projectId, command.idempotencyKey);
     if (record === null) return null;
@@ -1274,6 +1300,41 @@ export function createD1ArtifactRepository(
       record.accessSetting ?? undefined,
       tags,
     );
+  };
+  const readOpenCandidate = async (
+    command: PromoteCandidateVersion,
+  ): Promise<VersionRecord & {readonly baseVersionId: string}> => {
+    const version = await readVersionOrNull(command.projectId, command.versionId, command.artifactId);
+    if (version === null) {
+      throw new VersionNotFound({message: "The saved version does not exist on this artifact."});
+    }
+    if (version.state !== versionStates.candidate || version.baseVersionId === null) {
+      throw new CandidateNotOpen({
+        message: `Version ${version.number} is ${version.state}, not an open candidate.`,
+      });
+    }
+    return {...version, baseVersionId: version.baseVersionId};
+  };
+  const candidateState = async (
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+    replayed: boolean,
+  ): Promise<ArtifactState> => {
+    const artifact = await readArtifact(projectId, artifactId);
+    const version = await readVersionOrNull(projectId, versionId, artifactId);
+    if (version === null) throw new Error(`Candidate state references missing version ${versionId}.`);
+    return {artifact, replayed, version};
+  };
+  const candidateClosureReplay = async (
+    command: CloseCandidateVersion,
+  ): Promise<ArtifactState | null> => {
+    const record = await readIdempotency(command.projectId, command.idempotencyKey);
+    if (record === null) return null;
+    if (record.inputDigest !== command.inputDigest || record.operation !== "reject") {
+      throw new IdempotencyConflict({message: "The idempotency key was already used with different input."});
+    }
+    return candidateState(command.projectId, record.artifactId, record.versionId, true);
   };
   const applyManagementMutation = async (
     command: {
@@ -1771,6 +1832,7 @@ export function createD1ArtifactRepository(
               AND mapping.version_id = version.id
               AND mapping.status = 'recorded'
             WHERE version.project_id = ? AND artifact.deleted_at IS NULL
+              AND ${acceptedVersionSql("version")}
           ) AS mappedVersions,
           (SELECT COUNT(*)
             FROM versions version
@@ -1785,6 +1847,7 @@ export function createD1ArtifactRepository(
               AND mapping.status = 'recorded'
             WHERE version.project_id = ? AND artifact.deleted_at IS NULL
               AND mapping.version_id IS NULL
+              AND ${acceptedVersionSql("version")}
           ) AS unmappedVersions,
           (SELECT COUNT(*) FROM git_history_jobs
             WHERE installation_id = ? AND project_id = ?
@@ -1819,6 +1882,7 @@ export function createD1ArtifactRepository(
           WHERE version.project_id = ?
             AND artifact.project_id = ?
             AND artifact.deleted_at IS NULL
+            AND ${acceptedVersionSql("version")}
         ), version_totals AS (
           SELECT active.id,
             COALESCE(SUM(entry.size), 0) AS totalBytes,
@@ -1935,6 +1999,7 @@ export function createD1ArtifactRepository(
             ON queued.installation_id = setting.installation_id
             AND queued.version_id = version.id
           WHERE artifact.deleted_at IS NULL AND mapping.version_id IS NULL
+            AND ${acceptedVersionSql("version")}
         ) candidate
         WHERE candidate.artifactRank = 1 AND candidate.existingJobId IS NULL
         ORDER BY candidate.createdAt, candidate.versionId LIMIT 32
@@ -1979,6 +2044,7 @@ export function createD1ArtifactRepository(
           WHERE job.installation_id = ? AND job.state = 'queued'
             AND job.available_at <= ?
             AND (job.kind = 'delete-repository' OR setting.enabled = 1)
+            AND (job.kind = 'delete-repository' OR ${acceptedVersionSql("version")})
             AND NOT EXISTS (
               SELECT 1 FROM git_history_jobs claimed
               WHERE claimed.installation_id = job.installation_id
@@ -1996,6 +2062,7 @@ export function createD1ArtifactRepository(
               WHERE predecessor.project_id = job.project_id
                 AND predecessor.artifact_id = job.artifact_id
                 AND predecessor.number < version.number
+                AND ${acceptedVersionSql("predecessor")}
                 AND mapped.version_id IS NULL
             ))
           ORDER BY job.created_at, version.number, job.id LIMIT 1
@@ -2102,7 +2169,7 @@ export function createD1ArtifactRepository(
     findGitHistoryPredecessorMapping: async (
       projectId,
       artifactId,
-      versionNumber,
+      beforeVersionNumber,
     ) => {
       const row = await database.prepare(`
         SELECT mapping.project_id AS projectId,
@@ -2119,8 +2186,14 @@ export function createD1ArtifactRepository(
           AND mapping.version_id = version.id
           AND mapping.status = 'recorded'
         WHERE version.project_id = ? AND version.artifact_id = ?
-          AND version.number = ?
-      `).bind(installationId, projectId, artifactId, versionNumber).first();
+          AND version.number = (
+            SELECT MAX(previous.number) FROM versions previous
+            WHERE previous.project_id = version.project_id
+              AND previous.artifact_id = version.artifact_id
+              AND previous.number < ?
+              AND ${acceptedVersionSql("previous")}
+          )
+      `).bind(installationId, projectId, artifactId, beforeVersionNumber).first();
       return gitHistoryMappingRowSchema.nullable().parse(row);
     },
     reserveGitHistoryBudget: async (
@@ -2961,9 +3034,12 @@ export function createD1ArtifactRepository(
         FROM versions WHERE project_id = ? AND artifact_id = ?
       `).bind(command.projectId, command.artifactId).first<number>("nextNumber");
       if (nextNumber === null) throw new Error("D1 did not calculate the next version number.");
+      // A candidate leaves current where it is (CND-001); the publication guard
+      // still requires current to equal the base when the batch commits.
+      const staged = command.stage === true;
       try {
         await database.batch([
-          database.prepare(`
+          ...(staged ? [] : [database.prepare(`
             UPDATE artifacts SET current_version_id = ?
             WHERE project_id = ? AND id = ? AND current_version_id = ? AND deleted_at IS NULL
           `).bind(
@@ -2971,9 +3047,13 @@ export function createD1ArtifactRepository(
             command.projectId,
             command.artifactId,
             command.expectedCurrentVersionId,
+          )]),
+          ...versionStatements(command, nextNumber, staged ? command.expectedCurrentVersionId : null),
+          artifactAction(
+            command,
+            command.versionId,
+            staged ? artifactActionKinds.candidateStage : artifactActionKinds.publish,
           ),
-          ...versionStatements(command, nextNumber),
-          artifactAction(command, command.versionId, artifactActionKinds.publish),
           idempotencyStatement(command, command.versionId, artifactActionKinds.publish),
           database.prepare(`
             UPDATE staged_uploads SET status = 'committed', committed_version_id = ?
@@ -2984,13 +3064,17 @@ export function createD1ArtifactRepository(
             command.source.uploadId,
             command.source.principalId,
           ),
-          mirrorJobStatement(
+          // Candidates are never mirrored (CND-006); promotion queues the job.
+          ...(staged ? [] : [mirrorJobStatement(
             command.projectId,
             command.artifactId,
             command.versionId,
             command.createdAt,
+          )]),
+          ...publicationGuardStatements(
+            command,
+            staged ? command.expectedCurrentVersionId : command.versionId,
           ),
-          ...publicationGuardStatements(command),
         ]);
       } catch (cause) {
         const raced = await findIdempotentPublication(
@@ -3005,6 +3089,111 @@ export function createD1ArtifactRepository(
         throw cause;
       }
       return readPublishedVersion(command.projectId, command.versionId, false);
+    },
+    promoteCandidate: async (command: PromoteCandidateVersion) => {
+      const replay = await managementReplay(command, "promote");
+      if (replay !== null) return replay;
+      const artifact = await readArtifact(command.projectId, command.artifactId);
+      const candidate = await readOpenCandidate(command);
+      if (artifact.currentVersionId !== candidate.baseVersionId) {
+        throw candidateStale(candidate.number);
+      }
+      try {
+        await database.batch([
+          // The state moves first so the accepted-current trigger admits the
+          // repoint; both writes re-check the base and abort the batch if a
+          // concurrent write moved current or closed the candidate.
+          database.prepare(`
+            UPDATE versions SET state = ?
+            WHERE project_id = ? AND artifact_id = ? AND id = ? AND state = ?
+              AND base_version_id = (
+                SELECT current_version_id FROM artifacts
+                WHERE project_id = ? AND id = ? AND deleted_at IS NULL
+              )
+          `).bind(
+            versionStates.promoted,
+            command.projectId,
+            command.artifactId,
+            command.versionId,
+            versionStates.candidate,
+            command.projectId,
+            command.artifactId,
+          ),
+          ...mutationGuardStatements(
+            `promote-version:${command.projectId}:${command.idempotencyKey}`,
+            "SELECT 1 WHERE changes() = 1",
+            [],
+          ),
+          database.prepare(`
+            UPDATE artifacts SET current_version_id = ?
+            WHERE project_id = ? AND id = ? AND current_version_id = ? AND deleted_at IS NULL
+          `).bind(command.versionId, command.projectId, command.artifactId, candidate.baseVersionId),
+          ...mutationGuardStatements(
+            `promote-current:${command.projectId}:${command.idempotencyKey}`,
+            "SELECT 1 WHERE changes() = 1",
+            [],
+          ),
+          artifactAction(command, command.versionId, artifactActionKinds.candidatePromote),
+          idempotencyStatement(command, command.versionId, "promote", artifact.accessSetting),
+          mirrorJobStatement(command.projectId, command.artifactId, command.versionId, command.createdAt),
+        ]);
+      } catch (cause) {
+        const raced = await managementReplay(command, "promote");
+        if (raced !== null) return raced;
+        await readOpenCandidate(command);
+        if (cause instanceof Error && /constraint|unique/iu.test(cause.message)) {
+          throw candidateStale(candidate.number);
+        }
+        throw cause;
+      }
+      return artifactState(command.projectId, command.artifactId, command.versionId, false, artifact.accessSetting);
+    },
+    closeCandidate: async (command: CloseCandidateVersion) => {
+      const replay = await candidateClosureReplay(command);
+      if (replay !== null) return replay;
+      const artifact = await readArtifact(command.projectId, command.artifactId);
+      await readOpenCandidate(command);
+      try {
+        await database.batch([
+          database.prepare(`
+            UPDATE versions SET state = ?
+            WHERE project_id = ? AND artifact_id = ? AND id = ? AND state = ?
+          `).bind(
+            command.outcome,
+            command.projectId,
+            command.artifactId,
+            command.versionId,
+            versionStates.candidate,
+          ),
+          ...mutationGuardStatements(
+            `close-version:${command.projectId}:${command.idempotencyKey}`,
+            "SELECT 1 WHERE changes() = 1",
+            [],
+          ),
+          actionStatement({
+            action: artifactActionKinds.candidateReject,
+            actor: command.actor,
+            artifactId: command.artifactId,
+            authorizedByPrincipalId: command.authorizedByPrincipalId,
+            createdAt: command.createdAt,
+            detail: {how: command.outcome},
+            idempotencyKey: command.idempotencyKey,
+            principalId: command.principalId,
+            projectId: command.projectId,
+            versionId: command.versionId,
+          }),
+          idempotencyStatement(command, command.versionId, "reject", artifact.accessSetting),
+        ]);
+      } catch (cause) {
+        const raced = await candidateClosureReplay(command);
+        if (raced !== null) return raced;
+        await readOpenCandidate(command);
+        if (cause instanceof Error && /constraint|unique/iu.test(cause.message)) {
+          throw changedDuringManagement();
+        }
+        throw cause;
+      }
+      return candidateState(command.projectId, command.artifactId, command.versionId, false);
     },
     findIdempotentPublication,
     findPublicationByIdempotencyKey,
@@ -3047,10 +3236,11 @@ export function createD1ArtifactRepository(
         .first<z.input<typeof versionRowSchema>>();
       return row === null ? null : versionRowSchema.parse(row);
     },
-    listArtifactVersions: async (projectId, artifactId) => {
+    listArtifactVersions: async (projectId, artifactId, filter: VersionListFilter) => {
       if (await readArtifactOrNull(projectId, artifactId) === null) return [];
       const result = await database.prepare(`${versionSelect}
-        WHERE project_id = ? AND artifact_id = ? ORDER BY number DESC
+        WHERE project_id = ? AND artifact_id = ? AND ${versionListFilterSql(filter)}
+        ORDER BY number DESC
       `).bind(projectId, artifactId).all<z.input<typeof versionRowSchema>>();
       return result.results.map((row) => versionRowSchema.parse(row));
     },
@@ -3059,6 +3249,7 @@ export function createD1ArtifactRepository(
       artifactId,
       cursor,
       limit,
+      filter: VersionListFilter,
     ): Promise<PageResult<VersionRecord>> => {
       if (await readArtifactOrNull(projectId, artifactId) === null) {
         return {items: [], nextCursor: null};
@@ -3066,7 +3257,7 @@ export function createD1ArtifactRepository(
       const cursorCreatedAt = cursor?.createdAt ?? null;
       const cursorId = cursor?.id ?? null;
       const result = await database.prepare(`${versionSelect}
-        WHERE project_id = ? AND artifact_id = ?
+        WHERE project_id = ? AND artifact_id = ? AND ${versionListFilterSql(filter)}
           AND (? IS NULL OR createdAt < ? OR (createdAt = ? AND id < ?))
         ORDER BY createdAt DESC, id DESC
         LIMIT ?
@@ -3258,6 +3449,7 @@ export function createD1ArtifactRepository(
               SELECT COUNT(*) FROM versions
               WHERE versions.project_id = artifacts.project_id
                 AND versions.artifact_id = artifacts.id
+                AND ${acceptedVersionSql("versions")}
             ) AS versionCount
           FROM artifacts
           WHERE project_id = ? AND deleted_at IS NULL
@@ -3325,6 +3517,8 @@ export function createD1ArtifactRepository(
           version.content_token AS contentToken,
           version.publisher_principal_id AS publisherPrincipalId,
           version.created_at AS versionCreatedAt,
+          version.state AS versionState,
+          version.base_version_id AS baseVersionId,
           (
             SELECT entry.created_at FROM actions AS entry
             WHERE entry.project_id = artifact.project_id
@@ -3624,9 +3818,11 @@ export function createD1ArtifactRepository(
       if (replay !== null) return replay;
       const artifact = await readArtifact(command.projectId, command.artifactId);
       assertCurrent(artifact, command.expectedCurrentVersionId);
-      if (await readVersionOrNull(command.projectId, command.versionId, command.artifactId) === null) {
+      const target = await readVersionOrNull(command.projectId, command.versionId, command.artifactId);
+      if (target === null) {
         throw new VersionNotFound({message: "The saved version does not exist on this artifact."});
       }
+      if (!isAcceptedVersionState(target.state)) throw versionNotRestorable();
       return applyManagementMutation(command, artifactActionKinds.restore, [
         database.prepare(`
           UPDATE artifacts SET current_version_id = ?
@@ -5245,6 +5441,18 @@ function missingComment(): CommentNotFound {
 function resolvedComment(): CommentResolved {
   return new CommentResolved({
     message: "The comment thread is resolved and cannot accept replies.",
+  });
+}
+
+function candidateStale(number: number): CandidateStale {
+  return new CandidateStale({
+    message: `Current moved past the base of candidate version ${number}; stage a new candidate on the current version.`,
+  });
+}
+
+function versionNotRestorable(): VersionNotRestorable {
+  return new VersionNotRestorable({
+    message: "Only accepted versions can be restored; promote a candidate instead.",
   });
 }
 

@@ -306,6 +306,7 @@ const commitUploadSchema = z.object({
       artifactId: z.string().min(1).max(200),
       expectedCurrentVersionId: z.string().min(1).max(200),
       kind: z.literal("new_version"),
+      stage: z.boolean().optional(),
     }).strict(),
   ]),
 }).strict();
@@ -337,6 +338,12 @@ const captureArtifactSchema = z.object({
 const relinkArtifactSchema = z.object({
   expectedSha256: z.string().regex(/^[a-f0-9]{64}$/u),
   path: z.string().min(1).max(4_096),
+}).strict();
+const versionListQuerySchema = z.object({
+  filter: z.enum(["accepted", "candidates", "all"]).default("accepted"),
+});
+const closeCandidateSchema = z.object({
+  outcome: z.enum(["rejected", "superseded"]).default("rejected"),
 }).strict();
 const restoreVersionSchema = z.object({
   expectedCurrentVersionId: z.string().min(1).max(200),
@@ -2185,6 +2192,7 @@ export function createHttpApp(
   });
 
   app.get("/api/v1/artifacts/:artifactId/versions", async (context) => {
+    const {filter} = versionListQuerySchema.parse(context.req.query());
     const versions = await runHttpApplicationEffect(
       context,
       dependencies,
@@ -2192,6 +2200,7 @@ export function createHttpApp(
         management.listVersions({
           artifactId: context.req.param("artifactId"),
           cursor: null,
+          filter,
           limit: null,
           principal: context.get("principal"),
           projectId: requestedProjectId(context),
@@ -2632,6 +2641,63 @@ export function createHttpApp(
     },
   );
 
+  // CND-002/CND-004: only a person signed in directly can promote; the
+  // application service refuses keys and agents before any write.
+  app.post(
+    "/api/v1/artifacts/:artifactId/versions/:versionId/promote",
+    async (context) => {
+      const state = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.promoteCandidate({
+            artifactId: context.req.param("artifactId"),
+            idempotencyKey: requiredIdempotencyKey(
+              context.req.header("idempotency-key"),
+            ),
+            principal: context.get("principal"),
+            projectId: requestedProjectId(context),
+            versionId: context.req.param("versionId"),
+          })
+        ),
+      );
+      return context.json(artifactStateResponse(
+        responseApplicationUrl(context, dependencies),
+        dependencies.contentDomain,
+        state,
+      ));
+    },
+  );
+
+  app.post(
+    "/api/v1/artifacts/:artifactId/versions/:versionId/reject",
+    boundedJsonBody,
+    async (context) => {
+      const body = await parseOptionalJsonBody(context, closeCandidateSchema);
+      const state = await runHttpApplicationEffect(
+        context,
+        dependencies,
+        ArtifactManagementService.use((management) =>
+          management.closeCandidate({
+            artifactId: context.req.param("artifactId"),
+            idempotencyKey: requiredIdempotencyKey(
+              context.req.header("idempotency-key"),
+            ),
+            outcome: body.outcome,
+            principal: context.get("principal"),
+            projectId: requestedProjectId(context),
+            versionId: context.req.param("versionId"),
+          })
+        ),
+      );
+      return context.json(artifactStateResponse(
+        responseApplicationUrl(context, dependencies),
+        dependencies.contentDomain,
+        state,
+      ));
+    },
+  );
+
   app.patch(
     "/api/v1/artifacts/:artifactId/access",
     boundedJsonBody,
@@ -2907,7 +2973,14 @@ export function createHttpApp(
             ),
             principal: context.get("principal"),
             projectId: requestedProjectId(context),
-            target: body.target,
+            target: body.target.kind === "new_version"
+              ? {
+                artifactId: body.target.artifactId,
+                expectedCurrentVersionId: body.target.expectedCurrentVersionId,
+                kind: "new_version",
+                stage: body.target.stage === true,
+              }
+              : body.target,
             uploadId: context.req.param("uploadId"),
           })
         ),
