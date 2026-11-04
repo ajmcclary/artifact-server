@@ -6242,15 +6242,15 @@ requirements:
       behavior: {id: LNK-005-B, description: "Move the source file, relink with the expected hash, and observe the same artifact ID, version list, and comment threads with a healthy binding at the new path."}
       failure: {id: LNK-005-F, description: "A relink whose target bytes do not match the expected hash is rejected and changes nothing, and a relink to a path outside the link roots or inside the data directory is refused."}
     deployments: [local]
-    status: implementing
-    proof_gap: The acceptance-ID tests prove a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing. The attachment clause of the behavior is not exercised because standalone artifact attachment remains undecided under GATE-014; identity, versions, and comments preservation are the proved surface.
+    status: behavior_verified
+    proof_gap: "LNK-005-B/F prove locally that a moved file relinks under its expected hash with the same artifact ID, version list, and comment threads, and that a mismatched hash, a path outside every root, and a path inside the data directory each change nothing. The attachment clause of the behavior is not exercised because standalone artifact attachment remains undecided under GATE-014."
     depends_on: [LNK-002]
     evidence:
       - deployment: local
-        tests: [LNK-005-F]
+        tests: [LNK-005-B, LNK-005-F]
         result: pass
         run: project/evidence/local-foundation.json
-        recorded_at: "2026-09-22T17:59:28.000Z"
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: LNK-006
     kind: security
