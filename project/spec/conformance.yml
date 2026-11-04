@@ -121,9 +121,15 @@ requirements:
       behavior: {id: PRD-002-B, description: "Serve already-finished files without starting an artifact-specific runtime or conversion job."}
       failure: {id: PRD-002-F, description: "Publishing source that requires Node.js, Python, a database, a server function, or a conversion step does not cause the server to execute it."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "PRD-002-B/F prove on the local runtime that finished HTML, JavaScript, CSS, and JSON are served byte for byte, and that a published source tree with package.json lifecycle scripts, a Node server entry, a server function, a build config, Python, a Makefile, a Dockerfile, SQL, and a Prisma schema is stored and served as exact bytes after all publish-queued work runs, with no marker any of those programs would write, no child process of the server, no listener on the port the server entry would bind, and no installed, built, or provisioned state in the data directory. Non-local deployments are not exercised."
     depends_on: []
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PRD-002-B, PRD-002-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: PRD-003
     kind: behavior
@@ -5804,9 +5810,15 @@ requirements:
       behavior: {id: SCP-001-B, description: "Publish and serve only finished browser files while the server process list and network activity show no artifact-specific runtime."}
       failure: {id: SCP-001-F, description: "Build manifests, package files, server entry points, and backend dependencies cannot cause package installation, compilation, process execution, or database provisioning."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "SCP-001-B/F share the PRD-002 local proof: finished browser files are served byte for byte with no new child process or build output, and build manifests, package files, server entry points, and backend dependencies never install, compile, execute, listen, or provision. Process and network observation covers the local server's own process and one reserved port; non-local deployments are not exercised."
     depends_on: [PRD-002]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [SCP-001-B, SCP-001-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: SCP-002
     kind: exclusion
