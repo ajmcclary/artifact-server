@@ -2602,9 +2602,15 @@ requirements:
       behavior: {id: AUTH-013-B, description: "Enumerate application and content routes and confirm the required separation."}
       failure: {id: AUTH-013-F, description: "No content host exposes login callback, OAuth, metadata mutation, administration, or MCP endpoints."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "AUTH-013-B/F prove locally, from the complete route list registered by the HTTP application, that login, callback, OAuth metadata, MCP, administration, and artifact metadata routes answer on the application origin, and that every one of them, probed on a version content host with the application bearer token and browser session attached, answers only as read-only content (404 for GET/HEAD, 405 for other methods) with no challenge, cookie, or redirect. Non-local deployments, the hosted Worker router, and preview-lease and live-origin hosts are not exercised."
     depends_on: [CNT-003, CNT-004]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [AUTH-013-B, AUTH-013-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: AUTH-014
     kind: security
