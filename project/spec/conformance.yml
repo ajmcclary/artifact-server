@@ -1004,9 +1004,15 @@ requirements:
       behavior: {id: PUB-010-B, description: "Publish a regular local file through the client and confirm that later source changes do not change the saved version."}
       failure: {id: PUB-010-F, description: "Reject symlinks, special files, forbidden manifest paths, and paths inaccessible to the client's operating-system identity before creating an upload."}
     deployments: [local, single_server]
-    status: specified
+    status: behavior_verified
+    proof_gap: "PUB-010-B/F prove locally that the file publication client publishes a regular file's bytes as read at upload time, that a later edit of the source leaves the saved version unchanged, and that the artifact, version, and action records carry the derived file name but never the client path; and that a symbolic link, a FIFO, a .git directory, a backslash, .artifactserver, or non-NFC name, and a file the client's operating-system identity cannot read are each refused with a typed input error before any upload exists. When the suite runs as root the unreadable case runs under the unprivileged 65534 effective identity, because root bypasses permission bits. The single_server deployment, Windows and macOS clients, and MCP's own refusal of client paths are not exercised here."
     depends_on: [MAN-004, PUB-001]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [PUB-010-B, PUB-010-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: PUB-011
     kind: security
