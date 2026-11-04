@@ -769,9 +769,15 @@ requirements:
       behavior: {id: MAN-004-B, description: "Publish a directory containing only regular files and directories."}
       failure: {id: MAN-004-F, description: "Attempt every supported special-file type and confirm that the publish fails before a version is committed."}
     deployments: *all
-    status: specified
+    status: behavior_verified
+    proof_gap: "MAN-004-B/F prove locally, through the file publication client the CLI uses, that a directory of only regular files and nested directories publishes every file, and that a root or nested symbolic link (file, directory, or dangling), FIFO, Unix socket, and the /dev/null character device each fail with a typed input error before any upload or artifact exists. A block device and a device node nested inside a directory need privileges the suite does not assume and are not exercised; HTTP and MCP never receive client paths, and non-local client platforms are not run."
     depends_on: [MAN-003]
-    evidence: []
+    evidence:
+      - deployment: local
+        tests: [MAN-004-B, MAN-004-F]
+        result: pass
+        run: project/evidence/local-foundation.json
+        recorded_at: "RECORDED_AT_PENDING"
 
   - id: MAN-005
     kind: security
