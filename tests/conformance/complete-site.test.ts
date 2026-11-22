@@ -190,6 +190,37 @@ describe("complete-site publishing", () => {
       .toBe("https://artifacts.example.test");
     expect(plan.files.map(({uploadUrl}) => new URL(uploadUrl).origin))
       .toEqual(["https://artifacts.example.test"]);
+
+    // Caller-controlled Host and forwarded headers never select the origin
+    // links name: a request that reaches the server directly, or claims a
+    // different host, still gets the configured origin.
+    const poisonedHost = await fetch(`${server.baseUrl}/api/v1/uploads`, {
+      body: JSON.stringify({
+        entryPath: file.path,
+        files: [{
+          mediaType: file.mediaType,
+          path: file.path,
+          sha256: createHash("sha256").update(file.bytes).digest("hex"),
+          size: file.bytes.byteLength,
+        }],
+      }),
+      headers: {
+        Authorization: `Bearer ${installation.apiToken}`,
+        "Content-Type": "application/json",
+        Host: "evil.example.test",
+        "X-Forwarded-Host": "evil.example.test",
+        "X-Forwarded-Proto": "http",
+      },
+      method: "POST",
+    });
+    expect(poisonedHost.status).toBe(201);
+    const poisonedPlan = z.object({
+      commitUrl: z.url(),
+      files: z.array(z.object({uploadUrl: z.url()})),
+    }).parse(await poisonedHost.json());
+    expect(new URL(poisonedPlan.commitUrl).origin).toBe("https://artifacts.example.test");
+    expect(poisonedPlan.files.map(({uploadUrl}) => new URL(uploadUrl).origin))
+      .toEqual(["https://artifacts.example.test"]);
   });
 
   test("PUB-001-B PUB-003-B: a staged site resumes after restart and commits only after every file is verified", async () => {

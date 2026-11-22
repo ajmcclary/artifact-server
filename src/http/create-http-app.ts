@@ -3799,21 +3799,12 @@ function responseApplicationUrl(
   context: Context<HttpEnvironment>,
   dependencies: HttpAppDependencies,
 ): URL {
-  const requestUrl = new URL(context.req.url);
-  if (dependencies.trustedApplicationOrigin === null) return requestUrl;
-  const trustedUrl = new URL(dependencies.trustedApplicationOrigin);
-  const forwardedProtocol = context.req.header("x-forwarded-proto")
-    ?.split(",")[0]?.trim();
-  const forwardedHost = context.req.header("x-forwarded-host")
-    ?.split(",")[0]?.trim() ?? context.req.header("host");
-  if (
-    `${forwardedProtocol}:` === trustedUrl.protocol &&
-    forwardedHost?.toLocaleLowerCase("en-US") ===
-      trustedUrl.host.toLocaleLowerCase("en-US")
-  ) {
-    return trustedUrl;
+  // A configured application origin is the only origin links may name;
+  // request and forwarded headers are caller-controlled and never select it.
+  if (dependencies.trustedApplicationOrigin !== null) {
+    return new URL(dependencies.trustedApplicationOrigin);
   }
-  return requestUrl;
+  return new URL(context.req.url);
 }
 
 /** Refuse a browser request that did not come from the application's own origin. */
@@ -4697,7 +4688,7 @@ async function serveLiveContent(
     LinkedArtifactService.use((linked) =>
       linked.authorizeLiveRead({
         liveToken,
-        sessionToken: contentSessionToken(cookieHeader),
+        sessionToken: contentSessionToken(cookieHeader, new URL(context.req.url)),
       })
     ),
   );
@@ -4775,7 +4766,7 @@ async function serveVersionContent(
           ? "entry"
           : "none",
         path: requestedPath,
-        sessionToken: contentSessionToken(cookieHeader),
+        sessionToken: contentSessionToken(cookieHeader, requestUrl),
       })
     ),
   );
@@ -5380,24 +5371,32 @@ function usesSecureContentCookie(requestUrl: URL): boolean {
   );
 }
 
+/**
+ * Read the content-session cookie for one content-origin request. On a secure
+ * origin only the `__Host-` cookie counts: a sibling subdomain can plant the
+ * unprefixed name, but never a `__Host-` cookie. The unprefixed loopback name
+ * is accepted only where the secure cookie cannot be set. An invalid value is
+ * skipped rather than ending the search, so a planted malformed cookie cannot
+ * shadow the genuine one.
+ */
 function contentSessionToken(
   cookieHeader: string | undefined,
+  requestUrl: URL,
 ): Redacted.Redacted | null {
   if (cookieHeader === undefined) return null;
+  const acceptedName = usesSecureContentCookie(requestUrl)
+    ? contentSessionCookieName
+    : loopbackContentSessionCookieName;
   for (const pair of cookieHeader.split(";")) {
     const separator = pair.indexOf("=");
     if (separator < 0) continue;
-    const name = pair.slice(0, separator).trim();
-    if (
-      name !== contentSessionCookieName
-      && name !== loopbackContentSessionCookieName
-    ) continue;
+    if (pair.slice(0, separator).trim() !== acceptedName) continue;
     const parsed = contentSessionTokenSchema.safeParse(
       pair.slice(separator + 1).trim(),
     );
-    return parsed.success
-      ? Redacted.make(parsed.data, {label: "content-session-token"})
-      : null;
+    if (parsed.success) {
+      return Redacted.make(parsed.data, {label: "content-session-token"});
+    }
   }
   return null;
 }

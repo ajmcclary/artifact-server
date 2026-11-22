@@ -185,7 +185,27 @@ export async function createStagedUpload(
     method: "POST",
   });
   const body = createUploadResponseSchema.parse(await response.json());
-  return {body, response};
+  return {body: throughTestServer(server, body), response};
+}
+
+/**
+ * A server with a configured application origin names that origin in every
+ * link it returns. The test client stands in for the TLS-terminating proxy
+ * in front of it, sending each link's path to the server it actually runs.
+ */
+function throughTestServer(
+  server: Pick<RunningTestServer, "baseUrl">,
+  upload: CreateUploadResponse,
+): CreateUploadResponse {
+  const local = (link: string): string => {
+    const url = new URL(link);
+    return new URL(`${url.pathname}${url.search}`, server.baseUrl).toString();
+  };
+  return {
+    ...upload,
+    commitUrl: local(upload.commitUrl),
+    files: upload.files.map((file) => ({...file, uploadUrl: local(file.uploadUrl)})),
+  };
 }
 
 export async function uploadStagedFile(
