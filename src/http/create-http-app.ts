@@ -3799,12 +3799,21 @@ function responseApplicationUrl(
   context: Context<HttpEnvironment>,
   dependencies: HttpAppDependencies,
 ): URL {
-  // A configured application origin is the only origin links may name;
-  // request and forwarded headers are caller-controlled and never select it.
-  if (dependencies.trustedApplicationOrigin !== null) {
-    return new URL(dependencies.trustedApplicationOrigin);
+  const requestUrl = new URL(context.req.url);
+  if (dependencies.trustedApplicationOrigin === null) return requestUrl;
+  const trustedUrl = new URL(dependencies.trustedApplicationOrigin);
+  const forwardedProtocol = context.req.header("x-forwarded-proto")
+    ?.split(",")[0]?.trim();
+  const forwardedHost = context.req.header("x-forwarded-host")
+    ?.split(",")[0]?.trim() ?? context.req.header("host");
+  if (
+    `${forwardedProtocol}:` === trustedUrl.protocol &&
+    forwardedHost?.toLocaleLowerCase("en-US") ===
+      trustedUrl.host.toLocaleLowerCase("en-US")
+  ) {
+    return trustedUrl;
   }
-  return new URL(context.req.url);
+  return requestUrl;
 }
 
 /** Refuse a browser request that did not come from the application's own origin. */
