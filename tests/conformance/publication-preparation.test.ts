@@ -198,6 +198,39 @@ describe("publication preparation", () => {
     }));
   });
 
+  test("committing through the staged service publishes the prepared record and installs each file exactly once", async () => {
+    expect.hasAssertions();
+    await runtime.dispose();
+    runtime = makeRuntime(countingBlobs, {filesPerPass: 10, preparedEntriesPerPass: 10});
+    await runtime.context();
+    const files = [fileSlot("a.txt", "alpha"), fileSlot("b.txt", "bravo"), fileSlot("c.txt", "charlie")];
+    const principal = testPrincipal("commit-once-principal");
+    const created = await runStaged(runtime, (service) =>
+      service.createUpload({entryPath: "a.txt", files, principal}));
+    if (created.kind === "committed") throw new Error("Fixture upload unexpectedly committed.");
+    const upload = created.upload;
+    await Promise.all(files.map((file, index) => {
+      const slot = upload.files[index];
+      if (slot === undefined) throw new Error(`The fixture has no slot at index ${index}.`);
+      return runStaged(runtime, (service) => service.uploadFile({
+        body: byteStream(file.bytes),
+        ownerId: upload.principalId,
+        projectId: upload.projectId,
+        storageToken: slot.storageToken,
+        uploadId: upload.id,
+      }));
+    }));
+    const committed = await runStaged(runtime, (service) => service.commitUpload({
+      idempotencyKey: "commit-installs-once-0001",
+      principal,
+      target: {accessSetting: "account_required", kind: "new_artifact", name: "Installed once"},
+      uploadId: upload.id,
+    }));
+    expect(committed.kind).toBe("committed");
+    // Preparation installed every file; publication must not write any of them again.
+    expect(countingBlobs.count).toBe(files.length);
+  });
+
   test("PUB-019-F: a stalled preparation owner loses its lease to a successor and cannot record progress or finalize afterward, and a replaced staged source fails closed", async () => {
     expect.hasAssertions();
     const files = [

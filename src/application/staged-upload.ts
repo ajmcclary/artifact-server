@@ -553,8 +553,10 @@ function makeStagedUploadService(
       const result = yield* createUpload(command);
       const reuse = dependencies.reuse;
       if (result.kind === "committed" || reuse === undefined) return result;
-      // Reuse reveals which bytes the project already holds, so it needs read authority there.
-      const canRead = yield* authorization.requireArtifactListing(
+      // Reuse reveals which bytes the whole project already holds, so it needs
+      // project-wide read authority there; an artifact-only grant or knowledge
+      // of a content hash grants no access (PUB-023).
+      const canRead = yield* authorization.requireProjectRead(
         command.principal,
         {projectId: result.upload.projectId},
       ).pipe(
@@ -781,8 +783,13 @@ function makeStagedUploadService(
         }
       }
 
-      const files = upload.files.map((file) =>
-        publicationSource(upload, file, signal));
+      // Preparation installs files and records installedAt; publish from the
+      // prepared record so storeFiles skips every file it already installed.
+      const prepared = upload.status === uploadStatuses.open
+        ? yield* requiredUpload(project.id, command.uploadId, command.principal.id)
+        : upload;
+      const files = prepared.files.map((file) =>
+        publicationSource(prepared, file, signal));
       const source = {
         kind: "staged_upload" as const,
         principalId: command.principal.id,
