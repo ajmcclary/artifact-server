@@ -229,7 +229,7 @@ const projectRule = anyCapability(
  * capability rules every scoped check applies. A key holds at most these, so
  * it can never hand out a permission its capabilities would refuse it.
  */
-const capabilityPermissionMap: Readonly<Record<PrincipalCapability, readonly Permission[]>> = {
+const capabilityPermissionMap = {
   [principalCapabilities.connectAgents]: [],
   [principalCapabilities.createArtifact]: [permissions.artifactPublish],
   [principalCapabilities.issueContentSession]: [permissions.artifactView],
@@ -251,7 +251,7 @@ const capabilityPermissionMap: Readonly<Record<PrincipalCapability, readonly Per
   ],
   [principalCapabilities.manageProjects]: [permissions.projectManage],
   [principalCapabilities.writeComments]: [permissions.commentWrite],
-};
+} as const satisfies Readonly<Record<PrincipalCapability, readonly Permission[]>>;
 
 /** The permissions a principal's explicit capabilities authorize. */
 export function capabilityPermissions(principal: Principal): ReadonlySet<Permission> {
@@ -534,10 +534,10 @@ function makeAuthorizationService(
       yield* requireScoped(principal, scope, permissions.artifactShare, manageRule);
       const {policy} = yield* access.readAccessPolicy(dependencies.installationId);
       if (!policy.shareLinks.enabled) {
-        return yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
+        yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
       }
       if (policy.shareLinks.linkCreators === "administrators" && !isHumanAdministrator(principal)) {
-        return yield* new ShareLinksDisabled({
+        yield* new ShareLinksDisabled({
           message: "Only administrators can make content reachable by link here.",
         });
       }

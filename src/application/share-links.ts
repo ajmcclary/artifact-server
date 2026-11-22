@@ -181,7 +181,7 @@ function makeShareLinkService(
   const requireUnarchived = Effect.fnUntraced(function*(projectId: string) {
     const project = yield* dependencies.access.readProjectAccess(installationId, projectId);
     if (project?.archived === true) {
-      return yield* new ProjectArchived({message: "Archived projects cannot share new access."});
+      yield* new ProjectArchived({message: "Archived projects cannot share new access."});
     }
   });
 
@@ -194,7 +194,7 @@ function makeShareLinkService(
   ) {
     const effective = yield* authorization.effectiveAccess(principal, {artifactId, projectId});
     if (granted.some((permission) => !effective.permissions.has(permission))) {
-      return yield* new AuthorizationDenied({
+      yield* new AuthorizationDenied({
         message: "A share link cannot grant a permission you do not hold.",
       });
     }

@@ -12,7 +12,7 @@ import {
   type ToolAnnotations,
   type ToolCallback,
 } from "@modelcontextprotocol/server";
-import {Duration, Effect, Predicate, Redacted} from "effect";
+import {Duration, Effect, Redacted} from "effect";
 import {z} from "zod";
 
 import {AgentDispatchService} from "../application/agent-dispatch.js";
@@ -2999,17 +2999,6 @@ function sanitizedCommentAuthor(author: CommentAuthor): CommentAuthor {
   return {...author, displayName: sanitizeBundleText(author.displayName)};
 }
 
-/**
- * The anchor stays opaque client JSON, so only its quoted selection, the
- * text an agent reads as the reviewer's words, is sanitized; every other
- * field passes through for faithful anchor replacement.
- */
-function sanitizedAnchor(anchor: unknown): unknown {
-  const quoted = mailboxAnchorSchema.safeParse(anchor);
-  if (!quoted.success || !Predicate.isObject(anchor)) return anchor;
-  return {...anchor, originalText: sanitizeBundleText(quoted.data.originalText)};
-}
-
 function commentReplyProjection(reply: CommentReplyRecord): CommentReplyRecord {
   return {
     ...reply,
@@ -3019,8 +3008,14 @@ function commentReplyProjection(reply: CommentReplyRecord): CommentReplyRecord {
 }
 
 function commentThreadProjection(thread: CommentThreadRecord) {
+  // The anchor stays opaque client JSON, so only its quoted selection, the
+  // text an agent reads as the reviewer's words, is sanitized; every other
+  // field passes through for faithful anchor replacement.
+  const quoted = mailboxAnchorSchema.safeParse(thread.anchor);
   return {
-    anchor: sanitizedAnchor(thread.anchor ?? null),
+    anchor: quoted.success
+      ? {...quoted.data, originalText: sanitizeBundleText(quoted.data.originalText)}
+      : thread.anchor ?? null,
     artifactId: thread.artifactId,
     author: sanitizedCommentAuthor(thread.author),
     body: sanitizeBundleText(thread.body),

@@ -381,6 +381,13 @@ function normalizeArtifactSearch(candidate: string | null): string | null {
   return normalized === "" ? null : normalized;
 }
 
+// An archived project is read-only for its artifacts; only actions that
+// reduce exposure (making an artifact private) stay open (PRJ-003).
+const requireUnarchived = (project: {readonly archivedAt: string | null}) =>
+  project.archivedAt === null
+    ? Effect.void
+    : Effect.fail(new ProjectArchived({message: "Archived projects cannot be changed."}));
+
 function makeArtifactManagementService(
   dependencies: ArtifactManagementDependencies,
   authorization: AuthorizationOperations,
@@ -393,13 +400,6 @@ function makeArtifactManagementService(
       ? yield* projects.resolveActiveProject({principal, projectId})
       : yield* projects.getProject({principal, projectId});
   });
-
-  // An archived project is read-only for its artifacts; only actions that
-  // reduce exposure (making an artifact private) stay open (PRJ-003).
-  const requireUnarchived = (project: {readonly archivedAt: string | null}) =>
-    project.archivedAt === null
-      ? Effect.void
-      : Effect.fail(new ProjectArchived({message: "Archived projects cannot be changed."}));
 
   const requireArtifact = Effect.fn("ArtifactManagementService.requireArtifact")(
     function*(projectId: string, artifactId: string): Effect.fn.Return<
