@@ -18,6 +18,11 @@ import {Effect} from "effect";
 import {z} from "zod";
 
 import {
+  commitStagedUpload,
+  createStagedUpload,
+  uploadEveryStagedFile,
+} from "../support/publishing.js";
+import {
   parseCompactRuntimeConfiguration,
   parseExternalStorageRuntimeConfiguration,
   summarizeRuntimeConfiguration,
@@ -29,10 +34,6 @@ const assignedAddressSchema = z.object({port: z.number().int().positive()});
 const initializedSchema = z.object({
   dataDirectory: z.string(),
   installationId: z.string().startsWith("inst_"),
-});
-const publicationSchema = z.object({
-  artifact: z.object({id: z.string()}),
-  version: z.object({id: z.string()}),
 });
 
 afterEach(async () => {
@@ -540,18 +541,30 @@ describe("Artifact Server lifecycle CLI", () => {
       ], environment);
       await waitForOutput(server, '"status":"ready"');
 
-      const publication = await runCli([
-        "publish",
-        fixture,
-        "--server",
-        `http://127.0.0.1:${port}`,
-        "--token-file",
-        path.join(dataDirectory, "secrets/api-token"),
-        "--profile-data",
-        path.join(dataDirectory, "cli-profiles"),
-      ]);
-      expect(publication.exitCode).toBe(0);
-      publicationSchema.parse(JSON.parse(publication.output));
+      // The compact server names its configured HTTPS origin in every upload
+      // link, and the publish CLI refuses a plan on another origin. This test
+      // reaches the listener directly, so it stands in for the TLS proxy and
+      // follows each link's path to the port the server actually runs on.
+      const fixtureFile = {
+        bytes: new TextEncoder().encode(await readFile(fixture, "utf8")),
+        mediaType: "text/plain; charset=utf-8",
+        path: "artifact.txt",
+      };
+      const credential = {
+        apiToken: (await readFile(path.join(dataDirectory, "secrets/api-token"), "utf8")).trim(),
+      };
+      const listener = {baseUrl: `http://127.0.0.1:${port}`};
+      const planned = await createStagedUpload(listener, credential, fixtureFile.path, [fixtureFile]);
+      expect(planned.response.status).toBe(201);
+      for (const uploaded of await uploadEveryStagedFile(credential, planned.body, [fixtureFile])) {
+        expect(uploaded.ok).toBe(true);
+      }
+      const publication = await commitStagedUpload(credential, planned.body, "lifecycle-integrity-publication", {
+        accessSetting: "account_required",
+        kind: "new_artifact",
+        name: "Lifecycle integrity proof",
+      });
+      expect(publication.response.status).toBe(201);
 
       const exited = processExit(server);
       server.kill("SIGTERM");

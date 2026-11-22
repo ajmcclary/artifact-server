@@ -1442,7 +1442,7 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
       if (file === undefined) throw new Error("A declared file is missing.");
       const planned = plan.files.find((candidate) => candidate.path === file.path);
       if (planned === undefined) throw new Error("An upload slot is missing.");
-      const uploaded = await fetch(planned.uploadUrl, {
+      const uploaded = await fetch(replaceOrigin(planned.uploadUrl, server.baseUrl), {
         body: copiedArrayBuffer(file.bytes),
         headers: {Authorization: `Bearer ${identity.apiToken}`},
         method: "PUT",
@@ -3105,7 +3105,9 @@ async function stageExternalStorageFile(
   if (plannedFile === undefined) {
     throw new Error("The external-storage upload plan did not contain its declared file.");
   }
-  const uploaded = await fetch(plannedFile.uploadUrl, {
+  // Links name the configured application origin; this test reaches the
+  // process directly, standing in for the proxy in front of it.
+  const uploaded = await fetch(replaceOrigin(plannedFile.uploadUrl, baseUrl), {
     body: bytes,
     headers: {Authorization: `Bearer ${token}`},
     method: "PUT",
@@ -3113,7 +3115,7 @@ async function stageExternalStorageFile(
   if (!uploaded.ok) {
     throw new Error(`The external-storage staged upload failed with HTTP ${uploaded.status}.`);
   }
-  return upload;
+  return {...upload, commitUrl: replaceOrigin(upload.commitUrl, baseUrl)};
 }
 
 async function listArtifacts(
