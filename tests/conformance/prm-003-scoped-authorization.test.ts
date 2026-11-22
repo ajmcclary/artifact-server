@@ -103,6 +103,47 @@ describe("scoped authorization", () => {
     })))).toBe("success");
   });
 
+  test("comment deletion follows authorship and bulk clear needs comment moderation", async () => {
+    const projectId = await harness.createProject("Moderated");
+    const published = await harness.publish(harness.administrator, projectId);
+    const sam = await harness.person("Sam");
+    const lee = await harness.person("Lee");
+    const dana = await harness.person("Dana");
+    // A manager whose comment.write is removed still moderates other people's comments.
+    await harness.grant({memberId: dana.id, projectId, remove: ["comment.write"], role: "manager"});
+    const deleteThread = (principal: Principal, threadId: string) =>
+      ArtifactCommentService.use((comments) => comments.deleteThread({
+        artifactId: published.artifact.id,
+        principal,
+        projectId,
+        threadId,
+      }));
+    const clear = (principal: Principal) =>
+      ArtifactCommentService.use((comments) => comments.clearThreads({
+        artifactId: published.artifact.id,
+        principal,
+        projectId,
+        state: "all",
+        versionId: null,
+      }));
+    const first = await harness.runtime.runPromise(comment(sam, projectId, published.artifact.id, published.version.id));
+    const second = await harness.runtime.runPromise(comment(sam, projectId, published.artifact.id, published.version.id));
+    const third = await harness.runtime.runPromise(comment(sam, projectId, published.artifact.id, published.version.id));
+
+    // An editor holds agent.dispatch but not comment.moderate: no bulk clear, no deleting others' words.
+    expect(await outcome(harness, clear(lee))).toBe("AuthorizationDenied");
+    expect(await outcome(harness, deleteThread(lee, first.thread.id))).toBe("AuthorizationDenied");
+    expect(await outcome(harness, deleteThread(sam, first.thread.id))).toBe("success");
+    expect(await outcome(harness, deleteThread(dana, second.thread.id))).toBe("success");
+    expect(await outcome(harness, clear(dana))).toBe("success");
+    expect(await outcome(harness, ArtifactCommentService.use((comments) => comments.getThread({
+      artifactId: published.artifact.id,
+      principal: sam,
+      projectId,
+      threadId: third.thread.id,
+    })))).toBe("CommentNotFound");
+  });
+
   test("PRM-003-F: a member of a restricted project without a grant gets not found for the artifact and the project", async () => {
     const projectId = await harness.createProject("Secret");
     const published = await harness.publish(harness.administrator, projectId);
