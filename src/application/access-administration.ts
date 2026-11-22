@@ -12,13 +12,7 @@ import {
   PermissionNotHeld,
   ProjectArchived,
 } from "../core/errors.js";
-import {
-  isDirectHumanPrincipal,
-  membershipRoles,
-  type MembershipRole,
-  type Principal,
-  principalKinds,
-} from "../core/identity.js";
+import {isDirectHumanPrincipal, membershipRoles, type MembershipRole, type Principal} from "../core/identity.js";
 import type {InstallationMember} from "../core/installation-identity.js";
 import {
   allPermissions,
@@ -47,7 +41,6 @@ import {
   type AccessScope,
   type AuthorizationOperations,
   AuthorizationService,
-  capabilityPermissions,
   type ScopedDenial,
 } from "./authorization.js";
 import {
@@ -196,11 +189,6 @@ const sortedPermissions = (values: Iterable<Permission>): readonly Permission[] 
   return allPermissions.filter((permission) => included.has(permission)).toSorted();
 };
 
-const intersectPermissions = (
-  left: ReadonlySet<Permission>,
-  right: ReadonlySet<Permission>,
-): ReadonlySet<Permission> => new Set([...left].filter((permission) => right.has(permission)));
-
 /** The permissions one stored grant hands its member before ceilings and state. */
 const grantedBy = (grant: Pick<AccessGrant, "add" | "remove" | "role">): ReadonlySet<Permission> => {
   const granted = new Set(rolePermissions(grant.role));
@@ -298,18 +286,7 @@ function makeAccessAdministrationService(
     scope: AccessScope,
     granted: Iterable<Permission>,
   ) {
-    // A service principal is not a member, so it never inherits the project
-    // default role: it holds exactly what its capabilities authorize. A key
-    // bound to a member holds the member's access narrowed by its
-    // capabilities. Only a person signed in directly holds their full access.
-    const held: ReadonlySet<Permission> = principal.kind === principalKinds.service
-      ? capabilityPermissions(principal)
-      : isDirectHumanPrincipal(principal)
-      ? (yield* authorization.effectiveAccess(principal, scope)).permissions
-      : intersectPermissions(
-        (yield* authorization.effectiveAccess(principal, scope)).permissions,
-        capabilityPermissions(principal),
-      );
+    const held = yield* authorization.heldPermissions(principal, scope);
     const missing = sortedPermissions([...granted].filter((permission) => !held.has(permission)));
     if (missing.length > 0) {
       yield* new PermissionNotHeld({

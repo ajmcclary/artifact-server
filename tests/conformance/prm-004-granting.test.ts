@@ -154,6 +154,11 @@ describe("granting access", () => {
     const readingKey = await keyPrincipal(["artifact:read", "project:manage"], manager.id);
     expect(await failureTag(harness, putGrant(readingKey, shareProject, lee.id, "commenter"))).toBe("PermissionNotHeld");
     expect(await failureTag(harness, putGrant(readingKey, shareProject, sam.id, "viewer"))).toBeNull();
+    // The same bound applies to the links a key creates.
+    const sharingKey = await keyPrincipal(["artifact:manage:any", "artifact:read"]);
+    expect(await failureTag(harness, shareAs(sharingKey, ["artifact.view", "comment.read", "comment.write"])))
+      .toBe("AuthorizationDenied");
+    expect(await failureTag(harness, shareAs(sharingKey, ["artifact.view", "comment.read"]))).toBeNull();
   });
 
   test("invalid overrides, artifact none, removing view and past expiry are refused", async () => {

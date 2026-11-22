@@ -86,6 +86,18 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: AccessScope,
   ) => Effect.Effect<EffectiveAccess, ScopedDenial>;
+  /**
+   * The permissions a principal may hand to someone else on one scope: a
+   * grant, a project default, or a share link never carries more (PRM-004).
+   * A service principal is not a member, so it never inherits the project
+   * default role and holds exactly what its capabilities authorize; a key
+   * bound to a member holds that member's access narrowed by its
+   * capabilities; a person signed in directly holds their full access.
+   */
+  readonly heldPermissions: (
+    principal: Principal,
+    scope: AccessScope,
+  ) => Effect.Effect<ReadonlySet<Permission>, ScopedDenial>;
   readonly requireAgentConnection: (
     principal: Principal,
   ) => Effect.Effect<void, AuthorizationDenied>;
@@ -254,7 +266,7 @@ const capabilityPermissionMap = {
 } as const satisfies Readonly<Record<PrincipalCapability, readonly Permission[]>>;
 
 /** The permissions a principal's explicit capabilities authorize. */
-export function capabilityPermissions(principal: Principal): ReadonlySet<Permission> {
+function capabilityPermissions(principal: Principal): ReadonlySet<Permission> {
   return new Set(principal.capabilities.flatMap((capability) => capabilityPermissionMap[capability]));
 }
 
@@ -452,6 +464,19 @@ function makeAuthorizationService(
     },
   );
 
+  const heldPermissions = Effect.fn("AuthorizationService.heldPermissions")(
+    function*(principal: Principal, scope: AccessScope) {
+      if (principal.kind === principalKinds.service) {
+        yield* requireInstallation(principal);
+        return capabilityPermissions(principal);
+      }
+      const effective = (yield* effectiveAccess(principal, scope)).permissions;
+      if (principal.kind === principalKinds.guest || isDirectHumanPrincipal(principal)) return effective;
+      const allowed = capabilityPermissions(principal);
+      return new Set([...effective].filter((permission) => allowed.has(permission)));
+    },
+  );
+
   // Direct humans are not agents: the registry, claim, and report surface is
   // reserved for service principals holding the agent connection capability.
   const requireAgentConnection = Effect.fn(
@@ -579,6 +604,7 @@ function makeAuthorizationService(
 
   return AuthorizationService.of({
     effectiveAccess,
+    heldPermissions,
     requireCandidatePromotion,
     requireAgentConnection,
     requireArtifactDiscovery,

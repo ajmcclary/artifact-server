@@ -192,8 +192,8 @@ function makeShareLinkService(
     artifactId: string,
     granted: readonly Permission[],
   ) {
-    const effective = yield* authorization.effectiveAccess(principal, {artifactId, projectId});
-    if (granted.some((permission) => !effective.permissions.has(permission))) {
+    const held = yield* authorization.heldPermissions(principal, {artifactId, projectId});
+    if (granted.some((permission) => !held.has(permission))) {
       yield* new AuthorizationDenied({
         message: "A share link cannot grant a permission you do not hold.",
       });
