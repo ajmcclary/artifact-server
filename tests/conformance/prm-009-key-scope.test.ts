@@ -1,8 +1,10 @@
 import {Cause, type Effect, Exit, Option, Redacted} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
+import {ActivityService} from "../../src/application/activity.js";
 import {ArtifactManagementService} from "../../src/application/artifact-management.js";
 import {type IssueApiKeyCommand, InstallationAccessService} from "../../src/application/installation-access.js";
+import {LibraryCatalogService} from "../../src/application/library-catalog.js";
 import {ProjectManagementService} from "../../src/application/project-management.js";
 import type {Principal, PrincipalCapability} from "../../src/core/identity.js";
 import {startAccessRuntime} from "../support/access-runtime.js";
@@ -92,6 +94,39 @@ describe("project-scoped keys", () => {
     const projects = await harness.runtime.runPromise(ProjectManagementService.use((service) =>
       service.listProjects(key)));
     expect(projects.map((project) => project.id)).toEqual([projectA]);
+
+    // An administrator's key scoped to A is narrowed by its project list
+    // before the administrator role widens anything: projects, the Library
+    // catalog, and the activity feed all stay inside project A.
+    const inA = await harness.publish(harness.administrator, projectA);
+    const adminKey = await keyPrincipal(harness, publisher, [projectA], harness.administrator.id);
+    expect(adminKey.membershipRole).toBe("administrator");
+    const adminProjects = await harness.runtime.runPromise(ProjectManagementService.use((service) =>
+      service.listProjects(adminKey)));
+    expect(adminProjects.map((project) => project.id)).toEqual([projectA]);
+    expect(await failureTag(harness, ArtifactManagementService.use((service) =>
+      service.getArtifact({artifactId: inB.artifact.id, principal: adminKey, projectId: projectB}))))
+      .toBe("ProjectNotFound");
+    const unscopedLibrary = await harness.runtime.runPromise(LibraryCatalogService.use((service) =>
+      service.read(harness.administrator)));
+    expect(unscopedLibrary.examined).toBe(2);
+    const scopedLibrary = await harness.runtime.runPromise(LibraryCatalogService.use((service) =>
+      service.read(adminKey)));
+    expect(scopedLibrary.examined).toBe(1);
+    const feed = await harness.runtime.runPromise(ActivityService.use((service) =>
+      service.list(adminKey, {
+        actorIds: [],
+        cursor: null,
+        limit: 50,
+        projectIds: [],
+        search: null,
+        segment: "all",
+        types: [],
+      })));
+    expect(feed.items.length).toBeGreaterThan(0);
+    expect(feed.items.every((entry) => entry.project?.id === projectA)).toBe(true);
+    expect(feed.items.some((entry) => entry.artifact?.id === inA.artifact.id)).toBe(true);
+    expect(feed.items.some((entry) => entry.artifact?.id === inB.artifact.id)).toBe(false);
   });
 
   test("a member-bound key cannot exceed its member's viewer grant even with publish capabilities", async () => {

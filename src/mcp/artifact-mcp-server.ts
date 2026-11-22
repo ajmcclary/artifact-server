@@ -88,6 +88,7 @@ import {
 } from "../core/publishing-limits.js";
 import {
   AgentNotFound,
+  CapabilityUnavailable,
   InvalidComment,
   InvalidDispatch,
   InvalidPagination,
@@ -443,6 +444,20 @@ export function createArtifactMcpServer(
   _context: McpRequestContext,
 ): McpServer {
   const applicationUrl = new URL(dependencies.applicationOrigin);
+  // Linked files read paths on the server machine, so only a local MCP
+  // connection to a deployment that enabled them may advertise or use them.
+  // A remote connection refuses here even if a composition mistakenly
+  // enabled the service (project/spec/local-workspace-spec.md section 3).
+  const linkedArtifacts = dependencies.linkedArtifacts === true
+    && dependencies.mode === "local";
+  const linkedToolResultHere = <Value extends object>(
+    operation: () => Promise<Value>,
+    summary?: (value: Value) => string,
+  ) => linkedArtifacts
+    ? linkedToolResult(operation, summary)
+    : Promise.resolve(failureResult(new CapabilityUnavailable({
+      message: "Linked artifacts are not available on this deployment.",
+    })));
   const server = new McpServer(
     {name: "artifact-server", version: serverVersion},
     {
@@ -652,7 +667,7 @@ export function createArtifactMcpServer(
     () => successResult(
       capabilities(
         dependencies.mode,
-        dependencies.linkedArtifacts === true,
+        linkedArtifacts,
         dependencies.gitHistory,
         dependencies.requestMetadata,
       ),
@@ -985,7 +1000,7 @@ export function createArtifactMcpServer(
       // Mirror the HTTP artifact read: a local deployment decorates linked
       // artifacts with their freshly observed binding, and nothing else
       // reports one. The disabled service answers null when linking is off.
-      const binding = dependencies.linkedArtifacts === true
+      const binding = linkedArtifacts
         ? await runMcpApplicationEffect(
           dependencies,
           LinkedArtifactService.use((linked) =>
@@ -1783,7 +1798,7 @@ export function createArtifactMcpServer(
       outputSchema: linkedPublicationSchema,
       annotations: idempotentWriteAnnotations,
     },
-    async ({idempotencyKey, name, path, projectId}) => linkedToolResult(async () => {
+    async ({idempotencyKey, name, path, projectId}) => linkedToolResultHere(async () => {
       const command: LinkArtifactCommand = {
         idempotencyKey: idempotencyKey ?? derivedIdempotencyKey([
           "link",
@@ -1824,7 +1839,7 @@ export function createArtifactMcpServer(
       annotations: idempotentWriteAnnotations,
     },
     async ({artifactId, expectedCurrentVersionId, idempotencyKey, projectId}) =>
-      linkedToolResult(async () =>
+      linkedToolResultHere(async () =>
         linkedPublicationProjection(
           applicationUrl,
           dependencies.contentDomain,
@@ -1868,7 +1883,7 @@ export function createArtifactMcpServer(
       annotations: idempotentWriteAnnotations,
     },
     async ({artifactId, expectedSha256, path, projectId}) =>
-      linkedToolResult(async () => ({
+      linkedToolResultHere(async () => ({
         artifactId,
         sourceBinding: sourceBindingProjection(
           await runMcpApplicationEffect(

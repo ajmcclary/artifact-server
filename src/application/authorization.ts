@@ -309,7 +309,13 @@ function makeAuthorizationService(
           : {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
       }
       const subject = subjectOf(principal);
-      if (subject.kind === "administrator") return {kind: "all"} as const;
+      // A project-scoped key narrows every subject, administrators included:
+      // the key's project list is intersected before any role widens it.
+      if (subject.kind === "administrator") {
+        return principal.projectIds.length === 0
+          ? {kind: "all"} as const
+          : {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
+      }
       const projects = yield* access.listProjectAccess(dependencies.installationId);
       const grants = yield* access.listMemberGrants(dependencies.installationId, principal.id);
       const stored = yield* access.readAccessPolicy(dependencies.installationId);
@@ -320,7 +326,10 @@ function makeAuthorizationService(
         projects,
         subject,
       });
-      if (visible.kind === "all" || principal.projectIds.length === 0) return visible;
+      if (principal.projectIds.length === 0) return visible;
+      if (visible.kind === "all") {
+        return {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
+      }
       return {
         artifactIdsByProject: new Map(
           [...visible.artifactIdsByProject].filter(([projectId]) => principal.projectIds.includes(projectId)),

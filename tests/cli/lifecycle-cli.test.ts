@@ -171,23 +171,19 @@ describe("Artifact Server lifecycle CLI", () => {
       );
       expect(defaultLinkedFiles.linkedFiles).toBe("off");
       expect(defaultLinkedFiles.linkRoots).toEqual([homedir()]);
-      const linkedFilesEnabled = await Effect.runPromise(
-        parseCompactRuntimeConfiguration({
-          dataDirectory,
-          environment: {
-            ...environment,
-            ARTIFACT_SERVER_LINKED_FILES: "on",
-            ARTIFACT_SERVER_LINK_ROOTS: "/tmp/workspace-a:/tmp/workspace-b",
-          },
-          hostname: "127.0.0.1",
-          port: "8787",
-        }),
-      );
-      expect(linkedFilesEnabled.linkedFiles).toBe("on");
-      expect(linkedFilesEnabled.linkRoots).toEqual([
-        "/tmp/workspace-a",
-        "/tmp/workspace-b",
-      ]);
+      await expect(Effect.runPromise(parseCompactRuntimeConfiguration({
+        dataDirectory,
+        environment: {
+          ...environment,
+          ARTIFACT_SERVER_LINKED_FILES: "on",
+          ARTIFACT_SERVER_LINK_ROOTS: "/tmp/workspace-a:/tmp/workspace-b",
+        },
+        hostname: "127.0.0.1",
+        port: "8787",
+      }))).rejects.toMatchObject({
+        field: "ARTIFACT_SERVER_LINKED_FILES",
+        reason: "invalid_value",
+      });
       await expect(Effect.runPromise(parseCompactRuntimeConfiguration({
         dataDirectory,
         environment: {

@@ -233,6 +233,8 @@ export const parseCompactRuntimeConfiguration = Effect.fn(
     hostnameSchema,
   );
   yield* assertBrowserIsolation(applicationOrigin, contentDomain);
+  const linkedFiles = yield* parseLinkedFilesMode(input.environment);
+  yield* assertLinkedFilesAreLocalOnly(linkedFiles);
   yield* ensureWritableDirectory(layout.dataDirectory);
   return {
     apiToken,
@@ -245,7 +247,7 @@ export const parseCompactRuntimeConfiguration = Effect.fn(
     gitHistory: yield* loadNodeGitHistoryConfiguration(input.environment),
     hostname: yield* parseHostname(input.hostname),
     installation,
-    linkedFiles: yield* parseLinkedFilesMode(input.environment),
+    linkedFiles,
     linkRoots: yield* parseLinkRoots(input.environment),
     port: yield* parsePort(input.port),
     readinessWithdrawalMilliseconds: yield* parseMilliseconds(
@@ -725,7 +727,7 @@ function assertLinkedFilesAreLocalOnly(
   if (linkedFiles === "off") return Effect.void;
   return invalidValue(
     "ARTIFACT_SERVER_LINKED_FILES",
-    "ARTIFACT_SERVER_LINKED_FILES can only be enabled on the local deployment runtime; external-storage deployments must leave it off.",
+    "ARTIFACT_SERVER_LINKED_FILES can only be enabled on the local deployment runtime; compact and external-storage deployments must leave it off.",
   );
 }
 
