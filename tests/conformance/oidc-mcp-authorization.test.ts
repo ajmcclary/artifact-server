@@ -43,6 +43,7 @@ describe("generic OIDC MCP authorization", () => {
   let issuer: string;
   let keyId: string;
   let privateKey: CryptoKey;
+  let publicKey: JWK;
   let provider: ProviderBoundary;
   let server: RunningTestServer;
 
@@ -51,9 +52,8 @@ describe("generic OIDC MCP authorization", () => {
     privateKey = keys.privateKey;
     keyId = crypto.randomUUID();
     const publicJwk = await exportJWK(keys.publicKey);
-    provider = await startProviderBoundary({
-      jwk: {...publicJwk, alg: "RS256", kid: keyId, use: "sig"},
-    });
+    publicKey = {...publicJwk, alg: "RS256", kid: keyId, use: "sig"};
+    provider = await startProviderBoundary({jwk: publicKey});
     issuer = provider.issuer;
     const authorizationServer = await loadOidcAuthorizationServer(issuer);
     installation = await createTestInstallation();
@@ -337,6 +337,41 @@ describe("generic OIDC MCP authorization", () => {
       issueToken({idToken: true}))).rejects.toThrow("ID token is not");
   });
 
+  test("an issuer whose discovered identifier keeps a trailing slash verifies its own tokens", async () => {
+    expect.hasAssertions();
+    const slashed = await startProviderBoundary({
+      discoveredIssuerSuffix: "/",
+      jwk: publicKey,
+    });
+    try {
+      const slashedIssuer = `${slashed.issuer}/`;
+      const hosted = await createOidcHostedAuthentication({
+        applicationOrigin: "https://staging.artifactserver.test",
+        clientId: "artifact-server",
+        clientSecret: null,
+        issuer: slashedIssuer,
+        scopes: "openid email profile",
+      });
+      expect(hosted.mcpOAuthResource.authorizationServerMetadata)
+        .toMatchObject({issuer: slashedIssuer});
+      const verified = await Effect.runPromise(
+        hosted.externalMcpOAuthVerifier.verify(
+          Redacted.make(await issueToken({issuer: slashedIssuer})),
+        ),
+      );
+      expect(verified).toMatchObject({
+        provider: `oidc:${slashed.issuer}`,
+        subject,
+      });
+      await expect(verifiedSubject(
+        hosted.externalMcpOAuthVerifier,
+        await issueToken({issuer: slashed.issuer}),
+      )).rejects.toThrow("invalid, expired, or for another resource");
+    } finally {
+      await slashed.close();
+    }
+  });
+
   async function issueToken(options: {
     readonly audience?: string | string[];
     /** `null` leaves the claim out. */
@@ -439,6 +474,8 @@ interface ProviderBoundary {
 }
 
 async function startProviderBoundary(options: {
+  /** Appended to the issuer the discovery document reports. */
+  readonly discoveredIssuerSuffix?: string;
   readonly jwk: JWK;
 }): Promise<ProviderBoundary> {
   let keysStatus = 200;
@@ -448,7 +485,10 @@ async function startProviderBoundary(options: {
   const provider = createServer((request, response) => {
     if (request.url === `${realmPath}/.well-known/openid-configuration`) {
       response.setHeader("Content-Type", "application/json");
-      response.end(JSON.stringify(discoveryDocument(issuer)));
+      response.end(JSON.stringify({
+        ...discoveryDocument(issuer),
+        issuer: `${issuer}${options.discoveredIssuerSuffix ?? ""}`,
+      }));
       return;
     }
     if (request.url === `${realmPath}/protocol/openid-connect/certs`) {

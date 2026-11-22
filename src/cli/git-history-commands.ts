@@ -44,10 +44,15 @@ const cloneCredentialSchema = z.object({
   remote: z.url(),
   token: z.string().min(1),
 }).strict();
+/**
+ * Artifact IDs become destination directory names, so only the opaque
+ * server-minted shape is accepted before it reaches the filesystem.
+ */
+const artifactIdSchema = z.string().max(200).regex(/^art_[A-Za-z0-9_-]+$/u);
 const artifactPageSchema = z.object({
   artifacts: z.array(z.object({
     artifact: z.object({
-      id: z.string(),
+      id: artifactIdSchema,
       name: z.string(),
       projectId: z.string(),
     }).passthrough(),
@@ -101,7 +106,7 @@ export function configureGitHistoryCommands(
       options: CloneOptions,
     ) => {
       const connection = await resolveCliServerConnection(options, "history");
-      const destination = path.resolve(directory ?? artifactId);
+      const destination = path.resolve(directory ?? artifactIdSchema.parse(artifactId));
       const result = await cloneArtifactHistory(
         connection,
         options.project,
@@ -319,7 +324,7 @@ async function listProjectArtifacts(
   cursor?: string,
   accumulated: readonly ProjectArtifact[] = [],
 ): Promise<readonly ProjectArtifact[]> {
-  const query = new URLSearchParams({limit: "100", project: projectId});
+  const query = new URLSearchParams({limit: "100", projectId});
   if (cursor !== undefined) query.set("cursor", cursor);
   const response = await authenticatedFetch(
     connection,
@@ -351,7 +356,7 @@ async function cloneProjectArtifacts(
   const batch = artifacts.slice(index, index + concurrency);
   if (batch.length === 0) return accumulated;
   const completed = await Promise.all(batch.map(async (artifact) => {
-    const artifactDirectory = path.join(destination, artifact.id);
+    const artifactDirectory = artifactCheckoutDirectory(destination, artifact.id);
     try {
       await cloneArtifactHistory(
         connection,
@@ -447,25 +452,74 @@ function requireSuccessfulResponse(response: Response): void {
   }
 }
 
-async function runGitClone(
+/** Resolve one artifact's checkout directory strictly inside the destination. */
+export function artifactCheckoutDirectory(destination: string, artifactId: string): string {
+  const id = artifactIdSchema.parse(artifactId);
+  const directory = path.join(destination, id);
+  if (path.dirname(directory) !== path.resolve(destination)) {
+    throw new Error("Artifact checkout directory escapes the destination.");
+  }
+  return directory;
+}
+
+/** One `git clone` child process: its arguments and the environment it adds. */
+export interface GitCloneInvocation {
+  readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/**
+ * Build the Git child-process invocation for one clone credential. The bearer
+ * header is scoped to the remote's origin, transport is restricted to HTTPS
+ * (plain HTTP only for a loopback development server), and `--` keeps the
+ * remote from ever being parsed as an option.
+ */
+export function gitCloneInvocation(
   credential: z.infer<typeof cloneCredentialSchema>,
   destination: string,
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("git", [
+): GitCloneInvocation {
+  const remote = new URL(credential.remote);
+  const loopback = isLoopbackHostname(remote.hostname);
+  if (remote.protocol !== "https:" && !(remote.protocol === "http:" && loopback)) {
+    throw new Error("Git history remote must use HTTPS.");
+  }
+  if (remote.username !== "" || remote.password !== "") {
+    throw new Error("Git history remote must not embed credentials.");
+  }
+  return {
+    args: [
       "clone",
       "--branch",
       credential.defaultBranch,
       "--single-branch",
-      credential.remote,
+      "--",
+      remote.href,
       destination,
-    ], {
+    ],
+    env: {
+      GIT_ALLOW_PROTOCOL: loopback ? "https:http" : "https",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `http.${remote.origin}/.extraHeader`,
+      GIT_CONFIG_VALUE_0: `Authorization: Bearer ${credential.token}`,
+      GIT_TERMINAL_PROMPT: "0",
+    },
+  };
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+async function runGitClone(
+  credential: z.infer<typeof cloneCredentialSchema>,
+  destination: string,
+): Promise<void> {
+  const invocation = gitCloneInvocation(credential, destination);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("git", invocation.args, {
       env: {
         ...process.env,
-        GIT_CONFIG_COUNT: "1",
-        GIT_CONFIG_KEY_0: "http.extraHeader",
-        GIT_CONFIG_VALUE_0: `Authorization: Bearer ${credential.token}`,
-        GIT_TERMINAL_PROMPT: "0",
+        ...invocation.env,
       },
       stdio: "inherit",
     });

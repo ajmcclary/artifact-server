@@ -13,7 +13,7 @@ import {
   type CryptoKey,
   type JWK,
 } from "jose";
-import {Predicate, Redacted} from "effect";
+import {Effect, Predicate, Redacted} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
 import {WorkOsMcpBearerVerifier} from
@@ -193,6 +193,38 @@ describe("hosted WorkOS MCP authorization", () => {
     expect(provider.userRequests()).toBe(1);
   });
 
+  test("a WorkOS signing-key outage is a provider failure, not an invalid token", async () => {
+    expect.hasAssertions();
+    // A fresh verifier has no cached keys, so the outage is the first thing it
+    // meets and must not read as a bad token.
+    const coldVerifier = new WorkOsMcpBearerVerifier({
+      apiKey: Redacted.make("sk_test_artifact_server"),
+      apiOrigin: provider.origin,
+      issuer,
+      jwksUri: `${provider.origin}/oauth2/jwks`,
+      resource,
+    });
+    const token = Redacted.make(await issueToken({}));
+    provider.setKeysStatus(503);
+    try {
+      const failure = await Effect.runPromise(Effect.flip(coldVerifier.verify(token)));
+      expect(failure._tag).toBe("IdentityProviderFailure");
+    } finally {
+      provider.setKeysStatus(200);
+    }
+    const unreachable = new WorkOsMcpBearerVerifier({
+      apiKey: Redacted.make("sk_test_artifact_server"),
+      apiOrigin: provider.origin,
+      issuer,
+      jwksUri: "http://127.0.0.1:9/oauth2/jwks",
+      resource,
+    });
+    const network = await Effect.runPromise(Effect.flip(unreachable.verify(token)));
+    expect(network._tag).toBe("IdentityProviderFailure");
+    await expect(Effect.runPromise(coldVerifier.verify(token)))
+      .resolves.toMatchObject({subject: userId});
+  });
+
   async function issueToken(options: {
     readonly audience?: string | string[];
     readonly expiresAt?: number;
@@ -245,6 +277,7 @@ describe("hosted WorkOS MCP authorization", () => {
 interface ProviderBoundary {
   readonly origin: string;
   close(): Promise<void>;
+  setKeysStatus(status: number): void;
   setUserResponseStatus(status: number): void;
   userRequests(): number;
 }
@@ -252,10 +285,16 @@ interface ProviderBoundary {
 async function startProviderBoundary(options: {
   readonly jwk: JWK;
 }): Promise<ProviderBoundary> {
+  let keysStatus = 200;
   let userRequestCount = 0;
   let userResponseStatus = 200;
   const provider = createServer((request, response) => {
     if (request.url === "/oauth2/jwks") {
+      if (keysStatus !== 200) {
+        response.statusCode = keysStatus;
+        response.end();
+        return;
+      }
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify({keys: [options.jwk]}));
       return;
@@ -294,6 +333,9 @@ async function startProviderBoundary(options: {
   return {
     close: () => close(provider),
     origin: `http://127.0.0.1:${address.port}`,
+    setKeysStatus: (status) => {
+      keysStatus = status;
+    },
     setUserResponseStatus: (status) => {
       userResponseStatus = status;
     },

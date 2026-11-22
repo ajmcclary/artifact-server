@@ -592,8 +592,8 @@ function NewThreadComposer({artifactId, principalId, session, versionId}: NewThr
         onBodyChange={draft.onBodyChange}
         onCancel={null}
         onDiscardDraft={draft.onDiscard}
-        onSubmit={async (body) => {
-          const saved = await session.submit(body, null, null);
+        onSubmit={async (body, idempotencyKey) => {
+          const saved = await session.submit(body, null, null, idempotencyKey);
           if (saved) draft.onPosted();
           return saved;
         }}

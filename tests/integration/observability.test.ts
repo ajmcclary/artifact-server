@@ -1,8 +1,10 @@
 import {createServer} from "node:http";
 
+import {Effect} from "effect";
 import {afterEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
+import {IdentityProviderFailure} from "../../src/core/errors.js";
 import {defaultProjectId} from "../../src/core/model.js";
 import {
   createTestInstallation,
@@ -69,6 +71,11 @@ describe("Effect OTLP observability", () => {
     closeables.push(() => removeTestInstallation(installation));
     const artifactServer = await startTestServer(installation, {
       completedRequestLogSampleRate: 1,
+      externalApiBearerVerifier: {
+        verify: () => Effect.fail(new IdentityProviderFailure({
+          message: "The identity provider is unavailable.",
+        })),
+      },
       observability: true,
     });
     closeables.push(() => artifactServer.stop());
@@ -107,8 +114,32 @@ describe("Effect OTLP observability", () => {
       {method: "PATCH"},
     );
     expect(unmatched.status).toBe(404);
+    // Hand-built and error responses never see prepared context headers.
+    const shell = await fetch(`${artifactServer.baseUrl}/s/share-token-value`);
+    z.uuid().parse(shell.headers.get("x-request-id"));
+    const unauthenticated = await fetch(`${artifactServer.baseUrl}/api/v1/projects`);
+    expect(unauthenticated.status).toBe(401);
+    z.uuid().parse(unauthenticated.headers.get("x-request-id"));
+    const upstream = await fetch(`${artifactServer.baseUrl}/api/v1/projects`, {
+      headers: {Authorization: "Bearer external-provider-token-with-entropy-0000"},
+    });
+    expect(upstream.status).toBe(502);
+    const failedRequestId = z.uuid().parse(upstream.headers.get("x-request-id"));
 
-    await waitForSignals(signals, ["artifact.project.id", defaultProjectId, "unmatched"]);
+    await waitForSignals(signals, [
+      "artifact.project.id",
+      defaultProjectId,
+      "unmatched",
+      failedRequestId,
+    ]);
+    // OTLP status code 2 is ERROR; a 5xx request span must never end as OK.
+    await expect.poll(() => requestSpanStatuses(signals).get(failedRequestId), {
+      timeout: 5_000,
+    }).toBe(2);
+    await expect.poll(() => requestSpanStatuses(signals).has(requestId), {
+      timeout: 5_000,
+    }).toBe(true);
+    expect(requestSpanStatuses(signals).get(requestId)).not.toBe(2);
     expect(signals.map((signal) => signal.path)).toEqual(
       expect.arrayContaining(["/v1/logs", "/v1/metrics", "/v1/traces"]),
     );
@@ -167,6 +198,39 @@ describe("Effect OTLP observability", () => {
     process.env[name] = value;
   }
 });
+
+const spanSchema = z.object({
+  attributes: z.array(z.object({
+    key: z.string(),
+    value: z.object({stringValue: z.string().optional()}).passthrough(),
+  })).optional(),
+  name: z.string(),
+  status: z.object({code: z.number().optional()}).optional(),
+});
+const resourceSpanSchema = z.object({
+  scopeSpans: z.array(z.object({spans: z.array(spanSchema)})),
+});
+
+/** Map each exported http.request span's request ID to its OTLP status code. */
+function requestSpanStatuses(
+  signals: readonly CapturedSignal[],
+): ReadonlyMap<string, number | undefined> {
+  const statuses = new Map<string, number | undefined>();
+  for (const signal of signals) {
+    for (const resource of signal.body.resourceSpans ?? []) {
+      for (const scope of resourceSpanSchema.parse(resource).scopeSpans) {
+        for (const span of scope.spans) {
+          if (span.name !== "http.request") continue;
+          const requestId = span.attributes
+            ?.find((attribute) => attribute.key === "request.id")
+            ?.value.stringValue;
+          if (requestId !== undefined) statuses.set(requestId, span.status?.code);
+        }
+      }
+    }
+  }
+  return statuses;
+}
 
 async function reserveClosedPort(): Promise<number> {
   const server = createServer();

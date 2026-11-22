@@ -21,6 +21,7 @@ import {
   otlpLayer,
   structuredLoggingLayer,
 } from "../observability/application-observability.js";
+import {redactFailureMessage} from "../observability/failure-cause-summary.js";
 import {createApplicationLayer} from "../local/create-local-application-layer.js";
 import {PostgresArtifactRepository} from "../storage/postgres-artifact-repository.js";
 import {PostgresDatabase} from "../storage/postgres-database.js";
@@ -182,7 +183,7 @@ export async function createExternalStorageRuntime(
         variantLogRuntime?.runFork(Effect.logInfo("Content variant build finished.").pipe(
           Effect.annotateLogs({
             content_variant_duration_ms: Math.round(event.durationMilliseconds),
-            content_variant_error: event.error ?? "",
+            content_variant_error: event.error === null ? "" : redactFailureMessage(event.error),
             content_variant_outcome: event.outcome,
             content_variant_source_bytes: event.sourceSize,
             content_variant_source_sha256: event.sourceSha256,

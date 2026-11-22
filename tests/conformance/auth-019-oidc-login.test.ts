@@ -201,12 +201,34 @@ describe("generic OIDC browser login", () => {
     expect(rowCount(installation, "external_identities")).toBe(0);
     expect(rowCount(installation, "application_sessions")).toBe(0);
   });
+
+  test("generic OIDC login verifies ID tokens against an issuer that keeps its trailing slash", async () => {
+    const slashedIssuer = `${provider.issuer}/`;
+    provider.defects.discoveryIssuer = slashedIssuer;
+    provider.claims.issuer = slashedIssuer;
+    provider.claims.email = administratorEmail;
+    provider.claims.emailVerified = true;
+    server = await startOidcServer(installation, provider, clientSecret, slashedIssuer);
+
+    const completed = await completeStubLogin(server.baseUrl);
+    expect(completed.status).toBe(303);
+    expect(externalIdentities(installation).map((row) => row.provider))
+      .toEqual([`oidc:${provider.issuer}`]);
+
+    provider.claims.issuer = provider.issuer;
+    provider.claims.subject = "stub-oidc-subject-unslashed";
+    const respelled = await completeStubLogin(server.baseUrl);
+    expect(respelled.status).toBe(502);
+    expect(respelled.headers.getSetCookie()).toEqual([]);
+    expect(rowCount(installation, "external_identities")).toBe(1);
+  });
 });
 
 async function startOidcServer(
   installation: TestInstallation,
   provider: RunningStubOidcProvider,
   secret: string,
+  issuer: string = provider.issuer,
 ): Promise<RunningTestServer> {
   const port = await reserveLoopbackPort();
   const applicationOrigin = `http://127.0.0.1:${port}`;
@@ -218,7 +240,7 @@ async function startOidcServer(
       applicationOrigin,
       clientId: provider.clientId,
       clientSecret: Redacted.make(secret, {label: "oidc-client-secret"}),
-      issuer: provider.issuer,
+      issuer,
       scopes,
     }),
     port,

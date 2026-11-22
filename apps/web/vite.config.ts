@@ -67,7 +67,12 @@ function documentRoutes(): Plugin {
         }
         if (pathname === "/review-frame") {
           request.url = `/review-frame.html${query}`;
-        } else if (pathname === "/review" || pathname.startsWith("/review/")) {
+        } else if (
+          pathname === "/review"
+          || pathname.startsWith("/review/")
+          // Guest share pages open in the same Review document, as production serves them.
+          || /^\/s\/[^/]+$/u.test(pathname)
+        ) {
           request.url = `/review.html${query}`;
         }
         next();

@@ -23,11 +23,34 @@ export type SharePath =
   | {readonly kind: "open"; readonly token: string}
   | {readonly kind: "resume"; readonly linkId: string};
 
-/** Read a guest path; null for any other page. */
+const openSharePath = /^\/s\/([^/]+)$/u;
+const resumeSharePath = /^\/review\/shared\/([^/]+)$/u;
+
+/** Whether the address is shaped like a guest page, even one whose link cannot be read. */
+export function isShareAddress(pathname: string): boolean {
+  return openSharePath.test(pathname) || resumeSharePath.test(pathname);
+}
+
+/** Read a guest path; null for any other page, or for a malformed escape (the ended-link state). */
 export function sharePathOf(pathname: string): SharePath | null {
-  const open = /^\/s\/([^/]+)$/u.exec(pathname);
-  if (open?.[1] !== undefined) return {kind: "open", token: decodeURIComponent(open[1])};
-  const resume = /^\/review\/shared\/([^/]+)$/u.exec(pathname);
-  if (resume?.[1] !== undefined) return {kind: "resume", linkId: decodeURIComponent(resume[1])};
+  const open = openSharePath.exec(pathname);
+  if (open?.[1] !== undefined) {
+    const token = decodedSegment(open[1]);
+    return token === null ? null : {kind: "open", token};
+  }
+  const resume = resumeSharePath.exec(pathname);
+  if (resume?.[1] !== undefined) {
+    const linkId = decodedSegment(resume[1]);
+    return linkId === null ? null : {kind: "resume", linkId};
+  }
   return null;
+}
+
+function decodedSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch (caught) {
+    if (caught instanceof URIError) return null;
+    throw caught;
+  }
 }

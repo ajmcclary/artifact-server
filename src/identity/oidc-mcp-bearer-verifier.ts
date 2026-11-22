@@ -66,6 +66,10 @@ export interface OidcMcpBearerVerifierConfig {
   /** The exact MCP resource URL the issuer must bind into `aud`. */
   readonly audience: string;
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * The issuer identifier exactly as discovery spells it. Tokens must carry
+   * this spelling; the normalized form only names the provider binding.
+   */
   readonly issuer: string;
   readonly jwksUri: string;
   readonly userInfoEndpoint?: string | null;
@@ -77,6 +81,7 @@ export class OidcMcpBearerVerifier implements ExternalMcpBearerVerifier {
   readonly #audience: string;
   readonly #fetch: typeof globalThis.fetch;
   readonly #issuer: string;
+  readonly #tokenIssuer: string;
   readonly #jwks: ReturnType<typeof createRemoteJWKSet>;
   readonly #provider: string;
   readonly #userInfoEndpoint: string | null;
@@ -87,6 +92,7 @@ export class OidcMcpBearerVerifier implements ExternalMcpBearerVerifier {
     const providerFetch = config.fetch ?? globalThis.fetch;
     this.#fetch = (input, init) => providerFetch(input, init);
     this.#issuer = requireOidcIssuer(config.issuer, "The OIDC issuer");
+    this.#tokenIssuer = config.issuer.trim();
     // Browser login records the same provider name, so one person keeps one
     // membership whether they arrive through the interface or through MCP.
     this.#provider = `oidc:${this.#issuer}`;
@@ -153,7 +159,7 @@ export class OidcMcpBearerVerifier implements ExternalMcpBearerVerifier {
           algorithms: this.#algorithms,
           audience: this.#audience,
           clockTolerance,
-          issuer: this.#issuer,
+          issuer: this.#tokenIssuer,
         });
         return result;
       },

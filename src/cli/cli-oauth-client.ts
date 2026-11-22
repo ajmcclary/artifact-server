@@ -509,6 +509,11 @@ export function openSystemBrowser(
   url: URL,
   environment: NodeJS.ProcessEnv,
 ): Promise<void> {
+  if (!isBrowserSafeUrl(url)) {
+    return Promise.reject(new Error(
+      "Refusing to open a browser address that is not HTTPS or loopback HTTP.",
+    ));
+  }
   const configured = environment["ARTIFACT_SERVER_BROWSER_COMMAND"];
   if (configured !== undefined && !path.isAbsolute(configured)) {
     return Promise.reject(new Error(
@@ -532,6 +537,20 @@ export function openSystemBrowser(
       resolve();
     });
   });
+}
+
+/**
+ * Platform openers dispatch on scheme, so a server-supplied `file:`, custom
+ * protocol, or option-shaped address must never reach them.
+ */
+function isBrowserSafeUrl(url: URL): boolean {
+  if (url.username !== "" || url.password !== "") return false;
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && (
+    url.hostname === "localhost"
+    || url.hostname === "127.0.0.1"
+    || url.hostname === "[::1]"
+  );
 }
 
 function browserCommand(): string {
