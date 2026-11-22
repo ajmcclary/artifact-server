@@ -326,7 +326,7 @@ describe("staged upload lifecycle", () => {
       uploadId: live.id,
     }));
     const target = {
-      accessSetting: "public_link" as const,
+      accessSetting: "account_required" as const,
       kind: "new_artifact" as const,
       name: "Committed upload",
     };

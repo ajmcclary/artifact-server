@@ -16,7 +16,7 @@ import {
   type InvalidIdempotencyKey,
   type LinkPathOutsideRoots,
   type LinkPathProtected,
-  type ProjectArchived,
+  ProjectArchived,
   type PublishConflict,
   type SourceDrifted,
   type SourceMissing,
@@ -209,6 +209,7 @@ export type LinkedArtifactFailure =
   | InvalidLinkPath
   | LinkPathOutsideRoots
   | LinkPathProtected
+  | ProjectArchived
   | PublishConflict
   | SourceDrifted
   | SourceMissing
@@ -801,6 +802,11 @@ function makeLinkedArtifactService(
         {artifactId: command.artifactId, projectId: project.id},
       );
       yield* requireBinding(project.id, command.artifactId);
+      // An archived project is read-only: re-pointing a binding changes
+      // which bytes a later capture would read (PRJ-003).
+      if (project.archivedAt !== null) {
+        return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      }
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const canonical = yield* runLadder(command.path);
       const capture = yield* runEngine(() =>

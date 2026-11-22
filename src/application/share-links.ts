@@ -5,7 +5,9 @@ import {attributionOf} from "../core/action-attribution.js";
 import {
   AccessRevisionConflict,
   type ArtifactRepositoryFailure,
+  AuthorizationDenied,
   InvalidPagination,
+  ProjectArchived,
   ShareLinkInvalid,
   ShareLinkNotFound,
   ShareLinksDisabled,
@@ -56,7 +58,9 @@ export type ShareLinkFailure =
   | AccessRevisionConflict
   | ArtifactManagementFailure
   | ArtifactRepositoryFailure
+  | AuthorizationDenied
   | InvalidPagination
+  | ProjectArchived
   | ShareLinkInvalid
   | ShareLinkNotFound
   | ShareLinksDisabled;
@@ -127,6 +131,20 @@ export class ShareLinkService extends Context.Service<ShareLinkService, ShareLin
     );
 }
 
+/**
+ * Whether new settings could reach more than the link reaches now: another
+ * permission, a later or removed expiry, or a different version target. Only
+ * a narrowing update stays open on an archived project.
+ */
+function widensLink(link: ShareLink, next: ShareLinkSettings): boolean {
+  if (next.permissions.some((permission) => !link.permissions.includes(permission))) return true;
+  if (next.expiresAt === null ? link.expiresAt !== null : link.expiresAt !== null && next.expiresAt > link.expiresAt) {
+    return true;
+  }
+  if (next.target.kind !== link.target.kind) return true;
+  return next.target.kind === "pinned" && link.target.kind === "pinned" && next.target.versionId !== link.target.versionId;
+}
+
 const linkNotFound = () => new ShareLinkNotFound({message: "The share link does not exist."});
 
 /** The version a link's activity rows name: its pinned version, or the artifact's current one. */
@@ -157,6 +175,29 @@ function makeShareLinkService(
       return yield* new ShareLinksDisabled({message: "Only administrators can manage share links here."});
     }
     return {artifact: read.artifact, policy};
+  });
+
+  /** An archived project is read-only: no link may be created or widened in it (PRJ-003). */
+  const requireUnarchived = Effect.fnUntraced(function*(projectId: string) {
+    const project = yield* dependencies.access.readProjectAccess(installationId, projectId);
+    if (project?.archived === true) {
+      return yield* new ProjectArchived({message: "Archived projects cannot share new access."});
+    }
+  });
+
+  /** No one grants a permission they do not hold (PRM-004): a link carries only the sharer's own access. */
+  const requireHeldLinkPermissions = Effect.fnUntraced(function*(
+    principal: Principal,
+    projectId: string,
+    artifactId: string,
+    granted: readonly Permission[],
+  ) {
+    const effective = yield* authorization.effectiveAccess(principal, {artifactId, projectId});
+    if (granted.some((permission) => !effective.permissions.has(permission))) {
+      return yield* new AuthorizationDenied({
+        message: "A share link cannot grant a permission you do not hold.",
+      });
+    }
   });
 
   /** Validate settings; returns the normalized settings and the version the activity row names. */
@@ -213,6 +254,7 @@ function makeShareLinkService(
     readonly projectId: string | null;
   }) {
     const {artifact, policy} = yield* requireSharer(command.principal, command.projectId, command.artifactId);
+    yield* requireUnarchived(artifact.projectId);
     const checked = yield* validated(
       command.principal,
       artifact.projectId,
@@ -221,6 +263,7 @@ function makeShareLinkService(
       policy,
       command,
     );
+    yield* requireHeldLinkPermissions(command.principal, artifact.projectId, artifact.id, checked.settings.permissions);
     return yield* shareLinks.createShareLink({
       attribution: attributionOf(command.principal),
       installationId,
@@ -254,6 +297,8 @@ function makeShareLinkService(
       policy,
       command,
     );
+    yield* requireHeldLinkPermissions(command.principal, artifact.projectId, artifact.id, checked.settings.permissions);
+    if (widensLink(link, checked.settings)) yield* requireUnarchived(artifact.projectId);
     const written = yield* shareLinks.updateShareLink({
       ...checked.settings,
       attribution: attributionOf(command.principal),

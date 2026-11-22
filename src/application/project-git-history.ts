@@ -13,6 +13,7 @@ import {
 import {
   type ArtifactRepositoryFailure,
   CapabilityUnavailable,
+  ProjectArchived,
 } from "../core/errors.js";
 import type {
   GitHistoryCapabilityReader,
@@ -257,8 +258,13 @@ function makeProjectGitHistoryService(
 
   const set = Effect.fn("ProjectGitHistoryService.set")(
     function*(command: SetProjectGitHistoryCommand) {
-      yield* projects.getProject(command);
+      const project = yield* projects.getProject(command);
       yield* authorization.requireProjectManagement(command.principal, {projectId: command.projectId});
+      // Turning mirroring on starts writing an archived project's history to
+      // a provider; an archived project only allows turning it off (PRJ-003).
+      if (command.enabled && project.archivedAt !== null) {
+        return yield* new ProjectArchived({message: "Archived projects cannot enable Git history."});
+      }
       const existing = yield* dependencies.repository
         .readProjectGitHistorySetting(command.projectId);
       if ((existing?.enabled ?? false) === command.enabled) {

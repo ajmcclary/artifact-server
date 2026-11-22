@@ -16,6 +16,7 @@ import {
   principalCapabilities,
   principalKinds,
   type Principal,
+  type PrincipalCapability,
 } from "../core/identity.js";
 import {
   computeVisibleScope,
@@ -222,6 +223,40 @@ const projectRule = anyCapability(
   principalCapabilities.readArtifacts,
   principalCapabilities.writeComments,
 );
+
+/**
+ * The permissions each explicit capability authorizes, mirroring the
+ * capability rules every scoped check applies. A key holds at most these, so
+ * it can never hand out a permission its capabilities would refuse it.
+ */
+const capabilityPermissionMap: Readonly<Record<PrincipalCapability, readonly Permission[]>> = {
+  [principalCapabilities.connectAgents]: [],
+  [principalCapabilities.createArtifact]: [permissions.artifactPublish],
+  [principalCapabilities.issueContentSession]: [permissions.artifactView],
+  [principalCapabilities.manageAnyArtifact]: [
+    permissions.artifactView,
+    permissions.artifactHistory,
+    permissions.commentRead,
+    permissions.commentModerate,
+    permissions.artifactEdit,
+    permissions.artifactDelete,
+    permissions.artifactShare,
+    permissions.agentDispatch,
+  ],
+  [principalCapabilities.publishAnyArtifact]: [permissions.artifactPublish],
+  [principalCapabilities.readArtifacts]: [
+    permissions.artifactView,
+    permissions.artifactHistory,
+    permissions.commentRead,
+  ],
+  [principalCapabilities.manageProjects]: [permissions.projectManage],
+  [principalCapabilities.writeComments]: [permissions.commentWrite],
+};
+
+/** The permissions a principal's explicit capabilities authorize. */
+export function capabilityPermissions(principal: Principal): ReadonlySet<Permission> {
+  return new Set(principal.capabilities.flatMap((capability) => capabilityPermissionMap[capability]));
+}
 
 // A key bound to an administrator acts as that administrator, within its capabilities.
 const subjectOf = (principal: Principal): AccessSubject =>

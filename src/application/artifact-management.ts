@@ -394,6 +394,13 @@ function makeArtifactManagementService(
       : yield* projects.getProject({principal, projectId});
   });
 
+  // An archived project is read-only for its artifacts; only actions that
+  // reduce exposure (making an artifact private) stay open (PRJ-003).
+  const requireUnarchived = (project: {readonly archivedAt: string | null}) =>
+    project.archivedAt === null
+      ? Effect.void
+      : Effect.fail(new ProjectArchived({message: "Archived projects cannot be changed."}));
+
   const requireArtifact = Effect.fn("ArtifactManagementService.requireArtifact")(
     function*(projectId: string, artifactId: string): Effect.fn.Return<
       ArtifactRecord,
@@ -649,6 +656,7 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      yield* requireUnarchived(project);
       const target = yield* requireVersion(project.id, artifact.id, command.versionId);
       // Restore cannot be used to get around review (CND-005).
       if (!isAcceptedVersionState(target.version.state)) {
@@ -690,9 +698,7 @@ function makeArtifactManagementService(
         yield* authorization.requireVersionPublication(command.principal, scope);
       }
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (project.archivedAt !== null) {
-        return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
-      }
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       const decision = {
@@ -748,9 +754,7 @@ function makeArtifactManagementService(
         yield* authorization.requireArtifactManagement(command.principal, scope, permissions.artifactShare);
       }
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (widens && project.archivedAt !== null) {
-        return yield* new ProjectArchived({message: "Archived projects cannot widen artifact access."});
-      }
+      if (widens) yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       const changed = yield* dependencies.repository.changeAccessSetting({
@@ -795,7 +799,7 @@ function makeArtifactManagementService(
       const project = yield* resolveProjectForRead(command.principal, command.projectId);
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (project.archivedAt !== null) return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      yield* requireUnarchived(project);
       const name = yield* parseRenamedArtifactName(command.name);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
@@ -830,6 +834,7 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const tags = yield* parseArtifactTags(command.tags);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
@@ -866,6 +871,7 @@ function makeArtifactManagementService(
         project.id,
         command.artifactId,
       );
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.deleteArtifact({

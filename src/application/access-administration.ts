@@ -10,8 +10,15 @@ import {
   AuthorizationDenied,
   type IdentityRepositoryFailure,
   PermissionNotHeld,
+  ProjectArchived,
 } from "../core/errors.js";
-import {isDirectHumanPrincipal, membershipRoles, type MembershipRole, type Principal} from "../core/identity.js";
+import {
+  isDirectHumanPrincipal,
+  membershipRoles,
+  type MembershipRole,
+  type Principal,
+  principalKinds,
+} from "../core/identity.js";
 import type {InstallationMember} from "../core/installation-identity.js";
 import {
   allPermissions,
@@ -40,6 +47,7 @@ import {
   type AccessScope,
   type AuthorizationOperations,
   AuthorizationService,
+  capabilityPermissions,
   type ScopedDenial,
 } from "./authorization.js";
 import {
@@ -188,6 +196,42 @@ const sortedPermissions = (values: Iterable<Permission>): readonly Permission[] 
   return allPermissions.filter((permission) => included.has(permission)).toSorted();
 };
 
+const intersectPermissions = (
+  left: ReadonlySet<Permission>,
+  right: ReadonlySet<Permission>,
+): ReadonlySet<Permission> => new Set([...left].filter((permission) => right.has(permission)));
+
+/** The permissions one stored grant hands its member before ceilings and state. */
+const grantedBy = (grant: Pick<AccessGrant, "add" | "remove" | "role">): ReadonlySet<Permission> => {
+  const granted = new Set(rolePermissions(grant.role));
+  for (const permission of grant.add) granted.add(permission);
+  for (const permission of grant.remove) granted.delete(permission);
+  return granted;
+};
+
+/** Whether a replacement grant could reach more than the current one: a permission, or a later or removed expiry. */
+const widensGrant = (
+  current: AccessGrant | null,
+  granted: ReadonlySet<Permission>,
+  expiresAt: string | null,
+): boolean => {
+  if (current === null) return true;
+  const before = grantedBy(current);
+  if ([...granted].some((permission) => !before.has(permission))) return true;
+  return expiresAt === null ? current.expiresAt !== null : current.expiresAt !== null && expiresAt > current.expiresAt;
+};
+
+/** Whether new project settings could give some member more than the current ones. */
+const widensProjectAccess = (current: ProjectAccess, next: ProjectAccess): boolean => {
+  if (next.accessMode !== projectAccessModes.open) return false;
+  if (current.accessMode !== projectAccessModes.open) return true;
+  const before = rolePermissions(current.defaultMemberRole);
+  return [...rolePermissions(next.defaultMemberRole)].some((permission) => !before.has(permission));
+};
+
+const projectArchived = () =>
+  new ProjectArchived({message: "Archived projects cannot widen access; only narrowing changes are allowed."});
+
 const invalid = (message: string) => new AccessGrantInvalid({message});
 
 function makeAccessAdministrationService(
@@ -254,7 +298,18 @@ function makeAccessAdministrationService(
     scope: AccessScope,
     granted: Iterable<Permission>,
   ) {
-    const held = (yield* authorization.effectiveAccess(principal, scope)).permissions;
+    // A service principal is not a member, so it never inherits the project
+    // default role: it holds exactly what its capabilities authorize. A key
+    // bound to a member holds the member's access narrowed by its
+    // capabilities. Only a person signed in directly holds their full access.
+    const held: ReadonlySet<Permission> = principal.kind === principalKinds.service
+      ? capabilityPermissions(principal)
+      : isDirectHumanPrincipal(principal)
+      ? (yield* authorization.effectiveAccess(principal, scope)).permissions
+      : intersectPermissions(
+        (yield* authorization.effectiveAccess(principal, scope)).permissions,
+        capabilityPermissions(principal),
+      );
     const missing = sortedPermissions([...granted].filter((permission) => !held.has(permission)));
     if (missing.length > 0) {
       yield* new PermissionNotHeld({
@@ -355,6 +410,7 @@ function makeAccessAdministrationService(
       accessMode: command.accessMode,
       defaultMemberRole: command.defaultMemberRole,
     };
+    if (current.archived && widensProjectAccess(current, next)) return yield* projectArchived();
     let membersLosingAccess = 0;
     const narrowedMemberIds: string[] = [];
     for (const member of yield* activeMembers) {
@@ -414,9 +470,7 @@ function makeAccessAdministrationService(
     if (command.expiresAt !== null && command.expiresAt <= (yield* now)) {
       return yield* invalid("A grant must expire in the future.");
     }
-    const granted = new Set(fromRole);
-    for (const permission of add) granted.add(permission);
-    for (const permission of remove) granted.delete(permission);
+    const granted = grantedBy({add, remove, role: command.role});
     yield* requireHeld(command.principal, scope, granted);
 
     const existing = yield* access.findSubjectGrants({
@@ -434,6 +488,9 @@ function makeAccessAdministrationService(
       if (held.length >= maximumArtifactGrantsPerProject) {
         return yield* invalid(`A member can hold at most ${maximumArtifactGrantsPerProject} artifact grants in one project.`);
       }
+    }
+    if (widensGrant(current, granted, command.expiresAt) && (yield* requireProjectAccessRecord(command.projectId)).archived) {
+      return yield* projectArchived();
     }
     if ((current === null) !== (command.expectedRevision === null)) {
       return yield* new AccessRevisionConflict({message: "This member's access changed; reload it and try again."});
