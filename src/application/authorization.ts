@@ -6,6 +6,7 @@ import {
   type ArtifactRepositoryFailure,
   AuthorizationDenied,
   ProjectNotFound,
+  ShareLinksDisabled,
 } from "../core/errors.js";
 import {
   hasCapability,
@@ -159,6 +160,18 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: ProjectScope,
   ) => Effect.Effect<void, ProjectScopedDenial>;
+  /**
+   * Every path that makes content reachable by link (a share link, a
+   * public_link publication, or an access change to public_link) needs the
+   * same sharer authority: artifact.share on the scope, share links enabled
+   * by installation policy, and a direct human administrator when policy
+   * reserves link creation to administrators. A null artifact ID checks the
+   * project, for an artifact that does not exist yet.
+   */
+  readonly requireLinkSharing: (
+    principal: Principal,
+    scope: AccessScope,
+  ) => Effect.Effect<void, ScopedDenial | ShareLinksDisabled>;
   readonly requireVersionPublication: (
     principal: Principal,
     scope: ArtifactScope,
@@ -481,6 +494,21 @@ function makeAuthorizationService(
     },
   );
 
+  const requireLinkSharing = Effect.fn("AuthorizationService.requireLinkSharing")(
+    function*(principal: Principal, scope: AccessScope) {
+      yield* requireScoped(principal, scope, permissions.artifactShare, manageRule);
+      const {policy} = yield* access.readAccessPolicy(dependencies.installationId);
+      if (!policy.shareLinks.enabled) {
+        return yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
+      }
+      if (policy.shareLinks.linkCreators === "administrators" && !isHumanAdministrator(principal)) {
+        return yield* new ShareLinksDisabled({
+          message: "Only administrators can make content reachable by link here.",
+        });
+      }
+    },
+  );
+
   const requirePublicationPreparation = Effect.fn(
     "AuthorizationService.requirePublicationPreparation",
   )(function*(principal: Principal, scope: ProjectScope | null) {
@@ -565,6 +593,7 @@ function makeAuthorizationService(
       permissions.projectManage,
       anyCapability(principalCapabilities.manageProjects),
     ),
+    requireLinkSharing,
     requirePublicationPreparation,
     requireVersionPublication,
     visibleScope,

@@ -186,6 +186,7 @@ export async function startAccessRuntime() {
     installationId,
     person,
     publish,
+    publishTo,
     publishVersion,
     runtime,
     setProjectAccess,
