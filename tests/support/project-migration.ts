@@ -318,7 +318,7 @@ async function publish(
   await Promise.all(plan.files.map(async (planned) => {
     const file = encoded.find((candidate) => candidate.path === planned.path);
     if (file === undefined) throw new Error(`The fixture has no ${planned.path}.`);
-    const uploaded = await fetch(throughEndpoint(planned.uploadUrl, endpoint.baseUrl), {
+    const uploaded = await fetch(planned.uploadUrl, {
       body: file.bytes,
       headers: {Authorization: `Bearer ${endpoint.token}`},
       method: "PUT",
@@ -327,7 +327,7 @@ async function publish(
       throw new Error(`Fixture upload of ${planned.path} failed with HTTP ${uploaded.status}.`);
     }
   }));
-  const committed = await fetch(throughEndpoint(plan.commitUrl, endpoint.baseUrl), {
+  const committed = await fetch(plan.commitUrl, {
     body: JSON.stringify({target}),
     headers: {...jsonHeaders(endpoint.token), "Idempotency-Key": idempotencyKey},
     method: "POST",
@@ -575,14 +575,4 @@ export function fetchContentThroughServer(
     outgoing.on("error", reject);
     outgoing.end();
   });
-}
-
-/**
- * A server with a configured application origin names that origin in every
- * link it returns. The fixture reaches the process directly, standing in for
- * the proxy in front of it, so it sends each link's path to the real listener.
- */
-function throughEndpoint(link: string, baseUrl: string): string {
-  const url = new URL(link);
-  return new URL(`${url.pathname}${url.search}`, baseUrl).toString();
 }
