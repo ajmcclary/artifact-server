@@ -72,6 +72,16 @@ https://developers.cloudflare.com/d1/platform/limits/
 
 A bounded local Wrangler-D1 probe (`deploy/cloudflare/tests/d1-final-batch-limits.test.ts`, `ARTIFACT_SERVER_D1_FINAL_BATCH_LIMITS=1`) found no `database.batch()` statement ceiling up to at least 632 statements carrying 10,000 manifest rows. Wall times on this machine were roughly 170 ms for a 632-statement final-commit batch and 68 ms for the equivalent two-statement `INSERT ... SELECT` plus `DELETE` prepared-manifest path. The local binding did not enforce the documented Workers per-invocation query limit; a batch of 5,000 trivial statements succeeded locally. These are binding-only measurements and do not establish live Worker CPU or plan enforcement.
 
+#### Per-invocation D1 statement counts (local binding, 2026-11-22)
+
+The local binding does enforce the 100-bound-parameter statement limit (101 parameters fail with `too many SQL variables`), so statements that bind one parameter per thread or file break at that size rather than at the query budget.
+
+- Cold-start migration: a database already at the current revision and shared-schema fingerprint costs one read; before this change every cold start sent 6 batches carrying 76 statements (`deploy/cloudflare/tests/worker-cold-start.test.ts`). A stale revision, a changed fingerprint, or a missing default project still runs the full idempotent path.
+- Agent dispatch: the send batch is a fixed six statements and the thread check one statement for any bundle up to `maximumDispatchBundleSize` (100); before, a 99-thread bundle exceeded the parameter limit and the batch grew by one statement per thread (`deploy/cloudflare/tests/agent-dispatch-runtime.test.ts`).
+- Bulk comment clear: a fixed four-statement batch for any number of threads, down from three statements per thread plus a separate revision batch.
+
+These are statement counts on the local binding; the live per-invocation query budget is still unqualified.
+
 ### R2
 
 - Free tier: 10 GB-month storage, 1 million Class A operations/month, 10 million

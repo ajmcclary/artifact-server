@@ -62,7 +62,21 @@ await writeFile(configPath, JSON.stringify({
     "deploy/cloudflare/scripts/git-history-purge-worker.ts",
   ),
   name: "artifact-server-git-history-purge",
+  vars: {
+    ARTIFACT_SERVER_ACCOUNT_ID: environment.ARTIFACT_SERVER_CLOUDFLARE_ACCOUNT_ID,
+    ARTIFACT_SERVER_INSTALLATION_ID: environment.ARTIFACT_SERVER_INSTALLATION_ID,
+    ARTIFACT_SERVER_NAMESPACE:
+      environment.ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_NAMESPACE,
+  },
 }), "utf8");
+// Wrangler loads `.dev.vars` beside the configuration as secret bindings. The
+// key never reaches the process table, as a `--var` argument would, and the
+// owner-only file lives in the owner-only temporary directory removed below.
+await writeFile(
+  path.join(temporaryDirectory, ".dev.vars"),
+  `PURGE_KEY=${purgeKey}\n`,
+  {encoding: "utf8", flag: "wx", mode: 0o600},
+);
 
 const wrangler = spawn("pnpm", [
   "--dir",
@@ -75,14 +89,6 @@ const wrangler = spawn("pnpm", [
   "--remote",
   "--port",
   String(port),
-  "--var",
-  `PURGE_KEY:${purgeKey}`,
-  "--var",
-  `ARTIFACT_SERVER_ACCOUNT_ID:${environment.ARTIFACT_SERVER_CLOUDFLARE_ACCOUNT_ID}`,
-  "--var",
-  `ARTIFACT_SERVER_NAMESPACE:${environment.ARTIFACT_SERVER_CLOUDFLARE_ARTIFACTS_NAMESPACE}`,
-  "--var",
-  `ARTIFACT_SERVER_INSTALLATION_ID:${environment.ARTIFACT_SERVER_INSTALLATION_ID}`,
 ], {env: process.env, stdio: ["ignore", "pipe", "pipe"]});
 let output = "";
 wrangler.stdout.setEncoding("utf8");
@@ -110,7 +116,7 @@ try {
   });
   if (!response.ok) {
     throw new Error(
-      `Cloudflare purge returned HTTP ${response.status}: ${await response.text()}`,
+      `Cloudflare purge returned HTTP ${response.status}: ${redacted(await response.text())}`,
     );
   }
   process.stdout.write(
@@ -123,10 +129,10 @@ try {
 
 async function probeReadiness(deadline: number): Promise<void> {
   if (Date.now() >= deadline) {
-    throw new Error(`Wrangler did not become ready.\n${output}`);
+    throw new Error(`Wrangler did not become ready.\n${redacted(output)}`);
   }
   if (wrangler.exitCode !== null) {
-    throw new Error(`Wrangler exited before purge started.\n${output}`);
+    throw new Error(`Wrangler exited before purge started.\n${redacted(output)}`);
   }
   try {
     const response = await fetch(origin, {
@@ -149,6 +155,11 @@ async function stopWrangler(): Promise<void> {
     new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
   ]);
   if (wrangler.exitCode === null) wrangler.kill("SIGKILL");
+}
+
+/** Removes the transient purge key from text that reaches the operator. */
+function redacted(text: string): string {
+  return text.replaceAll(purgeKey, "[redacted]");
 }
 
 function appendBounded(current: string, chunk: string): string {

@@ -170,9 +170,15 @@ a replica count and pool size combination that exceeds
 `configuration.postgresConnectionBudget`. Horizontal autoscaling is
 intentionally not included until measured capacity defines safe thresholds.
 
-The default request is `100m` CPU and `256Mi` memory. Treat it as a starting
-request, observe the workload, and adjust `resources`. The chart does not set a
-CPU limit by default.
+The default request is `100m` CPU and `256Mi` memory with a `1Gi` memory
+limit. Treat it as a starting point, observe the workload, and adjust
+`resources`. The chart does not set a CPU limit by default. The same
+`resources`, `nodeSelector`, `tolerations`, and `affinity` apply to the serving
+pods, the migration Job, and the cleanup CronJob, so a cluster that dedicates
+tainted nodes to Artifact Server schedules all three. The migration Job is a
+`pre-install` hook and runs under the namespace's default ServiceAccount with
+no token mounted, because the chart's own ServiceAccount does not exist yet
+when the hook runs.
 
 ## Uninstall and durable state
 

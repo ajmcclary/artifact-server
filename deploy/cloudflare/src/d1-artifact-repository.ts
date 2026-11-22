@@ -667,6 +667,12 @@ const commentReplySelect = `
 `;
 const commentThreadScope =
   "FROM comment_threads t WHERE t.id = ? AND t.project_id = ? AND t.artifact_id = ?";
+/** The dispatch states that hold a thread, as `dispatchHoldsCommentThread` decides. */
+const commentHoldingDispatchStateSqlList = [
+  agentDispatchStates.queued,
+  agentDispatchStates.claimed,
+  agentDispatchStates.delivered,
+].map((state) => `'${state}'`).join(", ");
 const commentReplyScope = `FROM comment_threads t
   JOIN comment_replies r ON r.thread_id = t.id AND r.id = ?
   WHERE t.id = ? AND t.project_id = ? AND t.artifact_id = ?`;
@@ -1490,18 +1496,18 @@ export function createD1ArtifactRepository(
     )
   `).bind(dispatchId);
 
+  // Thread ids travel as one JSON parameter: D1 caps bound parameters at 100
+  // per statement and a bundle may hold maximumDispatchBundleSize threads.
   const bumpCommentRevisionForThreadsStatement = (
-    threadIds: readonly string[],
-  ): D1PreparedStatement => {
-    const placeholders = threadIds.map(() => "?").join(", ");
-    return database.prepare(`
-      UPDATE artifacts
-      SET comment_revision = comment_revision + 1
-      WHERE id IN (
-        SELECT DISTINCT artifact_id FROM comment_threads WHERE id IN (${placeholders})
-      )
-    `).bind(...threadIds);
-  };
+    threadIdsJson: string,
+  ): D1PreparedStatement => database.prepare(`
+    UPDATE artifacts
+    SET comment_revision = comment_revision + 1
+    WHERE id IN (
+      SELECT DISTINCT artifact_id FROM comment_threads
+      WHERE id IN (SELECT value FROM json_each(?))
+    )
+  `).bind(threadIdsJson);
 
   const readAgentRowOrNull = async (
     scopeInstallationId: string,
@@ -1674,12 +1680,16 @@ export function createD1ArtifactRepository(
     command: CreateAgentDispatch,
   ): Promise<void> => {
     if (command.threadIds.length === 0) return;
-    const placeholders = command.threadIds.map(() => "?").join(", ");
+    // One JSON parameter: a full bundle would exceed D1's 100 bound parameters.
     const result = await database.prepare(`
       SELECT id, state, dispatch_id AS dispatchId FROM comment_threads
-      WHERE installation_id = ? AND project_id = ? AND id IN (${placeholders})
-    `).bind(command.installationId, command.projectId, ...command.threadIds)
-      .all<z.input<typeof dispatchThreadCheckRowSchema>>();
+      WHERE installation_id = ? AND project_id = ?
+        AND id IN (SELECT value FROM json_each(?))
+    `).bind(
+      command.installationId,
+      command.projectId,
+      JSON.stringify(command.threadIds),
+    ).all<z.input<typeof dispatchThreadCheckRowSchema>>();
     const found = new Map<string, z.infer<typeof dispatchThreadCheckRowSchema>>();
     for (const row of result.results) {
       const parsed = dispatchThreadCheckRowSchema.parse(row);
@@ -4453,39 +4463,88 @@ export function createD1ArtifactRepository(
         }
         deletable.push(row);
       }
-      if (deletable.length > 0) {
-        // One atomic batch: per thread the ledger action lands first — its
-        // source select still sees the row — then the replies and the thread
-        // go, so no thread ever disappears without its comment_delete action.
-        await database.batch(deletable.flatMap((row) => {
-          const commentAction = commentActionIdentity(row.id);
-          return [
-            commentActionStatement(
-              {
-                action: artifactActionKinds.commentDelete,
-                actionId: commentAction.actionId,
-                actor: command.actor,
-                authorizedByPrincipalId: command.authorizedByPrincipalId,
-                changedAt: command.clearedAt,
-                idempotencyKey: commentAction.idempotencyKey,
-                principalId: command.principalId,
-                replyId: null,
-                threadId: row.id,
-              },
-              commentThreadScope,
-              [row.id, command.projectId, command.artifactId],
-            ),
-            database.prepare("DELETE FROM comment_replies WHERE thread_id = ?")
-              .bind(row.id),
-            database.prepare(`
-              DELETE FROM comment_threads
-              WHERE id = ? AND project_id = ? AND artifact_id = ?
-            `).bind(row.id, command.projectId, command.artifactId),
-          ];
-        }));
-        await database.batch([bumpCommentRevisionStatement(command.artifactId)]);
-      }
-      return {deleted: deletable.length, skippedDispatched};
+      if (deletable.length === 0) return {deleted: 0, skippedDispatched};
+      // Each thread's ledger identity is minted here and the whole set travels
+      // as one JSON parameter, so the batch is a fixed four statements for any
+      // number of threads. Every statement re-checks the listing predicate and
+      // the dispatch hold inside the batch: a thread a dispatch claimed, or a
+      // resolved thread reopened, after the listing above is left in place
+      // with its replies and without a comment_delete action.
+      const targetsJson = JSON.stringify(deletable.map((row) => ({
+        ...commentActionIdentity(row.id),
+        threadId: row.id,
+      })));
+      const clearable = `comment_threads.project_id = ?
+        AND comment_threads.artifact_id = ?
+        AND (? IS NULL OR comment_threads.version_id = ?)
+        AND (? = 'all' OR comment_threads.state = 'resolved')
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_dispatches held
+          WHERE held.id = comment_threads.dispatch_id
+            AND held.state IN (${commentHoldingDispatchStateSqlList})
+        )`;
+      const clearableBindings = [
+        command.projectId,
+        command.artifactId,
+        command.versionId,
+        command.versionId,
+        command.scope,
+      ];
+      const targets = `json_each(?) target
+        JOIN comment_threads
+          ON comment_threads.id = json_extract(target.value, '$.threadId')`;
+      // The ledger action lands first, while its source select still sees the
+      // thread, so no thread disappears without its comment_delete action.
+      const results = await database.batch([
+        database.prepare(`
+          INSERT INTO actions (
+            id, project_id, artifact_id, version_id, action, principal_id,
+            authorized_by_principal_id, idempotency_key, created_at,
+            thread_id, reply_id, actor_name, actor_kind
+          )
+          SELECT json_extract(target.value, '$.actionId'),
+            comment_threads.project_id, comment_threads.artifact_id,
+            comment_threads.version_id, ?, ?, ?,
+            json_extract(target.value, '$.idempotencyKey'), ?,
+            comment_threads.id, NULL, ?, ?
+          FROM ${targets}
+          WHERE ${clearable}
+        `).bind(
+          artifactActionKinds.commentDelete,
+          command.principalId,
+          command.authorizedByPrincipalId,
+          command.clearedAt,
+          command.actor.displayName,
+          storedPrincipalKind(command.actor.kind),
+          targetsJson,
+          ...clearableBindings,
+        ),
+        database.prepare(`
+          DELETE FROM comment_replies WHERE thread_id IN (
+            SELECT comment_threads.id FROM ${targets} WHERE ${clearable}
+          )
+        `).bind(targetsJson, ...clearableBindings),
+        database.prepare(`
+          DELETE FROM comment_threads
+          WHERE id IN (
+            SELECT json_extract(value, '$.threadId') FROM json_each(?)
+          ) AND ${clearable}
+        `).bind(targetsJson, ...clearableBindings),
+        bumpCommentRevisionStatement(command.artifactId),
+      ]);
+      const deleted = results[2]?.meta.changes ?? 0;
+      if (deleted === deletable.length) return {deleted, skippedDispatched};
+      // Fewer threads went than were listed: a dispatch took some between the
+      // listing and the batch, or another writer deleted or reopened them.
+      // Only the ones a dispatch now holds are reported as skipped.
+      const newlyHeld = await database.prepare(`
+        SELECT COUNT(*) AS count FROM comment_threads
+        JOIN agent_dispatches held ON held.id = comment_threads.dispatch_id
+        WHERE comment_threads.id IN (
+          SELECT json_extract(value, '$.threadId') FROM json_each(?)
+        ) AND held.state IN (${commentHoldingDispatchStateSqlList})
+      `).bind(targetsJson).first<number>("count");
+      return {deleted, skippedDispatched: skippedDispatched + (newlyHeld ?? 0)};
     },
     createReply: async (
       command: CreateCommentReply,
@@ -4900,12 +4959,14 @@ export function createD1ArtifactRepository(
             command.createdAt,
           ),
           // The marker moves the thread off the default listings, so it
-          // counts as a thread edit: a `since` poller must see it leave.
-          ...command.threadIds.map((threadId) => database.prepare(`
+          // counts as a thread edit: a `since` poller must see it leave. One
+          // set-based statement keeps the batch at a fixed six statements for
+          // any bundle size, inside the Workers Free per-invocation D1 budget.
+          ...(command.threadIds.length === 0 ? [] : [database.prepare(`
             UPDATE comment_threads SET dispatch_id = ?, updated_at = ?
-            WHERE id = ? AND project_id = ? AND state = 'open'
-              AND dispatch_id IS NULL
-          `).bind(command.id, command.createdAt, threadId, command.projectId)),
+            WHERE id IN (SELECT value FROM json_each(?)) AND project_id = ?
+              AND state = 'open' AND dispatch_id IS NULL
+          `).bind(command.id, command.createdAt, threadIdsJson, command.projectId)]),
           // The guard fails the whole batch unless every bundle thread now
           // carries this dispatch marker, so two concurrent sends can never
           // double-book a thread and a rejected bundle leaves no partial
@@ -4918,7 +4979,7 @@ export function createD1ArtifactRepository(
           )),
           ...(command.threadIds.length === 0
             ? []
-            : [bumpCommentRevisionForThreadsStatement(command.threadIds)]),
+            : [bumpCommentRevisionForThreadsStatement(threadIdsJson)]),
           actionStatement(attributedInsert(
             {
               actor: actorSnapshotOfAuthor(command.sender),

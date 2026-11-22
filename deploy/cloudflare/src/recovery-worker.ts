@@ -1,4 +1,4 @@
-import {createHash, timingSafeEqual} from "node:crypto";
+import {createHash} from "node:crypto";
 
 import {Effect} from "effect";
 
@@ -13,13 +13,15 @@ import type {
 import {
   checkIntegrityCatalog,
 } from "../../../src/lifecycle/integrity-check.js";
-import {createR2ObjectStorageAdapters} from "./r2-object-storage.js";
 import {requiredD1SchemaVersion} from "./d1-migrations.js";
+import {authorizedOperatorRequest} from "./operator-authorization.js";
+import {createR2ObjectStorageAdapters} from "./r2-object-storage.js";
 
 interface RecoveryEnvironment {
   readonly ARTIFACT_SERVER_INSTALLATION_ID: string;
   readonly ARTIFACT_SERVER_RECOVERY_MODE: "copy" | "restore" | "source";
-  readonly ARTIFACT_SERVER_RECOVERY_TOKEN: string;
+  /** Absent when the secret binding was never set; every request is refused. */
+  readonly ARTIFACT_SERVER_RECOVERY_TOKEN?: string;
   readonly RECOVERY_D1?: D1Database;
   readonly RECOVERY_R2?: R2Bucket;
   readonly SOURCE_R2?: R2Bucket;
@@ -66,11 +68,18 @@ const stateQueries: readonly NamedQuery[] = [
   {name: "actions", sql: "SELECT * FROM actions ORDER BY id"},
   {name: "staged_uploads", sql: "SELECT * FROM staged_uploads ORDER BY id"},
   {name: "staged_upload_files", sql: "SELECT * FROM staged_upload_files ORDER BY upload_id, storage_token"},
+  {name: "prepared_manifest_entries", sql: "SELECT * FROM prepared_manifest_entries ORDER BY upload_id, path"},
   {name: "content_bootstraps", sql: "SELECT * FROM content_bootstraps ORDER BY token_digest"},
   {name: "content_sessions", sql: "SELECT * FROM content_sessions ORDER BY token_digest"},
   {name: "installation_members", sql: "SELECT * FROM installation_members ORDER BY id"},
   {name: "external_identities", sql: "SELECT * FROM external_identities ORDER BY provider, subject"},
   {name: "application_sessions", sql: "SELECT * FROM application_sessions ORDER BY id"},
+  {name: "installation_invites", sql: "SELECT * FROM installation_invites ORDER BY installation_id, id"},
+  {name: "installation_access_policy", sql: "SELECT * FROM installation_access_policy ORDER BY installation_id"},
+  {name: "access_grants", sql: "SELECT * FROM access_grants ORDER BY installation_id, id"},
+  {name: "share_links", sql: "SELECT * FROM share_links ORDER BY installation_id, id"},
+  {name: "guest_principals", sql: "SELECT * FROM guest_principals ORDER BY installation_id, id"},
+  {name: "guest_sessions", sql: "SELECT * FROM guest_sessions ORDER BY installation_id, id"},
   {name: "git_history_provider_identity", sql: "SELECT * FROM git_history_provider_identity ORDER BY installation_id"},
   {name: "git_history_project_settings", sql: "SELECT * FROM git_history_project_settings ORDER BY project_id"},
   {name: "git_history_repositories", sql: "SELECT * FROM git_history_repositories ORDER BY artifact_id"},
@@ -91,7 +100,12 @@ export default {
     request: Request,
     environment: RecoveryEnvironment,
   ): Promise<Response> {
-    if (!authorized(request, environment.ARTIFACT_SERVER_RECOVERY_TOKEN)) {
+    if (
+      !authorizedOperatorRequest(
+        request,
+        environment.ARTIFACT_SERVER_RECOVERY_TOKEN,
+      )
+    ) {
       return Response.json({error: "unauthorized"}, {status: 401});
     }
     try {
@@ -125,15 +139,6 @@ function recoveryOperationName(error: Error | null): string {
   return recoveryOperations.find((operation) =>
     error.message === `Recovery operation failed: ${operation}`
   ) ?? "unknown";
-}
-
-function authorized(request: Request, expectedToken: string): boolean {
-  const provided = request.headers.get("Authorization") ?? "";
-  const expected = `Bearer ${expectedToken}`;
-  const providedBytes = Buffer.from(provided);
-  const expectedBytes = Buffer.from(expected);
-  return providedBytes.byteLength === expectedBytes.byteLength &&
-    timingSafeEqual(providedBytes, expectedBytes);
 }
 
 async function inspectInstallation(environment: RecoveryEnvironment) {
@@ -224,6 +229,9 @@ async function readIntegrityCatalog(
         SELECT 'action' AS kind, id, project_id AS projectId,
           artifact_id AS artifactId, version_id AS versionId
         FROM actions
+        -- Installation-level activity (members, keys, invites) references no
+        -- project; the shared integrity check reads it the same way.
+        WHERE project_id IS NOT NULL
         UNION ALL
         SELECT 'idempotency', idempotency_key, project_id,
           artifact_id, version_id FROM idempotency_records

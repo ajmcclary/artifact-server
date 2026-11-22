@@ -135,6 +135,28 @@ expect_render_failure "trustedCertificateAuthorities" \
   --set identity.trustedCertificateAuthorities.configMapName=identity-ca \
   --set identity.trustedCertificateAuthorities.key=../escape
 
+# Placement and the memory limit reach every pod the release runs: the
+# serving Deployment, the pre-install migration Job, and the cleanup CronJob.
+artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+  --kube-version 1.36.0 "${artifactserver_values[@]}" \
+  --set nodeSelector.artifact-server/pool=dedicated \
+  --set tolerations[0].key=artifact-server/dedicated \
+  --set tolerations[0].operator=Exists \
+  --set tolerations[0].effect=NoSchedule \
+  --set affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=artifact-server/zone \
+  --set affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=Exists)
+for artifactserver_expected_count in \
+  'artifact-server/pool: dedicated' \
+  'key: artifact-server/dedicated' \
+  'key: artifact-server/zone' \
+  'memory: 1Gi'; do
+  artifactserver_count=$(grep -cF -- "$artifactserver_expected_count" <<<"$artifactserver_rendered" || true)
+  if [[ "$artifactserver_count" -ne 3 ]]; then
+    echo "Expected '$artifactserver_expected_count' on the Deployment, migration Job, and cleanup CronJob; found $artifactserver_count." >&2
+    exit 1
+  fi
+done
+
 mkdir -p -- "$artifactserver_repository/release"
 helm package "$artifactserver_chart" \
   --destination "$artifactserver_repository/release" >/dev/null

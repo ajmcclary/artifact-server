@@ -150,6 +150,57 @@ describe("GCP Pulumi deployment", () => {
     expect(JSON.stringify(deployment)).not.toContain("generated-database-password");
   });
 
+  test("grants the workload an operator WorkOS key and pins a TLS 1.2 public edge", async () => {
+    resources.length = 0;
+    const workosApiKeySecretRef =
+      "projects/artifact-server-production/secrets/workos-api-key";
+    const configuration = parseGcpPulumiConfiguration(gcpInput({
+      workosApiKeySecretRef,
+      workosClientId: "client_01EXAMPLE",
+      workosIssuer: "https://auth.example.com",
+    }), "production", "artifact-server-production");
+    await pulumi.runtime.runInPulumiStack(async () => {
+      const stack = defineGcpStack(configuration);
+      return {deployment: stack.deployment};
+    });
+
+    // Cloud Run resolves the key for both the service and the cleanup job,
+    // so the shared workload identity must hold secretAccessor on it.
+    expect(JSON.stringify(requireResource("gcp:cloudrunv2/service:Service").inputs))
+      .toContain(workosApiKeySecretRef);
+    expect(JSON.stringify(requireResource("gcp:cloudrunv2/job:Job").inputs))
+      .toContain(workosApiKeySecretRef);
+    const grants = requireResources("gcp:secretmanager/secretIamMember:SecretIamMember");
+    expect(grants.map(({inputs}) => inputs["secretId"])).toContain(workosApiKeySecretRef);
+    const workosGrant = grants.find(({inputs}) =>
+      inputs["secretId"] === workosApiKeySecretRef
+    );
+    expect(workosGrant?.inputs).toMatchObject({
+      member: "serviceAccount:as-123456789abc-app@artifact-server-production.iam.gserviceaccount.com",
+      role: "roles/secretmanager.secretAccessor",
+    });
+
+    const sslPolicy = requireResource("gcp:compute/sSLPolicy:SSLPolicy");
+    expect(sslPolicy.inputs).toMatchObject({minTlsVersion: "TLS_1_2", profile: "MODERN"});
+    expect(requireResource("gcp:compute/targetHttpsProxy:TargetHttpsProxy").inputs)
+      .toMatchObject({sslPolicy: `${sslPolicy.name}-id`});
+  });
+
+  test("grants no WorkOS secret access when hosted login is not configured", async () => {
+    resources.length = 0;
+    const configuration = parseGcpPulumiConfiguration(
+      gcpInput(),
+      "production",
+      "artifact-server-production",
+    );
+    await pulumi.runtime.runInPulumiStack(async () => {
+      const stack = defineGcpStack(configuration);
+      return {deployment: stack.deployment};
+    });
+    expect(requireResources("gcp:secretmanager/secretIamMember:SecretIamMember"))
+      .toHaveLength(2);
+  });
+
   test("adopts an existing GCP network without creating one", async () => {
     resources.length = 0;
     const configuration = parseGcpPulumiConfiguration(gcpInput({

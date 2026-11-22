@@ -1,5 +1,3 @@
-import {createHash} from "node:crypto";
-
 import type {
   BlobByteRange,
   BlobStore,
@@ -17,6 +15,7 @@ import {
   type StoredObjectKind,
   verifyCloudObjectWriteSize,
 } from "../../../src/storage/cloud-object-storage.js";
+import {verifiedBlobStream} from "../../../src/storage/verified-file.js";
 
 /** Immutable and staging adapters backed by one Worker R2 binding. */
 export interface R2ObjectStorageAdapters {
@@ -147,7 +146,9 @@ class R2Objects {
     }
 
     const fixedLength = new FixedLengthStream(write.size);
-    const verifiedStream = verifiedR2Stream(write, expectedDigest);
+    // The shared verifier fails with FileVerificationError, which the
+    // application maps to UploadedFileMismatch (422) like every other adapter.
+    const verifiedStream = verifiedBlobStream(write, expectedDigest);
     const verified = write.signal === undefined
       ? verifiedStream.pipeTo(fixedLength.writable)
       : verifiedStream.pipeTo(fixedLength.writable, {signal: write.signal});
@@ -178,14 +179,16 @@ class R2Objects {
   }
 }
 
+/**
+ * Proves possession of the declared bytes for an object that already exists.
+ * The shared verifier is Web-stream native, so the drain needs no Node stream.
+ */
 async function drainVerifiedR2Write(
   write: BlobWrite,
   expectedDigest: string,
 ): Promise<void> {
-  const stream = verifiedR2Stream(write, expectedDigest);
-  const sink = new WritableStream<Uint8Array>();
-  if (write.signal === undefined) await stream.pipeTo(sink);
-  else await stream.pipeTo(sink, {signal: write.signal});
+  await verifiedBlobStream(write, expectedDigest)
+    .pipeTo(new WritableStream<Uint8Array>());
 }
 
 function inspectR2Object(
@@ -200,38 +203,4 @@ function inspectR2Object(
     provider: "R2",
     size: object.size,
   });
-}
-
-function verifiedR2Stream(
-  write: BlobWrite,
-  expectedDigest: string,
-): ReadableStream<Uint8Array> {
-  const fingerprint = createHash("sha256");
-  let size = 0;
-  return write.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    flush: (controller) => {
-      if (size !== write.size) {
-        controller.error(new Error(
-          `Incoming R2 object ${expectedDigest} is ${size} bytes but ${write.size} were declared.`,
-        ));
-        return;
-      }
-      if (fingerprint.digest("hex") !== expectedDigest) {
-        controller.error(new Error(
-          `Incoming R2 object does not match fingerprint ${expectedDigest}.`,
-        ));
-      }
-    },
-    transform: (chunk, controller) => {
-      size += chunk.byteLength;
-      if (size > write.size) {
-        controller.error(new Error(
-          `Incoming R2 object ${expectedDigest} exceeds its declared ${write.size} bytes.`,
-        ));
-        return;
-      }
-      fingerprint.update(chunk);
-      controller.enqueue(chunk);
-    },
-  }));
 }

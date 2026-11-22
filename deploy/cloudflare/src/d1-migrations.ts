@@ -1,3 +1,5 @@
+import {createHash} from "node:crypto";
+
 import {
   defaultProjectId,
   defaultProjectName,
@@ -30,7 +32,13 @@ import {
   versionStateSqlList,
 } from "../../../src/storage/version-state-sql.js";
 
-/** D1 schema revision required by the Cloudflare runtime. */
+/**
+ * D1 schema revision required by the Cloudflare runtime.
+ *
+ * Bump it with every change to a migration step in this module: a database
+ * stamped with the current revision and fingerprint skips the migration
+ * batch on cold start (see `schemaIsCurrent`).
+ */
 export const requiredD1SchemaVersion = 23;
 
 /** SQL literal list of every action kind the ledger accepts. */
@@ -632,11 +640,98 @@ const upgradeFromVersion4Statements = [
   "ALTER TABLE comment_threads ADD COLUMN dispatch_id TEXT REFERENCES agent_dispatches(id)",
 ] as const;
 
+/**
+ * The `artifact_server_schema` component holding `migrationFingerprint`. It is
+ * a separate row, so every reader of the `runtime` revision is unaffected.
+ */
+const migrationFingerprintComponent = "runtime-migration-fingerprint";
+
+/**
+ * A digest of every shared schema input the always-run steps read. Those
+ * modules live outside this package and have changed (new action kinds, for
+ * example) without a D1 revision bump, so the revision alone cannot prove a
+ * current database already ran this build's steps. 48 bits fit a SQLite
+ * INTEGER and a JavaScript safe integer. It is computed on first use because
+ * some inputs are declared further down this module.
+ */
+let memoizedMigrationFingerprint: number | null = null;
+
+function migrationFingerprint(): number {
+  memoizedMigrationFingerprint ??= Number.parseInt(
+    createHash("sha256").update(JSON.stringify([
+      requiredD1SchemaVersion,
+      schemaSql,
+      actionKindList,
+      upgradeFromVersion1Statements,
+      upgradeFromVersion2Statements,
+      upgradeFromVersion3Statements,
+      upgradeFromVersion4Statements,
+      widenRegisteredAgentsStatements,
+      sqliteActionsRebuildStatements({strict: false}),
+      sqliteActionsWidenStatements({strict: false}),
+      sqliteActivityRecoveryStatements({identity: true}),
+      admissionMethodCheckSql,
+      d1MemberAdmissionWidenStatements,
+      sqliteInvitesTableSql,
+      sqliteInvitesIndexSql,
+      sqliteAccessTableStatements,
+      sqliteKeyProjectScopeColumnSql,
+      sqliteProjectAccessColumns,
+      sqliteShareLinkTableStatements,
+      versionStateSqlList,
+      acceptedVersionStateSqlList,
+      defaultGitHistoryMaximumCopiedFiles,
+    ])).digest("hex").slice(0, 12),
+    16,
+  );
+  return memoizedMigrationFingerprint;
+}
+
+/**
+ * Whether this database already holds this build's schema, decided by one
+ * read so a cold start does not resend the full migration batch and its
+ * probes against the per-invocation D1 query budget.
+ *
+ * The revision, fingerprint, and default project are written together in the
+ * last batch of `migrateD1`, after every step succeeded, so all three present
+ * means every step already ran. Any read failure (a fresh database has no
+ * schema table yet) takes the full idempotent path.
+ */
+async function schemaIsCurrent(
+  database: D1Database,
+  installationId: string,
+): Promise<boolean> {
+  try {
+    const row = await database.prepare(`
+      SELECT
+        (SELECT version FROM artifact_server_schema WHERE component = 'runtime')
+          AS revision,
+        (SELECT version FROM artifact_server_schema WHERE component = ?)
+          AS fingerprint,
+        EXISTS (
+          SELECT 1 FROM projects WHERE id = ? AND installation_id = ?
+        ) AS seeded
+    `).bind(migrationFingerprintComponent, defaultProjectId, installationId)
+      .first<{
+        readonly fingerprint: number | null;
+        readonly revision: number | null;
+        readonly seeded: number;
+      }>();
+    return row !== null &&
+      row.revision === requiredD1SchemaVersion &&
+      row.fingerprint === migrationFingerprint() &&
+      row.seeded === 1;
+  } catch {
+    return false;
+  }
+}
+
 /** Create or verify the Cloudflare D1 schema and installation default project. */
 export async function migrateD1(
   database: D1Database,
   installationId: string,
 ): Promise<void> {
+  if (await schemaIsCurrent(database, installationId)) return;
   const statements = schemaSql.split(";")
     .map((statement) => statement.trim())
     .filter((statement) => statement !== "")
@@ -693,6 +788,11 @@ export async function migrateD1(
       ON CONFLICT(component) DO UPDATE SET version = excluded.version
       WHERE artifact_server_schema.version <= excluded.version
     `).bind(requiredD1SchemaVersion),
+    database.prepare(`
+      INSERT INTO artifact_server_schema (component, version)
+      VALUES (?, ?)
+      ON CONFLICT(component) DO UPDATE SET version = excluded.version
+    `).bind(migrationFingerprintComponent, migrationFingerprint()),
     database.prepare(`
       INSERT INTO projects (id, installation_id, name, created_at, archived_at)
       VALUES (?, ?, ?, ?, NULL)

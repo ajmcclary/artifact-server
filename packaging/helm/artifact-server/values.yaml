@@ -76,10 +76,15 @@ securityContext:
     drop:
       - ALL
 
+# Applies to the serving pods, the migration Job, and the cleanup CronJob.
+# The memory limit bounds a runaway process and sizes Node's heap from the
+# container; there is deliberately no CPU limit, which would only throttle.
 resources:
   requests:
     cpu: 100m
     memory: 256Mi
+  limits:
+    memory: 1Gi
 
 terminationGracePeriodSeconds: 30
 
@@ -112,6 +117,8 @@ topologySpread:
   topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: ScheduleAnyway
 
+# Placement for every pod the release runs: the serving Deployment, the
+# migration Job, and the cleanup CronJob.
 nodeSelector: {}
 tolerations: []
 affinity: {}
