@@ -82,6 +82,14 @@ export interface CreateStagedUploadCommand {
   readonly routingMode?: RoutingMode;
 }
 
+/** Input for staging one capture its owning service has already authorized. */
+export interface AuthorizedCaptureUploadCommand {
+  readonly entryPath: string;
+  readonly files: readonly DeclaredManifestFile[];
+  readonly principal: Principal;
+  readonly projectId: string;
+}
+
 /** Result of creating or resuming one staged upload bound to an idempotency key. */
 export type CreateStagedUploadResult =
   | {readonly kind: "committed"; readonly publication: PublishedVersion}
@@ -271,6 +279,16 @@ interface StagedUploadOperations {
   readonly createUpload: (
     command: CreateStagedUploadCommand,
   ) => Effect.Effect<CreateStagedUploadResult, StagedUploadFailure>;
+  /**
+   * Stage one fresh, key-less upload for a capture whose owning service has
+   * already authorized it under its own policy: the comment-time implicit
+   * capture of a drifted linked source, which a commenter may trigger
+   * without publication authority (LNK-008). It never reuses project
+   * content and never replays; the caller names a resolved project.
+   */
+  readonly createAuthorizedCaptureUpload: (
+    command: AuthorizedCaptureUploadCommand,
+  ) => Effect.Effect<StagedUpload, StagedUploadFailure>;
   readonly uploadBatch: (
     command: UploadStagedBatchCommand,
   ) => Effect.Effect<StagedUploadBatchResult, StagedUploadFailure>;
@@ -545,6 +563,17 @@ function makeStagedUploadService(
         uploadedAt,
       );
       return {...file, uploadedAt};
+    },
+  );
+
+  const createAuthorizedCaptureUpload = Effect.fn("StagedUploadService.createAuthorizedCaptureUpload")(
+    function*(command: AuthorizedCaptureUploadCommand): Effect.fn.Return<StagedUpload, StagedUploadFailure> {
+      const manifest = yield* parseManifest({
+        entryPath: command.entryPath,
+        files: command.files,
+        routingMode: "static",
+      });
+      return yield* createFreshUpload(command.projectId, manifest, command.principal.id);
     },
   );
 
@@ -836,7 +865,13 @@ function makeStagedUploadService(
     },
   );
 
-  return StagedUploadService.of({commitUpload, createUpload: createUploadWithReuse, uploadBatch, uploadFile});
+  return StagedUploadService.of({
+    commitUpload,
+    createAuthorizedCaptureUpload,
+    createUpload: createUploadWithReuse,
+    uploadBatch,
+    uploadFile,
+  });
 }
 
 function abortSignalUntil(expiresAt: string, now: DateTime.Utc): AbortSignal {
