@@ -582,6 +582,29 @@ export const shareLinkRepositoryCases: readonly {
     },
   },
   {
+    name: "concurrent revokes of one link both succeed and record one revoke action",
+    run: async (fixture) => {
+      await seedShared(fixture);
+      await createLink(fixture);
+      const revoke = () => fixture.store.revokeShareLink({
+        attribution: caseManager,
+        installationId: fixture.installationId,
+        linkId: caseShareLink().id,
+        versionId: "ver_shared",
+      });
+      const results = await Promise.all(Array.from({length: 8}, revoke));
+      const links = results.map(linkOf);
+      for (const link of links) {
+        assert.notEqual(link.revokedAt, null);
+        assert.equal(link.revision, 2);
+      }
+      const replayed = linkOf(await revoke());
+      assert.equal(replayed.revision, 2);
+      const actions = await fixture.actions();
+      assert.equal(actions.filter((action) => action.action === "share_link_revoke").length, 1);
+    },
+  },
+  {
     name: "listActiveShareLinks skips revoked and expired and pages by cursor",
     run: async (fixture) => {
       await seedShared(fixture);

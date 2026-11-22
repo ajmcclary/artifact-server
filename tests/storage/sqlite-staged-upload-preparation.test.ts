@@ -202,6 +202,70 @@ describe("SQLite staged upload preparation", () => {
     expect(claim).toBeNull();
   });
 
+  test("PUB-019 regression: commit refuses an upload that is uploaded but not installed and prepared, then clears its prepared entries", async () => {
+    const manifest = manifestFixture("prepared commit");
+    const command = uploadCommand("upl_prepared_commit", manifest);
+    const storageToken = command.files[0]?.storageToken;
+    if (storageToken === undefined) throw new Error("The fixture has no file.");
+    await repository.createStagedUpload(command);
+    await repository.markStagedFileUploaded(
+      projectId,
+      command.id,
+      principalId,
+      storageToken,
+      "2026-09-21T00:00:01.000Z",
+    );
+    const source = {
+      kind: "staged_upload" as const,
+      principalId,
+      projectId,
+      uploadId: command.id,
+    };
+    const commitTime = "2026-09-21T00:00:30.000Z";
+    // Every file is uploaded, but nothing installed or prepared it.
+    await expect(repository.assertPublicationSourceReady(source, manifest.digest, commitTime))
+      .rejects.toMatchObject({_tag: "UploadIncomplete"});
+
+    const claim = await repository.claimUploadPreparation(
+      command.id,
+      "2026-09-21T00:00:02.000Z",
+      "2026-09-21T00:00:47.000Z",
+    );
+    if (claim === null) throw new Error("The upload could not be claimed.");
+    await repository.recordStagedFileInstalled(
+      command.id,
+      storageToken,
+      claim.attempts,
+      "2026-09-21T00:00:03.000Z",
+    );
+    await repository.writePreparedManifestEntries(command.id, claim.attempts, manifest.entries);
+    // Installed with entries written, but still claimed rather than prepared.
+    await expect(repository.assertPublicationSourceReady(source, manifest.digest, commitTime))
+      .rejects.toMatchObject({_tag: "UploadIncomplete"});
+
+    await repository.markUploadPrepared(command.id, claim.attempts, "2026-09-21T00:00:04.000Z");
+    await repository.assertPublicationSourceReady(source, manifest.digest, commitTime);
+    expect(await repository.countPreparedManifestEntries(command.id)).toBe(1);
+    await repository.commitNewArtifact({
+      accessSetting: "account_required",
+      actor: {displayName: "Test publisher", kind: "service"},
+      artifactId: "art_prepared_commit",
+      authorizedByPrincipalId: null,
+      contentToken: "content-prepared-commit",
+      createdAt: commitTime,
+      idempotencyKey: "publish-prepared-commit",
+      inputDigest: manifest.digest,
+      manifest,
+      name: "Prepared commit",
+      principalId,
+      projectId,
+      source,
+      tags: [],
+      versionId: "ver_prepared_commit",
+    });
+    expect(await repository.countPreparedManifestEntries(command.id)).toBe(0);
+  });
+
   test("release resets a claimed upload so it can be reclaimed", async () => {
     const manifest = manifestFixture("release and reclaim");
     const command = uploadCommand("upl_release_reclaim", manifest);

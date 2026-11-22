@@ -8,6 +8,7 @@ import {expect, test} from "vitest";
 
 import {
   commitGitHistoryVersion,
+  GitHistoryWorkspaceHandoff,
   lookupGitHistoryCommit,
   readGitHistoryCommit,
 } from "../../src/git-history/cloudflare-artifacts-git-history-provider.js";
@@ -383,6 +384,58 @@ test("GIT-008 remote race regression: an advance between push discovery and the 
     await remote.close();
   }
 }, 30_000);
+
+test("GIT-008 remote regression: a lookup that finds nothing hands its one clone to the commit", async () => {
+  const remote = await startGitSmartHttpServer();
+  const coordinates: GitRepositoryCoordinates = {
+    artifactId: "art_git_http_handoff",
+    defaultBranch: "main",
+    projectId: "prj_git_http_test",
+    provider: "cloudflare-artifacts",
+    remoteUrl: remote.remoteUrl,
+    repositoryName: "repository.git",
+    status: "provisioned",
+  };
+  const git = async (...arguments_: string[]): Promise<string> => {
+    const {stdout} = await execute("git", ["--git-dir", remote.barePath, ...arguments_]);
+    return stdout.trim();
+  };
+  try {
+    const workspaces = new GitHistoryWorkspaceHandoff();
+    const first = versionRequest(coordinates, 1, "ver_git_handoff_1", null);
+    expect(await lookupGitHistoryCommit(first, testToken, workspaces)).toBeNull();
+    const firstCommit = await commitGitHistoryVersion(first, testToken, workspaces);
+
+    const second = versionRequest(coordinates, 2, "ver_git_handoff_2", firstCommit.commitId);
+    const fetchesBefore = remote.uploadPackCalls();
+    expect(await lookupGitHistoryCommit(second, testToken, workspaces)).toBeNull();
+    const secondCommit = await commitGitHistoryVersion(second, testToken, workspaces);
+    expect(remote.uploadPackCalls() - fetchesBefore).toBe(1);
+    expect(await git("rev-list", "--parents", "-n", "1", secondCommit.commitId))
+      .toBe(`${secondCommit.commitId} ${firstCommit.commitId}`);
+
+    // A handed-off clone is used once; a remote that moved since is still refused.
+    const third = versionRequest(coordinates, 3, "ver_git_handoff_3", secondCommit.commitId);
+    expect(await lookupGitHistoryCommit(third, testToken, workspaces)).toBeNull();
+    const tree = await git("rev-parse", `${secondCommit.commitId}^{tree}`);
+    const foreign = await execute("git", [
+      "--git-dir", remote.barePath, "commit-tree", tree,
+      "-p", secondCommit.commitId, "-m", "foreign advance after lookup",
+    ], {env: {
+      ...process.env,
+      GIT_AUTHOR_EMAIL: "git-test@invalid.example",
+      GIT_AUTHOR_NAME: "Git test",
+      GIT_COMMITTER_EMAIL: "git-test@invalid.example",
+      GIT_COMMITTER_NAME: "Git test",
+    }});
+    await git("update-ref", "refs/heads/main", foreign.stdout.trim());
+    await expect(commitGitHistoryVersion(third, testToken, workspaces))
+      .rejects.toThrow("git_history_predecessor_mismatch");
+    expect(await git("rev-parse", "refs/heads/main")).toBe(foreign.stdout.trim());
+  } finally {
+    await remote.close();
+  }
+});
 
 function versionRequest(
   coordinates: GitRepositoryCoordinates,

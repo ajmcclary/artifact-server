@@ -437,7 +437,9 @@ const expiredStagedUploadRowSchema = z.object({
 const stagedUploadCommitRowSchema = z.object({
   expiresAt: z.string(),
   fileCount: z.number().int().nonnegative(),
+  installedCount: z.number().int().nonnegative(),
   manifestDigest: z.string(),
+  preparationState: z.string(),
   readyCount: z.number().int().nonnegative(),
   status: uploadStatusSchema,
 });
@@ -4041,8 +4043,10 @@ export class SqliteArtifactRepository implements
           u.status AS status,
           u.expires_at AS expiresAt,
           u.manifest_digest AS manifestDigest,
+          u.preparation_state AS preparationState,
           COUNT(f.storage_token) AS fileCount,
-          COALESCE(SUM(CASE WHEN f.uploaded_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS readyCount
+          COALESCE(SUM(CASE WHEN f.uploaded_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS readyCount,
+          COALESCE(SUM(CASE WHEN f.installed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS installedCount
         FROM staged_uploads u
         LEFT JOIN staged_upload_files f ON f.upload_id = u.id
         WHERE u.project_id = ? AND u.id = ? AND u.principal_id = ?
@@ -4064,10 +4068,12 @@ export class SqliteArtifactRepository implements
     if (
       upload.fileCount === 0 ||
       upload.readyCount !== upload.fileCount ||
+      upload.installedCount !== upload.fileCount ||
+      upload.preparationState !== preparationStates.prepared ||
       upload.manifestDigest !== manifestDigest
     ) {
       throw new UploadIncomplete({
-        message: "Every declared upload file must be verified before commit.",
+        message: "Every declared upload file must be installed and prepared before commit.",
       });
     }
   }
@@ -4085,6 +4091,11 @@ export class SqliteArtifactRepository implements
         message: "The staged upload changed during commit.",
       });
     }
+    // The committed manifest is now durable in manifest_entries; the prepared
+    // copy has no reader left and would otherwise accumulate forever.
+    this.#database
+      .prepare("DELETE FROM prepared_manifest_entries WHERE upload_id = ?")
+      .run(source.uploadId);
   }
 
   #insertIdempotency(
@@ -5503,6 +5514,9 @@ export class SqliteArtifactRepository implements
         isoBefore(now, agentUnavailableStalenessMilliseconds),
       );
     if (failed.changes === 1) {
+      // The same permanent failure as #failDispatch: revision pollers must
+      // see the released threads return to the artifact surfaces.
+      this.#bumpCommentRevisionForDispatch(row.id, now);
       this.#clearDispatchMarkers(row.id, now);
       return;
     }
@@ -6546,9 +6560,11 @@ export class SqliteArtifactRepository implements
         FROM staged_uploads;
         DROP TABLE staged_uploads;
         ALTER TABLE staged_uploads_next RENAME TO staged_uploads;
-
-        COMMIT;
       `);
+      // Restore the guards this rebuild dropped before the rebuild commits, so
+      // the first process after the upgrade already enforces project scope.
+      this.#database.exec(projectScopeGuardsSql);
+      this.#database.exec("COMMIT;");
     } catch (cause) {
       this.#database.exec("ROLLBACK;");
       throw cause;
@@ -6698,162 +6714,7 @@ export class SqliteArtifactRepository implements
         `);
       }
 
-      this.#database.exec(`
-        DROP INDEX IF EXISTS versions_artifact_id;
-        DROP INDEX IF EXISTS artifacts_active_created;
-        DROP INDEX IF EXISTS actions_artifact_created;
-        DROP INDEX IF EXISTS staged_uploads_expiry;
-
-        CREATE INDEX versions_artifact_id
-          ON versions (project_id, artifact_id, number);
-        CREATE INDEX artifacts_active_created
-          ON artifacts (project_id, deleted_at, created_at DESC, id DESC);
-        CREATE INDEX actions_artifact_created
-          ON actions (project_id, artifact_id, created_at DESC, id DESC);
-        CREATE INDEX staged_uploads_expiry
-          ON staged_uploads (project_id, status, expires_at);
-
-        CREATE TRIGGER IF NOT EXISTS artifacts_project_insert
-        BEFORE INSERT ON artifacts
-        WHEN NOT EXISTS (
-          SELECT 1 FROM projects WHERE id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'artifact project not found');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS artifacts_project_update
-        BEFORE UPDATE OF project_id ON artifacts
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'artifact project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS artifacts_current_version_update
-        BEFORE UPDATE OF current_version_id ON artifacts
-        WHEN NEW.current_version_id IS NOT NULL AND NOT EXISTS (
-          SELECT 1 FROM versions
-          WHERE id = NEW.current_version_id
-            AND artifact_id = NEW.id
-            AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'artifact current version project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS staged_uploads_project_insert
-        BEFORE INSERT ON staged_uploads
-        WHEN NOT EXISTS (
-          SELECT 1 FROM projects WHERE id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'staged upload project not found');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS staged_uploads_project_update
-        BEFORE UPDATE OF project_id ON staged_uploads
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'staged upload project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS versions_project_insert
-        BEFORE INSERT ON versions
-        WHEN NOT EXISTS (
-          SELECT 1 FROM artifacts
-          WHERE id = NEW.artifact_id AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'version project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS versions_project_update
-        BEFORE UPDATE OF project_id ON versions
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'version project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS actions_project_insert
-        BEFORE INSERT ON actions
-        WHEN NOT EXISTS (
-          SELECT 1 FROM artifacts
-          WHERE id = NEW.artifact_id AND project_id = NEW.project_id
-        ) OR NOT EXISTS (
-          SELECT 1 FROM versions
-          WHERE id = NEW.version_id AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'action project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS actions_project_update
-        BEFORE UPDATE OF project_id ON actions
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'action project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS idempotency_project_insert
-        BEFORE INSERT ON idempotency_records
-        WHEN NOT EXISTS (
-          SELECT 1 FROM artifacts
-          WHERE id = NEW.artifact_id AND project_id = NEW.project_id
-        ) OR NOT EXISTS (
-          SELECT 1 FROM versions
-          WHERE id = NEW.version_id AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'idempotency project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS idempotency_project_update
-        BEFORE UPDATE OF project_id ON idempotency_records
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'idempotency project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS content_bootstrap_project_insert
-        BEFORE INSERT ON content_bootstraps
-        WHEN NOT EXISTS (
-          SELECT 1 FROM artifacts
-          WHERE id = NEW.artifact_id AND project_id = NEW.project_id
-        ) OR NOT EXISTS (
-          SELECT 1 FROM versions
-          WHERE id = NEW.version_id AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'content bootstrap project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS content_bootstrap_project_update
-        BEFORE UPDATE OF project_id ON content_bootstraps
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'content bootstrap project cannot change');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS content_session_project_insert
-        BEFORE INSERT ON content_sessions
-        WHEN NOT EXISTS (
-          SELECT 1 FROM artifacts
-          WHERE id = NEW.artifact_id AND project_id = NEW.project_id
-        ) OR NOT EXISTS (
-          SELECT 1 FROM versions
-          WHERE id = NEW.version_id AND project_id = NEW.project_id
-        )
-        BEGIN
-          SELECT RAISE(ABORT, 'content session project mismatch');
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS content_session_project_update
-        BEFORE UPDATE OF project_id ON content_sessions
-        WHEN NEW.project_id <> OLD.project_id
-        BEGIN
-          SELECT RAISE(ABORT, 'content session project cannot change');
-        END;
-      `);
+      this.#database.exec(projectScopeGuardsSql);
     });
   }
 
@@ -7522,3 +7383,165 @@ function pageFromRows<Item extends PageCursor>(
       : null,
   };
 }
+
+/**
+ * The project-scope indexes and guard triggers. A table rebuild drops the
+ * triggers that name the rebuilt table, so every rebuild re-installs this set
+ * inside its own transaction; the project-scope migration installs it too.
+ */
+const projectScopeGuardsSql = `
+  DROP INDEX IF EXISTS versions_artifact_id;
+  DROP INDEX IF EXISTS artifacts_active_created;
+  DROP INDEX IF EXISTS actions_artifact_created;
+  DROP INDEX IF EXISTS staged_uploads_expiry;
+
+  CREATE INDEX versions_artifact_id
+    ON versions (project_id, artifact_id, number);
+  CREATE INDEX artifacts_active_created
+    ON artifacts (project_id, deleted_at, created_at DESC, id DESC);
+  CREATE INDEX actions_artifact_created
+    ON actions (project_id, artifact_id, created_at DESC, id DESC);
+  CREATE INDEX staged_uploads_expiry
+    ON staged_uploads (project_id, status, expires_at);
+
+  CREATE TRIGGER IF NOT EXISTS artifacts_project_insert
+  BEFORE INSERT ON artifacts
+  WHEN NOT EXISTS (
+    SELECT 1 FROM projects WHERE id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'artifact project not found');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS artifacts_project_update
+  BEFORE UPDATE OF project_id ON artifacts
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'artifact project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS artifacts_current_version_update
+  BEFORE UPDATE OF current_version_id ON artifacts
+  WHEN NEW.current_version_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM versions
+    WHERE id = NEW.current_version_id
+      AND artifact_id = NEW.id
+      AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'artifact current version project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS staged_uploads_project_insert
+  BEFORE INSERT ON staged_uploads
+  WHEN NOT EXISTS (
+    SELECT 1 FROM projects WHERE id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'staged upload project not found');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS staged_uploads_project_update
+  BEFORE UPDATE OF project_id ON staged_uploads
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'staged upload project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS versions_project_insert
+  BEFORE INSERT ON versions
+  WHEN NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'version project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS versions_project_update
+  BEFORE UPDATE OF project_id ON versions
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'version project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS actions_project_insert
+  BEFORE INSERT ON actions
+  WHEN NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM versions
+    WHERE id = NEW.version_id AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'action project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS actions_project_update
+  BEFORE UPDATE OF project_id ON actions
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'action project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS idempotency_project_insert
+  BEFORE INSERT ON idempotency_records
+  WHEN NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM versions
+    WHERE id = NEW.version_id AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'idempotency project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS idempotency_project_update
+  BEFORE UPDATE OF project_id ON idempotency_records
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'idempotency project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS content_bootstrap_project_insert
+  BEFORE INSERT ON content_bootstraps
+  WHEN NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM versions
+    WHERE id = NEW.version_id AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'content bootstrap project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS content_bootstrap_project_update
+  BEFORE UPDATE OF project_id ON content_bootstraps
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'content bootstrap project cannot change');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS content_session_project_insert
+  BEFORE INSERT ON content_sessions
+  WHEN NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE id = NEW.artifact_id AND project_id = NEW.project_id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM versions
+    WHERE id = NEW.version_id AND project_id = NEW.project_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'content session project mismatch');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS content_session_project_update
+  BEFORE UPDATE OF project_id ON content_sessions
+  WHEN NEW.project_id <> OLD.project_id
+  BEGIN
+    SELECT RAISE(ABORT, 'content session project cannot change');
+  END;
+`;

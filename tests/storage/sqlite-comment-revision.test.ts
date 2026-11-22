@@ -524,6 +524,87 @@ describe("SQLite comment revision", () => {
     })).revision).toBe(3);
   });
 
+  test("CMT-023 regression: a lazy agent_unavailable failure bumps the revision and releases the thread", async () => {
+    const artifactId = "art_lazy_failure_revision";
+    const published = await publishFixture(
+      repository,
+      artifactId,
+      "ver_lazy_failure_revision",
+      "idem-lazy-failure-revision",
+    );
+    const thread = await repository.createThread({
+      anchor: null,
+      artifactId,
+      author: {
+        authorizedByPrincipalId: null,
+        displayName: "Author",
+        principalId,
+        principalKind: "human",
+      },
+      body: "Thread whose agent stops polling.",
+      createdAt: "2026-09-21T00:01:00.000Z",
+      id: "thread_lazy_failure_revision",
+      idempotencyKey: "idem-lazy-failure-thread",
+      installationId,
+      path: null,
+      projectId,
+      versionId: published.version.id,
+    });
+    await repository.registerAgent({
+      agentSessionId: null,
+      capabilities: {beacon: false, evidence: "native"},
+      connectionKey: "agent-connection-lazy-failure",
+      displayName: "Stale Agent",
+      id: "agent_lazy_failure",
+      installationId,
+      kind: "test-agent",
+      principalId,
+      registeredAt: "2026-09-21T00:00:00.000Z",
+      workingDirectory: "/tmp",
+    });
+    const dispatch = await repository.createDispatch({
+      agentDisplayName: "Stale Agent",
+      agentId: "agent_lazy_failure",
+      createdAt: "2026-09-21T00:02:00.000Z",
+      id: "dispatch_lazy_failure",
+      idempotencyKey: "idem-lazy-failure-dispatch",
+      installationId,
+      note: null,
+      projectId,
+      sender: {
+        authorizedByPrincipalId: null,
+        displayName: "Sender",
+        principalId,
+        principalKind: "human",
+      },
+      threadIds: [thread.thread.id],
+    });
+    const listing = () => repository.listThreads({
+      artifactId,
+      cursor: null,
+      dispatched: "exclude",
+      limit: 10,
+      projectId,
+      since: null,
+      state: null,
+      versionId: null,
+    });
+    const dispatchedListing = await listing();
+    expect(dispatchedListing.revision).toBe(2);
+    expect(dispatchedListing.items).toHaveLength(0);
+
+    // The agent has not polled for longer than the staleness window.
+    const failed = await repository.findDispatch(
+      installationId,
+      dispatch.dispatch.id,
+      "2026-09-21T01:00:00.000Z",
+    );
+    expect(failed).toMatchObject({failureReason: "agent_unavailable", state: "failed"});
+    const released = await listing();
+    expect(released.revision).toBe(3);
+    expect(released.items.map((item) => item.id)).toEqual([thread.thread.id]);
+  });
+
   test("a previous-schema database upgrades and starts revision at 0", async () => {
     const databasePath = path.join(dataDirectory, "legacy-artifact-server.db");
     repository.close();

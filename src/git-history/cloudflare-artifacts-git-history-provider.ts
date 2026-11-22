@@ -17,7 +17,7 @@ import {
   resolveRef,
   writeRef,
 } from "isomorphic-git";
-import http from "isomorphic-git/http/web";
+import webHttp from "isomorphic-git/http/web";
 import {createFsFromVolume, Volume} from "memfs";
 import {Redacted, Schema} from "effect";
 
@@ -35,6 +35,31 @@ const apiOrigin = new URL("https://api.cloudflare.com/client/v4/");
 const maximumControlPlaneResponseBytes = 64 * 1024;
 const writeTokenTtlSeconds = 300;
 const zeroOid = "0".repeat(40);
+/**
+ * One smart-HTTP request may not outlive this bound. The mirror worker renews
+ * its durable lease while a request is pending, so without it a stalled
+ * remote could hold the lease for as long as the socket stays open.
+ */
+export const gitHttpRequestTimeoutMilliseconds = 120_000;
+
+type GitHttpClient = Parameters<typeof clone>[0]["http"];
+
+/** Bound every isomorphic-git HTTP exchange, including its streamed body. */
+export function boundedGitHttp(
+  timeoutMilliseconds: number,
+  base: GitHttpClient = webHttp,
+): GitHttpClient {
+  return {
+    // The mirror never passes its own fetch options, so the deadline is the
+    // whole set; the signal also bounds the streamed response body.
+    request: (request) => base.request({
+      ...request,
+      fetchOptions: {signal: AbortSignal.timeout(timeoutMilliseconds)},
+    }),
+  };
+}
+
+const http = boundedGitHttp(gitHttpRequestTimeoutMilliseconds);
 
 const repositorySchema = Schema.Struct({
   default_branch: Schema.String,
@@ -65,10 +90,40 @@ export interface CloudflareArtifactsProviderConfig {
   readonly repositoryPrefix?: string;
 }
 
+/**
+ * Carries the clone a lookup made, when it found no commit to adopt, to the
+ * commit call that follows it for the same version, so one mirror job clones
+ * the repository once. Reuse is safe even if the remote moved in between: the
+ * commit re-checks the local parent and every push re-checks the remote ref.
+ */
+export class GitHistoryWorkspaceHandoff {
+  #held: {readonly key: string; readonly workspace: MemoryWorkspace} | null = null;
+
+  offer(request: GitHistoryCommitRequest, workspace: MemoryWorkspace): void {
+    this.#held = {key: workspaceHandoffKey(request), workspace};
+  }
+
+  take(request: GitHistoryCommitRequest): MemoryWorkspace | null {
+    const held = this.#held;
+    this.#held = null;
+    return held?.key === workspaceHandoffKey(request) ? held.workspace : null;
+  }
+}
+
+function workspaceHandoffKey(request: GitHistoryCommitRequest): string {
+  return JSON.stringify([
+    request.coordinates.remoteUrl,
+    request.coordinates.repositoryName,
+    request.metadata.versionId,
+    request.expectedParentCommitId,
+  ]);
+}
+
 /** Cloudflare Artifacts control plane plus standards-compatible Git smart HTTP. */
 export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider {
   readonly name = "cloudflare-artifacts" as const;
   readonly #apiToken: Redacted.Redacted;
+  readonly #workspaces = new GitHistoryWorkspaceHandoff();
   readonly #base: URL;
   readonly #repositoryPrefix: string;
 
@@ -133,7 +188,7 @@ export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider
       "write",
       writeTokenTtlSeconds,
     );
-    return commitGitHistoryVersion(request, credential.token);
+    return commitGitHistoryVersion(request, credential.token, this.#workspaces);
   }
 
   async lookupCommit(
@@ -142,7 +197,7 @@ export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider
     // Reconciliation may need to repair the immutable tag after a branch push
     // succeeded but the following tag push response was lost.
     const credential = await this.issueCredential(request.coordinates, "write", 60);
-    return lookupGitHistoryCommit(request, credential.token);
+    return lookupGitHistoryCommit(request, credential.token, this.#workspaces);
   }
 
   async issueCredential(
@@ -212,6 +267,7 @@ export class CloudflareArtifactsGitHistoryProvider implements GitHistoryProvider
 export async function commitGitHistoryVersion(
   request: GitHistoryCommitRequest,
   writeToken: string,
+  workspaces?: GitHistoryWorkspaceHandoff,
 ): Promise<{readonly commitId: string}> {
     const metadataPaths = new Set(
       gitHistoryMetadataFiles(request).map((file) => file.path),
@@ -219,7 +275,7 @@ export async function commitGitHistoryVersion(
     if (request.files.some((file) => metadataPaths.has(file.path))) {
       throw new Error("reserved_git_history_metadata_path");
     }
-    const workspace = await openWorkspace(
+    const workspace = workspaces?.take(request) ?? await openWorkspace(
       request.coordinates.remoteUrl,
       writeToken,
     );
@@ -310,6 +366,7 @@ export async function commitGitHistoryVersion(
 export async function lookupGitHistoryCommit(
   request: GitHistoryCommitRequest,
   writeToken: string,
+  workspaces?: GitHistoryWorkspaceHandoff,
 ): Promise<{readonly commitId: string} | null> {
   const {coordinates, metadata} = request;
   const exact = await readGitHistoryCommit(
@@ -322,11 +379,16 @@ export async function lookupGitHistoryCommit(
     await assertVersionCommit(workspace, exact.commitId, request);
     return exact;
   }
+  // Nothing to adopt: the untouched clone is the commit's starting point.
+  const nothingToAdopt = (): null => {
+    workspaces?.offer(request, workspace);
+    return null;
+  };
   try {
       const branch = await currentBranch({dir: workspace.dir, fs: workspace.fs});
-      if (branch !== "main") return null;
+      if (branch !== "main") return nothingToAdopt();
       const tip = await localMainCommit(workspace);
-      if (tip === null) return null;
+      if (tip === null) return nothingToAdopt();
       const saved = await readBlob({
         dir: workspace.dir,
         filepath: ".artifactserver/version.json",
@@ -336,7 +398,7 @@ export async function lookupGitHistoryCommit(
       const parsed = Schema.decodeUnknownSync(Schema.Struct({versionId: Schema.String}))(
         JSON.parse(new TextDecoder().decode(saved.blob)),
       );
-      if (parsed.versionId !== metadata.versionId) return null;
+      if (parsed.versionId !== metadata.versionId) return nothingToAdopt();
       await assertVersionCommit(workspace, tip, request);
       const tagRef = `refs/tags/v/${metadata.versionId}`;
       await writeRef({
@@ -511,7 +573,7 @@ async function assertVersionCommit(
   await verifyFile(0);
 }
 
-interface MemoryWorkspace {
+export interface MemoryWorkspace {
   readonly dir: string;
   readonly fs: ReturnType<typeof createFsFromVolume>;
 }
@@ -599,11 +661,29 @@ async function readControlPlaneResponse(response: Response): Promise<string> {
     await response.body?.cancel();
     throw new Error(`cloudflare_control_plane_status_${response.status}`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > maximumControlPlaneResponseBytes) {
+  const declared = response.headers.get("Content-Length");
+  if (declared !== null && Number(declared) > maximumControlPlaneResponseBytes) {
+    await response.body?.cancel();
     throw new Error("cloudflare_control_plane_response_too_large");
   }
-  return new TextDecoder().decode(bytes);
+  if (response.body === null) return "";
+  // Never buffer more than the bound, whatever the declared length says.
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop -- a response body is read in order
+    const next = await reader.read();
+    if (next.done) break;
+    received += next.value.byteLength;
+    if (received > maximumControlPlaneResponseBytes) break;
+    chunks.push(next.value);
+  }
+  if (received > maximumControlPlaneResponseBytes) {
+    await reader.cancel();
+    throw new Error("cloudflare_control_plane_response_too_large");
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 async function decodeRepositoryResponse(response: Response) {

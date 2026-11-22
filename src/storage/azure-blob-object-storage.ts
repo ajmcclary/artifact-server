@@ -459,7 +459,8 @@ class AzureBlobObjects {
       );
       if (existing !== null) {
         await drainVerifiedWrite(write, expectedDigest);
-        return existing;
+        // A reused object must match the verified write, not just its digest metadata.
+        return verifyCloudObjectWriteSize(existing, write.size, "Azure Blob", kind);
       }
       const blockIds = await stageVerifiedBlocks(
         client,
@@ -479,7 +480,9 @@ class AzureBlobObjects {
         },
       });
     } finally {
-      await lease.releaseLease();
+      // The lease is finite and expires on its own. A failed release must not
+      // mask the write's own failure or fail a write that already committed.
+      await lease.releaseLease().catch(() => undefined);
     }
     return verifyCloudObjectWriteSize(
       await this.inspect(key, expectedDigest, kind),
@@ -670,14 +673,45 @@ async function* fixedSizeBlocks(
   if (blockOffset > 0) yield block.subarray(0, blockOffset);
 }
 
-function createUserDelegationCopySourceUrlResolver(
-  service: BlobServiceClient,
+/** The start and expiry a copy-source SAS is signed with. */
+export interface CopySourceSasWindow {
+  readonly expiresOn: Date;
+  readonly startsOn: Date;
+}
+
+/**
+ * The validity window of one copy-source SAS. It starts early enough to absorb
+ * clock skew and never outlives the user delegation key that signs it, since
+ * Azure refuses a SAS whose expiry is past its signing key's expiry.
+ */
+export function copySourceSasWindow(
+  now: number,
+  keyExpiresOn: Date,
+): CopySourceSasWindow {
+  return {
+    expiresOn: new Date(Math.min(
+      now + copySourceSasExpirationMinutes * 60 * 1000,
+      keyExpiresOn.getTime(),
+    )),
+    startsOn: new Date(now - copySourceSasClockSkewMinutes * 60 * 1000),
+  };
+}
+
+/** The one Blob service call the copy-source resolver needs. */
+export interface UserDelegationKeySource {
+  getUserDelegationKey(startsOn: Date, expiresOn: Date): Promise<UserDelegationKey>;
+}
+
+/** Sign read-only copy-source URLs with a cached, refreshed user delegation key. */
+export function createUserDelegationCopySourceUrlResolver(
+  service: UserDelegationKeySource,
   accountUrl: string,
-): (source: BlobClient) => Promise<string> {
+  clock: () => number = Date.now,
+): (source: Pick<BlobClient, "containerName" | "name" | "url">) => Promise<string> {
   const accountName = parseAccountName(accountUrl);
   let cached: {key: UserDelegationKey; expiresOn: Date} | undefined;
   return async (source) => {
-    const now = Date.now();
+    const now = clock();
     const refreshDeadline = new Date(
       now + copySourceSasClockSkewMinutes * 60 * 1000,
     );
@@ -689,10 +723,7 @@ function createUserDelegationCopySourceUrlResolver(
         expiresOn,
       };
     }
-    const startsOn = new Date();
-    const expiresOn = new Date(
-      Date.now() + copySourceSasExpirationMinutes * 60 * 1000,
-    );
+    const {expiresOn, startsOn} = copySourceSasWindow(now, cached.expiresOn);
     const sas = generateBlobSASQueryParameters(
       {
         blobName: source.name,

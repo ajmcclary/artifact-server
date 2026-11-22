@@ -24,6 +24,7 @@ export async function startGitSmartHttpServer() {
   let receivePackCalls = 0;
   let receivePackDiscoveryCalls = 0;
   let receivePackUpdateCalls = 0;
+  let uploadPackCalls = 0;
   const droppedResponses = new Set<number>();
   let advanceBeforeDiscovery: string | null = null;
   let heldDiscovery: {
@@ -63,6 +64,9 @@ export async function startGitSmartHttpServer() {
           advanceBeforeDiscovery,
         ]);
         advanceBeforeDiscovery = null;
+      }
+      if (request.method === "POST" && url.pathname.endsWith("/git-upload-pack")) {
+        uploadPackCalls += 1;
       }
       if (request.method === "POST" && url.pathname.endsWith("/git-receive-pack")) {
         receivePackUpdateCalls += 1;
@@ -168,6 +172,8 @@ export async function startGitSmartHttpServer() {
       advanceBeforeDiscovery = commitId;
     },
     remoteUrl: `http://127.0.0.1:${address.port}/repository.git`,
+    /** Object fetches served so far; each clone of a non-empty remote makes one. */
+    uploadPackCalls: () => uploadPackCalls,
   };
 }
 
