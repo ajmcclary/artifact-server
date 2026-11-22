@@ -12,7 +12,7 @@ import {
   type ToolAnnotations,
   type ToolCallback,
 } from "@modelcontextprotocol/server";
-import {Duration, Effect, Redacted} from "effect";
+import {Duration, Effect, Predicate, Redacted} from "effect";
 import {z} from "zod";
 
 import {AgentDispatchService} from "../application/agent-dispatch.js";
@@ -60,6 +60,8 @@ import {
   type AgentDispatchRecord,
   type AgentDispatchState,
   type ArtifactVersion,
+  type CommentAuthor,
+  type CommentReplyRecord,
   type CommentThreadRecord,
   type PageCursor,
   type PublishedVersion,
@@ -95,6 +97,7 @@ import {
   isArtifactServerFailure,
   PublishConflict,
   SourceDrifted,
+  UploadStillPreparing,
 } from "../core/errors.js";
 import {
   artifactBrowserUrl,
@@ -1989,7 +1992,7 @@ export function createArtifactMcpServer(
         ),
       );
       return {
-        replies: [...details.replies],
+        replies: details.replies.map(commentReplyProjection),
         thread: commentThreadProjection(details.thread),
       };
     }),
@@ -2081,7 +2084,7 @@ export function createArtifactMcpServer(
             })
           ),
         );
-        return {replayed: creation.replayed, reply: creation.reply};
+        return {replayed: creation.replayed, reply: commentReplyProjection(creation.reply)};
       }),
   );
 
@@ -2164,7 +2167,7 @@ export function createArtifactMcpServer(
               comments.updateReply({...target, body, replyId})
             ),
           );
-          return {reply, thread: null};
+          return {reply: commentReplyProjection(reply), thread: null};
         }
         const thread = await runMcpApplicationEffect(
           dependencies,
@@ -2986,19 +2989,48 @@ function versionProjection(
   };
 }
 
+/**
+ * Comment text, author names, and quoted anchor selections are written by
+ * people, including guests, and land in an agent's context. Strip the
+ * bidirectional overrides and invisible characters a reviewer could use to
+ * hide or reorder what the agent reads, exactly as dispatch bundles do.
+ */
+function sanitizedCommentAuthor(author: CommentAuthor): CommentAuthor {
+  return {...author, displayName: sanitizeBundleText(author.displayName)};
+}
+
+/**
+ * The anchor stays opaque client JSON, so only its quoted selection, the
+ * text an agent reads as the reviewer's words, is sanitized; every other
+ * field passes through for faithful anchor replacement.
+ */
+function sanitizedAnchor(anchor: unknown): unknown {
+  const quoted = mailboxAnchorSchema.safeParse(anchor);
+  if (!quoted.success || !Predicate.isObject(anchor)) return anchor;
+  return {...anchor, originalText: sanitizeBundleText(quoted.data.originalText)};
+}
+
+function commentReplyProjection(reply: CommentReplyRecord): CommentReplyRecord {
+  return {
+    ...reply,
+    author: sanitizedCommentAuthor(reply.author),
+    body: sanitizeBundleText(reply.body),
+  };
+}
+
 function commentThreadProjection(thread: CommentThreadRecord) {
   return {
-    anchor: thread.anchor ?? null,
+    anchor: sanitizedAnchor(thread.anchor ?? null),
     artifactId: thread.artifactId,
-    author: thread.author,
-    body: thread.body,
+    author: sanitizedCommentAuthor(thread.author),
+    body: sanitizeBundleText(thread.body),
     createdAt: thread.createdAt,
     id: thread.id,
     path: thread.path,
     projectId: thread.projectId,
     replyCount: thread.replyCount,
     resolvedAt: thread.resolvedAt,
-    resolvedBy: thread.resolvedBy,
+    resolvedBy: thread.resolvedBy === null ? null : sanitizedCommentAuthor(thread.resolvedBy),
     state: thread.state,
     updatedAt: thread.updatedAt,
     versionId: thread.versionId,
@@ -3160,9 +3192,12 @@ function commitUploadWithRetry(command: {
       yield* Effect.sleep(Duration.seconds(delaySeconds));
     }
     const progress = lastPreparing ?? {installed: 0, total: 0};
-    return yield* Effect.fail(new Error(
-      `UPLOAD_STILL_PREPARING: The upload is still preparing (${progress.installed}/${progress.total} files). Re-run artifact_commit_upload with the same idempotency key to resume.`,
-    ));
+    return yield* new UploadStillPreparing({
+      installed: progress.installed,
+      message:
+        `The upload is still preparing (${progress.installed}/${progress.total} files). Re-run artifact_commit_upload with the same uploadId and idempotency key to resume; nothing is lost.`,
+      total: progress.total,
+    });
   });
 }
 

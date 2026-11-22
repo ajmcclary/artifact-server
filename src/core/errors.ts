@@ -60,6 +60,7 @@ export const errorCodes = {
   uploadIncomplete: "UPLOAD_INCOMPLETE",
   uploadInterrupted: "UPLOAD_INTERRUPTED",
   uploadNotFound: "UPLOAD_NOT_FOUND",
+  uploadStillPreparing: "UPLOAD_STILL_PREPARING",
   versionNotFound: "VERSION_NOT_FOUND",
   versionNotRestorable: "VERSION_NOT_RESTORABLE",
 } as const;
@@ -422,6 +423,20 @@ export class UploadFileNotFound extends Schema.TaggedError<UploadFileNotFound>()
   messageField,
 ) {}
 
+/**
+ * A committed upload's files are still being installed after the caller's
+ * bounded wait. Nothing failed: re-running the same commit with the same
+ * idempotency key resumes it.
+ */
+export class UploadStillPreparing extends Schema.TaggedError<UploadStillPreparing>()(
+  "UploadStillPreparing",
+  {
+    installed: Schema.Number,
+    message: Schema.String,
+    total: Schema.Number,
+  },
+) {}
+
 /** A staged upload does not yet contain every verified file. */
 export class UploadIncomplete extends Schema.TaggedError<UploadIncomplete>()(
   "UploadIncomplete",
@@ -724,6 +739,7 @@ const artifactServerFailureSchema = Schema.Union([
   UploadIncomplete,
   UploadInterrupted,
   UploadNotFound,
+  UploadStillPreparing,
   VersionNotFound,
   ContentNotPublic,
   InvalidLinkPath,

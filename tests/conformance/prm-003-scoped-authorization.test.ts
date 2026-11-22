@@ -228,7 +228,7 @@ describe("scoped authorization", () => {
         projectId: archivedId,
       }))),
       enableGitHistory: await outcome(harness, ProjectGitHistoryService.use((history) =>
-        history.set({enabled: true, principal: admin, projectId: archivedId}))),
+        history.set({confirmEstimate: true, enabled: true, principal: admin, projectId: archivedId}))),
       newGrant: await outcome(harness, AccessAdministrationService.use((access) => access.putGrant({
         add: [],
         artifactId: null,
