@@ -11,6 +11,7 @@
 import {homedir, hostname} from "node:os";
 
 import {Type} from "typebox";
+import {z} from "zod";
 
 import {
   ActivityBeacon,
@@ -50,7 +51,8 @@ interface PiSessionManagerLike {
 
 export interface PiExtensionContextLike {
   cwd: string;
-  sessionManager: PiSessionManagerLike;
+  /** Optional: a build without it registers with no host session id. */
+  sessionManager?: PiSessionManagerLike;
   ui: PiNotifier;
 }
 
@@ -113,6 +115,58 @@ export interface PiExtensionApi {
   sendUserMessage(text: string, delivery: FollowUpDelivery): void;
 }
 
+// ---------------------------------------------------------------------------
+// Runtime guards
+// ---------------------------------------------------------------------------
+
+/**
+ * The extension API surface the bridge needs, checked before anything is
+ * registered so a Pi build that lacks it leaves the bridge dormant instead of
+ * throwing into the host. Only presence is checked; calls keep going through
+ * the original object so method bindings stay intact.
+ */
+const extensionSurfaceSchema = z.object({
+  on: z.function(),
+  registerTool: z.function(),
+  sendUserMessage: z.function(),
+}).loose();
+
+const eventSurfaceSchema = z.object({on: z.function()}).loose();
+
+/** The session context surface `session_start` needs. */
+const sessionContextSchema = z.object({
+  cwd: z.string().min(1),
+  ui: z.object({notify: z.function()}).loose(),
+}).loose();
+
+const sessionManagerSchema = z.object({
+  sessionManager: z.object({getSessionId: z.function()}).loose(),
+}).loose();
+
+const sessionIdSchema = z.string().min(1);
+
+function isCompleteExtensionApi(
+  pi: Partial<PiExtensionApi>,
+): pi is PiExtensionApi {
+  return extensionSurfaceSchema.safeParse(pi).success;
+}
+
+/** The host session id, or null when this build cannot report one. */
+function hostSessionId(ctx: PiExtensionContextLike): string | null {
+  if (!sessionManagerSchema.safeParse(ctx).success) return null;
+  try {
+    const parsed = sessionIdSchema.safeParse(ctx.sessionManager?.getSessionId());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Shown once when this Pi build lacks the extension API the bridge needs. */
+export const unsupportedHostNotice =
+  "Artifact Server bridge: this Pi build lacks the extension API the " +
+  "bridge needs; staying dormant.";
+
 function artifactCommentsParameters() {
   return Type.Object({
     body: Type.Optional(Type.String({
@@ -149,8 +203,10 @@ function textResult(
   threadIds: readonly string[],
   text: string,
 ): PiToolResultLike {
+  // Second sanitization layer: thread bodies, paths, and reply authors are
+  // untrusted human text, even when an older bridge package returned them raw.
   return {
-    content: [{text, type: "text"}],
+    content: [{text: sanitizeBundleText(text), type: "text"}],
     details: {operation, threadIds},
   };
 }
@@ -160,11 +216,50 @@ export interface PiSessionShutdownEventLike {
   readonly reason?: string;
 }
 
-/** Artifact Server bridge extension factory. */
-export default function artifactServerBridge(pi: PiExtensionApi): void {
+/**
+ * Artifact Server bridge extension factory. Never throws into Pi: a host
+ * without the expected API surface leaves the bridge dormant after one
+ * notice, and every event handler contains its own failures.
+ */
+export default function artifactServerBridge(
+  pi: Partial<PiExtensionApi>,
+): void {
+  try {
+    if (isCompleteExtensionApi(pi)) {
+      installBridge(pi);
+    } else {
+      installDormantNotice(pi);
+    }
+  } catch {
+    // Registration itself failed; the session continues without the bridge.
+  }
+}
+
+/** One notice at the first session start, and nothing else. */
+function installDormantNotice(pi: Partial<PiExtensionApi>): void {
+  if (!eventSurfaceSchema.safeParse(pi).success) return;
+  let noticed = false;
+  pi.on?.("session_start", (_event, ctx) => {
+    if (noticed) return Promise.resolve();
+    noticed = true;
+    try {
+      if (sessionContextSchema.safeParse(ctx).success) {
+        ctx.ui.notify(unsupportedHostNotice, "warning");
+      }
+    } catch {
+      // A notice may be lost; the host must never see the failure.
+    }
+    return Promise.resolve();
+  });
+}
+
+function installBridge(pi: PiExtensionApi): void {
   let bridge: BridgeHandle | null = null;
   let comments: CommentOperations | null = null;
   let compactionStartedAt: number | null = null;
+  // Bumped by every session boundary so a start still resolving credentials
+  // never installs a bridge after a later start or shutdown superseded it.
+  let generation = 0;
   const locations = new ThreadLocationCache();
 
   const stopBridge = async (disconnect: boolean): Promise<void> => {
@@ -184,47 +279,65 @@ export default function artifactServerBridge(pi: PiExtensionApi): void {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    await stopBridge(false);
-    const environment = environmentConfiguration();
-    const credentials = await resolveBridgeCredentials(environment, homedir());
-    // One beacon per session: replies and resolves through the tool count
-    // against the bundles this session's bridge delivered.
-    const beacon = new ActivityBeacon();
-    comments = credentials === null
-      ? null
-      : createCommentOperations(credentials, fetch, locations, beacon);
+    generation += 1;
+    const current = generation;
+    try {
+      // A session replacement keeps the registration row: the successor
+      // reclaims the same agent id and its queued dispatches.
+      await stopBridge(false);
+      if (!sessionContextSchema.safeParse(ctx).success) {
+        comments = null;
+        return;
+      }
+      const environment = environmentConfiguration();
+      const credentials = await resolveBridgeCredentials(environment, homedir());
+      if (current !== generation) return;
+      // One beacon per session: replies and resolves through the tool count
+      // against the bundles this session's bridge delivered.
+      const beacon = new ActivityBeacon();
+      comments = credentials === null
+        ? null
+        : createCommentOperations(credentials, fetch, locations, beacon);
 
-    const port: HostPort = {
-      isCompacting: () =>
-        compactionStartedAt !== null &&
-        Date.now() - compactionStartedAt < compactionFlagLifetimeMilliseconds,
-      notify: (message, kind) => {
-        ctx.ui.notify(sanitizeBundleText(message), kind);
-      },
-      sendUserMessage: (text, delivery) => {
-        // Always named follow-up delivery: safe while idle (delivery mode is
-        // ignored and a run starts) and queued to the work boundary while
-        // streaming. Never "steer", and never omitted.
-        pi.sendUserMessage(sanitizeBundleText(text), delivery);
-      },
-    };
+      const port: HostPort = {
+        isCompacting: () =>
+          compactionStartedAt !== null &&
+          Date.now() - compactionStartedAt < compactionFlagLifetimeMilliseconds,
+        notify: (message, kind) => {
+          ctx.ui.notify(sanitizeBundleText(message), kind);
+        },
+        sendUserMessage: (text, delivery) => {
+          // Always named follow-up delivery: safe while idle (delivery mode is
+          // ignored and a run starts) and queued to the work boundary while
+          // streaming. Never "steer", and never omitted.
+          pi.sendUserMessage(sanitizeBundleText(text), delivery);
+        },
+      };
 
-    bridge = startBridge({
-      agentSessionId: ctx.sessionManager.getSessionId(),
-      beacon,
-      credentials,
-      displayName: chooseDisplayName(environment, ctx.cwd),
-      fetchImplementation: fetch,
-      host: port,
-      hostname: hostname(),
-      kind: "pi",
-      locations,
-      workingDirectory: ctx.cwd,
-    });
+      bridge = startBridge({
+        agentSessionId: hostSessionId(ctx),
+        beacon,
+        credentials,
+        displayName: chooseDisplayName(environment, ctx.cwd),
+        fetchImplementation: fetch,
+        host: port,
+        hostname: hostname(),
+        kind: "pi",
+        locations,
+        workingDirectory: ctx.cwd,
+      });
+    } catch {
+      // Fail open: the session continues without the bridge.
+    }
   });
 
   pi.on("session_shutdown", async (event) => {
-    await stopBridge(event?.reason === "quit");
+    generation += 1;
+    try {
+      await stopBridge(event?.reason === "quit");
+    } catch {
+      // A failed teardown is unremarkable; the row goes stale and is reaped.
+    }
   });
 
   pi.registerTool({
@@ -233,45 +346,58 @@ export default function artifactServerBridge(pi: PiExtensionApi): void {
       "sent to this agent. Use get_bundle to read threads, reply to record " +
       "what you did on a thread, and resolve to close it when done.",
     async execute(_toolCallId, params) {
-      const operations = comments;
-      if (operations === null) {
-        throw new Error(
-          "Artifact Server is not configured; the bridge is dormant.",
-        );
+      try {
+        return await runArtifactComments(comments, params);
+      } catch (error) {
+        // The tool's own error channel, never a host crash; the text is
+        // sanitized like every other string this tool returns.
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(sanitizeBundleText(message), {cause: error});
       }
-      if (params.operation === "get_bundle") {
-        const threadIds = params.threadIds ?? [];
-        if (threadIds.length === 0) {
-          throw new Error("get_bundle requires threadIds.");
-        }
-        const details = [];
-        for (const threadId of threadIds) {
-          // eslint-disable-next-line no-await-in-loop
-          details.push(await operations.getThread(threadId));
-        }
-        return textResult(
-          "get_bundle",
-          threadIds,
-          JSON.stringify(details, null, 2),
-        );
-      }
-      const threadId = params.threadId ?? "";
-      if (threadId === "") {
-        throw new Error(`${params.operation} requires threadId.`);
-      }
-      if (params.operation === "reply") {
-        const body = params.body ?? "";
-        if (body.trim() === "") {
-          throw new Error("reply requires a non-empty body.");
-        }
-        await operations.reply(threadId, body);
-        return textResult("reply", [threadId], `Replied to ${threadId}.`);
-      }
-      await operations.resolve(threadId);
-      return textResult("resolve", [threadId], `Resolved ${threadId}.`);
     },
     label: "Artifact comments",
     name: "artifact_comments",
     parameters: artifactCommentsParameters(),
   });
+}
+
+async function runArtifactComments(
+  operations: CommentOperations | null,
+  params: ArtifactCommentsParams,
+): Promise<PiToolResultLike> {
+  if (operations === null) {
+    throw new Error(
+      "Artifact Server is not configured; the bridge is dormant.",
+    );
+  }
+  if (params.operation === "get_bundle") {
+    const threadIds = params.threadIds ?? [];
+    if (threadIds.length === 0) {
+      throw new Error("get_bundle requires threadIds.");
+    }
+    const details = [];
+    for (const threadId of threadIds) {
+      // eslint-disable-next-line no-await-in-loop
+      details.push(await operations.getThread(threadId));
+    }
+    return textResult(
+      "get_bundle",
+      threadIds,
+      JSON.stringify(details, null, 2),
+    );
+  }
+  const threadId = params.threadId ?? "";
+  if (threadId === "") {
+    throw new Error(`${params.operation} requires threadId.`);
+  }
+  if (params.operation === "reply") {
+    const body = params.body ?? "";
+    if (body.trim() === "") {
+      throw new Error("reply requires a non-empty body.");
+    }
+    await operations.reply(threadId, body);
+    return textResult("reply", [threadId], `Replied to ${threadId}.`);
+  }
+  await operations.resolve(threadId);
+  return textResult("resolve", [threadId], `Resolved ${threadId}.`);
 }

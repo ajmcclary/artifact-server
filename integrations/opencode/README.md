@@ -160,6 +160,40 @@ Still not covered live:
   every compaction or session-deletion race. Any remaining live qualification
   is tracked in [T17](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md#t17-complete-live-bridge-qualification-without-changing-citizenship).
 
+### Changed since the live qualification (structural proof only)
+
+These changes landed after the OpenCode 1.18.32 live run and have **not**
+been re-qualified against a live OpenCode. They are proven by the scripted
+plugin context in `tests/client/opencode-bridge.test.ts` against a real
+Artifact Server:
+
+- Compaction is tracked per session id. A subagent (child) session's
+  compaction window can no longer overwrite or end the target session's
+  hold; previously one slot held whichever session compacted last.
+- `dispose` while OpenCode has not yet admitted a prompt returns promptly
+  and reports nothing, leaving the uncertain delivery for lease expiry.
+- `artifact_comments` sanitizes its final text and its error messages, as a
+  second layer over the bridge's own sanitization.
+- Bridge fixes carried by this repository's patch of
+  `@plannotator/agent-bridge` 0.1.1 (`patches/@plannotator__agent-bridge@0.1.1.patch`):
+  `artifact_comments` `get_bundle` leads guest thread bodies and guest
+  replies with the guest marker and strips bidirectional and zero-width
+  controls from every field; every bridge request is bounded and aborted
+  with the session, and the courtesy disconnect gives up after 5 s, so a
+  shutdown never waits on a silent server; a stop while the host has not
+  yet admitted a bundle leaves it unreported for lease expiry. Structural
+  proof: `tests/conformance/prm-008-guest-bundles.test.ts` and
+  `tests/client/bridge-core-shutdown.test.ts`.
+- **Published npm installs do not get the patch yet.** A pnpm patch applies
+  only inside this workspace; `npm install` of this package resolves the
+  unpatched `@plannotator/agent-bridge` 0.1.1 from the registry. The release
+  workflow refuses to publish the adapters until a patched bridge is
+  released upstream and the dependency range is raised past 0.1.1
+  (`scripts/check-adapter-bridge-release.mjs`,
+  `tests/tooling/adapter-bridge-release-gate.test.ts`). The adapter's own
+  final-text sanitization still applies to an unpatched bridge; the guest
+  marker in `get_bundle` and the request bounds do not.
+
 ## Compatibility
 
 - The package version tracks Artifact Server releases; it is a client of

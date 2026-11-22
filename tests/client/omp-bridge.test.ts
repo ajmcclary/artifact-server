@@ -3,6 +3,8 @@ import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import artifactServerBridge, {
   type OmExtensionApi,
   type OmEventHandlers,
+  type OmSessionShutdownEventLike,
+  unsupportedHostNotice,
 } from "../../integrations/omp/index.js";
 import {
   agentListSchema,
@@ -68,8 +70,8 @@ class ScriptedOmp implements OmExtensionApi {
     this.#handlers.session_compact?.();
   }
 
-  async shutdown(): Promise<void> {
-    await this.#handlers.session_shutdown?.();
+  async shutdown(event?: OmSessionShutdownEventLike): Promise<void> {
+    await this.#handlers.session_shutdown?.(event);
   }
 }
 
@@ -173,12 +175,106 @@ describe("omp bridge adapter", () => {
     await tool.execute("resolve", {operation: "resolve", threadId: thread.id}, undefined);
     await eventually(async () => (await state()) === "addressed" ? true : null);
 
+    // omp's shutdown names no reason, so it cannot be told from a reload:
+    // the registration row stays for a successor to reclaim.
     await host.shutdown();
-    await eventually(async () => {
+    const afterShutdown = agentListSchema.parse(await (await client.listAgents()).json()).items;
+    expect(afterShutdown.some((item) => item.id === agent.id)).toBe(true);
+  });
+
+  test("a rebind keeps the agent id, so a dispatch queued across shutdown and start reaches the successor", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    const published = (await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>omp rebind</title>",
+      idempotencyKey: "omp-rebind-publish",
+      name: "omp rebind report",
+    })).body;
+    const thread = await client.openThread(published, "Survive the reload.", "omp-rebind-thread");
+
+    artifactServerBridge(host);
+    await host.start();
+    const agent = await eventually(async () => {
       const response = await client.listAgents();
       return agentListSchema.parse(await response.json()).items
-        .some((item) => item.id === agent.id) ? null : true;
+        .find((item) => item.displayName === "omp-under-test") ?? null;
     });
+
+    // The lifecycle omp runs for /reload, /resume, and /fork: shutdown, then
+    // a new session_start. The dispatch is queued while no bridge runs.
+    await host.shutdown();
+    const sent = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "omp-rebind-dispatch",
+      projectId: published.artifact.projectId,
+      threadIds: [thread.id],
+    });
+    expect(sent.status).toBe(201);
+    const dispatchId = dispatchCreationSchema.parse(await sent.json()).dispatch.id;
+    await host.start();
+
+    const state = async () => {
+      const response = await client.getDispatch(dispatchId, published.artifact.projectId);
+      return dispatchEnvelopeSchema.parse(await response.json()).dispatch;
+    };
+    await eventually(async () => (await state()).state === "delivered" ? true : null);
+    expect((await state()).agentId).toBe(agent.id);
+    expect(host.messages).toHaveLength(1);
+    expect(host.messages[0]?.text).toContain(thread.id);
+    const agents = agentListSchema.parse(await (await client.listAgents()).json()).items
+      .filter((item) => item.displayName === "omp-under-test");
+    expect(agents.map((item) => item.id)).toEqual([agent.id]);
+  });
+
+  test("only a shutdown that explicitly says quit sends the courtesy disconnect", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    artifactServerBridge(host);
+    await host.start();
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "omp-under-test") ?? null;
+    });
+    await host.shutdown({reason: "quit"});
+    const listed = agentListSchema.parse(await (await client.listAgents()).json()).items;
+    expect(listed.some((item) => item.id === agent.id)).toBe(false);
+  });
+
+  test("an omp build without the extension API surface stays dormant with one notice and never throws", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    const handlers: Partial<OmEventHandlers> = {};
+    let registrations = 0;
+    const partial: Partial<OmExtensionApi> = {
+      on<Event extends keyof OmEventHandlers>(
+        event: Event,
+        handler: OmEventHandlers[Event],
+      ): void {
+        registrations += 1;
+        handlers[event] = handler;
+      },
+      sendUserMessage: () => undefined,
+    };
+    expect(() => {
+      artifactServerBridge({});
+    }).not.toThrow();
+    expect(() => {
+      artifactServerBridge(partial);
+    }).not.toThrow();
+    expect(registrations).toBe(1);
+    const startHandler = handlers.session_start;
+    if (startHandler === undefined) throw new Error("No session_start handler was registered.");
+    const notices: string[] = [];
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await startHandler({}, {
+        cwd: "/work/omp-partial-host",
+        ui: {notify: (message) => { notices.push(message); }},
+      });
+    }
+    expect(notices).toEqual([unsupportedHostNotice]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const listed = agentListSchema.parse(await (await client.listAgents()).json()).items;
+    expect(listed.some((item) => item.displayName === "omp-under-test")).toBe(false);
   });
 
   test("a synchronous host throw ends the claim loop without reporting delivery", async () => {

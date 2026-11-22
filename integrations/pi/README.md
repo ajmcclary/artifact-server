@@ -57,6 +57,41 @@ The 1 s → 30 s jittered backoff cap with fail-open dormancy is covered by
 `tests/conformance/dsp-012-bridge-fail-open.test.ts` and measured live once
 via the OpenCode suite, shared by the common bridge core.
 
+### Changed since the live qualification (structural proof only)
+
+These changes landed after the Pi 0.84.4 live run and have **not** been
+re-qualified against a live Pi. They are proven by the scripted Pi surface in
+`tests/client/pi-bridge-core.test.ts` against a real Artifact Server:
+
+- The factory validates the extension API surface (`on`, `registerTool`,
+  `sendUserMessage`) before registering anything. A build that lacks it stays
+  dormant with one notice at the first `session_start` and registers no tool.
+  `session_start` validates its context (`cwd`, `ui.notify`); a missing or
+  throwing `sessionManager.getSessionId` only costs the optional host session
+  id. Both session handlers contain every failure instead of rejecting into
+  Pi, and a start superseded by a later boundary never installs a bridge.
+- `artifact_comments` sanitizes its final text and its error messages, as a
+  second layer over the bridge's own sanitization.
+- Bridge fixes carried by this repository's patch of
+  `@plannotator/agent-bridge` 0.1.1 (`patches/@plannotator__agent-bridge@0.1.1.patch`):
+  `artifact_comments` `get_bundle` leads guest thread bodies and guest
+  replies with the guest marker and strips bidirectional and zero-width
+  controls from every field; every bridge request is bounded and aborted
+  with the session, and the courtesy disconnect gives up after 5 s, so a
+  shutdown never waits on a silent server; a stop while the host has not
+  yet admitted a bundle leaves it unreported for lease expiry. Structural
+  proof: `tests/conformance/prm-008-guest-bundles.test.ts` and
+  `tests/client/bridge-core-shutdown.test.ts`.
+- **Published npm installs do not get the patch yet.** A pnpm patch applies
+  only inside this workspace; `npm install` of this package resolves the
+  unpatched `@plannotator/agent-bridge` 0.1.1 from the registry. The release
+  workflow refuses to publish the adapters until a patched bridge is
+  released upstream and the dependency range is raised past 0.1.1
+  (`scripts/check-adapter-bridge-release.mjs`,
+  `tests/tooling/adapter-bridge-release-gate.test.ts`). The adapter's own
+  final-text sanitization still applies to an unpatched bridge; the guest
+  marker in `get_bundle` and the request bounds do not.
+
 ## Install
 
 ```bash
@@ -96,7 +131,8 @@ the session. It never blocks a Pi event handler on the network.
 
 - Pi extension API: tested against `@earendil-works/pi-coding-agent` 0.84.x.
   The bridge fails soft on missing API surface (dormant plus one notice,
-  never a crash).
+  never a crash); that guard is proven structurally, not against a live Pi
+  build that lacks the surface.
 - The package version tracks Artifact Server releases; it is a client of the
   server's dispatch API (`project/spec/agent-dispatch-spec.md`).
 - Ships TypeScript source; Pi loads extensions through jiti with no build

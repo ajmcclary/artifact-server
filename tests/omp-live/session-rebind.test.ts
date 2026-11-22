@@ -9,8 +9,10 @@
  * bridge's claim loop.
  *
  * omp emits `session_shutdown` WITHOUT a reason field (upstream Pi emits
- * "quit" | "reload" | "new" | ...), so the omp bridge answers every shutdown
- * with the courtesy disconnect. What a live host actually does around `/new`
+ * "quit" | "reload" | "new" | ...), so the omp bridge keeps the registration
+ * row on every shutdown and disconnects only on an explicit `reason: "quit"`
+ * (a disconnect would make the successor mint a new agent id that queued
+ * dispatches cannot reach). What a live host actually does around `/new`
  * is observed here: omp 18.2.11 emits no session lifecycle events at all for
  * `/new` (the extension host survives), so the original registration stays
  * connected and the replacement session inherits the pending FIFO through it.

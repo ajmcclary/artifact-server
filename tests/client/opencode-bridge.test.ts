@@ -485,4 +485,95 @@ describe("opencode bridge adapter", () => {
     expect(context.prompts[0]?.path.id).toBe("ses_compaction_target");
     expect(context.prompts[0]?.body.parts[0]?.text).toContain(thread.id);
   });
+
+  test("a child session compacting never ends or overwrites the target session's compaction hold", async () => {
+    const thread = await client.openThread(
+      published,
+      "Hold me through the target's compaction.",
+      "opencode-child-compaction-thread",
+    );
+    const context = fakePluginContext("/work/opencode-child-compaction-test");
+    const hooks = await ArtifactServerBridge(context.input);
+    hooksToDispose.push(hooks);
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "opencode-under-test") ?? null;
+    });
+    await hooks["chat.message"]({sessionID: "ses_target"});
+    await hooks.event({
+      event: {
+        properties: {info: {id: "ses_child", parentID: "ses_target"}},
+        type: "session.created",
+      },
+    });
+    await hooks["experimental.session.compacting"]({sessionID: "ses_target"});
+    // The child's whole compaction window opens and closes inside the
+    // target's: neither event may release the target.
+    await hooks["experimental.session.compacting"]({sessionID: "ses_child"});
+    await hooks.event({
+      event: {properties: {sessionID: "ses_child"}, type: "session.compacted"},
+    });
+
+    const sent = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "opencode-child-compaction-dispatch",
+      projectId,
+      threadIds: [thread.id],
+    });
+    const dispatchId = dispatchCreationSchema.parse(await sent.json()).dispatch.id;
+    const state = async () => {
+      const response = await client.getDispatch(dispatchId, projectId);
+      return dispatchEnvelopeSchema.parse(await response.json()).dispatch.state;
+    };
+    await eventually(async () => (await state()) === "claimed" ? true : null);
+    await settle(700);
+    expect(context.prompts).toHaveLength(0);
+    expect(await state()).toBe("claimed");
+
+    await hooks.event({
+      event: {properties: {sessionID: "ses_target"}, type: "session.compacted"},
+    });
+    await eventually(async () => (await state()) === "delivered" ? true : null);
+    expect(context.prompts).toHaveLength(1);
+    expect(context.prompts[0]?.path.id).toBe("ses_target");
+  });
+
+  test("dispose while OpenCode has not yet admitted a prompt returns promptly and reports nothing", async () => {
+    const thread = await client.openThread(
+      published,
+      "This admission never answers.",
+      "opencode-pending-admission-thread",
+    );
+    const context = fakePluginContext("/work/opencode-pending-admission-test");
+    context.setPromptHandler(() => new Promise(() => undefined));
+    const hooks = await ArtifactServerBridge(context.input);
+    hooksToDispose.push(hooks);
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "opencode-under-test") ?? null;
+    });
+    await hooks["chat.message"]({sessionID: "ses_pending"});
+    const sent = await client.sendDispatch({
+      agentId: agent.id,
+      idempotencyKey: "opencode-pending-admission-dispatch",
+      projectId,
+      threadIds: [thread.id],
+    });
+    const dispatchId = dispatchCreationSchema.parse(await sent.json()).dispatch.id;
+    await eventually(() => Promise.resolve(context.prompts.length === 1 ? true : null));
+
+    const startedAt = Date.now();
+    await hooks.dispose();
+    expect(Date.now() - startedAt).toBeLessThan(6_000);
+    // The admission is uncertain: neither delivered nor failed, so the lease
+    // returns it to the queue instead of the bridge guessing.
+    const response = await client.getDispatch(dispatchId, projectId);
+    expect(dispatchEnvelopeSchema.parse(await response.json()).dispatch).toMatchObject({
+      deliveredAt: null,
+      failedAt: null,
+      state: "claimed",
+    });
+  });
 });
