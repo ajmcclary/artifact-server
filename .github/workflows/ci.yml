@@ -1,6 +1,11 @@
 name: CI
 
 on:
+  # Pull requests run the PR tier on GitHub-hosted runners with the
+  # read-only token and no secrets. They never reach the full gate or the
+  # home runner (see the job conditions and docs/ci-home-runner.md).
+  pull_request:
+    branches: [main]
   workflow_call:
     inputs:
       tier:
