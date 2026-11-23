@@ -67,6 +67,15 @@ export async function createOmpEnvironment(
     `${JSON.stringify({defaultProjectTrust: "never"}, null, 2)}\n`,
     "utf8",
   );
+  // omp 18.19 opens an interactive onboarding wizard in a fresh agent home and
+  // never reaches the model banner the suite waits for. The global config.yml
+  // layer in the agent directory turns it off (`omp config set
+  // startup.setupWizard false` writes exactly this).
+  await writeFile(
+    path.join(agentDirectory, "config.yml"),
+    "startup:\n  setupWizard: false\n",
+    "utf8",
+  );
   await writeFile(
     path.join(projectDirectory, "notes.md"),
     "# Live suite project\n\nA placeholder file so the directory is not empty.\n",
