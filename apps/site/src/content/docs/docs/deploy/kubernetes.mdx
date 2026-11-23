@@ -257,6 +257,8 @@ The chart creates a cleanup `CronJob` by default. It runs one bounded cleanup pa
 
 Serving Pods use the `external` cleanup schedule. They do not run a second cleanup loop.
 
+The cleanup command needs only the database and object storage. The `CronJob` mounts only the database URL and optional S3 keys from the Secret. It never receives the API token or an OIDC or WorkOS value.
+
 Change the schedule or limits under `cleanup` in the Helm values.
 
 If another operator runs this command, you can disable the `CronJob`:

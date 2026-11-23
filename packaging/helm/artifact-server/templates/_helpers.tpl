@@ -212,3 +212,59 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
   value: {{ .Values.identity.workosIssuer | quote }}
 {{- end }}
 {{- end -}}
+
+{{/*
+The cleanup CronJob never authenticates a caller, so it mounts only the
+database URL and optional object-storage keys: never the API token or an
+identity-provider secret.
+*/}}
+{{- define "artifact-server.maintenanceSecretItems" -}}
+- key: {{ .Values.secret.keys.databaseUrl | quote }}
+  path: database-url
+{{- if .Values.secret.keys.s3AccessKeyId }}
+- key: {{ .Values.secret.keys.s3AccessKeyId | quote }}
+  path: s3-access-key-id
+- key: {{ .Values.secret.keys.s3SecretAccessKey | quote }}
+  path: s3-secret-access-key
+{{- end }}
+{{- end -}}
+
+{{/* Storage, database, and cleanup-policy settings only. */}}
+{{- define "artifact-server.maintenanceEnvironment" -}}
+- name: ARTIFACT_SERVER_DATABASE_URL_FILE
+  value: /run/secrets/artifact-server/database-url
+- name: ARTIFACT_SERVER_INSTALLATION_ID
+  value: {{ .Values.configuration.installationId | quote }}
+- name: ARTIFACT_SERVER_OBJECT_STORAGE_PROVIDER
+  value: "s3"
+- name: ARTIFACT_SERVER_POSTGRES_MAX_CONNECTIONS
+  value: {{ .Values.configuration.postgresPoolSize | quote }}
+- name: ARTIFACT_SERVER_S3_BUCKET
+  value: {{ .Values.configuration.s3.bucket | quote }}
+- name: ARTIFACT_SERVER_S3_FORCE_PATH_STYLE
+  value: {{ .Values.configuration.s3.forcePathStyle | quote }}
+- name: ARTIFACT_SERVER_S3_REGION
+  value: {{ .Values.configuration.s3.region | quote }}
+- name: ARTIFACT_SERVER_STAGING_CLEANUP_BATCH_SIZE
+  value: {{ .Values.cleanup.batchSize | quote }}
+- name: ARTIFACT_SERVER_STAGING_CLEANUP_CONCURRENCY
+  value: {{ .Values.cleanup.concurrency | quote }}
+- name: ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE
+  value: "external"
+- name: ARTIFACT_SERVER_STAGING_CLEANUP_SETTLE_DELAY_MS
+  value: {{ .Values.cleanup.settleDelayMilliseconds | quote }}
+{{- if .Values.configuration.s3.endpoint }}
+- name: ARTIFACT_SERVER_S3_ENDPOINT
+  value: {{ .Values.configuration.s3.endpoint | quote }}
+{{- end }}
+{{- if .Values.secret.keys.s3AccessKeyId }}
+- name: ARTIFACT_SERVER_S3_ACCESS_KEY_ID_FILE
+  value: /run/secrets/artifact-server/s3-access-key-id
+- name: ARTIFACT_SERVER_S3_SECRET_ACCESS_KEY_FILE
+  value: /run/secrets/artifact-server/s3-secret-access-key
+{{- end }}
+{{- end -}}
+
+{{- define "artifact-server.migrationServiceAccountName" -}}
+{{- printf "%s-migrate" (include "artifact-server.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}

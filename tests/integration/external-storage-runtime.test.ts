@@ -1,5 +1,5 @@
 import {spawn, type ChildProcessWithoutNullStreams} from "node:child_process";
-import {createHash, randomUUID} from "node:crypto";
+import {createHash, randomBytes, randomUUID} from "node:crypto";
 import {request} from "node:http";
 import path from "node:path";
 
@@ -34,6 +34,7 @@ import {requiredPostgresSchemaVersion} from
 import {PostgresArtifactRepository} from "../../src/storage/postgres-artifact-repository.js";
 import {PostgresIdentityRepository} from "../../src/storage/postgres-identity-repository.js";
 import {defaultProjectId} from "../../src/core/model.js";
+import {createManifest} from "../../src/manifest/create-manifest.js";
 import type {NodeGitHistoryConfiguration} from
   "../../src/git-history/node-git-history-configuration.js";
 import type {GitHistoryProviderHealthProbe} from
@@ -72,6 +73,11 @@ const availableGitHistoryProbe: GitHistoryProviderHealthProbe = {
   check: () => Effect.succeed({state: "available"}),
 };
 
+const cleanupReportSchema = z.object({
+  deleted: z.number(),
+  failed: z.number(),
+  selected: z.number(),
+});
 const publishResponseSchema = z.object({
   artifact: z.object({
     currentVersionId: z.string(),
@@ -2038,6 +2044,81 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     })).rejects.toThrow(/exited before readiness/u);
   });
 
+  test("external-storage foundation: cleanup reclaims expired staging with only storage and database settings and serves nothing", async () => {
+    const cleanupInstallationId = `cleanup-maintenance-${randomUUID()}`;
+    const database = await PostgresDatabase.open(
+      {url: Redacted.make(environment.databaseUrl)},
+      "apply",
+    );
+    // Server-shaped identifiers: the object-storage keyspace refuses any other.
+    const uploadId = `upl_${randomUUID()}`;
+    const storageToken = randomBytes(18).toString("hex");
+    try {
+      const repository = await PostgresArtifactRepository.open(
+        database,
+        cleanupInstallationId,
+      );
+      const bytes = new TextEncoder().encode("abandoned before commit");
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const manifest = createManifest({
+        entryPath: "index.txt",
+        files: [{mediaType: "text/plain", path: "index.txt", sha256, size: bytes.byteLength}],
+        routingMode: "static",
+      });
+      await repository.createStagedUpload({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-01-01T01:00:00.000Z",
+        files: manifest.entries.map((entry) => ({entry, storageToken})),
+        id: uploadId,
+        idempotencyKey: null,
+        manifest,
+        principalId: "principal-maintenance",
+        projectId: defaultProjectId,
+      });
+
+      // The scheduled job's whole environment: storage and database settings only.
+      // No API token, origin, content domain, administrator, or identity secret.
+      const maintenanceEnvironment = {
+        ARTIFACT_SERVER_DATABASE_URL: environment.databaseUrl,
+        ARTIFACT_SERVER_INSTALLATION_ID: cleanupInstallationId,
+        ARTIFACT_SERVER_S3_ACCESS_KEY_ID: environment.accessKey,
+        ARTIFACT_SERVER_S3_BUCKET: bucket,
+        ARTIFACT_SERVER_S3_ENDPOINT: environment.endpoint,
+        ARTIFACT_SERVER_S3_FORCE_PATH_STYLE: "true",
+        ARTIFACT_SERVER_S3_REGION: region,
+        ARTIFACT_SERVER_S3_SECRET_ACCESS_KEY: environment.secretKey,
+        ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE: "external",
+      };
+      const cleanup = await runIsolatedExternalCli([
+        "maintenance", "cleanup-staging", "--once",
+        "--mode", "external-storage", "--limit", "10",
+      ], maintenanceEnvironment);
+      expect(cleanup).toMatchObject({exitCode: 0});
+      const report = cleanupReportSchema.parse(
+        JSON.parse(cleanup.output.slice(cleanup.output.indexOf("{\n"))),
+      );
+      expect(report).toMatchObject({deleted: 1, failed: 0, selected: 1});
+      await expect(repository.findStagedUpload(
+        defaultProjectId,
+        uploadId,
+        "principal-maintenance",
+      )).resolves.toBeNull();
+      expect(cleanup.output).not.toContain(environment.secretKey);
+      expect(cleanup.output).not.toContain("\"status\":\"ready\"");
+
+      // The same storage-only environment cannot start anything that serves requests.
+      const serving = await runIsolatedExternalCli(
+        ["start-external-storage", "--host", "127.0.0.1", "--port", "0"],
+        maintenanceEnvironment,
+      );
+      expect(serving.exitCode).not.toBe(0);
+      expect(serving.output).toContain("ARTIFACT_SERVER_ORIGIN");
+      expect(serving.output).not.toContain("\"status\":\"ready\"");
+    } finally {
+      await database.close();
+    }
+  });
+
   test("OPS-001-B OPS-001-F: health and dependency readiness are separate and fail closed", async () => {
     expect.hasAssertions();
     const readinessBucket = `artifact-server-readiness-${randomUUID()}`;
@@ -2969,6 +3050,28 @@ function runExternalCli(
     const child = spawn(process.execPath, [externalStorageCli, ...arguments_], {
       cwd: repositoryRoot,
       env: {...process.env, ...environment},
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const output: Uint8Array[] = [];
+    child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => output.push(chunk));
+    child.once("error", reject);
+    child.once("close", (exitCode) => resolve({
+      exitCode: exitCode ?? -1,
+      output: Buffer.concat(output).toString("utf8").trim(),
+    }));
+  });
+}
+
+/** Run the CLI with exactly the given variables, so nothing leaks in from the test runner. */
+function runIsolatedExternalCli(
+  arguments_: readonly string[],
+  environment: Readonly<Record<string, string>>,
+): Promise<{readonly exitCode: number; readonly output: string}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [externalStorageCli, ...arguments_], {
+      cwd: repositoryRoot,
+      env: {PATH: process.env["PATH"] ?? "", ...environment},
       stdio: ["ignore", "pipe", "pipe"],
     });
     const output: Uint8Array[] = [];

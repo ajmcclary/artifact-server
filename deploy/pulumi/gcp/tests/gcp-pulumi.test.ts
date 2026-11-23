@@ -114,7 +114,19 @@ describe("GCP Pulumi deployment", () => {
     // sets the switch, so the external-storage runtime can never enable it.
     expect(serializedService).not.toContain("ARTIFACT_SERVER_LINKED_FILES");
     const cleanupJob = requireResource("gcp:cloudrunv2/job:Job");
-    expect(JSON.stringify(cleanupJob.inputs)).toContain("cleanup-staging");
+    const serializedCleanupJob = JSON.stringify(cleanupJob.inputs);
+    expect(serializedCleanupJob).toContain("cleanup-staging");
+    // The cleanup job receives only storage and database settings.
+    expect(serializedCleanupJob).toContain("ARTIFACT_SERVER_DATABASE_URL");
+    expect(serializedCleanupJob).toContain("ARTIFACT_SERVER_GCS_BUCKET");
+    for (const forbidden of [
+      "ARTIFACT_SERVER_API_TOKEN",
+      "ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL",
+      "ARTIFACT_SERVER_ORIGIN",
+      "ARTIFACT_SERVER_WORKOS",
+    ]) {
+      expect(serializedCleanupJob).not.toContain(forbidden);
+    }
     expect(requireResource("gcp:cloudscheduler/job:Job").inputs).toMatchObject({
       schedule: "*/15 * * * *",
       timeZone: "Etc/UTC",
@@ -164,12 +176,13 @@ describe("GCP Pulumi deployment", () => {
       return {deployment: stack.deployment};
     });
 
-    // Cloud Run resolves the key for both the service and the cleanup job,
-    // so the shared workload identity must hold secretAccessor on it.
+    // Cloud Run resolves the key for the service, so the workload identity
+    // must hold secretAccessor on it. The cleanup job never receives it.
     expect(JSON.stringify(requireResource("gcp:cloudrunv2/service:Service").inputs))
       .toContain(workosApiKeySecretRef);
-    expect(JSON.stringify(requireResource("gcp:cloudrunv2/job:Job").inputs))
-      .toContain(workosApiKeySecretRef);
+    const cleanupJob = JSON.stringify(requireResource("gcp:cloudrunv2/job:Job").inputs);
+    expect(cleanupJob).not.toContain(workosApiKeySecretRef);
+    expect(cleanupJob).not.toContain("ARTIFACT_SERVER_WORKOS");
     const grants = requireResources("gcp:secretmanager/secretIamMember:SecretIamMember");
     expect(grants.map(({inputs}) => inputs["secretId"])).toContain(workosApiKeySecretRef);
     const workosGrant = grants.find(({inputs}) =>

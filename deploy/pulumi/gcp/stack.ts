@@ -258,9 +258,9 @@ export function defineGcpStack(
     },
   );
 
-  // An operator-owned WorkOS key secret is read by both the service and the
-  // cleanup job, so the workload needs the same accessor grant as the
-  // generated secrets; AWS grants it through the execution-role policy.
+  // An operator-owned WorkOS key secret is read by the service, so the
+  // workload needs the same accessor grant as the generated secrets; AWS
+  // grants it through the execution-role policy.
   const workosApiKeyAccess = input.workosApiKeySecretRef === undefined
     ? []
     : [new gcp.secretmanager.SecretIamMember(
@@ -310,6 +310,19 @@ export function defineGcpStack(
       },
     });
   }
+  // The cleanup job never authenticates a caller: it receives only database,
+  // object-storage, and cleanup-policy settings, never the API token or the
+  // WorkOS key.
+  const cleanupEnvironment = gcpMaintenanceEnvironment(
+    input,
+    installationId.result,
+    bucket.name,
+    projectId,
+  );
+  const cleanupSecretEnvironment: GcpSecretEnvironmentVariable[] = [{
+    name: "ARTIFACT_SERVER_DATABASE_URL",
+    valueSource: {secretKeyRef: {secret: databaseUrlSecret.secretId, version: "latest"}},
+  }];
   const runtime = new gcp.cloudrunv2.Service(`${name}-application`, {
     defaultUriDisabled: true,
     deletionProtection: input.deletionProtection,
@@ -411,7 +424,7 @@ export function defineGcpStack(
             "--limit",
             "100",
           ],
-          envs: [...runtimeEnvironment, ...secretEnvironment],
+          envs: [...cleanupEnvironment, ...cleanupSecretEnvironment],
           image: input.imageReference,
           name: "artifact-server-cleanup",
           resources: {limits: {cpu: plan.cpu, memory: plan.memory}},
@@ -437,14 +450,11 @@ export function defineGcpStack(
   }, {
     dependsOn: [
       ...services,
-      apiTokenAccess,
-      apiTokenVersion,
       bucketInspection,
       cloudSqlAccess,
       databaseUrlAccess,
       databaseUrlVersion,
       objectAccess,
-      ...workosApiKeyAccess,
       runtime,
     ],
     protect: input.deletionProtection,
@@ -712,6 +722,34 @@ function defineDnsAuthorization(input: {
   });
   void validation;
   return authorization;
+}
+
+function gcpMaintenanceEnvironment(
+  input: GcpCloudDeploymentInput,
+  installationId: pulumi.Input<string>,
+  bucket: pulumi.Input<string>,
+  projectId: string,
+): GcpEnvironmentVariable[] {
+  const environment: GcpEnvironmentVariable[] = [
+    {name: "ARTIFACT_SERVER_GCS_BUCKET", value: bucket},
+    {name: "ARTIFACT_SERVER_GCS_PROJECT_ID", value: projectId},
+    {name: "ARTIFACT_SERVER_INSTALLATION_ID", value: installationId},
+    {name: "ARTIFACT_SERVER_OBJECT_STORAGE_PROVIDER", value: "gcs"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_BATCH_SIZE", value: "100"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_CONCURRENCY", value: "4"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE", value: "external"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_SETTLE_DELAY_MS", value: "300000"},
+    {name: "NODE_ENV", value: "production"},
+  ];
+  if (input.otlpEndpoint !== undefined) {
+    environment.push(
+      {name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: input.otlpEndpoint},
+      {name: "OTEL_LOGS_EXPORTER", value: "otlp"},
+      {name: "OTEL_METRICS_EXPORTER", value: "otlp"},
+      {name: "OTEL_TRACES_EXPORTER", value: "otlp"},
+    );
+  }
+  return environment;
 }
 
 function gcpRuntimeEnvironment(

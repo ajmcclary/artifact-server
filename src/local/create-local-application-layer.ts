@@ -424,6 +424,7 @@ export function createApplicationLayer(
     staging: stagingPort,
   };
   const preparationLayer = PublicationPreparationService.layer(preparationDependencies);
+  const cleanupRepository = expiredStagingCleanupRepository(adapters.repository);
   const stagedDependencies: StagedUploadDependencies = {
     reuse: {
       hasContent: (projectId, sha256, size) => Effect.tryPromise({
@@ -480,61 +481,7 @@ export function createApplicationLayer(
         ),
         catch: (cause) => repositoryFailure("findStagedUploadFileSlot", cause),
       }),
-      claimExpiredStagedUploadForCleanup: (
-        uploadId,
-        expiredBefore,
-        now,
-        staleClaimBefore,
-      ) =>
-        Effect.tryPromise({
-          try: () => adapters.repository.claimExpiredStagedUploadForCleanup(
-            uploadId,
-            expiredBefore,
-            now,
-            staleClaimBefore,
-          ),
-          catch: (cause) => repositoryFailure(
-            "claimExpiredStagedUploadForCleanup",
-            cause,
-          ),
-        }),
-      releaseStagedUploadCleanupClaim: (uploadId, claimedAt, staleClaimBefore) =>
-        Effect.tryPromise({
-          try: () => adapters.repository.releaseStagedUploadCleanupClaim(
-            uploadId,
-            claimedAt,
-            staleClaimBefore,
-          ),
-          catch: (cause) => repositoryFailure(
-            "releaseStagedUploadCleanupClaim",
-            cause,
-          ),
-        }),
-      listExpiredStagedUploads: (expiredBefore, now, limit) =>
-        Effect.tryPromise({
-          try: () => adapters.repository.listExpiredStagedUploads(
-            expiredBefore,
-            now,
-            limit,
-          ),
-          catch: (cause) => repositoryFailure(
-            "listExpiredStagedUploads",
-            cause,
-          ),
-        }),
-      removeExpiredStagedFile: (uploadId, storageToken, expiredBefore, now) =>
-        Effect.tryPromise({
-          try: () => adapters.repository.removeExpiredStagedFile(
-            uploadId,
-            storageToken,
-            expiredBefore,
-            now,
-          ),
-          catch: (cause) => repositoryFailure(
-            "removeExpiredStagedFile",
-            cause,
-          ),
-        }),
+      ...cleanupRepository,
       markStagedFileUploaded: (
         projectId,
         uploadId,
@@ -565,18 +512,6 @@ export function createApplicationLayer(
             }
             return repositoryFailure("markStagedFileUploaded", cause);
           },
-        }),
-      removeExpiredStagedUpload: (uploadId, expiredBefore, now) =>
-        Effect.tryPromise({
-          try: () => adapters.repository.removeExpiredStagedUpload(
-            uploadId,
-            expiredBefore,
-            now,
-          ),
-          catch: (cause) => repositoryFailure(
-            "removeExpiredStagedUpload",
-            cause,
-          ),
         }),
     },
   };
@@ -1406,22 +1341,7 @@ export function createApplicationLayer(
   const stagedLayer = StagedUploadService.layer(stagedDependencies).pipe(
     Layer.provideMerge(Layer.mergeAll(publishLayer, projectLayer, preparationLayer)),
   );
-  const cleanupDependencies: ExpiredStagingCleanupDependencies = {
-    clock,
-    concurrency: adapters.stagingCleanupPolicy?.concurrency ??
-      defaultStagingCleanupPolicy.concurrency,
-    repository: stagedDependencies.uploads,
-    settleDelayMilliseconds:
-      adapters.stagingCleanupPolicy?.settleDelayMilliseconds ??
-        defaultStagingCleanupPolicy.settleDelayMilliseconds,
-    storage: stagedDependencies.staging,
-  };
-  if (adapters.repository.committedStagingCleanup !== undefined) {
-    Object.assign(cleanupDependencies,{committed:{repository:adapters.repository.committedStagingCleanup,
-      openBlob:(sha256:string)=>Effect.tryPromise({try:()=>adapters.blobs.open(sha256),
-        catch:(cause)=>new BlobStorageFailure({cause:redactedFailureCause(cause),operation:"open"})})}});
-  }
-  const cleanupLayer = ExpiredStagingCleanupService.layer(cleanupDependencies);
+  const cleanupLayer = createStagingCleanupLayer(adapters);
   const contentLayer = ContentAccessService.layer(contentDependencies).pipe(
     Layer.provideMerge(Layer.mergeAll(authorizationLayer, projectLayer)),
   );
@@ -1995,6 +1915,137 @@ export function shareLinkRepositoryEffects(store: ShareLinkRepository): ShareLin
 // A failed span renders its whole cause chain, including a driver error's
 // stack and properties (a Postgres `detail` names the conflicting value), so
 // repository failures carry the redacted copy that operator logs already print.
+/** The adapters one expired-staging cleanup pass needs, and nothing that authenticates. */
+export interface StagingCleanupAdapters {
+  readonly blobs: Pick<BlobStore, "open">;
+  readonly clock: Clock;
+  readonly repository: Pick<
+    StagedUploadRepository,
+    | "claimExpiredStagedUploadForCleanup"
+    | "committedStagingCleanup"
+    | "listExpiredStagedUploads"
+    | "releaseStagedUploadCleanupClaim"
+    | "removeExpiredStagedFile"
+    | "removeExpiredStagedUpload"
+  >;
+  readonly staging: Pick<StagingStore, "remove">;
+  readonly stagingCleanupPolicy?: {
+    readonly concurrency: number;
+    readonly settleDelayMilliseconds: number;
+  };
+}
+
+/** Build only the expired-staging cleanup service over storage and persistence adapters. */
+export function createStagingCleanupLayer(
+  adapters: StagingCleanupAdapters,
+): Layer.Layer<ExpiredStagingCleanupService> {
+  const clock = {
+    now: Effect.sync(() => DateTime.makeUnsafe(adapters.clock.now())),
+  };
+  const cleanupDependencies: ExpiredStagingCleanupDependencies = {
+    clock,
+    concurrency: adapters.stagingCleanupPolicy?.concurrency ??
+      defaultStagingCleanupPolicy.concurrency,
+    repository: expiredStagingCleanupRepository(adapters.repository),
+    settleDelayMilliseconds:
+      adapters.stagingCleanupPolicy?.settleDelayMilliseconds ??
+        defaultStagingCleanupPolicy.settleDelayMilliseconds,
+    storage: {
+      remove: (uploadId, storageToken) =>
+        Effect.tryPromise({
+          try: () => adapters.staging.remove(uploadId, storageToken),
+          catch: (cause) =>
+            new StagingStorageFailure({cause: redactedFailureCause(cause), operation: "remove"}),
+        }),
+    },
+  };
+  const committed = adapters.repository.committedStagingCleanup;
+  if (committed !== undefined) {
+    Object.assign(cleanupDependencies, {committed: {
+      openBlob: (sha256: string) => Effect.tryPromise({
+        try: () => adapters.blobs.open(sha256),
+        catch: (cause) => new BlobStorageFailure({cause: redactedFailureCause(cause), operation: "open"}),
+      }),
+      repository: committed,
+    }});
+  }
+  return ExpiredStagingCleanupService.layer(cleanupDependencies);
+}
+
+function expiredStagingCleanupRepository(
+  repository: StagingCleanupAdapters["repository"],
+): ExpiredStagingCleanupDependencies["repository"] {
+  return {
+    claimExpiredStagedUploadForCleanup: (
+      uploadId,
+      expiredBefore,
+      now,
+      staleClaimBefore,
+    ) =>
+      Effect.tryPromise({
+        try: () => repository.claimExpiredStagedUploadForCleanup(
+          uploadId,
+          expiredBefore,
+          now,
+          staleClaimBefore,
+        ),
+        catch: (cause) => repositoryFailure(
+          "claimExpiredStagedUploadForCleanup",
+          cause,
+        ),
+      }),
+    releaseStagedUploadCleanupClaim: (uploadId, claimedAt, staleClaimBefore) =>
+      Effect.tryPromise({
+        try: () => repository.releaseStagedUploadCleanupClaim(
+          uploadId,
+          claimedAt,
+          staleClaimBefore,
+        ),
+        catch: (cause) => repositoryFailure(
+          "releaseStagedUploadCleanupClaim",
+          cause,
+        ),
+      }),
+    listExpiredStagedUploads: (expiredBefore, now, limit) =>
+      Effect.tryPromise({
+        try: () => repository.listExpiredStagedUploads(
+          expiredBefore,
+          now,
+          limit,
+        ),
+        catch: (cause) => repositoryFailure(
+          "listExpiredStagedUploads",
+          cause,
+        ),
+      }),
+    removeExpiredStagedFile: (uploadId, storageToken, expiredBefore, now) =>
+      Effect.tryPromise({
+        try: () => repository.removeExpiredStagedFile(
+          uploadId,
+          storageToken,
+          expiredBefore,
+          now,
+        ),
+        catch: (cause) => repositoryFailure(
+          "removeExpiredStagedFile",
+          cause,
+        ),
+      }),
+    removeExpiredStagedUpload: (uploadId, expiredBefore, now) =>
+      Effect.tryPromise({
+        try: () => repository.removeExpiredStagedUpload(
+          uploadId,
+          expiredBefore,
+          now,
+        ),
+        catch: (cause) => repositoryFailure(
+          "removeExpiredStagedUpload",
+          cause,
+        ),
+      }),
+  };
+}
+
 function repositoryFailure(
   operation: ArtifactRepositoryFailure["operation"],
   cause: unknown,

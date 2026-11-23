@@ -88,12 +88,37 @@ their values in the task definition or stack outputs. The Fargate task receives
 temporary AWS credentials through its task role and can use only this
 installation's S3 prefix.
 
+Every task runs with a read-only root filesystem and drops every Linux
+capability. The image writes only to `/tmp` (its `HOME` and `TMPDIR`), so each
+task mounts a Fargate ephemeral bind volume there. Fargate creates that volume
+root-owned with mode `0755`, so a short-lived `prepare-scratch` container runs
+first as root, with no capabilities and a read-only root filesystem, sets the
+volume to `1777`, and exits. The application container starts only after it
+succeeds. This layout is proved by the mocked Pulumi tests only; it has not run
+on a live Fargate task yet.
+
 EventBridge starts one separate Fargate maintenance task every 15 minutes. It
 runs `artifactserver maintenance cleanup-staging --once` with the same task
 role, private subnets, security group, database Secret, and S3 prefix as the
-application. The task role can delete only named staging objects inside that
-installation prefix. Serving tasks disable their internal cleanup loop, so the
-scheduled task is the only trigger in this deployment.
+application. The cleanup command needs only database and object-storage
+settings, so the task receives the database URL and nothing that
+authenticates: no API token, origin, or WorkOS value. Its own execution role
+can read only the database URL secret. The task role can delete only named
+staging objects inside that installation prefix. Serving tasks disable their
+internal cleanup loop, so the scheduled task is the only trigger in this
+deployment.
+
+With public ingress, the load-balancer security group admits only the
+CloudFront origin-facing prefix list, which every CloudFront distribution
+shares. The stack also generates a 48-character origin secret. CloudFront
+sends it to the origin in the `X-Artifact-Server-Origin-Verify` header,
+replacing any viewer-supplied header of that name. The HTTPS listener answers
+`403` by default and forwards only requests whose header matches. The value
+lives only in encrypted Pulumi state, the distribution, and the listener rule.
+It is never a stack output or task environment value. To rotate it, replace
+the `origin-verification` random resource with
+`pulumi up --replace <urn>`. Requests can fail with `403` while the
+distribution and the rule update.
 
 ## Network choices
 

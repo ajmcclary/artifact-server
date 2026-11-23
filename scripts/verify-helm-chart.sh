@@ -157,6 +157,103 @@ for artifactserver_expected_count in \
   fi
 done
 
+# Print one rendered template's manifest from a full helm template stream.
+rendered_template() {
+  local artifactserver_template=$1
+  awk -v source="# Source: artifact-server/templates/$artifactserver_template" '
+    /^# Source: / { printing = ($0 == source) }
+    printing { print }
+  ' <<<"$2"
+}
+
+# The cleanup CronJob receives only storage and database settings: no API token
+# and no identity-provider value, for either browser-login provider.
+for artifactserver_identity in oidc workos; do
+  if [[ "$artifactserver_identity" == oidc ]]; then
+    artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+      --kube-version 1.36.0 "${artifactserver_values[@]}" \
+      --set identity.oidcScopes="openid email profile" \
+      --set secret.keys.oidcClientSecret=oidc-client-secret \
+      --set secret.keys.s3AccessKeyId=s3-access-key-id \
+      --set secret.keys.s3SecretAccessKey=s3-secret-access-key)
+  else
+    artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+      --kube-version 1.36.0 "${artifactserver_values[@]}" \
+      --set identity.oidcClientId= \
+      --set identity.oidcIssuer= \
+      --set identity.workosClientId=client_workos \
+      --set identity.workosIssuer=https://auth.example.test \
+      --set secret.keys.workosApiKey=workos-api-key)
+  fi
+  artifactserver_cleanup=$(rendered_template cleanup-cronjob.yaml "$artifactserver_rendered")
+  if [[ "$artifactserver_cleanup" != *"cleanup-staging"* ]]; then
+    echo "The rendered chart has no cleanup CronJob." >&2
+    exit 1
+  fi
+  for artifactserver_forbidden in \
+    ARTIFACT_SERVER_API_TOKEN \
+    ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL \
+    ARTIFACT_SERVER_ORIGIN \
+    ARTIFACT_SERVER_OIDC \
+    ARTIFACT_SERVER_WORKOS \
+    'path: api-token' \
+    'path: oidc-client-secret' \
+    'path: workos-api-key'; do
+    if [[ "$artifactserver_cleanup" == *"$artifactserver_forbidden"* ]]; then
+      echo "The $artifactserver_identity cleanup CronJob receives $artifactserver_forbidden." >&2
+      exit 1
+    fi
+  done
+  for artifactserver_expected_line in \
+    'value: /run/secrets/artifact-server/database-url' \
+    'path: database-url' \
+    'name: ARTIFACT_SERVER_S3_BUCKET'; do
+    if [[ "$artifactserver_cleanup" != *"$artifactserver_expected_line"* ]]; then
+      echo "The $artifactserver_identity cleanup CronJob lacks: $artifactserver_expected_line" >&2
+      exit 1
+    fi
+  done
+  artifactserver_deployment=$(rendered_template deployment.yaml "$artifactserver_rendered")
+  if [[ "$artifactserver_deployment" != *"path: api-token"* ]]; then
+    echo "The serving Deployment lost its API token mount." >&2
+    exit 1
+  fi
+done
+
+# The pre-install migration runs under a hook-scoped ServiceAccount created by
+# an earlier hook, never under the namespace default account.
+artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+  --kube-version 1.36.0 "${artifactserver_values[@]}")
+artifactserver_migration_account=$(rendered_template migration-serviceaccount.yaml "$artifactserver_rendered")
+for artifactserver_expected_line in \
+  'kind: ServiceAccount' \
+  'name: artifact-server-migrate' \
+  'helm.sh/hook: pre-install,pre-upgrade' \
+  'helm.sh/hook-weight: "-20"' \
+  'helm.sh/hook-delete-policy: before-hook-creation' \
+  'automountServiceAccountToken: false'; do
+  if [[ "$artifactserver_migration_account" != *"$artifactserver_expected_line"* ]]; then
+    echo "The migration ServiceAccount lacks: $artifactserver_expected_line" >&2
+    exit 1
+  fi
+done
+artifactserver_migration_job=$(rendered_template migration-job.yaml "$artifactserver_rendered")
+for artifactserver_expected_line in \
+  'helm.sh/hook-weight: "-10"' \
+  'serviceAccountName: artifact-server-migrate' \
+  'automountServiceAccountToken: false'; do
+  if [[ "$artifactserver_migration_job" != *"$artifactserver_expected_line"* ]]; then
+    echo "The migration Job lacks: $artifactserver_expected_line" >&2
+    exit 1
+  fi
+done
+artifactserver_rendered=$(helm template artifact-server "$artifactserver_chart" \
+  --kube-version 1.36.0 "${artifactserver_values[@]}" --set migration.enabled=false)
+if [[ -n "$(rendered_template migration-serviceaccount.yaml "$artifactserver_rendered")" ]]; then
+  echo "The migration ServiceAccount renders with migrations disabled." >&2
+  exit 1
+fi
+
 mkdir -p -- "$artifactserver_repository/release"
 helm package "$artifactserver_chart" \
   --destination "$artifactserver_repository/release" >/dev/null

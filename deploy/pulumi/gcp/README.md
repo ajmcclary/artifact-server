@@ -11,7 +11,11 @@ This Pulumi project deploys the Artifact Server container to Cloud Run with:
 
 Cloud Scheduler invokes one private Cloud Run Job every 15 minutes to remove
 expired uploads that were never committed. The Job uses the application
-workload identity, Cloud SQL connection, GCS bucket, and Secret Manager values.
+workload identity, Cloud SQL connection, and GCS bucket, but receives only the
+database URL from Secret Manager. It gets no API token, origin, or WorkOS
+value, because the cleanup command never authenticates a caller. The shared
+workload identity can still read those secrets; a separate cleanup identity is
+not yet part of this package.
 A separate scheduler identity has only permission to invoke that Job. Serving
 instances disable their internal cleanup loop.
 

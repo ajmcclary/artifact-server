@@ -229,11 +229,22 @@ describe("AWS Pulumi deployment", () => {
       originRequestPolicyId: "216adef6-5c7f-47e4-b989-5492eafa07d3",
       viewerProtocolPolicy: "redirect-to-https",
     });
-    expect(distribution.inputs["origins"]).toEqual([expect.objectContaining({
-      customOriginConfig: expect.objectContaining({
+    // The origin carries the generated origin secret, so the engine stores the
+    // whole input encrypted; decoding it proves it is a Pulumi secret.
+    const origins = await Effect.runPromise(Schema.decodeUnknownEffect(
+      pulumiSecret(Schema.Array(Schema.Struct({
+        customHeaders: Schema.Array(Schema.Struct({name: Schema.String, value: Schema.String})),
+        customOriginConfig: Schema.Struct({
+          originProtocolPolicy: Schema.String,
+          originReadTimeout: Schema.Number,
+        }),
+      }))),
+    )(distribution.inputs["origins"]));
+    expect(origins.value).toEqual([expect.objectContaining({
+      customOriginConfig: {
         originProtocolPolicy: "https-only",
         originReadTimeout: 60,
-      }),
+      },
     })]);
     expect(distribution.inputs["viewerCertificate"]).toMatchObject({
       minimumProtocolVersion: "TLSv1.2_2021",
@@ -268,15 +279,17 @@ describe("AWS Pulumi deployment", () => {
       "aws:ecs/taskDefinition:TaskDefinition",
       "application",
     );
-    const containers = await Effect.runPromise(Schema.decodeUnknownEffect(
-      Schema.Array(Schema.Struct({
-        command: Schema.Array(Schema.String),
-        environment: Schema.Array(Schema.Struct({name: Schema.String, value: Schema.String})),
-        image: Schema.String,
-        secrets: Schema.Array(Schema.Struct({name: Schema.String, valueFrom: Schema.String})),
-      })),
+    const [container] = await Effect.runPromise(Schema.decodeUnknownEffect(
+      Schema.Tuple([
+        Schema.Struct({
+          command: Schema.Array(Schema.String),
+          environment: Schema.Array(Schema.Struct({name: Schema.String, value: Schema.String})),
+          image: Schema.String,
+          secrets: Schema.Array(Schema.Struct({name: Schema.String, valueFrom: Schema.String})),
+        }),
+        Schema.Unknown,
+      ]),
     )(JSON.parse(String(taskDefinition.inputs["containerDefinitions"]))));
-    const container = containers[0];
     expect(container).toBeDefined();
     expect(container?.image).toBe(imageReference);
     expect(container?.command.join(" ")).toContain("migrate apply");
@@ -322,6 +335,109 @@ describe("AWS Pulumi deployment", () => {
     );
     expect(String(cleanupTaskDefinition.inputs["containerDefinitions"]))
       .toContain("cleanup-staging");
+
+    // Both task definitions run read-only with every capability dropped, and
+    // write only to the task's ephemeral scratch volume.
+    const hardenedDefinitions = await Promise.all(
+      [taskDefinition, cleanupTaskDefinition].map(async (definition) => ({
+        containers: await decodeHardenedContainers(definition),
+        definition,
+      })),
+    );
+    for (const {containers: [primary, preparation], definition} of hardenedDefinitions) {
+      expect(primary).toMatchObject({
+        dependsOn: [{condition: "SUCCESS", containerName: "prepare-scratch"}],
+        essential: true,
+        linuxParameters: {capabilities: {add: [], drop: ["ALL"]}, initProcessEnabled: true},
+        mountPoints: [{containerPath: "/tmp", readOnly: false, sourceVolume: "scratch"}],
+        readonlyRootFilesystem: true,
+      });
+      expect(primary?.user).toBeUndefined();
+      expect(preparation).toMatchObject({
+        command: ["chmod 1777 /tmp"],
+        essential: false,
+        linuxParameters: {capabilities: {add: [], drop: ["ALL"]}},
+        mountPoints: [{containerPath: "/tmp", readOnly: false, sourceVolume: "scratch"}],
+        name: "prepare-scratch",
+        readonlyRootFilesystem: true,
+        user: "0:0",
+      });
+      // The preparation step sees no secret and no application environment.
+      expect(preparation?.secrets).toBeUndefined();
+      expect(preparation?.environment).toBeUndefined();
+      expect(definition.inputs["volumes"]).toEqual([{name: "scratch"}]);
+    }
+
+    // The cleanup job receives only storage and database settings.
+    const cleanupContainer = hardenedDefinitions[1]?.containers[0];
+    expect(cleanupContainer?.secrets?.map((entry) => entry.name)).toEqual([
+      "ARTIFACT_SERVER_DATABASE_URL",
+    ]);
+    const cleanupEnvironmentNames =
+      cleanupContainer?.environment?.map((entry) => entry.name) ?? [];
+    for (const forbidden of [
+      "ARTIFACT_SERVER_API_TOKEN",
+      "ARTIFACT_SERVER_BOOTSTRAP_ADMIN_EMAIL",
+      "ARTIFACT_SERVER_ORIGIN",
+      "ARTIFACT_SERVER_WORKOS_API_KEY",
+      "ARTIFACT_SERVER_WORKOS_CLIENT_ID",
+      "ARTIFACT_SERVER_WORKOS_ISSUER",
+    ]) {
+      expect(cleanupEnvironmentNames).not.toContain(forbidden);
+    }
+    expect(cleanupEnvironmentNames).toContain("ARTIFACT_SERVER_S3_BUCKET");
+    expect(cleanupEnvironmentNames).toContain("ARTIFACT_SERVER_INSTALLATION_ID");
+    const cleanupExecutionPolicy = requireNamedResource(
+      "aws:iam/rolePolicy:RolePolicy",
+      "cleanup-execution-secrets",
+    );
+    expect(String(cleanupExecutionPolicy.inputs["policy"])).toContain("database-url");
+    expect(String(cleanupExecutionPolicy.inputs["policy"])).not.toContain("api-token");
+    expect(String(cleanupExecutionPolicy.inputs["policy"])).not.toContain("workos");
+    expect(String(cleanupTaskDefinition.inputs["executionRoleArn"]))
+      .toContain("cleanup-execution");
+    const cleanupSchedulePolicy = requireNamedResource(
+      "aws:iam/rolePolicy:RolePolicy",
+      "cleanup-schedule",
+    );
+    expect(String(cleanupSchedulePolicy.inputs["policy"])).toContain("cleanup-execution");
+    expect(String(cleanupSchedulePolicy.inputs["policy"])).not.toContain(
+      "production-execution",
+    );
+
+    // The load balancer refuses every request that lacks the distribution's
+    // generated origin secret, so another CloudFront distribution cannot reach it.
+    const listener = requireResource("aws:lb/listener:Listener");
+    expect(listener.inputs["defaultActions"]).toEqual([expect.objectContaining({
+      fixedResponse: expect.objectContaining({statusCode: "403"}),
+      type: "fixed-response",
+    })]);
+    const verifiedOriginRule = requireResource("aws:lb/listenerRule:ListenerRule");
+    expect(verifiedOriginRule.inputs).toMatchObject({
+      actions: [expect.objectContaining({type: "forward"})],
+      priority: 1,
+    });
+    const ruleConditions = await Effect.runPromise(Schema.decodeUnknownEffect(
+      pulumiSecret(Schema.Array(Schema.Struct({
+        httpHeader: Schema.Struct({
+          httpHeaderName: Schema.String,
+          values: Schema.Array(Schema.String),
+        }),
+      }))),
+    )(verifiedOriginRule.inputs["conditions"]));
+    expect(ruleConditions.value).toEqual([{
+      httpHeader: {
+        httpHeaderName: "X-Artifact-Server-Origin-Verify",
+        values: ["generated-origin-secret"],
+      },
+    }]);
+    expect(origins.value.map((origin) => origin.customHeaders)).toEqual([[{
+      name: "X-Artifact-Server-Origin-Verify",
+      value: "generated-origin-secret",
+    }]]);
+    for (const definition of [taskDefinition, cleanupTaskDefinition]) {
+      expect(JSON.stringify(definition.inputs)).not.toContain("generated-origin-secret");
+    }
     expect(requireResource("aws:cloudwatch/eventRule:EventRule").inputs)
       .toMatchObject({scheduleExpression: "rate(15 minutes)"});
 
@@ -335,6 +451,7 @@ describe("AWS Pulumi deployment", () => {
       stateBackend: "s3://artifact-server-pulumi-state/aws-production",
     });
     expect(JSON.stringify(deployment)).not.toContain("generated-api-token");
+    expect(JSON.stringify(deployment)).not.toContain("generated-origin-secret");
     expect(JSON.stringify(deployment)).not.toContain("generated-database-password");
   });
 
@@ -369,6 +486,12 @@ describe("AWS Pulumi deployment", () => {
     )).toBe(false);
     expect(requireResource("aws:lb/loadBalancer:LoadBalancer").inputs["internal"])
       .toBe(true);
+    // Without CloudFront there is no origin secret: the private listener forwards.
+    expect(requireResource("aws:lb/listener:Listener").inputs["defaultActions"])
+      .toEqual([expect.objectContaining({type: "forward"})]);
+    expect(resources.some((resource) =>
+      resource.type === "aws:lb/listenerRule:ListenerRule"
+    )).toBe(false);
     expect(requireResource("aws:ec2/securityGroup:SecurityGroup").inputs["ingress"])
       .toEqual([expect.objectContaining({cidrBlocks: ["172.16.0.0/12"]})]);
 
@@ -429,6 +552,52 @@ function awsInput(
   );
 }
 
+const hardenedContainerSchema = Schema.Struct({
+  command: Schema.optional(Schema.Array(Schema.String)),
+  dependsOn: Schema.optional(Schema.Array(Schema.Struct({
+    condition: Schema.String,
+    containerName: Schema.String,
+  }))),
+  environment: Schema.optional(Schema.Array(Schema.Struct({
+    name: Schema.String,
+    value: Schema.String,
+  }))),
+  essential: Schema.Boolean,
+  linuxParameters: Schema.Struct({
+    capabilities: Schema.Struct({
+      add: Schema.Array(Schema.String),
+      drop: Schema.Array(Schema.String),
+    }),
+    initProcessEnabled: Schema.optional(Schema.Boolean),
+  }),
+  mountPoints: Schema.Array(Schema.Struct({
+    containerPath: Schema.String,
+    readOnly: Schema.Boolean,
+    sourceVolume: Schema.String,
+  })),
+  name: Schema.String,
+  readonlyRootFilesystem: Schema.Boolean,
+  secrets: Schema.optional(Schema.Array(Schema.Struct({
+    name: Schema.String,
+    valueFrom: Schema.String,
+  }))),
+  user: Schema.optional(Schema.String),
+});
+
+/** Pulumi's wire form of a secret value inside mocked resource inputs. */
+function pulumiSecret<S extends Schema.Top>(value: S) {
+  return Schema.Struct({
+    "4dabf18193072939515e22adb298388d": Schema.Literal("1b47061264138c4ac30d75fd1eb44270"),
+    value,
+  });
+}
+
+function decodeHardenedContainers(definition: pulumi.runtime.MockResourceArgs) {
+  return Effect.runPromise(Schema.decodeUnknownEffect(
+    Schema.Array(hardenedContainerSchema),
+  )(JSON.parse(String(definition.inputs["containerDefinitions"]))));
+}
+
 function requireResource(type: string): pulumi.runtime.MockResourceArgs {
   const resource = resources.find((candidate) => candidate.type === type);
   if (resource === undefined) {
@@ -468,6 +637,9 @@ function mockResourceState(
     return {...base, result: "019c1111-2222-7333-8444-555555555555"};
   }
   if (args.type === "random:index/randomPassword:RandomPassword") {
+    if (args.name.includes("origin-verification")) {
+      return {...base, result: "generated-origin-secret"};
+    }
     return {
       ...base,
       result: args.name.includes("database")

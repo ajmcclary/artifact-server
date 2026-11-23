@@ -63,7 +63,7 @@ spec:
                 - --limit
                 - {{ .Values.cleanup.batchSize | quote }}
               env:
-                {{- include "artifact-server.runtimeEnvironment" . | nindent 16 }}
+                {{- include "artifact-server.maintenanceEnvironment" . | nindent 16 }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
               securityContext:
@@ -80,7 +80,7 @@ spec:
                 secretName: {{ .Values.secret.name | quote }}
                 defaultMode: 288
                 items:
-                  {{- include "artifact-server.secretItems" . | nindent 18 }}
+                  {{- include "artifact-server.maintenanceSecretItems" . | nindent 18 }}
             - name: temporary
               emptyDir:
                 medium: Memory
