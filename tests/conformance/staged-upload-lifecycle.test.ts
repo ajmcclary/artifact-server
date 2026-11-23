@@ -34,6 +34,17 @@ describe("staged upload lifecycle", () => {
   let identityRepository: SqliteIdentityRepository;
   let runtime: ApplicationRuntime;
   let staging: LocalStagingStore;
+  // Every access repository a test opens, closed before the data directory is
+  // removed: Windows refuses to unlink a SQLite file that is still open.
+  let accessRepositories: SqliteAccessRepository[] = [];
+  const openAccess = (
+    file: string,
+    accessClock: ConstructorParameters<typeof SqliteAccessRepository>[1],
+  ): SqliteAccessRepository => {
+    const access = new SqliteAccessRepository(file, accessClock);
+    accessRepositories.push(access);
+    return access;
+  };
 
   const createRuntime = (overrides?: {
     repository?: SqliteArtifactRepository;
@@ -42,7 +53,7 @@ describe("staged upload lifecycle", () => {
     ManagedRuntime.make(createLocalApplicationLayer({
       apiToken: Redacted.make("test-api-token"),
       blobs,
-      access: new SqliteAccessRepository(databasePath, clock),
+      access: openAccess(databasePath, clock),
       bootstrapAdministratorEmail: "admin@example.test",
       clock,
       dispatches: repository,
@@ -75,6 +86,8 @@ describe("staged upload lifecycle", () => {
     await runtime.dispose();
     identityRepository.close();
     repository.close();
+    for (const access of accessRepositories) access.close();
+    accessRepositories = [];
     await rm(dataDirectory, {force: true, recursive: true});
   });
 
@@ -203,7 +216,7 @@ describe("staged upload lifecycle", () => {
           apiToken: Redacted.make("foreign-api-token"),
           blobs: new LocalBlobStore(path.join(dataDirectory, "foreign-blobs")),
           bootstrapAdministratorEmail: "foreign-admin@example.test",
-          access: new SqliteAccessRepository(path.join(dataDirectory, "foreign-installation.db"), clock),
+          access: openAccess(path.join(dataDirectory, "foreign-installation.db"), clock),
           clock,
           dispatches: foreignRepository,
           externalApiBearerVerifier: null,
@@ -1047,7 +1060,7 @@ describe("staged upload lifecycle", () => {
       apiToken: Redacted.make("test-api-token"),
       blobs,
       bootstrapAdministratorEmail: "admin@example.test",
-      access: new SqliteAccessRepository(databasePath, advancingClock),
+      access: openAccess(databasePath, advancingClock),
       clock: advancingClock,
       dispatches: repository,
       externalApiBearerVerifier: null,
