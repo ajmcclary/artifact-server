@@ -159,6 +159,12 @@ export async function startLiveClaude(
     if (value === undefined) continue;
     // Never let real Anthropic credentials or endpoints leak into the child.
     if (key.startsWith("ANTHROPIC_")) continue;
+    // Nor a parent Claude Code session's markers and credentials: when the
+    // suite runs inside one, CLAUDECODE and CLAUDE_CODE_CHILD_SESSION turn the
+    // child into a nested session that drops the channel's tools, and
+    // CLAUDE_CODE_MESSAGING_TOKEN is the parent's own credential. The suite's
+    // CLAUDE_CODE_* settings are assigned explicitly below.
+    if (key === "CLAUDECODE" || key.startsWith("CLAUDE_")) continue;
     environment[key] = value;
   }
   Object.assign(environment, {

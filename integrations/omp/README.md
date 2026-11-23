@@ -77,7 +77,9 @@ the session. It never blocks an omp event handler on the network.
 
 - omp extension API: the adapter types its narrow API slice structurally and
   keeps no hard dependency on omp's own type package. Live-host qualification
-  has run against **omp 18.2.11** (2026-09-24): the `tests/omp-live` suite
+  last ran against **omp 18.19.0** (2026-11-23, 6/6, with the merged bridge
+  fixes below in place) and first ran against **omp 18.2.11** (2026-09-24,
+  6/6): the `tests/omp-live` suite
   drives a real omp process in a PTY with this extension loaded against a
   real Artifact Server and a scripted offline model — round trip
   (`OMP-LIVE 1`), FIFO drain (`OMP-LIVE 2`), session replacement
@@ -98,7 +100,28 @@ the session. It never blocks an omp event handler on the network.
   cap lives in the shared bridge core and is measured live once for every
   adapter by the opencode suite (`OPENCODE-LIVE 4`); the structural floor is
   `tests/conformance/dsp-012-bridge-fail-open.test.ts`.
-- Host behaviors observed on omp 18.2.11 during live qualification:
+- Host drift found re-qualifying on omp 18.19.0 (2026-11-23). Neither was a
+  bridge regression; both were fixed in the suite's isolated install, not by
+  weakening an assertion. Failed attempts are kept as
+  `project/evidence/omp-live-2026-11-23-setup-wizard.failed.json` and
+  `project/evidence/omp-live-2026-11-23-repeated-turns.failed.json`.
+  - A fresh agent home opens a new onboarding wizard instead of the editor.
+    The suite writes `startup.setupWizard: false` to the agent-dir
+    `config.yml` (what `omp config set startup.setupWizard false` writes).
+  - At startup omp discovers skills outside the isolated agent home (for
+    example `~/.agents/skills`) and asks the model to compress each one into
+    a routing hint: one model request per skill (42 on the qualifying
+    machine) before the first prompt. This was the "~40 requests while the
+    first turn is held" failure. The suite now starts omp with
+    `--no-skills --no-rules --no-context-files`. Real users with many skills
+    pay those startup requests on their own model; delivery is unaffected.
+  - The extension surface the adapter types is unchanged: `session_shutdown`
+    still carries no `reason`, `session_before_compact` / `session_compact`
+    still bracket compaction, and `sendUserMessage(text, {deliverAs:
+    "followUp"})` still queues to the work boundary.
+- Host behaviors observed on omp 18.2.11 during live qualification. The
+  18.19.0 suite still passes with the tests that depend on them, but they
+  were not re-observed one by one:
   - `/new` emits no session lifecycle events at all (no `session_shutdown`,
     no new `session_start`): the extension host survives, so the original
     registration stays connected and the replacement session inherits the
@@ -136,17 +159,22 @@ the session. It never blocks an omp event handler on the network.
 - The bridge fails soft on missing API surface (dormant plus one notice,
   never a crash).
 
-### Changed since the live qualification (structural proof only)
+### Changed since the omp 18.2.11 qualification
 
-These changes landed after the omp 18.2.11 live run and have **not** been
-re-qualified against a live omp. They are proven by the scripted omp surface
-in `tests/client/omp-bridge.test.ts` against a real Artifact Server:
+These changes landed after the omp 18.2.11 live run. The omp 18.19.0 run on
+2026-11-23 had all of them in place and passed 6/6, so they no longer break
+the live paths. The specific paths they target are still proven only by
+the scripted omp surface in `tests/client/omp-bridge.test.ts` against a real
+Artifact Server, except where a bullet says otherwise:
 
 - Rebind keeps the agent id: a dispatch queued between `session_shutdown`
   and the next `session_start` is delivered by the successor under the same
   agent id (it answered 404 with the previous disconnect-on-every-stop
-  behavior). Only `session_shutdown` with `reason: "quit"` disconnects. The
-  `tests/omp-live` suite has not been re-run against this behavior.
+  behavior). Only `session_shutdown` with `reason: "quit"` disconnects.
+  Live, `OMP-LIVE 3` on 18.19.0 shows the agent id and its queued bundle
+  survive `/new`. The run did not observe whether 18.19.0 emits
+  `session_shutdown` / `session_start` around `/new`, so the
+  shutdown-then-start path is still structural proof only.
 - The factory validates the extension API surface (`on`, `registerTool`,
   `sendUserMessage`) before registering anything; a build that lacks it
   stays dormant with one notice. `session_start` validates its context, a

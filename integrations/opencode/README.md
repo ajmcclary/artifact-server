@@ -104,8 +104,9 @@ Verified by the fake plugin context against a real spawned Artifact Server:
 - A missing plugin surface fails open: no registration, no crash, and an
   honest tool error.
 
-Qualified live against the current host, **OpenCode 1.18.32** (2026-09-24):
-the `tests/opencode-live` suite drives a real `opencode serve` plus
+Qualified live against **OpenCode 1.18.32**: 7/7 on 2026-09-24, and 7/7
+again on 2026-11-23 against `main` at `d2dfdbb`, with the merged bridge fixes
+below in place. The `tests/opencode-live` suite drives a real `opencode serve` plus
 `run --attach` clients with this plugin loaded against a real Artifact
 Server and a scripted offline model — round trip (`OPENCODE-LIVE 1`), FIFO
 drain (`OPENCODE-LIVE 2`), fail-open against an unreachable origin
@@ -160,12 +161,15 @@ Still not covered live:
   every compaction or session-deletion race. Any remaining live qualification
   is tracked in [T17](../../docs/archive/planning-2026-10-08/NEXT-STEPS.md#t17-complete-live-bridge-qualification-without-changing-citizenship).
 
-### Changed since the live qualification (structural proof only)
+### Changed since the 2026-09-24 qualification
 
-These changes landed after the OpenCode 1.18.32 live run and have **not**
-been re-qualified against a live OpenCode. They are proven by the scripted
-plugin context in `tests/client/opencode-bridge.test.ts` against a real
-Artifact Server:
+These changes landed after the first OpenCode 1.18.32 live run. The
+2026-11-23 re-run had all of them in place and passed 7/7, so they no longer
+break the live paths. The races and failure paths they target (a child
+session's compaction overlapping the target's, `dispose` before admission,
+guest markers, request bounds) are not driven by the live suite. They are
+still proven only by the scripted plugin context in
+`tests/client/opencode-bridge.test.ts` against a real Artifact Server:
 
 - Compaction is tracked per session id. A subagent (child) session's
   compaction window can no longer overwrite or end the target session's

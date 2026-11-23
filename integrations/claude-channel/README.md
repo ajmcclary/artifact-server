@@ -17,8 +17,10 @@ The npm package is not published yet.
 
 ## Live verification
 
-Qualified live against the current host, **Claude Code 2.1.282** (2026-09-24):
-the `tests/claude-live` suite drives a real `claude` process in a PTY with
+Last qualified live against **Claude Code 2.1.330** (2026-11-23, 4/4, with
+the lifetime and sanitization changes below in place); first qualified
+against **Claude Code 2.1.282** (2026-09-24, 3/3). The `tests/claude-live`
+suite drives a real `claude` process in a PTY with
 the channel loaded through `.mcp.json` and
 `--dangerously-load-development-channels`, against a real Artifact Server
 and a scripted offline model — no metered provider usage. The round trip
@@ -32,8 +34,36 @@ dispatch settles `delivered` — never `failed`), and a duplicate lease
 delivery (`CLAUDE-LIVE 3`: a replayed claim delivers a second,
 byte-identical channel event, the second `delivered` report is refused with
 409 `DISPATCH_STATE_CONFLICT`, and settlement stays singular) all pass.
-Evidence: `project/evidence/claude-live.json` (`pnpm test:claude-live`
-re-runs it).
+`CLAUDE-LIVE 4` runs the round trip again with the server's tools forced
+deferred (see below). Evidence: `project/evidence/claude-live.json`
+(`pnpm test:claude-live` re-runs it).
+
+### Tool search (found on 2.1.330)
+
+Claude Code defers MCP tools behind its `ToolSearch` step by default, and
+since 2.1.304 it does this behind an `ANTHROPIC_BASE_URL` gateway too. A
+deferred tool is left out of the request's `tools` until the model loads it.
+On 2.1.330 the round trip failed with `No such tool available:
+artifact_comments` (kept as
+`project/evidence/claude-live-2026-11-23-deferred-tool.failed.json`; the
+same failure reproduced on the pre-merge commit, so it was host drift).
+
+This affected real sessions too, not just the suite. In a fresh session
+whose first message is the channel event, the bundle turn on 2.1.330 had no
+deferred-tool list in context yet. The model saw only the channel's
+instruction to use `artifact_comments`, and calling it directly failed. A
+model that searched first would recover, at the cost of a round trip per
+session.
+
+The fix is in the channel, not the suite: `artifact_comments` is listed with
+`_meta: {"anthropic/alwaysLoad": true}`, the per-tool marker Claude Code
+documents for MCP server authors, so it is always in the request.
+`CLAUDE-LIVE 1` asserts the tool is advertised on the bundle turn.
+A user can still force the server deferred with `"alwaysLoad": false` on its
+`.mcp.json` entry. `CLAUDE-LIVE 4` covers that path: the tool is absent on the
+bundle turn, the model loads it with one `ToolSearch` query for
+`artifact_comments`, and the thread still closes and the dispatch reads
+`addressed`.
 
 The suite's isolated HOME seeds the account feature-flag cache
 (`cachedGrowthBookFeatures.tengu_harbor` in `.claude.json`), because a
@@ -51,6 +81,9 @@ process boundary, not a mock:
   pretending to work.
 - Follow-up delivery as one `notifications/claude/channel` event, its
   sanitization, and the tool closing both threads.
+- `tools/list` advertises `artifact_comments` with
+  `_meta: {"anthropic/alwaysLoad": true}`, so the ordinary gate catches a
+  regression of the tool-search fix without the live suite.
 
 Host-agnostic behaviors are covered once for every adapter by the extracted
 bridge core: the structural floor is
@@ -72,11 +105,13 @@ Two behaviors are recorded gaps rather than tests:
   adapter maps to bridge shutdown. The live round trip above is the current
   evidence; T17 tracks the gap.
 
-### Changed since the live qualification (structural proof only)
+### Changed since the Claude Code 2.1.282 qualification
 
-These changes landed after the Claude Code 2.1.282 live run and have **not**
-been re-qualified against a live Claude Code. They are proven by spawning the
-real channel process in `tests/client/claude-channel-lifetime.test.ts`:
+These changes landed after the Claude Code 2.1.282 live run. The 2.1.330 run
+on 2026-11-23 had them in place and passed 4/4, so they no longer break the
+live paths. Their own behavior (the session-end and signal paths) is still
+proven only by spawning the real channel process in
+`tests/client/claude-channel-lifetime.test.ts`:
 
 - The channel lives exactly as long as its session. The MCP SDK's stdio
   transport never watches stdin for end-of-file, so the channel does: stdin

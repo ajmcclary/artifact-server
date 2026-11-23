@@ -22,6 +22,20 @@ export interface ClaudeEnvironmentOptions {
   readonly apiToken: string;
   /** Artifact Server origin the channel registers against. */
   readonly origin: string;
+  /**
+   * The `.mcp.json` server-level `alwaysLoad` override. Omitted or null, the
+   * channel's own per-tool `anthropic/alwaysLoad` marker decides; `false` is
+   * how a user keeps every tool of the server deferred behind ToolSearch.
+   */
+  readonly serverAlwaysLoad?: boolean | null;
+}
+
+/** The Artifact Server entry this suite writes into `.mcp.json`. */
+interface McpServerEntry {
+  alwaysLoad?: boolean;
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly env: Readonly<Record<string, string>>;
 }
 
 /** Create the temporary home and project directory. */
@@ -48,19 +62,22 @@ export async function createClaudeEnvironment(
     "../../../integrations/claude-channel/bin/claude-channel.js",
     import.meta.url,
   ).pathname;
+  const serverEntry: McpServerEntry = {
+    args: [channelEntry],
+    command: process.execPath,
+    env: {
+      ARTIFACT_SERVER_AGENT_NAME: "claude-live-suite",
+      ARTIFACT_SERVER_AGENT_TOKEN: options.apiToken,
+      ARTIFACT_SERVER_ORIGIN: options.origin,
+    },
+  };
+  const serverAlwaysLoad = options.serverAlwaysLoad ?? null;
+  if (serverAlwaysLoad !== null) serverEntry.alwaysLoad = serverAlwaysLoad;
   await writeFile(
     path.join(projectDirectory, ".mcp.json"),
     `${JSON.stringify({
       mcpServers: {
-        "artifact-server": {
-          args: [channelEntry],
-          command: process.execPath,
-          env: {
-            ARTIFACT_SERVER_AGENT_NAME: "claude-live-suite",
-            ARTIFACT_SERVER_AGENT_TOKEN: options.apiToken,
-            ARTIFACT_SERVER_ORIGIN: options.origin,
-          },
-        },
+        "artifact-server": serverEntry,
       },
     }, null, 2)}\n`,
     "utf8",
