@@ -13,6 +13,7 @@ import {
 import {
   type GitHistoryCommitRequest,
   type GitHistoryJob,
+  GitHistoryRemoteIncomplete,
   makeGitHistoryMirrorWorker,
   startGitHistoryMirrorWorker,
 } from "../../src/git-history/git-history-mirror.js";
@@ -204,6 +205,41 @@ describe("Git history mirror worker recovery", () => {
       expect(store.releases).toEqual([]);
     } finally {
       contender.close();
+      store.close();
+    }
+  });
+
+  test("GIT-008 stalled-remote regression: an incomplete remote response is released as a retryable provider failure", async () => {
+    const published = await publishAndEnable("stalled remote");
+    const store = new ReleaseRecordingStore(
+      `${installation.dataDirectory}/artifact-server.db`,
+      "local",
+    );
+    class StalledLookup extends RecordingGitHistoryProvider {
+      override async lookupCommit(): Promise<never> {
+        throw new GitHistoryRemoteIncomplete("git_remote_deadline_exceeded");
+      }
+    }
+    const provider = new StalledLookup();
+    try {
+      const worker = makeGitHistoryMirrorWorker({
+        blobs: new LocalBlobStore(join(installation.dataDirectory, "blobs")),
+        capability: fixedGitHistoryCapabilityReader(capability),
+        installationId: "local",
+        provider,
+        store,
+      });
+      await expect(Effect.runPromise(worker.runPass()))
+        .resolves.toEqual({claimed: true, outcome: "retry"});
+      expect(store.releases).toEqual(["provider_response_incomplete"]);
+      // A partial remote view never falls through to a fresh commit.
+      expect(provider.commitCalls).toBe(0);
+      expect(await store.findGitHistoryMapping(
+        "prj_default",
+        published.artifact.id,
+        published.version.id,
+      )).toBeNull();
+    } finally {
       store.close();
     }
   });
