@@ -210,7 +210,7 @@ jobs:
   portable:
     name: macOS portability
     if: inputs.tier != 'release' && inputs.runner != 'home'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 12
     steps:
       - name: Checkout repository
