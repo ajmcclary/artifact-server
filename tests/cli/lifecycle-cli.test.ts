@@ -476,7 +476,11 @@ describe("Artifact Server lifecycle CLI", () => {
     } finally {
       await rm(parent, {force: true, recursive: true});
     }
-  }, 30_000);
+    // Eight sequential CLI processes, each a cold tsx start. That fits in
+    // 30 s on a developer machine but not on a 2-vCPU GitHub-hosted runner
+    // under the parallel suite, where it timed out on every PR-tier run.
+    // This is a correctness budget, not a performance claim.
+  }, 120_000);
 
   test("private-team configuration refuses a local browser-bootstrap credential without echoing it", async () => {
     const parent = await mkdtemp(path.join(tmpdir(), "artifact-server-lifecycle-"));

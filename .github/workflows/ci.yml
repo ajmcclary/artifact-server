@@ -1,6 +1,11 @@
 name: CI
 
 on:
+  # Pull requests run the PR tier on GitHub-hosted runners with the
+  # read-only token and no secrets. They never reach the full gate or the
+  # home runner (see the job conditions and docs/ci-home-runner.md).
+  pull_request:
+    branches: [main]
   workflow_call:
     inputs:
       tier:
@@ -205,8 +210,10 @@ jobs:
   portable:
     name: macOS portability
     if: inputs.tier != 'release' && inputs.runner != 'home'
-    runs-on: macos-14
-    timeout-minutes: 12
+    runs-on: macos-15
+    # The full `pnpm check` took 7-8 minutes in September 2026; the suite has
+    # since roughly doubled and macOS arm64 runners are capacity-constrained.
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -228,6 +235,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify portable code paths
+        # The 3-vCPU macOS runner timed out process-spawning tests (MCP
+        # onboarding, candidate versions, the shipped skill) when Vitest ran
+        # one fork per core; two workers stop them starving each other.
+        env:
+          VITEST_MAX_WORKERS: "2"
         run: pnpm check
 
   windows-local:
