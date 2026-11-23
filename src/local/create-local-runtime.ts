@@ -128,6 +128,8 @@ export interface LocalRuntimeConfig {
    */
   readonly contentVariantBuilds?: "background" | "manual";
   readonly localBootstrapToken?: string;
+  /** Waits between preparation re-runs in one MCP commit; never parsed from the environment. */
+  readonly mcpCommitPreparationDelays?: HttpAppDependencies["mcpCommitPreparationDelays"];
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly observability?: boolean;
   readonly publicationPreparationConfig?: PublicationPreparationConfig;
@@ -406,6 +408,12 @@ export async function createLocalRuntime(
       appDependencies = {
         ...appDependencies,
         mcpOAuthResource: config.mcpOAuthResource,
+      };
+    }
+    if (config.mcpCommitPreparationDelays !== undefined) {
+      appDependencies = {
+        ...appDependencies,
+        mcpCommitPreparationDelays: config.mcpCommitPreparationDelays,
       };
     }
     const app = createHttpApp(config.runtimeLifecycle === undefined

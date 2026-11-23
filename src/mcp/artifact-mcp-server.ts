@@ -406,6 +406,12 @@ const manifestResource = new ResourceTemplate(
 export interface ArtifactMcpServerDependencies {
   readonly applicationOrigin: string;
   readonly applicationRuntime: ApplicationRuntime;
+  /**
+   * Waits between the bounded re-runs of preparation inside one
+   * artifact_commit_upload call; the list length bounds the re-runs. Defaults
+   * to {@link defaultMcpCommitPreparationDelays}. Tests shorten it.
+   */
+  readonly commitPreparationDelays?: ReadonlyArray<Duration.Duration>;
   readonly contentDomain: string;
   /** Secret-free optional Git state exposed by capability discovery. */
   readonly gitHistory: GitHistoryCapability;
@@ -1493,7 +1499,7 @@ export function createArtifactMcpServer(
           projectId,
           target,
           uploadId,
-        }),
+        }, dependencies.commitPreparationDelays ?? defaultMcpCommitPreparationDelays),
       );
       return {
         ...publishedVersionProjection(
@@ -3154,7 +3160,13 @@ function publicationSummary(published: {
   ].join("\n");
 }
 
-const maximumMcpCommitPreparationRetries = 9;
+/**
+ * Production waits between preparation re-runs in one MCP commit: exponential
+ * from one second, capped at thirty, nine re-runs (about two and a half
+ * minutes) before the caller gets resume guidance instead of a hung tool call.
+ */
+export const defaultMcpCommitPreparationDelays: ReadonlyArray<Duration.Duration> =
+  [1, 2, 4, 8, 16, 30, 30, 30, 30].map((seconds) => Duration.seconds(seconds));
 
 function commitUploadWithRetry(command: {
   readonly idempotencyKey: string;
@@ -3171,20 +3183,20 @@ function commitUploadWithRetry(command: {
     readonly kind: "new_version";
   };
   readonly uploadId: string;
-}): Effect.Effect<PublishedVersion, unknown, ApplicationServices> {
+}, delays: ReadonlyArray<Duration.Duration>): Effect.Effect<PublishedVersion, unknown, ApplicationServices> {
   return Effect.gen(function*() {
     let lastPreparing: {readonly installed: number; readonly total: number} | undefined;
-    for (let attempt = 0; attempt <= maximumMcpCommitPreparationRetries; attempt += 1) {
+    for (let attempt = 0; attempt <= delays.length; attempt += 1) {
       const result = yield* StagedUploadService.use((uploads) => uploads.commitUpload(command));
       if (result.kind === "committed") {
         return result.publication;
       }
       lastPreparing = result;
-      if (attempt === maximumMcpCommitPreparationRetries) {
+      const delay = delays[attempt];
+      if (delay === undefined) {
         break;
       }
-      const delaySeconds = Math.min(2 ** attempt, 30);
-      yield* Effect.sleep(Duration.seconds(delaySeconds));
+      yield* Effect.sleep(delay);
     }
     const progress = lastPreparing ?? {installed: 0, total: 0};
     return yield* new UploadStillPreparing({

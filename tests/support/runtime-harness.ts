@@ -112,6 +112,7 @@ export async function startTestServer(
     readonly linkedFiles?: "off" | "on";
     readonly linkRoots?: readonly string[];
     readonly linkedCaptureHooks?: CaptureHooks;
+    readonly mcpCommitPreparationDelays?: LocalServerConfig["mcpCommitPreparationDelays"];
     readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
     readonly observability?: boolean;
     readonly port?: number;
@@ -202,6 +203,9 @@ export async function startTestServer(
   }
   if (options.linkedCaptureHooks !== undefined) {
     config = {...config, linkedCaptureHooks: options.linkedCaptureHooks};
+  }
+  if (options.mcpCommitPreparationDelays !== undefined) {
+    config = {...config, mcpCommitPreparationDelays: options.mcpCommitPreparationDelays};
   }
   if (options.mcpOAuthResource !== undefined) {
     config = {...config, mcpOAuthResource: options.mcpOAuthResource};
