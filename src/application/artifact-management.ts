@@ -18,7 +18,6 @@ import {
   type ProjectManagementFailure,
   ProjectManagementService,
 } from "./project-management.js";
-import type {AccessPolicy} from "../core/access-policy.js";
 import {type ActionAttribution, actorSnapshotOf, attributionOf} from "../core/action-attribution.js";
 import {
   ArtifactNotFound,
@@ -33,7 +32,7 @@ import {
   InvalidPagination,
   type InvalidArtifactName,
   ProjectArchived,
-  ShareLinksDisabled,
+  type ShareLinksDisabled,
   VersionNotFound,
   VersionNotRestorable,
 } from "../core/errors.js";
@@ -274,8 +273,6 @@ export type CandidateRepositoryFailure =
 
 /** Dependencies used to construct artifact management operations. */
 export interface ArtifactManagementDependencies {
-  /** The installation policy, which can turn public links off (ADR 0033). */
-  readonly accessPolicy: () => Effect.Effect<AccessPolicy, ArtifactRepositoryFailure>;
   readonly clock: ApplicationClock;
   readonly repository: ArtifactManagementRepository;
   /** End every share link of an artifact made account-required. */
@@ -383,6 +380,13 @@ function normalizeArtifactSearch(candidate: string | null): string | null {
   const normalized = normalizeArtifactTag(candidate);
   return normalized === "" ? null : normalized;
 }
+
+// An archived project is read-only for its artifacts; only actions that
+// reduce exposure (making an artifact private) stay open (PRJ-003).
+const requireUnarchived = (project: {readonly archivedAt: string | null}) =>
+  project.archivedAt === null
+    ? Effect.void
+    : Effect.fail(new ProjectArchived({message: "Archived projects cannot be changed."}));
 
 function makeArtifactManagementService(
   dependencies: ArtifactManagementDependencies,
@@ -652,6 +656,7 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      yield* requireUnarchived(project);
       const target = yield* requireVersion(project.id, artifact.id, command.versionId);
       // Restore cannot be used to get around review (CND-005).
       if (!isAcceptedVersionState(target.version.state)) {
@@ -693,9 +698,7 @@ function makeArtifactManagementService(
         yield* authorization.requireVersionPublication(command.principal, scope);
       }
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (project.archivedAt !== null) {
-        return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
-      }
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       const decision = {
@@ -740,11 +743,18 @@ function makeArtifactManagementService(
         command.principal,
         command.projectId,
       );
-      yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactShare);
-      const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (command.accessSetting === accessSettings.publicLink && !(yield* dependencies.accessPolicy()).shareLinks.enabled) {
-        return yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
+      const scope = {artifactId: command.artifactId, projectId: project.id};
+      const widens = command.accessSetting === accessSettings.publicLink;
+      // Making content reachable by link needs the same sharer authority as
+      // creating a share link; narrowing to account-required needs only
+      // artifact.share and stays open on an archived project.
+      if (widens) {
+        yield* authorization.requireLinkSharing(command.principal, scope);
+      } else {
+        yield* authorization.requireArtifactManagement(command.principal, scope, permissions.artifactShare);
       }
+      const artifact = yield* requireArtifact(project.id, command.artifactId);
+      if (widens) yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       const changed = yield* dependencies.repository.changeAccessSetting({
@@ -769,6 +779,7 @@ function makeArtifactManagementService(
       // Turning a public artifact private also ends every share link to it (ADR 0033). A
       // request that changes nothing, including an idempotent replay, ends nothing.
       if (
+        !changed.replayed &&
         artifact.accessSetting === accessSettings.publicLink &&
         command.accessSetting === accessSettings.accountRequired
       ) {
@@ -788,7 +799,7 @@ function makeArtifactManagementService(
       const project = yield* resolveProjectForRead(command.principal, command.projectId);
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
-      if (project.archivedAt !== null) return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      yield* requireUnarchived(project);
       const name = yield* parseRenamedArtifactName(command.name);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
@@ -823,6 +834,7 @@ function makeArtifactManagementService(
       );
       yield* authorization.requireArtifactManagement(command.principal, {artifactId: command.artifactId, projectId: project.id}, permissions.artifactEdit);
       const artifact = yield* requireArtifact(project.id, command.artifactId);
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const tags = yield* parseArtifactTags(command.tags);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
@@ -859,6 +871,7 @@ function makeArtifactManagementService(
         project.id,
         command.artifactId,
       );
+      yield* requireUnarchived(project);
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const createdAt = DateTime.formatIso(yield* dependencies.clock.now);
       return yield* dependencies.repository.deleteArtifact({

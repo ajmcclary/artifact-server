@@ -263,6 +263,22 @@ describe("private content sessions", () => {
     expect(setCookie).toContain("Secure");
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).not.toContain("Domain=");
+
+    // On a secure content origin only the __Host- cookie counts: a sibling
+    // subdomain can plant the unprefixed name, never a __Host- cookie. A
+    // planted malformed value cannot shadow the genuine cookie either.
+    const hostedPair = setCookie.split(";", 1)[0];
+    if (hostedPair === undefined) throw new Error("The hosted content cookie is empty.");
+    const hostedToken = hostedPair.slice(hostedPair.indexOf("=") + 1);
+    const readHosted = async (cookieHeader: string): Promise<number> => (await fetchVersion(
+      server,
+      published.body.links.version,
+      "GET",
+      {Cookie: cookieHeader},
+    )).status;
+    expect(await readHosted(hostedPair)).toBe(200);
+    expect(await readHosted(`artifact_content=${hostedToken}`)).toBe(401);
+    expect(await readHosted(`__Host-artifact_content=not-a-session; ${hostedPair}`)).toBe(200);
   });
 
   test("CMT-018-B CMT-018-F: an authenticated exact-version preview lease is read-only, restart-safe, and version-bound", async () => {

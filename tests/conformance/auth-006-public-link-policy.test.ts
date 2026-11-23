@@ -117,6 +117,16 @@ describe("administrators can disable public links for the installation", () => {
     };
   }
 
+  /** Publishing as public_link is a link-sharing path: returns "published", or the refusal message. */
+  async function publishPublic(token = context.installation.apiToken): Promise<string> {
+    try {
+      await publish("public_link", token);
+      return "published";
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : "unknown";
+    }
+  }
+
   /** Returns "changed", or the refusal's status and error code. */
   async function makePublic(caller: Caller, artifact: PublishedArtifact): Promise<string> {
     const response = await request(caller, "PATCH", `/api/v1/artifacts/${artifact.artifactId}/access`, {
@@ -190,8 +200,8 @@ describe("administrators can disable public links for the installation", () => {
 
     // The existing public artifact stops being publicly readable at once.
     expect(await anonymousRead(existing)).toEqual(notPubliclyReadable);
-    // A newly published "public" artifact is not publicly readable.
-    expect(await anonymousRead(await publish("public_link"))).toEqual(notPubliclyReadable);
+    // Publishing a new artifact as public is refused like any other link-sharing path.
+    expect(await publishPublic()).toMatch(/HTTP 403.*SHARE_LINKS_DISABLED/u);
     // Even the administrator cannot make an artifact public under the policy.
     expect(await makePublic(administrator, privateArtifact)).toBe("403 SHARE_LINKS_DISABLED");
     expect(await anonymousRead(privateArtifact)).toEqual(notPubliclyReadable);
@@ -238,8 +248,8 @@ describe("administrators can disable public links for the installation", () => {
     expect(await makePublic(member, target)).toBe("403 SHARE_LINKS_DISABLED");
     expect(await makePublic(key, target)).toBe("403 SHARE_LINKS_DISABLED");
     expect(await makePublicThroughMcp(agentKey, target)).toMatch(/share links|public links/iu);
-    // An artifact a key publishes as public is not publicly readable.
-    expect(await anonymousRead(await publish("public_link", agentKey))).toEqual(notPubliclyReadable);
+    // A key cannot publish a new artifact as public either.
+    expect(await publishPublic(agentKey)).toMatch(/HTTP 403.*SHARE_LINKS_DISABLED/u);
     expect(await anonymousRead(target)).toEqual(notPubliclyReadable);
 
     const policy = await request(administrator, "GET", "/api/v1/access-policy");

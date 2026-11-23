@@ -82,6 +82,14 @@ export interface CreateStagedUploadCommand {
   readonly routingMode?: RoutingMode;
 }
 
+/** Input for staging one capture its owning service has already authorized. */
+export interface AuthorizedCaptureUploadCommand {
+  readonly entryPath: string;
+  readonly files: readonly DeclaredManifestFile[];
+  readonly principal: Principal;
+  readonly projectId: string;
+}
+
 /** Result of creating or resuming one staged upload bound to an idempotency key. */
 export type CreateStagedUploadResult =
   | {readonly kind: "committed"; readonly publication: PublishedVersion}
@@ -271,6 +279,16 @@ interface StagedUploadOperations {
   readonly createUpload: (
     command: CreateStagedUploadCommand,
   ) => Effect.Effect<CreateStagedUploadResult, StagedUploadFailure>;
+  /**
+   * Stage one fresh, key-less upload for a capture whose owning service has
+   * already authorized it under its own policy: the comment-time implicit
+   * capture of a drifted linked source, which a commenter may trigger
+   * without publication authority (LNK-008). It never reuses project
+   * content and never replays; the caller names a resolved project.
+   */
+  readonly createAuthorizedCaptureUpload: (
+    command: AuthorizedCaptureUploadCommand,
+  ) => Effect.Effect<StagedUpload, StagedUploadFailure>;
   readonly uploadBatch: (
     command: UploadStagedBatchCommand,
   ) => Effect.Effect<StagedUploadBatchResult, StagedUploadFailure>;
@@ -548,13 +566,26 @@ function makeStagedUploadService(
     },
   );
 
+  const createAuthorizedCaptureUpload = Effect.fn("StagedUploadService.createAuthorizedCaptureUpload")(
+    function*(command: AuthorizedCaptureUploadCommand): Effect.fn.Return<StagedUpload, StagedUploadFailure> {
+      const manifest = yield* parseManifest({
+        entryPath: command.entryPath,
+        files: command.files,
+        routingMode: "static",
+      });
+      return yield* createFreshUpload(command.projectId, manifest, command.principal.id);
+    },
+  );
+
   const createUploadWithReuse = Effect.fn("StagedUploadService.createUploadWithReuse")(
     function*(command: CreateStagedUploadCommand): Effect.fn.Return<CreateStagedUploadResult, StagedUploadFailure> {
       const result = yield* createUpload(command);
       const reuse = dependencies.reuse;
       if (result.kind === "committed" || reuse === undefined) return result;
-      // Reuse reveals which bytes the project already holds, so it needs read authority there.
-      const canRead = yield* authorization.requireArtifactListing(
+      // Reuse reveals which bytes the whole project already holds, so it needs
+      // project-wide read authority there; an artifact-only grant or knowledge
+      // of a content hash grants no access (PUB-023).
+      const canRead = yield* authorization.requireProjectRead(
         command.principal,
         {projectId: result.upload.projectId},
       ).pipe(
@@ -781,8 +812,13 @@ function makeStagedUploadService(
         }
       }
 
-      const files = upload.files.map((file) =>
-        publicationSource(upload, file, signal));
+      // Preparation installs files and records installedAt; publish from the
+      // prepared record so storeFiles skips every file it already installed.
+      const prepared = upload.status === uploadStatuses.open
+        ? yield* requiredUpload(project.id, command.uploadId, command.principal.id)
+        : upload;
+      const files = prepared.files.map((file) =>
+        publicationSource(prepared, file, signal));
       const source = {
         kind: "staged_upload" as const,
         principalId: command.principal.id,
@@ -829,7 +865,13 @@ function makeStagedUploadService(
     },
   );
 
-  return StagedUploadService.of({commitUpload, createUpload: createUploadWithReuse, uploadBatch, uploadFile});
+  return StagedUploadService.of({
+    commitUpload,
+    createAuthorizedCaptureUpload,
+    createUpload: createUploadWithReuse,
+    uploadBatch,
+    uploadFile,
+  });
 }
 
 function abortSignalUntil(expiresAt: string, now: DateTime.Utc): AbortSignal {

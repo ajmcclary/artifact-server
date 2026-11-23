@@ -491,15 +491,27 @@ function makeArtifactCommentService(
     });
   });
 
-  const requireCommentDeletionAuthority = Effect.fn(
-    "ArtifactCommentService.requireCommentDeletionAuthority",
+  /**
+   * Before a thread or reply is loaded, the caller must see the artifact and
+   * hold one of the two deletion authorities, so a hidden thread's existence
+   * never leaks. Which one is actually needed is decided after loading.
+   */
+  const requireAnyCommentDeletion = Effect.fn(
+    "ArtifactCommentService.requireAnyCommentDeletion",
   )(function*(principal: Principal, scope: ArtifactScope) {
-    if (hasCapability(principal, principalCapabilities.manageAnyArtifact)) {
-      return yield* authorization.requireCommentModeration(principal, scope);
-    }
-    return yield* authorization.requireCommentWrite(principal, scope);
+    yield* authorization.requireCommentWrite(principal, scope).pipe(
+      Effect.catchTag("AuthorizationDenied", () =>
+        authorization.requireCommentModeration(principal, scope)),
+    );
   });
 
+  /**
+   * Deletion authority follows authorship of the loaded thread or reply: an
+   * author deletes their own words with comment.write, and anyone else needs
+   * comment moderation (administrators, project managers, or a service
+   * holding the artifact-management capability). A manage-any service is
+   * always judged by moderation, as it may hold no comment-write capability.
+   */
   const requireCommentRemoval = Effect.fn(
     "ArtifactCommentService.requireCommentRemoval",
   )(function*(
@@ -507,9 +519,13 @@ function makeArtifactCommentService(
     author: CommentAuthor,
     scope: ArtifactScope,
   ): Effect.fn.Return<CommentAuthor, ScopedDenial> {
-    if (principal.id === author.principalId) return author;
-    // Anyone else needs comment moderation: administrators and project managers,
-    // or a service holding the artifact-management capability.
+    if (
+      principal.id === author.principalId &&
+      !hasCapability(principal, principalCapabilities.manageAnyArtifact)
+    ) {
+      yield* authorization.requireCommentWrite(principal, scope);
+      return author;
+    }
     yield* authorization.requireCommentModeration(principal, scope).pipe(
       Effect.catchTag("AuthorizationDenied", () =>
         Effect.fail(new AuthorizationDenied({
@@ -680,7 +696,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* requireCommentDeletionAuthority(command.principal, {artifactId: command.artifactId, projectId: project.id});
+      yield* requireAnyCommentDeletion(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,
@@ -707,9 +723,13 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      // Bulk clear shares the dispatch-send rule: a direct human member, or
-      // the artifact-management capability (spec §2).
-      yield* authorization.requireDispatchSend(command.principal, {projectId: project.id});
+      // Bulk clear removes other people's comments, so it needs comment
+      // moderation on the artifact (ADR 0033, CMT-008): administrators,
+      // project managers, or the artifact-management capability.
+      yield* authorization.requireCommentModeration(command.principal, {
+        artifactId: command.artifactId,
+        projectId: project.id,
+      });
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       if (command.versionId !== null) {
         yield* requireVersion(project.id, artifact.id, command.versionId);
@@ -794,7 +814,7 @@ function makeArtifactCommentService(
         command.principal,
         command.projectId,
       );
-      yield* requireCommentDeletionAuthority(command.principal, {artifactId: command.artifactId, projectId: project.id});
+      yield* requireAnyCommentDeletion(command.principal, {artifactId: command.artifactId, projectId: project.id});
       const artifact = yield* requireArtifact(project.id, command.artifactId);
       const thread = yield* requireThread(
         project.id,

@@ -953,6 +953,41 @@ describe("project-scoped artifacts", () => {
       expect(archivedProject).toEqual({...created, archivedAt: expect.any(String)});
       expect(await memberRead()).toBe(200);
 
+      // An archived project is read-only: restoring, retagging, tombstoning,
+      // and widening access all refuse with PROJECT_ARCHIVED and change nothing.
+      const archivedMutation = async (
+        method: "DELETE" | "PATCH" | "POST",
+        suffix: string,
+        body: Readonly<Record<string, string | readonly string[]>>,
+        key: string,
+      ): Promise<string> => {
+        const headers = bearerJsonHeaders(adminToken);
+        headers.set("Idempotency-Key", key);
+        const response = await fetch(
+          `${team.server.baseUrl}/api/v1/artifacts/${privateId}${suffix}?projectId=${created.id}`,
+          {body: JSON.stringify(body), headers, method},
+        );
+        const failure = z.object({error: z.object({code: z.string()})}).safeParse(await response.json());
+        return `${response.status} ${failure.success ? failure.data.error.code : "ok"}`;
+      };
+      const expectedCurrentVersionId = privateSecond.body.version.id;
+      expect(await archivedMutation("PATCH", "/access", {
+        accessSetting: "public_link",
+        expectedCurrentVersionId,
+      }, "archive-invariants-widen")).toBe("409 PROJECT_ARCHIVED");
+      expect(await archivedMutation("PATCH", "/tags", {
+        expectedCurrentVersionId,
+        tags: ["changed"],
+      }, "archive-invariants-tags")).toBe("409 PROJECT_ARCHIVED");
+      expect(await archivedMutation("POST", "/restore", {
+        expectedCurrentVersionId,
+        versionId: privateArtifact.body.version.id,
+      }, "archive-invariants-restore")).toBe("409 PROJECT_ARCHIVED");
+      expect(await archivedMutation("DELETE", "", {
+        expectedCurrentVersionId,
+      }, "archive-invariants-delete")).toBe("409 PROJECT_ARCHIVED");
+      expect(await snapshot()).toEqual(before);
+
       const deactivated = await fetch(
         `${team.server.baseUrl}/api/v1/members/${lateMember.id}/deactivate`,
         {headers: browserMutationHeaders(team.server.baseUrl, administrator), method: "POST"},

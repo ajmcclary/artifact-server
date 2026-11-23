@@ -131,6 +131,9 @@ export function artifactServerFailureResponse(failure: ArtifactServerFailure) {
       return {code: errorCodes.uploadInterrupted, message: failure.message, status: 408};
     case "UploadNotFound":
       return {code: errorCodes.uploadNotFound, message: failure.message, status: 404};
+    case "UploadStillPreparing":
+      // Accepted work that is not finished: retrying the same commit resumes it.
+      return {code: errorCodes.uploadStillPreparing, message: failure.message, status: 409};
     case "VersionNotFound":
       return {code: errorCodes.versionNotFound, message: failure.message, status: 404};
     case "InvalidLinkPath":

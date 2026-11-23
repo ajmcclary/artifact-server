@@ -60,6 +60,8 @@ import {
   type AgentDispatchRecord,
   type AgentDispatchState,
   type ArtifactVersion,
+  type CommentAuthor,
+  type CommentReplyRecord,
   type CommentThreadRecord,
   type PageCursor,
   type PublishedVersion,
@@ -88,12 +90,14 @@ import {
 } from "../core/publishing-limits.js";
 import {
   AgentNotFound,
+  CapabilityUnavailable,
   InvalidComment,
   InvalidDispatch,
   InvalidPagination,
   isArtifactServerFailure,
   PublishConflict,
   SourceDrifted,
+  UploadStillPreparing,
 } from "../core/errors.js";
 import {
   artifactBrowserUrl,
@@ -443,6 +447,20 @@ export function createArtifactMcpServer(
   _context: McpRequestContext,
 ): McpServer {
   const applicationUrl = new URL(dependencies.applicationOrigin);
+  // Linked files read paths on the server machine, so only a local MCP
+  // connection to a deployment that enabled them may advertise or use them.
+  // A remote connection refuses here even if a composition mistakenly
+  // enabled the service (project/spec/local-workspace-spec.md section 3).
+  const linkedArtifacts = dependencies.linkedArtifacts === true
+    && dependencies.mode === "local";
+  const linkedToolResultHere = <Value extends object>(
+    operation: () => Promise<Value>,
+    summary?: (value: Value) => string,
+  ) => linkedArtifacts
+    ? linkedToolResult(operation, summary)
+    : Promise.resolve(failureResult(new CapabilityUnavailable({
+      message: "Linked artifacts are not available on this deployment.",
+    })));
   const server = new McpServer(
     {name: "artifact-server", version: serverVersion},
     {
@@ -652,7 +670,7 @@ export function createArtifactMcpServer(
     () => successResult(
       capabilities(
         dependencies.mode,
-        dependencies.linkedArtifacts === true,
+        linkedArtifacts,
         dependencies.gitHistory,
         dependencies.requestMetadata,
       ),
@@ -985,7 +1003,7 @@ export function createArtifactMcpServer(
       // Mirror the HTTP artifact read: a local deployment decorates linked
       // artifacts with their freshly observed binding, and nothing else
       // reports one. The disabled service answers null when linking is off.
-      const binding = dependencies.linkedArtifacts === true
+      const binding = linkedArtifacts
         ? await runMcpApplicationEffect(
           dependencies,
           LinkedArtifactService.use((linked) =>
@@ -1783,7 +1801,7 @@ export function createArtifactMcpServer(
       outputSchema: linkedPublicationSchema,
       annotations: idempotentWriteAnnotations,
     },
-    async ({idempotencyKey, name, path, projectId}) => linkedToolResult(async () => {
+    async ({idempotencyKey, name, path, projectId}) => linkedToolResultHere(async () => {
       const command: LinkArtifactCommand = {
         idempotencyKey: idempotencyKey ?? derivedIdempotencyKey([
           "link",
@@ -1824,7 +1842,7 @@ export function createArtifactMcpServer(
       annotations: idempotentWriteAnnotations,
     },
     async ({artifactId, expectedCurrentVersionId, idempotencyKey, projectId}) =>
-      linkedToolResult(async () =>
+      linkedToolResultHere(async () =>
         linkedPublicationProjection(
           applicationUrl,
           dependencies.contentDomain,
@@ -1868,7 +1886,7 @@ export function createArtifactMcpServer(
       annotations: idempotentWriteAnnotations,
     },
     async ({artifactId, expectedSha256, path, projectId}) =>
-      linkedToolResult(async () => ({
+      linkedToolResultHere(async () => ({
         artifactId,
         sourceBinding: sourceBindingProjection(
           await runMcpApplicationEffect(
@@ -1974,7 +1992,7 @@ export function createArtifactMcpServer(
         ),
       );
       return {
-        replies: [...details.replies],
+        replies: details.replies.map(commentReplyProjection),
         thread: commentThreadProjection(details.thread),
       };
     }),
@@ -2066,7 +2084,7 @@ export function createArtifactMcpServer(
             })
           ),
         );
-        return {replayed: creation.replayed, reply: creation.reply};
+        return {replayed: creation.replayed, reply: commentReplyProjection(creation.reply)};
       }),
   );
 
@@ -2149,7 +2167,7 @@ export function createArtifactMcpServer(
               comments.updateReply({...target, body, replyId})
             ),
           );
-          return {reply, thread: null};
+          return {reply: commentReplyProjection(reply), thread: null};
         }
         const thread = await runMcpApplicationEffect(
           dependencies,
@@ -2971,19 +2989,43 @@ function versionProjection(
   };
 }
 
-function commentThreadProjection(thread: CommentThreadRecord) {
+/**
+ * Comment text, author names, and quoted anchor selections are written by
+ * people, including guests, and land in an agent's context. Strip the
+ * bidirectional overrides and invisible characters a reviewer could use to
+ * hide or reorder what the agent reads, exactly as dispatch bundles do.
+ */
+function sanitizedCommentAuthor(author: CommentAuthor): CommentAuthor {
+  return {...author, displayName: sanitizeBundleText(author.displayName)};
+}
+
+function commentReplyProjection(reply: CommentReplyRecord): CommentReplyRecord {
   return {
-    anchor: thread.anchor ?? null,
+    ...reply,
+    author: sanitizedCommentAuthor(reply.author),
+    body: sanitizeBundleText(reply.body),
+  };
+}
+
+function commentThreadProjection(thread: CommentThreadRecord) {
+  // The anchor stays opaque client JSON, so only its quoted selection, the
+  // text an agent reads as the reviewer's words, is sanitized; every other
+  // field passes through for faithful anchor replacement.
+  const quoted = mailboxAnchorSchema.safeParse(thread.anchor);
+  return {
+    anchor: quoted.success
+      ? {...quoted.data, originalText: sanitizeBundleText(quoted.data.originalText)}
+      : thread.anchor ?? null,
     artifactId: thread.artifactId,
-    author: thread.author,
-    body: thread.body,
+    author: sanitizedCommentAuthor(thread.author),
+    body: sanitizeBundleText(thread.body),
     createdAt: thread.createdAt,
     id: thread.id,
     path: thread.path,
     projectId: thread.projectId,
     replyCount: thread.replyCount,
     resolvedAt: thread.resolvedAt,
-    resolvedBy: thread.resolvedBy,
+    resolvedBy: thread.resolvedBy === null ? null : sanitizedCommentAuthor(thread.resolvedBy),
     state: thread.state,
     updatedAt: thread.updatedAt,
     versionId: thread.versionId,
@@ -3145,9 +3187,12 @@ function commitUploadWithRetry(command: {
       yield* Effect.sleep(Duration.seconds(delaySeconds));
     }
     const progress = lastPreparing ?? {installed: 0, total: 0};
-    return yield* Effect.fail(new Error(
-      `UPLOAD_STILL_PREPARING: The upload is still preparing (${progress.installed}/${progress.total} files). Re-run artifact_commit_upload with the same idempotency key to resume.`,
-    ));
+    return yield* new UploadStillPreparing({
+      installed: progress.installed,
+      message:
+        `The upload is still preparing (${progress.installed}/${progress.total} files). Re-run artifact_commit_upload with the same uploadId and idempotency key to resume; nothing is lost.`,
+      total: progress.total,
+    });
   });
 }
 

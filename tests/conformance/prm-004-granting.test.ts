@@ -1,12 +1,14 @@
 import {randomUUID} from "node:crypto";
 
-import {Cause, type Effect, Exit, Option} from "effect";
+import {Cause, type Effect, Exit, Option, Redacted} from "effect";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 
 import {AccessAdministrationService} from "../../src/application/access-administration.js";
 import {ArtifactCommentService} from "../../src/application/artifact-comments.js";
+import {InstallationAccessService} from "../../src/application/installation-access.js";
+import {ShareLinkService} from "../../src/application/share-links.js";
 import {defaultAccessPolicy} from "../../src/core/access-policy.js";
-import type {Principal} from "../../src/core/identity.js";
+import type {Principal, PrincipalCapability} from "../../src/core/identity.js";
 import type {Permission, ProjectRole} from "../../src/core/permissions.js";
 import {startAccessRuntime} from "../support/access-runtime.js";
 
@@ -14,7 +16,7 @@ type AccessRuntime = Awaited<ReturnType<typeof startAccessRuntime>>;
 
 async function failureTag<A, E extends {readonly _tag: string}>(
   harness: AccessRuntime,
-  effect: Effect.Effect<A, E, AccessAdministrationService | ArtifactCommentService>,
+  effect: Effect.Effect<A, E, AccessAdministrationService | ArtifactCommentService | ShareLinkService>,
 ): Promise<string | null> {
   const exit = await harness.runtime.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return null;
@@ -79,7 +81,7 @@ describe("granting access", () => {
     })))).toBeNull();
   });
 
-  test("PRM-004-F: an editor cannot grant manager or add comment moderation", async () => {
+  test("PRM-004-F: an editor cannot grant manager or add comment moderation, and no sharer or key grants beyond what it holds", async () => {
     const projectId = await harness.createProject("Design");
     const dana = await harness.person("Dana");
     const sam = await harness.person("Sam");
@@ -98,6 +100,65 @@ describe("granting access", () => {
     }))).toBe("PermissionNotHeld");
     expect(await failureTag(harness, putGrant(sam, shareProject, dana.id, "commenter", {artifactId: published.artifact.id})))
       .toBeNull();
+
+    // A share link carries only what its sharer holds: an editor without
+    // comment.write cannot hand a guest comment.write.
+    const lee = await harness.person("Lee");
+    await harness.grant({memberId: lee.id, projectId: shareProject, remove: ["comment.write"], role: "editor"});
+    const shareAs = (principal: Principal, permissions: readonly Permission[]) =>
+      ShareLinkService.use((links) => links.create({
+        artifactId: published.artifact.id,
+        expiresAt: null,
+        label: "Client review",
+        permissions,
+        principal,
+        projectId: shareProject,
+        target: {kind: "latest"},
+      }));
+    expect(await failureTag(harness, shareAs(lee, ["artifact.view", "comment.read", "comment.write"])))
+      .toBe("AuthorizationDenied");
+    expect(await failureTag(harness, shareAs(lee, ["artifact.view", "comment.read"]))).toBeNull();
+
+    // A key holds at most what its capabilities authorize. A service key is
+    // not a member, so it never inherits the project's editor default, and a
+    // key bound to a manager is narrowed by its capabilities.
+    const keyPrincipal = async (capabilities: readonly PrincipalCapability[], memberId?: string) => {
+      const command = {
+        capabilities,
+        expiresAt: "2027-10-26T00:00:00.000Z",
+        name: "Granting key",
+        principal: harness.administrator,
+        projectIds: [],
+      };
+      const issued = await harness.runtime.runPromise(InstallationAccessService.use((service) =>
+        service.issueApiKey(memberId === undefined ? command : {...command, memberId})));
+      return harness.runtime.runPromise(InstallationAccessService.use((service) =>
+        service.authenticateManagedApiKey(Redacted.make(issued.token))));
+    };
+    const changeDefault = (principal: Principal, defaultMemberRole: ProjectRole) =>
+      AccessAdministrationService.use((service) => service.changeProjectAccess({
+        accessMode: "open",
+        confirmMembersLosingAccess: null,
+        defaultMemberRole,
+        expectedRevision: 0,
+        principal,
+        projectId: shareProject,
+      }));
+    const serviceKey = await keyPrincipal(["project:manage"]);
+    expect(await failureTag(harness, changeDefault(serviceKey, "editor"))).toBe("PermissionNotHeld");
+    expect(await failureTag(harness, putGrant(serviceKey, shareProject, lee.id, "viewer"))).toBe("PermissionNotHeld");
+    const manager = await harness.person("Morgan");
+    await harness.grant({memberId: manager.id, projectId: shareProject, role: "manager"});
+    const narrowKey = await keyPrincipal(["project:manage"], manager.id);
+    expect(await failureTag(harness, putGrant(narrowKey, shareProject, lee.id, "viewer"))).toBe("PermissionNotHeld");
+    const readingKey = await keyPrincipal(["artifact:read", "project:manage"], manager.id);
+    expect(await failureTag(harness, putGrant(readingKey, shareProject, lee.id, "commenter"))).toBe("PermissionNotHeld");
+    expect(await failureTag(harness, putGrant(readingKey, shareProject, sam.id, "viewer"))).toBeNull();
+    // The same bound applies to the links a key creates.
+    const sharingKey = await keyPrincipal(["artifact:manage:any", "artifact:read"]);
+    expect(await failureTag(harness, shareAs(sharingKey, ["artifact.view", "comment.read", "comment.write"])))
+      .toBe("AuthorizationDenied");
+    expect(await failureTag(harness, shareAs(sharingKey, ["artifact.view", "comment.read"]))).toBeNull();
   });
 
   test("invalid overrides, artifact none, removing view and past expiry are refused", async () => {

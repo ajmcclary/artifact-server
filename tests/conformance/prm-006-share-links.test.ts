@@ -196,6 +196,80 @@ describe("share links", () => {
     expect(await failureTag(harness, create(harness.administrator, projectId, published.artifact.id))).toBeNull();
   });
 
+  // Link-creator policy governs every path that makes content reachable by
+  // link, not only share links: publishing as public_link and changing an
+  // artifact's access to public_link need the same sharer authority.
+  test("link-creator policy governs public-link publication and access changes", async () => {
+    const projectId = await harness.createProject("Design");
+    const editor = await harness.person("Dana");
+    const viewer = await harness.person("Vic");
+    await harness.grant({memberId: viewer.id, projectId, role: "viewer"});
+    const published = await harness.publish(editor, projectId);
+    const changeAccess = (principal: Principal, accessSetting: "account_required" | "public_link") =>
+      ArtifactManagementService.use((artifacts) => artifacts.changeAccess({
+        accessSetting,
+        artifactId: published.artifact.id,
+        expectedCurrentVersionId: published.version.id,
+        idempotencyKey: `access-${randomUUID()}`,
+        principal,
+        projectId,
+      }));
+    const publishPublic = async (principal: Principal): Promise<string | null> => {
+      try {
+        await harness.publishTo(principal, projectId, "Public fixture", {
+          accessSetting: "public_link",
+          kind: "new_artifact",
+          name: "Public fixture",
+        });
+        return null;
+      } catch (error: unknown) {
+        return error instanceof Error ? error.name : "unknown";
+      }
+    };
+
+    // Without artifact.share a principal cannot widen access, whatever the policy.
+    expect(await failureTag(harness, changeAccess(viewer, "public_link"))).toBe("AuthorizationDenied");
+
+    await writePolicy(harness, {...defaultAccessPolicy, shareLinks: {...defaultAccessPolicy.shareLinks, linkCreators: "administrators"}});
+    expect(await publishPublic(editor)).toBe("ShareLinksDisabled");
+    expect(await failureTag(harness, changeAccess(editor, "public_link"))).toBe("ShareLinksDisabled");
+    // Narrowing needs no link-creator authority.
+    expect(await failureTag(harness, changeAccess(editor, "account_required"))).toBeNull();
+    expect(await publishPublic(harness.administrator)).toBeNull();
+    expect(await failureTag(harness, changeAccess(harness.administrator, "public_link"))).toBeNull();
+
+    await writePolicy(
+      harness,
+      {...defaultAccessPolicy, shareLinks: {...defaultAccessPolicy.shareLinks, enabled: false}},
+      1,
+    );
+    expect(await publishPublic(harness.administrator)).toBe("ShareLinksDisabled");
+  });
+
+  test("an idempotent replay of making an artifact private ends no share link created since", async () => {
+    const projectId = await harness.createProject("Design");
+    const published = await harness.publish(harness.administrator, projectId);
+    const changeAccess = (accessSetting: "account_required" | "public_link", idempotencyKey: string) =>
+      ArtifactManagementService.use((artifacts) => artifacts.changeAccess({
+        accessSetting,
+        artifactId: published.artifact.id,
+        expectedCurrentVersionId: published.version.id,
+        idempotencyKey,
+        principal: harness.administrator,
+        projectId,
+      }));
+    const privateKey = `access-${randomUUID()}`;
+    await harness.runtime.runPromise(changeAccess("public_link", `access-${randomUUID()}`));
+    await harness.runtime.runPromise(changeAccess("account_required", privateKey));
+    await harness.runtime.runPromise(changeAccess("public_link", `access-${randomUUID()}`));
+    const link = await harness.runtime.runPromise(create(harness.administrator, projectId, published.artifact.id));
+    const replay = await harness.runtime.runPromise(changeAccess("account_required", privateKey));
+    expect(replay.replayed).toBe(true);
+    const listed = await harness.runtime.runPromise(ShareLinkService.use((links) =>
+      links.listForArtifact({artifactId: published.artifact.id, principal: harness.administrator, projectId})));
+    expect(listed.find((item) => item.id === link.id)?.revokedAt).toBeNull();
+  });
+
   test("the inventory lists active links for administrators only, and policy narrowing counts them", async () => {
     const projectId = await harness.createProject("Design");
     const published = await harness.publish(harness.administrator, projectId);

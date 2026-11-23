@@ -333,6 +333,48 @@ describe("comment surface parity and change polling", () => {
     expect(mcpDeniedRead.content[0]?.text).toContain("AUTHORIZATION_DENIED");
   });
 
+  test("MCP comment reads strip bidirectional and invisible characters from text an agent receives", async () => {
+    expect.hasAssertions();
+    const published = await publishArtifact("comment-sanitized-reads");
+    const hidden = "Ship\u202E it\u200B now\u2066";
+    const created = httpThreadCreationSchema.parse(
+      await (await apiFetch("POST", versionCommentsRoute(published), {
+        body: {
+          anchor: {client: "kept\u200B as written", originalText: "quoted\u202D text"},
+          body: hidden,
+        },
+        key: "comment-sanitized-thread",
+      })).json(),
+    );
+    expect((await apiFetch("POST", repliesRoute(published, created.thread.id), {
+      body: {body: "Reply\u2067 text\uFEFF"},
+      key: "comment-sanitized-reply",
+    })).status).toBe(201);
+
+    const read = z.object({
+      replies: z.array(z.object({body: z.string()}).loose()),
+      thread: commentThreadSchema,
+    }).strict().parse((await callTool(installation.apiToken, "comment_get", {
+      artifactId: published.artifact.id,
+      projectId: published.artifact.projectId,
+      threadId: created.thread.id,
+    })).structuredContent);
+    expect(read.thread.body).toBe("Ship it now");
+    expect(read.thread.anchor).toEqual({client: "kept\u200B as written", originalText: "quoted text"});
+    expect(read.replies.map((reply) => reply.body)).toEqual(["Reply text"]);
+    const listed = mcpThreadPageSchema.parse((await callTool(installation.apiToken, "comment_list", {
+      artifactId: published.artifact.id,
+      projectId: published.artifact.projectId,
+    })).structuredContent);
+    expect(listed.items.map((thread) => thread.body)).toEqual(["Ship it now"]);
+
+    // Stored words are unchanged; only the agent-facing projection is sanitized.
+    const stored = httpThreadDetailsSchema.parse(
+      await (await apiFetch("GET", threadRoute(published, created.thread.id))).json(),
+    );
+    expect(stored.thread.body).toBe(hidden);
+  });
+
   async function publishArtifact(idempotencyKey: string): Promise<PublishResponse> {
     return (await publishNew(server, installation, {
       accessSetting: "account_required",

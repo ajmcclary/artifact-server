@@ -25,6 +25,8 @@ import {
 
 const commenterToken = "linked-comment-commenter-credential";
 const commenterPrincipalId = "member_commenter";
+const reviewerToken = "linked-comment-reviewer-credential";
+const reviewerPrincipalId = "member_reviewer";
 
 const sourceBindingSchema = z.object({
   lastVerifiedAt: z.iso.datetime(),
@@ -206,6 +208,53 @@ describe("comment threads on a linked artifact anchor to captured versions", () 
     );
     expect(onCapturedVersion.items.map((item) => item.id))
       .toEqual([drifted.thread.id]);
+
+    // A member whose role can comment but not publish still captures
+    // implicitly: the capture is part of commenting, attributed to them.
+    const narrowed = await fetch(
+      new URL(`/api/v1/projects/${linked.artifact.projectId}/access`, requiredServer().baseUrl),
+      {
+        body: JSON.stringify({
+          accessMode: "open",
+          confirmMembersLosingAccess: null,
+          defaultMemberRole: "commenter",
+          expectedRevision: 0,
+        }),
+        headers: commenterHeaders(null),
+        method: "PATCH",
+      },
+    );
+    expect(narrowed.status).toBe(200);
+    await writeFile(sourcePath, racedBytes);
+    const reviewerThread = await fetch(
+      new URL(
+        `/api/v1/artifacts/${linked.artifact.id}/versions/${drifted.thread.versionId}/comments`,
+        requiredServer().baseUrl,
+      ),
+      {
+        body: JSON.stringify({body: "A commenter's note on newer bytes."}),
+        headers: new Headers({
+          Authorization: `Bearer ${reviewerToken}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "lnk-008-behavior-thread-commenter",
+        }),
+        method: "POST",
+      },
+    );
+    expect(reviewerThread.status).toBe(201);
+    const reviewerCreated = createdThreadSchema.parse(await reviewerThread.json());
+    expect(reviewerCreated.thread.author.principalId).toBe(reviewerPrincipalId);
+    const afterReviewer = await readJson(
+      `/api/v1/artifacts/${linked.artifact.id}/versions`,
+      versionListSchema,
+    );
+    const reviewerCapture = afterReviewer.versions.find((saved) =>
+      saved.version.id === reviewerCreated.thread.versionId
+    );
+    expect(reviewerCapture?.version).toMatchObject({number: 3, publisherPrincipalId: reviewerPrincipalId});
+    expect(new TextDecoder().decode(
+      await deliveredBytes(linked.artifact.id, reviewerCreated.thread.versionId),
+    )).toBe(racedBytes);
   });
 
   test("LNK-008-F: an aborted implicit capture fails the whole comment request and leaves no thread and no version", async () => {
@@ -482,6 +531,18 @@ describe("comment threads on a linked artifact anchor to captured versions", () 
 
 const commenterVerifier: BearerCredentialVerifier = {
   verify: (credential) => {
+    if (Redacted.value(credential) === reviewerToken) {
+      return Effect.succeed({
+        authorizedByPrincipalId: null,
+        capabilities: [],
+        displayName: "Riley Reviewer",
+        id: reviewerPrincipalId,
+        installationId: "local",
+        kind: principalKinds.human,
+        membershipRole: membershipRoles.member,
+        projectIds: [],
+      });
+    }
     if (Redacted.value(credential) === commenterToken) {
       return Effect.succeed({
         authorizedByPrincipalId: null,

@@ -15,6 +15,7 @@ import {
   type PublishConflict,
   type ProjectArchived,
   type ProjectNotFound,
+  type ShareLinksDisabled,
   type StagingStorageFailure,
   type UploadClosed,
   type UploadExpired,
@@ -22,10 +23,11 @@ import {
   type UploadNotFound,
 } from "../core/errors.js";
 import type { Principal } from "../core/identity.js";
-import type {
-  AccessSetting,
-  CanonicalManifest,
-  PublishedVersion,
+import {
+  type AccessSetting,
+  accessSettings,
+  type CanonicalManifest,
+  type PublishedVersion,
 } from "../core/model.js";
 import type {
   BlobWrite,
@@ -159,6 +161,7 @@ export type PublishArtifactFailure =
   | ProjectNotFound
   | BlobStorageFailure
   | StagingStorageFailure
+  | ShareLinksDisabled
   | AuthorizationDenied;
 
 interface PublishArtifactOperations {
@@ -251,6 +254,9 @@ function makePublishArtifactService(
     command: PublishPreparedNewArtifactCommand,
   ): Effect.fn.Return<PublishedVersion, PublishArtifactFailure> {
     yield* authorization.requireArtifactCreation(command.principal, {projectId: command.projectId});
+    if (command.accessSetting === accessSettings.publicLink) {
+      yield* authorization.requireLinkSharing(command.principal, {artifactId: null, projectId: command.projectId});
+    }
     const name = yield* decodeArtifactName(command.name).pipe(
       Effect.mapError(() =>
         new InvalidArtifactName({

@@ -732,6 +732,7 @@ export function createHttpApp(
   // Views and provenance outcomes are pure functions of immutable version
   // bytes, so one reader per process serves every request and the MCP adapter.
   const versionDocuments = createVersionDocuments({blobs: dependencies.blobs});
+  const linkedArtifacts = linkedArtifactsAvailable(dependencies);
   const mcp = createMcpHttpAdapter({
     allowedHostnames: mcpAllowedHostnames,
     allowedOriginHostnames: mcpAllowedHostnames,
@@ -739,7 +740,7 @@ export function createHttpApp(
     applicationRuntime: dependencies.applicationRuntime,
     contentDomain: dependencies.contentDomain,
     gitHistory,
-    linkedArtifacts: dependencies.linkedArtifacts === true,
+    linkedArtifacts,
     mode: dependencies.trustedApplicationOrigin === null ? "local" : "remote",
     oauthResource: dependencies.mcpOAuthResource?.resource ?? null,
     versionDocuments,
@@ -1307,7 +1308,7 @@ export function createHttpApp(
       authenticationMethod: context.get("authenticationMethod"),
       capabilities: {
         gitHistory: gitHistory.read(),
-        linkedArtifacts: dependencies.linkedArtifacts === true,
+        linkedArtifacts,
       },
       principal: context.get("principal"),
     }));
@@ -2166,7 +2167,7 @@ export function createHttpApp(
         // everywhere else the disabled service answers null and the read
         // shape stays exactly what it is today.
         const linked = yield* LinkedArtifactService;
-        const binding = dependencies.linkedArtifacts === true
+        const binding = linkedArtifactsAvailable(dependencies)
           ? yield* linked.observeBinding({
             artifactId: details.artifact.id,
             principal: context.get("principal"),
@@ -4110,17 +4111,32 @@ function commitUploadResponse(
 }
 
 /**
- * Fast deployment gate for linked-artifact routes: the capability exists
- * only on a local deployment (loopback application origin) that enabled it.
- * The application service enforces the same boundary; this check just keeps
- * the stable capability-unavailable answer cheap and origin-checked.
+ * Whether this composition serves linked artifacts at all. The capability
+ * exists only on the local-owner runtime, which has no configured remote
+ * application origin, and only when linked files were enabled at startup
+ * (project/spec/local-workspace-spec.md sections 3 and 4.3). The decision
+ * uses deployment configuration fixed by the composition root, never a
+ * request header.
+ */
+function linkedArtifactsAvailable(dependencies: HttpAppDependencies): boolean {
+  return dependencies.linkedArtifacts === true
+    && dependencies.browserAccess.mode === browserAccessModes.localOwner
+    && dependencies.trustedApplicationOrigin === null;
+}
+
+/**
+ * Deployment gate for linked-artifact routes. The configured deployment
+ * decides availability; the loopback request origin is an additional
+ * requirement on top of it, never a substitute, because the Host header is
+ * caller-controlled. The application service still enforces membership,
+ * capability, and link-root policy for every operation.
  */
 function requireLinkedRequest(
   context: Context<HttpEnvironment>,
   dependencies: HttpAppDependencies,
 ): void {
   const hostname = new URL(context.req.url).hostname;
-  if (dependencies.linkedArtifacts !== true || !isLoopbackHostname(hostname)) {
+  if (!linkedArtifactsAvailable(dependencies) || !isLoopbackHostname(hostname)) {
     throw new CapabilityUnavailable({
       message: "Linked artifacts are not available on this deployment.",
     });
@@ -4681,7 +4697,7 @@ async function serveLiveContent(
     LinkedArtifactService.use((linked) =>
       linked.authorizeLiveRead({
         liveToken,
-        sessionToken: contentSessionToken(cookieHeader),
+        sessionToken: contentSessionToken(cookieHeader, new URL(context.req.url)),
       })
     ),
   );
@@ -4759,7 +4775,7 @@ async function serveVersionContent(
           ? "entry"
           : "none",
         path: requestedPath,
-        sessionToken: contentSessionToken(cookieHeader),
+        sessionToken: contentSessionToken(cookieHeader, requestUrl),
       })
     ),
   );
@@ -5364,24 +5380,32 @@ function usesSecureContentCookie(requestUrl: URL): boolean {
   );
 }
 
+/**
+ * Read the content-session cookie for one content-origin request. On a secure
+ * origin only the `__Host-` cookie counts: a sibling subdomain can plant the
+ * unprefixed name, but never a `__Host-` cookie. The unprefixed loopback name
+ * is accepted only where the secure cookie cannot be set. An invalid value is
+ * skipped rather than ending the search, so a planted malformed cookie cannot
+ * shadow the genuine one.
+ */
 function contentSessionToken(
   cookieHeader: string | undefined,
+  requestUrl: URL,
 ): Redacted.Redacted | null {
   if (cookieHeader === undefined) return null;
+  const acceptedName = usesSecureContentCookie(requestUrl)
+    ? contentSessionCookieName
+    : loopbackContentSessionCookieName;
   for (const pair of cookieHeader.split(";")) {
     const separator = pair.indexOf("=");
     if (separator < 0) continue;
-    const name = pair.slice(0, separator).trim();
-    if (
-      name !== contentSessionCookieName
-      && name !== loopbackContentSessionCookieName
-    ) continue;
+    if (pair.slice(0, separator).trim() !== acceptedName) continue;
     const parsed = contentSessionTokenSchema.safeParse(
       pair.slice(separator + 1).trim(),
     );
-    return parsed.success
-      ? Redacted.make(parsed.data, {label: "content-session-token"})
-      : null;
+    if (parsed.success) {
+      return Redacted.make(parsed.data, {label: "content-session-token"});
+    }
   }
   return null;
 }

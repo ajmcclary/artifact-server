@@ -16,14 +16,14 @@ import {
   type InvalidIdempotencyKey,
   type LinkPathOutsideRoots,
   type LinkPathProtected,
-  type ProjectArchived,
+  ProjectArchived,
   type PublishConflict,
   type SourceDrifted,
   type SourceMissing,
   type SourceUnreadable,
   type StagingStorageFailure,
 } from "../core/errors.js";
-import type { Principal } from "../core/identity.js";
+import {principalKinds, type Principal} from "../core/identity.js";
 import {
   accessSettings,
   type ArtifactVersion,
@@ -209,6 +209,7 @@ export type LinkedArtifactFailure =
   | InvalidLinkPath
   | LinkPathOutsideRoots
   | LinkPathProtected
+  | ProjectArchived
   | PublishConflict
   | SourceDrifted
   | SourceMissing
@@ -478,24 +479,30 @@ function makeLinkedArtifactService(
       readonly mediaType: string;
       readonly principal: Principal;
       readonly projectId: string;
+      /** Set when the owning operation already authorized the capture (comment-time capture). */
+      readonly preauthorized: boolean;
     }) {
-      const result = yield* staged.createUpload({
-        entryPath: input.entryPath,
-        files: [{
-          mediaType: input.mediaType,
-          path: input.entryPath,
-          sha256: input.capture.sha256,
-          size: input.capture.size,
-        }],
-        principal: input.principal,
-        projectId: input.projectId,
-      });
-      if (result.kind === "committed") {
-        return yield* Effect.die(
-          new Error("A linked capture upload unexpectedly returned a committed publication."),
-        );
-      }
-      const upload = result.upload;
+      const files = [{
+        mediaType: input.mediaType,
+        path: input.entryPath,
+        sha256: input.capture.sha256,
+        size: input.capture.size,
+      }];
+      const upload = input.preauthorized
+        ? yield* staged.createAuthorizedCaptureUpload({
+          entryPath: input.entryPath,
+          files,
+          principal: input.principal,
+          projectId: input.projectId,
+        })
+        : yield* staged.createUpload({
+          entryPath: input.entryPath,
+          files,
+          principal: input.principal,
+          projectId: input.projectId,
+        }).pipe(Effect.flatMap((result) => result.kind === "committed"
+          ? Effect.die(new Error("A linked capture upload unexpectedly returned a committed publication."))
+          : Effect.succeed(result.upload)));
       const file = upload.files[0];
       if (file === undefined) {
         return yield* Effect.die(
@@ -560,6 +567,7 @@ function makeLinkedArtifactService(
             capture,
             entryPath,
             mediaType: dependencies.engine.mediaTypeForPath(canonical),
+            preauthorized: false,
             principal: command.principal,
             projectId: project.id,
           });
@@ -619,6 +627,7 @@ function makeLinkedArtifactService(
     readonly binding: SourceBindingRecord;
     readonly expectedCurrentVersionId: string;
     readonly idempotencyKey: string;
+    readonly preauthorized: boolean;
     readonly principal: Principal;
     readonly projectId: string;
   }): Effect.fn.Return<LinkedPublication, LinkedArtifactFailure> {
@@ -666,6 +675,7 @@ function makeLinkedArtifactService(
           capture,
           entryPath,
           mediaType: dependencies.engine.mediaTypeForPath(input.binding.path),
+          preauthorized: input.preauthorized,
           principal: input.principal,
           projectId: input.projectId,
         });
@@ -750,6 +760,7 @@ function makeLinkedArtifactService(
         binding,
         expectedCurrentVersionId: command.expectedCurrentVersionId,
         idempotencyKey: command.idempotencyKey,
+        preauthorized: false,
         principal: command.principal,
         projectId: project.id,
       });
@@ -767,6 +778,9 @@ function makeLinkedArtifactService(
       command.artifactId,
     );
     if (binding === null) return null;
+    // A guest never reaches live bytes (section 4.3), so a guest's comment
+    // never captures; it anchors to the last captured version it can see.
+    if (command.principal.kind === principalKinds.guest) return null;
     const observation = yield* runEngine(() =>
       dependencies.engine.refreshFreshness(binding.path, binding.fingerprint)
     );
@@ -784,6 +798,10 @@ function makeLinkedArtifactService(
       binding,
       expectedCurrentVersionId: current.version.id,
       idempotencyKey: commentCaptureKey(command.idempotencyKey),
+      // The comment service authorized this request with comment.write; the
+      // spec makes the implicit capture part of commenting (LNK-008), so it
+      // does not also demand publication authority from the commenter.
+      preauthorized: true,
       principal: command.principal,
       projectId: command.projectId,
     });
@@ -801,6 +819,11 @@ function makeLinkedArtifactService(
         {artifactId: command.artifactId, projectId: project.id},
       );
       yield* requireBinding(project.id, command.artifactId);
+      // An archived project is read-only: re-pointing a binding changes
+      // which bytes a later capture would read (PRJ-003).
+      if (project.archivedAt !== null) {
+        return yield* new ProjectArchived({message: "Archived projects cannot be changed."});
+      }
       const idempotencyKey = yield* parseIdempotencyKey(command.idempotencyKey);
       const canonical = yield* runLadder(command.path);
       const capture = yield* runEngine(() =>

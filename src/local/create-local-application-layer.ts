@@ -669,10 +669,6 @@ export function createApplicationLayer(
     },
   };
   const managementDependencies: ArtifactManagementDependencies = {
-    accessPolicy: () => Effect.map(
-      accessRepositoryEffects(adapters.access).readAccessPolicy(adapters.installationId),
-      (stored) => stored.policy,
-    ),
     clock,
     revokeShareLinks: (command) => shareLinkRepositoryEffects(adapters.access).revokeArtifactShareLinks({
       ...command,

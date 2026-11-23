@@ -6,6 +6,7 @@ import {
   type ArtifactRepositoryFailure,
   AuthorizationDenied,
   ProjectNotFound,
+  ShareLinksDisabled,
 } from "../core/errors.js";
 import {
   hasCapability,
@@ -15,6 +16,7 @@ import {
   principalCapabilities,
   principalKinds,
   type Principal,
+  type PrincipalCapability,
 } from "../core/identity.js";
 import {
   computeVisibleScope,
@@ -84,6 +86,18 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: AccessScope,
   ) => Effect.Effect<EffectiveAccess, ScopedDenial>;
+  /**
+   * The permissions a principal may hand to someone else on one scope: a
+   * grant, a project default, or a share link never carries more (PRM-004).
+   * A service principal is not a member, so it never inherits the project
+   * default role and holds exactly what its capabilities authorize; a key
+   * bound to a member holds that member's access narrowed by its
+   * capabilities; a person signed in directly holds their full access.
+   */
+  readonly heldPermissions: (
+    principal: Principal,
+    scope: AccessScope,
+  ) => Effect.Effect<ReadonlySet<Permission>, ScopedDenial>;
   readonly requireAgentConnection: (
     principal: Principal,
   ) => Effect.Effect<void, AuthorizationDenied>;
@@ -159,6 +173,18 @@ export interface AuthorizationOperations {
     principal: Principal,
     scope: ProjectScope,
   ) => Effect.Effect<void, ProjectScopedDenial>;
+  /**
+   * Every path that makes content reachable by link (a share link, a
+   * public_link publication, or an access change to public_link) needs the
+   * same sharer authority: artifact.share on the scope, share links enabled
+   * by installation policy, and a direct human administrator when policy
+   * reserves link creation to administrators. A null artifact ID checks the
+   * project, for an artifact that does not exist yet.
+   */
+  readonly requireLinkSharing: (
+    principal: Principal,
+    scope: AccessScope,
+  ) => Effect.Effect<void, ScopedDenial | ShareLinksDisabled>;
   readonly requireVersionPublication: (
     principal: Principal,
     scope: ArtifactScope,
@@ -209,6 +235,40 @@ const projectRule = anyCapability(
   principalCapabilities.readArtifacts,
   principalCapabilities.writeComments,
 );
+
+/**
+ * The permissions each explicit capability authorizes, mirroring the
+ * capability rules every scoped check applies. A key holds at most these, so
+ * it can never hand out a permission its capabilities would refuse it.
+ */
+const capabilityPermissionMap = {
+  [principalCapabilities.connectAgents]: [],
+  [principalCapabilities.createArtifact]: [permissions.artifactPublish],
+  [principalCapabilities.issueContentSession]: [permissions.artifactView],
+  [principalCapabilities.manageAnyArtifact]: [
+    permissions.artifactView,
+    permissions.artifactHistory,
+    permissions.commentRead,
+    permissions.commentModerate,
+    permissions.artifactEdit,
+    permissions.artifactDelete,
+    permissions.artifactShare,
+    permissions.agentDispatch,
+  ],
+  [principalCapabilities.publishAnyArtifact]: [permissions.artifactPublish],
+  [principalCapabilities.readArtifacts]: [
+    permissions.artifactView,
+    permissions.artifactHistory,
+    permissions.commentRead,
+  ],
+  [principalCapabilities.manageProjects]: [permissions.projectManage],
+  [principalCapabilities.writeComments]: [permissions.commentWrite],
+} as const satisfies Readonly<Record<PrincipalCapability, readonly Permission[]>>;
+
+/** The permissions a principal's explicit capabilities authorize. */
+function capabilityPermissions(principal: Principal): ReadonlySet<Permission> {
+  return new Set(principal.capabilities.flatMap((capability) => capabilityPermissionMap[capability]));
+}
 
 // A key bound to an administrator acts as that administrator, within its capabilities.
 const subjectOf = (principal: Principal): AccessSubject =>
@@ -309,7 +369,13 @@ function makeAuthorizationService(
           : {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
       }
       const subject = subjectOf(principal);
-      if (subject.kind === "administrator") return {kind: "all"} as const;
+      // A project-scoped key narrows every subject, administrators included:
+      // the key's project list is intersected before any role widens it.
+      if (subject.kind === "administrator") {
+        return principal.projectIds.length === 0
+          ? {kind: "all"} as const
+          : {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
+      }
       const projects = yield* access.listProjectAccess(dependencies.installationId);
       const grants = yield* access.listMemberGrants(dependencies.installationId, principal.id);
       const stored = yield* access.readAccessPolicy(dependencies.installationId);
@@ -320,7 +386,10 @@ function makeAuthorizationService(
         projects,
         subject,
       });
-      if (visible.kind === "all" || principal.projectIds.length === 0) return visible;
+      if (principal.projectIds.length === 0) return visible;
+      if (visible.kind === "all") {
+        return {artifactIdsByProject: new Map(), kind: "limited", projectIds: principal.projectIds} as const;
+      }
       return {
         artifactIdsByProject: new Map(
           [...visible.artifactIdsByProject].filter(([projectId]) => principal.projectIds.includes(projectId)),
@@ -392,6 +461,19 @@ function makeAuthorizationService(
         return guest;
       }
       return yield* resolve(principal, scope);
+    },
+  );
+
+  const heldPermissions = Effect.fn("AuthorizationService.heldPermissions")(
+    function*(principal: Principal, scope: AccessScope) {
+      if (principal.kind === principalKinds.service) {
+        yield* requireInstallation(principal);
+        return capabilityPermissions(principal);
+      }
+      const effective = (yield* effectiveAccess(principal, scope)).permissions;
+      if (principal.kind === principalKinds.guest || isDirectHumanPrincipal(principal)) return effective;
+      const allowed = capabilityPermissions(principal);
+      return new Set([...effective].filter((permission) => allowed.has(permission)));
     },
   );
 
@@ -472,6 +554,21 @@ function makeAuthorizationService(
     },
   );
 
+  const requireLinkSharing = Effect.fn("AuthorizationService.requireLinkSharing")(
+    function*(principal: Principal, scope: AccessScope) {
+      yield* requireScoped(principal, scope, permissions.artifactShare, manageRule);
+      const {policy} = yield* access.readAccessPolicy(dependencies.installationId);
+      if (!policy.shareLinks.enabled) {
+        yield* new ShareLinksDisabled({message: "Public links are turned off for this installation."});
+      }
+      if (policy.shareLinks.linkCreators === "administrators" && !isHumanAdministrator(principal)) {
+        yield* new ShareLinksDisabled({
+          message: "Only administrators can make content reachable by link here.",
+        });
+      }
+    },
+  );
+
   const requirePublicationPreparation = Effect.fn(
     "AuthorizationService.requirePublicationPreparation",
   )(function*(principal: Principal, scope: ProjectScope | null) {
@@ -507,6 +604,7 @@ function makeAuthorizationService(
 
   return AuthorizationService.of({
     effectiveAccess,
+    heldPermissions,
     requireCandidatePromotion,
     requireAgentConnection,
     requireArtifactDiscovery,
@@ -556,6 +654,7 @@ function makeAuthorizationService(
       permissions.projectManage,
       anyCapability(principalCapabilities.manageProjects),
     ),
+    requireLinkSharing,
     requirePublicationPreparation,
     requireVersionPublication,
     visibleScope,

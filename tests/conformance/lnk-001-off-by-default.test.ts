@@ -87,6 +87,86 @@ async function callTool(
   }).loose().parse(await response.json()).result;
 }
 
+async function expectLinkedSurfaceAbsent(
+  activeServer: RunningTestServer,
+  installation: TestInstallation,
+  source: string,
+  label: string,
+): Promise<void> {
+  const session = sessionSchema.parse(await (await fetch(
+    new URL("/api/v1/session", activeServer.baseUrl),
+    {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+  )).json());
+  expect(session.capabilities.linkedArtifacts).toBe(false);
+
+  const capabilities = z.object({
+    linkedArtifacts: z.object({available: z.boolean()}).loose(),
+  }).loose().parse((await callTool(
+    activeServer,
+    installation.apiToken,
+    "artifact_capabilities",
+    {},
+  )).structuredContent);
+  expect(capabilities.linkedArtifacts.available).toBe(false);
+
+  const routeResponses = await Promise.all([
+    fetch(new URL("/api/v1/artifacts/link", activeServer.baseUrl), {
+      body: JSON.stringify({path: source}),
+      headers: apiHeaders(installation, `lnk-001-${label}-link-0001`),
+      method: "POST",
+    }),
+    fetch(new URL("/api/v1/artifacts/art_missing/capture", activeServer.baseUrl), {
+      body: JSON.stringify({expectedCurrentVersionId: "ver_missing"}),
+      headers: apiHeaders(installation, `lnk-001-${label}-capture-01`),
+      method: "POST",
+    }),
+    fetch(new URL("/api/v1/artifacts/art_missing/source", activeServer.baseUrl), {
+      body: JSON.stringify({expectedSha256: "a".repeat(64), path: source}),
+      headers: apiHeaders(installation, `lnk-001-${label}-relink-001`),
+      method: "PUT",
+    }),
+    fetch(new URL("/api/v1/artifacts/art_missing/live-sessions", activeServer.baseUrl), {
+      body: JSON.stringify({}),
+      headers: apiHeaders(installation, `lnk-001-${label}-live-00001`),
+      method: "POST",
+    }),
+  ]);
+  const routeResults = await Promise.all(routeResponses.map(async (response) => ({
+    code: errorSchema.parse(await response.json()).error.code,
+    status: response.status,
+  })));
+  for (const result of routeResults) {
+    expect(result.status).toBe(501);
+    expect(result.code).toBe("CAPABILITY_UNAVAILABLE");
+  }
+
+  const toolCalls: ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> = [
+    ["artifact_link", {path: source}],
+    [
+      "artifact_capture",
+      {artifactId: "art_missing", expectedCurrentVersionId: "ver_missing"},
+    ],
+    [
+      "artifact_relink",
+      {artifactId: "art_missing", expectedSha256: "a".repeat(64), path: source},
+    ],
+  ];
+  const toolResults = await Promise.all(toolCalls.map(([name, toolArguments]) =>
+    callTool(activeServer, installation.apiToken, name, toolArguments)
+  ));
+  for (const result of toolResults) {
+    expect(result.isError).toBe(true);
+    expect(z.object({error: z.object({code: z.string()}).loose()}).loose()
+      .parse(result.structuredContent).error.code).toBe("CAPABILITY_UNAVAILABLE");
+  }
+
+  const listed = artifactListSchema.parse(await (await fetch(
+    new URL("/api/v1/artifacts", activeServer.baseUrl),
+    {headers: {Authorization: `Bearer ${installation.apiToken}`}},
+  )).json());
+  expect(listed.artifacts).toEqual([]);
+}
+
 describe("linked artifacts are off by default and reference in place", () => {
   let installation: TestInstallation;
   let server: RunningTestServer | null = null;
@@ -170,84 +250,25 @@ describe("linked artifacts are off by default and reference in place", () => {
     expect(ids).toEqual([httpLinked.artifact.id, mcpLinked.artifact.id].toSorted());
   });
 
-  test("LNK-001-F: with the feature off the capability is absent, every linked route and tool answers the stable shape, and no file becomes an artifact", async () => {
+  test("LNK-001-F: with the feature off, or enabled on a deployment that is not the local-owner runtime, the capability is absent, every linked route and tool answers the stable shape, and no file becomes an artifact", async () => {
     expect.hasAssertions();
     server = await startTestServer(installation);
     const source = path.join(sourceRoot, "unreachable.md");
     await writeFile(source, "# unreachable\n");
+    await expectLinkedSurfaceAbsent(server, installation, source, "off");
+    await server.stop();
+    server = null;
 
-    const session = sessionSchema.parse(await (await fetch(
-      new URL("/api/v1/session", server.baseUrl),
-      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
-    )).json());
-    expect(session.capabilities.linkedArtifacts).toBe(false);
-
-    const capabilities = z.object({
-      linkedArtifacts: z.object({available: z.boolean()}).loose(),
-    }).loose().parse((await callTool(
-      server,
-      installation.apiToken,
-      "artifact_capabilities",
-      {},
-    )).structuredContent);
-    expect(capabilities.linkedArtifacts.available).toBe(false);
-
-    const activeServer = server;
-    const routeResponses = await Promise.all([
-      fetch(new URL("/api/v1/artifacts/link", activeServer.baseUrl), {
-        body: JSON.stringify({path: source}),
-        headers: apiHeaders(installation, "lnk-001-off-link-00001"),
-        method: "POST",
-      }),
-      fetch(new URL("/api/v1/artifacts/art_missing/capture", activeServer.baseUrl), {
-        body: JSON.stringify({expectedCurrentVersionId: "ver_missing"}),
-        headers: apiHeaders(installation, "lnk-001-off-capture-001"),
-        method: "POST",
-      }),
-      fetch(new URL("/api/v1/artifacts/art_missing/source", activeServer.baseUrl), {
-        body: JSON.stringify({expectedSha256: "a".repeat(64), path: source}),
-        headers: apiHeaders(installation, "lnk-001-off-relink-001"),
-        method: "PUT",
-      }),
-      fetch(new URL("/api/v1/artifacts/art_missing/live-sessions", activeServer.baseUrl), {
-        body: JSON.stringify({}),
-        headers: apiHeaders(installation, "lnk-001-off-live-00001"),
-        method: "POST",
-      }),
-    ]);
-    const routeResults = await Promise.all(routeResponses.map(async (response) => ({
-      code: errorSchema.parse(await response.json()).error.code,
-      status: response.status,
-    })));
-    for (const result of routeResults) {
-      expect(result.status).toBe(501);
-      expect(result.code).toBe("CAPABILITY_UNAVAILABLE");
-    }
-
-    const toolCalls: ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> = [
-      ["artifact_link", {path: source}],
-      [
-        "artifact_capture",
-        {artifactId: "art_missing", expectedCurrentVersionId: "ver_missing"},
-      ],
-      [
-        "artifact_relink",
-        {artifactId: "art_missing", expectedSha256: "a".repeat(64), path: source},
-      ],
-    ];
-    const toolResults = await Promise.all(toolCalls.map(([name, toolArguments]) =>
-      callTool(activeServer, installation.apiToken, name, toolArguments)
-    ));
-    for (const result of toolResults) {
-      expect(result.isError).toBe(true);
-      expect(z.object({error: z.object({code: z.string()}).loose()}).loose()
-        .parse(result.structuredContent).error.code).toBe("CAPABILITY_UNAVAILABLE");
-    }
-
-    const listed = artifactListSchema.parse(await (await fetch(
-      new URL("/api/v1/artifacts", server.baseUrl),
-      {headers: {Authorization: `Bearer ${installation.apiToken}`}},
-    )).json());
-    expect(listed.artifacts).toEqual([]);
+    // A composition that enables linked files but serves a configured
+    // application origin is not the local-owner runtime. Requests still
+    // arrive with a loopback Host header, which must not unlock the
+    // capability: the configured deployment decides, and the MCP adapter
+    // runs in remote mode, which refuses the link tools on its own.
+    server = await startTestServer(installation, {
+      applicationOrigin: "http://127.0.0.1:9",
+      linkRoots: [sourceRoot],
+      linkedFiles: "on",
+    });
+    await expectLinkedSurfaceAbsent(server, installation, source, "origin");
   });
 });
