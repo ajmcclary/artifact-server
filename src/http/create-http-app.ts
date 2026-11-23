@@ -788,48 +788,6 @@ export function createHttpApp(
       ),
   });
 
-  if (dependencies.mcpOAuthResource !== undefined) {
-    const resourceServerUrl = new URL(
-      dependencies.mcpOAuthResource.resource,
-    );
-    const metadataOptions = {
-      oauthMetadata:
-        dependencies.mcpOAuthResource.authorizationServerMetadata,
-      resourceName: "Artifact Server MCP",
-      resourceServerUrl,
-    };
-    const protectedMetadata = {
-      ...buildOAuthProtectedResourceMetadata(metadataOptions),
-      bearer_methods_supported: ["header"],
-    };
-    const protectedMetadataPath = new URL(
-      getOAuthProtectedResourceMetadataUrl(resourceServerUrl),
-    ).pathname;
-    app.get(
-      protectedMetadataPath,
-      (context) => context.json(protectedMetadata),
-    );
-  }
-
-  app.use("*", async (context, next) => {
-    if (dependencies.mcpOAuthResource !== undefined) {
-      const response = oauthMetadataResponse(
-        context.req.raw,
-        {
-          oauthMetadata:
-            dependencies.mcpOAuthResource.authorizationServerMetadata,
-          resourceName: "Artifact Server MCP",
-          resourceServerUrl: new URL(dependencies.mcpOAuthResource.resource),
-        },
-      );
-      if (response !== undefined) {
-        context.res = response;
-        return;
-      }
-    }
-    await next();
-  });
-
   app.use("*", async (context, next) => {
     const requestId = crypto.randomUUID();
     const startedAt = performance.now();
@@ -928,7 +886,58 @@ export function createHttpApp(
         dependencies,
       );
     }
+    // A separate content domain is untrusted artifact territory: a host under
+    // it that is not an exact content-token host never reaches application
+    // routes, OAuth metadata, MCP, or login.
+    if (isUntrustedContentDomainHost(requestUrl.hostname, dependencies.contentDomain, applicationHostname)) {
+      return context.notFound();
+    }
     return next();
+  });
+
+  // OAuth metadata is application surface, so it registers after the content
+  // host gate: a content host never answers protected-resource or
+  // authorization-server metadata.
+  if (dependencies.mcpOAuthResource !== undefined) {
+    const resourceServerUrl = new URL(
+      dependencies.mcpOAuthResource.resource,
+    );
+    const metadataOptions = {
+      oauthMetadata:
+        dependencies.mcpOAuthResource.authorizationServerMetadata,
+      resourceName: "Artifact Server MCP",
+      resourceServerUrl,
+    };
+    const protectedMetadata = {
+      ...buildOAuthProtectedResourceMetadata(metadataOptions),
+      bearer_methods_supported: ["header"],
+    };
+    const protectedMetadataPath = new URL(
+      getOAuthProtectedResourceMetadataUrl(resourceServerUrl),
+    ).pathname;
+    app.get(
+      protectedMetadataPath,
+      (context) => context.json(protectedMetadata),
+    );
+  }
+
+  app.use("*", async (context, next) => {
+    if (dependencies.mcpOAuthResource !== undefined) {
+      const response = oauthMetadataResponse(
+        context.req.raw,
+        {
+          oauthMetadata:
+            dependencies.mcpOAuthResource.authorizationServerMetadata,
+          resourceName: "Artifact Server MCP",
+          resourceServerUrl: new URL(dependencies.mcpOAuthResource.resource),
+        },
+      );
+      if (response !== undefined) {
+        context.res = response;
+        return;
+      }
+    }
+    await next();
   });
 
   app.on(["GET", "HEAD"], "/assets/*", (context) =>
@@ -3813,8 +3822,14 @@ function responseApplicationUrl(
     ?.split(",")[0]?.trim();
   const forwardedHost = context.req.header("x-forwarded-host")
     ?.split(",")[0]?.trim() ?? context.req.header("host");
+  // A request addressed to the trusted host came through the configured
+  // origin. A proxy that forwards Host but omits X-Forwarded-Proto still gets
+  // the trusted scheme; an explicit, different scheme does not. A request for
+  // any other host (a listener reached directly, as Compose, a port-forward,
+  // or a replica do) keeps its own URL.
   if (
-    `${forwardedProtocol}:` === trustedUrl.protocol &&
+    (forwardedProtocol === undefined || forwardedProtocol === "" ||
+      `${forwardedProtocol}:` === trustedUrl.protocol) &&
     forwardedHost?.toLocaleLowerCase("en-US") ===
       trustedUrl.host.toLocaleLowerCase("en-US")
   ) {
@@ -5486,22 +5501,57 @@ function tokenFromContentHost(
   return parsed.success ? parsed.data : null;
 }
 
+/**
+ * True for a host equal to or under the content domain that is neither an
+ * exact content-token host nor the application host. Such a host is artifact
+ * territory with no artifact behind it, so it answers 404 rather than reaching
+ * application routes. In local mode the content domain is `localhost`; the
+ * bare loopback name stays the application host while every `*.localhost`
+ * label that is not a content token is refused.
+ */
+function isUntrustedContentDomainHost(
+  hostname: string,
+  contentDomain: string,
+  applicationHostname: string | null,
+): boolean {
+  const host = withoutTrailingDot(hostname.toLocaleLowerCase("en-US"));
+  const domain = withoutTrailingDot(contentDomain.toLocaleLowerCase("en-US"));
+  if (host !== domain && !host.endsWith(`.${domain}`)) return false;
+  const application = applicationHostname === null
+    ? "localhost"
+    : withoutTrailingDot(applicationHostname.toLocaleLowerCase("en-US"));
+  return host !== application;
+}
+
+function withoutTrailingDot(hostname: string): string {
+  return hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+}
+
 function isContentBootstrapRequest(requestUrl: URL): boolean {
   return requestUrl.searchParams.has(contentBootstrapQueryParameter);
 }
 
 /**
  * The review frame renders one artifact version inside an opaque-origin
- * `srcdoc` sandbox. Relative resources resolve through an exact-version content
- * host, so the inherited policy permits network access only to configured
- * content hosts. The frame still cannot reach the trusted application origin.
+ * `srcdoc` sandbox, which inherits this policy. Relative resources resolve
+ * through an exact-version content host, so the policy permits network access
+ * only to configured content hosts. The frame still cannot reach the trusted
+ * application origin.
+ *
+ * `'unsafe-inline'` stays: the inherited policy must run the artifact's own
+ * inline scripts and styles plus the injected fragment-navigation script, and
+ * a nonce would disable `'unsafe-inline'` for them. The frame's own bundle is
+ * covered by `'self'`. `base-uri` admits only content hosts because the frame
+ * injects a `<base href>` at the exact-version host into the sandbox document.
  */
 function reviewFrameContentSecurityPolicy(contentDomain: string): string {
-  const httpContent = `http://*.${contentDomain}:*`;
-  const httpsContent = `https://*.${contentDomain}`;
-  const contentSources = `${httpContent} ${httpsContent}`;
+  const contentSources = contentDomain === "localhost"
+    ? "http://*.localhost:* https://*.localhost"
+    : `https://*.${contentDomain}`;
   return [
     "default-src 'none'",
+    `base-uri ${contentSources}`,
+    "object-src 'none'",
     `script-src 'self' 'unsafe-inline' ${contentSources}`,
     `style-src 'self' 'unsafe-inline' ${contentSources}`,
     // Preserve the viewer's existing support for authored remote images,
