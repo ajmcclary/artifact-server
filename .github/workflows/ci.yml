@@ -235,6 +235,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify portable code paths
+        # The 3-vCPU macOS runner timed out process-spawning tests (MCP
+        # onboarding, candidate versions, the shipped skill) when Vitest ran
+        # one fork per core; two workers stop them starving each other.
+        env:
+          VITEST_MAX_WORKERS: "2"
         run: pnpm check
 
   windows-local:
