@@ -2,6 +2,11 @@
 /**
  * Banner — announcement strip. Pass `dismissible: { id, days? }` to
  * show a close button that persists to localStorage.
+ *
+ * `content` is rendered as raw HTML. It must be trusted build-time input:
+ * repository-authored frontmatter or a literal in a layout, never text a
+ * visitor or an external service can influence. No sanitizer runs here, and
+ * none should be relied on; a regex filter cannot make untrusted HTML safe.
  */
 import Icon from "@cloudflare/nimbus-docs/components/Icon.astro";
 import { cn } from "@/lib/cn";
@@ -15,13 +20,6 @@ interface Props extends HTMLAttributes<"div"> {
 
 const { content, variant = "note", dismissible, class: className, ...attrs } = Astro.props;
 
-function sanitizeBannerHtml(value: string): string {
-  return value
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s+(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, "");
-}
-
 const config: Record<string, { color: string; tint: string }> = {
   note: { color: "var(--nb-info)", tint: "var(--nb-info-muted)" },
   tip: { color: "var(--nb-success)", tint: "var(--nb-success-muted)" },
@@ -30,7 +28,6 @@ const config: Record<string, { color: string; tint: string }> = {
 };
 
 const c = config[variant] ?? config.note;
-const safeContent = sanitizeBannerHtml(content);
 ---
 
 <div
@@ -43,7 +40,7 @@ const safeContent = sanitizeBannerHtml(content);
   {...attrs}
 >
   <div class="banner-card-body min-w-0 flex-1">
-    <Fragment set:html={safeContent} />
+    <Fragment set:html={content} />
   </div>
   {dismissible && (
     <button

@@ -842,10 +842,12 @@ export function createHttpApp(
     );
     context.set("requestId", requestId);
     context.set("requestSpan", requestSpan);
-    context.header("X-Request-Id", requestId);
     try {
       await next();
     } finally {
+      // Stamped after the handler so raw `Response` routes and error
+      // responses, which never see prepared context headers, still carry it.
+      stampRequestId(context, requestId);
       const status = context.res.status;
       const matchedRoute = safeMatchedRoute(context);
       const protocol = matchedRoute === "/mcp" ? "mcp" : "http";
@@ -873,7 +875,12 @@ export function createHttpApp(
         const endTime = await dependencies.applicationRuntime.runPromise(
           Clock.currentTimeNanos,
         );
-        requestSpan.end(endTime, Exit.succeed(status));
+        requestSpan.end(
+          endTime,
+          status >= 500
+            ? Exit.fail(new HttpServerFailureStatus(status))
+            : Exit.succeed(status),
+        );
       }
     }
   });
@@ -3919,6 +3926,30 @@ function requestedContentPath(
   return requested === undefined
     ? undefined
     : parseManifestPath(z.string().min(1).max(1_024).parse(requested));
+}
+
+/** A server-side failure status recorded on the request span. */
+class HttpServerFailureStatus extends Error {
+  override readonly name = "HttpServerFailureStatus";
+
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+/** Put the server request ID on the final response, whatever built it. */
+function stampRequestId(
+  context: Context<HttpEnvironment>,
+  requestId: string,
+): void {
+  try {
+    context.res.headers.set("X-Request-Id", requestId);
+  } catch {
+    // Fetched and redirect responses carry immutable headers.
+    const response = new Response(context.res.body, context.res);
+    response.headers.set("X-Request-Id", requestId);
+    context.res = response;
+  }
 }
 
 function isLoopbackHostname(hostname: string): boolean {

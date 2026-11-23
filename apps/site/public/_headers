@@ -1,0 +1,9 @@
+# Cloudflare static-asset response headers for every page of the public site.
+# HSTS omits includeSubDomains and preload: other artifactserver.com hosts are
+# not owned by this site and must opt in on their own.
+/*
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin

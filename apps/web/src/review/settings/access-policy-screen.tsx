@@ -1,7 +1,8 @@
 import {useCallback, useEffect, useState} from "react";
 
 import {api, type AccessPolicy, type StoredAccessPolicy} from "@/api/client";
-import {Alert, Button, Checkbox, Input, PageScaffold, Select, Switch} from "@/arkcase";
+import {Alert, Button, Checkbox, Input, Select, Switch} from "@/arkcase";
+import {AdminConsole} from "./admin-console.tsx";
 import {AdminActions, AdminNote, AdminPanel, AdminStack, RequestFailure} from "./admin-parts.tsx";
 import {type Permission, permissionLabel, permissionOrder} from "./project-access-model.ts";
 
@@ -51,9 +52,9 @@ export function AccessPolicyScreen() {
 
   if (draft === null || stored === null) {
     return (
-      <PageScaffold title="Access policy">
+      <AdminConsole administrator area="accessPolicy">
         {error === null ? null : <RequestFailure error={error} onRetry={() => void load()} />}
-      </PageScaffold>
+      </AdminConsole>
     );
   }
 
@@ -77,10 +78,8 @@ export function AccessPolicyScreen() {
   const links = draft.shareLinks;
 
   return (
-    <PageScaffold
-      meta="Limits that no project, grant, or share link can exceed. Narrowing a limit applies to existing access immediately."
-      title="Access policy"
-    >
+    <AdminConsole administrator area="accessPolicy">
+      <AdminNote>Narrowing a limit applies to existing access immediately.</AdminNote>
       {error === null ? null : <RequestFailure error={error} />}
       {notice === null ? null : <Alert density="compact" variant="success">{notice}</Alert>}
       <AdminPanel label="Share links" subtitle="What people without an account can do">
@@ -181,6 +180,6 @@ export function AccessPolicyScreen() {
           {pending ? "Saving…" : "Save policy"}
         </Button>
       </AdminActions>
-    </PageScaffold>
+    </AdminConsole>
   );
 }

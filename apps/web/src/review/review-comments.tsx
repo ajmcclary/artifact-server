@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -176,10 +177,16 @@ export interface ReviewCommentSession {
   readonly repliesByThread: ReadonlyMap<string, readonly CommentReply[]>;
   readonly selectedThreadId: string | null;
   readonly selectThread: (threadId: string | null) => void;
+  /**
+   * Create one thread. A composer passes its stable attempt key so a retry of
+   * the same text can never create a second thread; without one, each call is
+   * its own attempt.
+   */
   readonly submit: (
     body: string,
     anchor: ReviewAnchor | null,
     path: string | null,
+    idempotencyKey?: string,
   ) => Promise<boolean>;
   readonly threads: readonly CommentThread[];
   readonly unanchoredIds: readonly string[];
@@ -232,6 +239,17 @@ export function useReviewComments({
   const reloadGenerationRef = useRef(0);
   const ownership = useCommentListOwnership();
   const active = artifactId !== null && projectId !== "" && versionId !== null;
+  // The hook instance outlives an artifact or version switch, so a mutation
+  // that settles after the switch must not reload or select into the new view.
+  const sessionKey = `${projectId}\u0000${artifactId ?? ""}\u0000${versionId ?? ""}`;
+  const activeKeyRef = useRef(sessionKey);
+  useLayoutEffect(() => {
+    activeKeyRef.current = sessionKey;
+  }, [sessionKey]);
+  const isCurrent = useCallback(
+    (key: string): boolean => activeKeyRef.current === key,
+    [],
+  );
 
   const replaceAllThreads = useCallback(async (
     options: {readonly withLoading?: boolean} = {},
@@ -259,7 +277,7 @@ export function useReviewComments({
           null,
         );
         const conversations = await loadTransportConversations(transport, listed.threads);
-        if (reloadGenerationRef.current !== generation) return null;
+        if (reloadGenerationRef.current !== generation || !isCurrent(sessionKey)) return null;
         setThreads(conversations.map(({thread}) => thread));
         setRepliesByThread(new Map(
           conversations.map(({replies, thread}) => [thread.id, replies]),
@@ -267,7 +285,7 @@ export function useReviewComments({
         return listed.revision;
       });
     } catch (caught) {
-      if (reloadGenerationRef.current !== generation) return null;
+      if (reloadGenerationRef.current !== generation || !isCurrent(sessionKey)) return null;
       setError(
         caught instanceof Error ? caught : new Error("Comment loading failed."),
       );
@@ -277,7 +295,7 @@ export function useReviewComments({
         setLoading(false);
       }
     }
-  }, [artifactId, ownership, projectId, transport, versionId]);
+  }, [artifactId, isCurrent, ownership, projectId, sessionKey, transport, versionId]);
 
   const reload = useCallback(async (): Promise<void> => {
     const revision = await replaceAllThreads({withLoading: true});
@@ -327,41 +345,48 @@ export function useReviewComments({
     body: string,
     anchor: ReviewAnchor | null,
     path: string | null,
+    idempotencyKey: string = crypto.randomUUID(),
   ): Promise<boolean> => {
     if (artifactId === null || projectId === "" || versionId === null || transport === null) return false;
+    const key = sessionKey;
     setError(null);
     try {
       const storedAnchor: CommentAnchor = z.json().parse(anchor);
       const created = await ownership.own(() =>
-        transport.createThread(versionId, {anchor: storedAnchor, body, path}, crypto.randomUUID())
+        transport.createThread(versionId, {anchor: storedAnchor, body, path}, idempotencyKey)
       );
+      if (!isCurrent(key)) return true;
       if (created.versionId !== versionId) {
         onVersionChanged(created.versionId);
       } else {
         await reload();
-        setSelectedThreadId(created.id);
+        if (isCurrent(key)) setSelectedThreadId(created.id);
       }
       return true;
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught : new Error("Comment creation failed."),
-      );
+      if (isCurrent(key)) {
+        setError(
+          caught instanceof Error ? caught : new Error("Comment creation failed."),
+        );
+      }
       return false;
     }
-  }, [artifactId, onVersionChanged, ownership, projectId, reload, transport, versionId]);
+  }, [artifactId, isCurrent, onVersionChanged, ownership, projectId, reload, sessionKey, transport, versionId]);
 
   const changeState = useCallback(async (thread: CommentThread): Promise<void> => {
     if (artifactId === null || projectId === "" || transport === null) return;
+    const key = sessionKey;
     setError(null);
     try {
       await ownership.own(() => transport.setThreadState(thread.id, thread.state === "open" ? "resolved" : "open"));
-      await reload();
+      if (isCurrent(key)) await reload();
     } catch (caught) {
+      if (!isCurrent(key)) return;
       setError(
         caught instanceof Error ? caught : new Error("Comment state change failed."),
       );
     }
-  }, [artifactId, ownership, projectId, reload, transport]);
+  }, [artifactId, isCurrent, ownership, projectId, reload, sessionKey, transport]);
 
   const createReply = useCallback(async (
     thread: CommentThread,
@@ -369,43 +394,51 @@ export function useReviewComments({
     idempotencyKey: string,
   ): Promise<boolean> => {
     if (artifactId === null || projectId === "" || thread.state !== "open" || transport === null) return false;
+    const key = sessionKey;
     setError(null);
     try {
       await ownership.own(() => transport.createReply(thread.id, body, idempotencyKey));
-      await reload();
+      if (isCurrent(key)) await reload();
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error("Reply creation failed."));
+      if (isCurrent(key)) {
+        setError(caught instanceof Error ? caught : new Error("Reply creation failed."));
+      }
       return false;
     }
-  }, [artifactId, ownership, projectId, reload, transport]);
+  }, [artifactId, isCurrent, ownership, projectId, reload, sessionKey, transport]);
 
   const updateReply = useCallback(async (
     reply: CommentReply,
     body: string,
   ): Promise<boolean> => {
     if (artifactId === null || projectId === "" || transport === null) return false;
+    const key = sessionKey;
     setError(null);
     try {
       await ownership.own(() => transport.updateReply(reply.threadId, reply.id, body));
-      await reload();
+      if (isCurrent(key)) await reload();
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error("Reply edit failed."));
+      if (isCurrent(key)) {
+        setError(caught instanceof Error ? caught : new Error("Reply edit failed."));
+      }
       return false;
     }
-  }, [artifactId, ownership, projectId, reload, transport]);
+  }, [artifactId, isCurrent, ownership, projectId, reload, sessionKey, transport]);
 
   const deleteReply = useCallback(async (reply: CommentReply): Promise<void> => {
     if (artifactId === null || projectId === "" || transport === null) return;
+    const key = sessionKey;
     setError(null);
     try {
       await ownership.own(() => transport.deleteReply(reply.threadId, reply.id));
-      await reload();
+      if (isCurrent(key)) await reload();
     } catch (caught) {
+      if (!isCurrent(key)) return;
       setError(caught instanceof Error ? caught : new Error("Reply deletion failed."));
     }
-  }, [artifactId, ownership, projectId, reload, transport]);
+  }, [artifactId, isCurrent, ownership, projectId, reload, sessionKey, transport]);
 
   const annotations = useMemo(
     () => threads.filter((thread) => thread.state === "open").map(toAnnotation),

@@ -1,5 +1,6 @@
 import {
   createRemoteJWKSet,
+  customFetch,
   errors as joseErrors,
   jwtVerify,
   type JWTPayload,
@@ -71,6 +72,13 @@ export class WorkOsMcpBearerVerifier implements ExternalMcpBearerVerifier {
     this.#jwks = createRemoteJWKSet(jwksUri, {
       cacheMaxAge: 10 * 60 * 1_000,
       cooldownDuration: 5 * 60 * 1_000,
+      // A key set that answers with an error is a WorkOS outage, not a reason
+      // to call the presented token invalid.
+      [customFetch]: async (input, init) => {
+        const response = await providerFetch(input, init);
+        if (response.status !== 200) throw new KeySetUnavailable();
+        return response;
+      },
       timeoutDuration: 5_000,
     });
   }
@@ -218,10 +226,14 @@ function workOsExternalIdentity(
   };
 }
 
+/** WorkOS answered the key set with something other than a key set. */
+class KeySetUnavailable extends Error {}
+
 function verificationFailure(
   cause: unknown,
 ): AuthenticationRequired | IdentityProviderFailure {
   if (
+    cause instanceof KeySetUnavailable ||
     cause instanceof TypeError ||
     cause instanceof joseErrors.JWKSTimeout ||
     (

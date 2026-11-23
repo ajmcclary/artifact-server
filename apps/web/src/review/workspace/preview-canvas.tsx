@@ -30,6 +30,7 @@ import {
   type UnanchoredReason,
 } from "@/review-frame/protocol";
 import {pageMessageSchema} from "@/review-frame/page-protocol";
+import {isVersionContentUrl} from "@/review/version-content-url";
 import {arkcaseFrameTokens, frameIsLight} from "@/theme/frame-theme";
 
 import {mediaTypeEssence} from "./page-inventory.ts";
@@ -592,7 +593,7 @@ function HtmlPreview({
         const useStableOrigin = accessSetting === "public_link" && isCurrentVersion;
         const interactiveBase = useStableOrigin ? version.links.version : lease.baseUrl;
         const interactiveUrl = documentEntryUrl(interactiveBase, entry.path);
-        if (!isVersionContentUrl(interactiveUrl, lease.baseUrl)) {
+        if (!isVersionContentUrl(interactiveUrl, lease.baseUrl, window.location.origin)) {
           throw new Error("Interactive preview requires a separate version content origin.");
         }
         if (current) {
@@ -898,21 +899,6 @@ function prefersInteractivePreview(html: string, entryUrl: string, path: string)
       return false;
     }
   });
-}
-
-function isVersionContentUrl(candidate: string, leaseBase: string): boolean {
-  const target = new URL(candidate);
-  const lease = new URL(leaseBase);
-  const suffix = lease.hostname.slice(lease.hostname.indexOf("."));
-  const label = target.hostname.slice(0, -suffix.length);
-  return suffix.startsWith(".")
-    && label.length > 0
-    && !label.includes(".")
-    && target.hostname.endsWith(suffix)
-    && target.protocol === lease.protocol
-    && target.port === lease.port
-    && ["http:", "https:"].includes(target.protocol)
-    && target.origin !== window.location.origin;
 }
 
 function NativeMediaPreview({

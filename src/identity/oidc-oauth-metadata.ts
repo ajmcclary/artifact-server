@@ -25,6 +25,8 @@ const discoveryDocumentSchema = z.looseObject({
 
 /** Authorization-server contract one OIDC issuer offers to MCP clients. */
 export interface OidcAuthorizationServer {
+  /** The issuer exactly as discovery spells it, which tokens must carry. */
+  readonly issuer: string;
   readonly jwksUri: string;
   readonly metadata: OAuthMetadata;
   readonly userInfoEndpoint: string | null;
@@ -99,7 +101,9 @@ export async function loadOidcAuthorizationServer(
   let metadata: OAuthMetadata = {
     ...document,
     authorization_endpoint: authorizationEndpoint,
-    issuer: exactIssuer,
+    // Clients compare this identifier exactly against the issuer's own
+    // metadata and token `iss`, so the discovered spelling is served on.
+    issuer: document.issuer,
     jwks_uri: jwksUri,
     token_endpoint: tokenEndpoint,
   };
@@ -109,7 +113,7 @@ export async function loadOidcAuthorizationServer(
   if (revocationEndpoint !== null) {
     metadata = {...metadata, revocation_endpoint: revocationEndpoint};
   }
-  return {jwksUri, metadata, userInfoEndpoint};
+  return {issuer: document.issuer, jwksUri, metadata, userInfoEndpoint};
 }
 
 function optionalEndpoint(

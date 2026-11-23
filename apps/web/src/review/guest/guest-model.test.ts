@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 
-import {guestBanner, guestShellControls, sharePathOf} from "@/review/guest/guest-model";
+import {guestBanner, guestShellControls, isShareAddress, sharePathOf} from "@/review/guest/guest-model";
 
 describe("guest model", () => {
   it("shows comments with comment.read and the composer only with comment.write", () => {
@@ -20,5 +20,15 @@ describe("guest model", () => {
     expect(sharePathOf("/review/shared/shl_1")).toEqual({kind: "resume", linkId: "shl_1"});
     expect(sharePathOf("/review/shared/")).toBeNull();
     expect(sharePathOf("/review")).toBeNull();
+  });
+
+  it("reads a malformed percent escape as no share path instead of throwing", () => {
+    expect(sharePathOf("/s/%E0%A4%A")).toBeNull();
+    expect(sharePathOf("/review/shared/%")).toBeNull();
+    expect(sharePathOf("/s/shr%5Fabc")).toEqual({kind: "open", token: "shr_abc"});
+    // The guest shell still owns the address, so it can show the ended link.
+    expect(isShareAddress("/s/%E0%A4%A")).toBe(true);
+    expect(isShareAddress("/review/shared/%")).toBe(true);
+    expect(isShareAddress("/review")).toBe(false);
   });
 });

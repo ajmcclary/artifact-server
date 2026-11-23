@@ -281,7 +281,10 @@ const loadDiscovery = Effect.fn("OidcIdentityProvider.loadDiscovery")(
     }
     const discovery: OidcDiscovery = {
       authorizationEndpoint,
-      issuer,
+      // ID tokens carry the issuer exactly as the provider spells it (Auth0
+      // keeps a trailing slash), so verification uses the discovered string
+      // while configuration matching above uses the normalized form.
+      issuer: document.data.issuer,
       jwksUri,
       tokenEndpoint,
     };

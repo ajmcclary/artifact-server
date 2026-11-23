@@ -50,6 +50,8 @@ export function ActivityThumbnail({artifactName, entry}: {readonly artifactName:
   const thread = entry.thread;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  // Gives the load slot back once the rendered frame has loaded or initialised.
+  const settleFrameRef = useRef<(() => void) | null>(null);
   const screenKey = thread === undefined || entry.artifact === null || entry.project === null
     ? null
     : JSON.stringify([entry.project.id, entry.artifact.id, thread.id, thread.versionId, thread.path, thread.anchor]);
@@ -103,16 +105,26 @@ export function ActivityThumbnail({artifactName, entry}: {readonly artifactName:
       const base = new URL(plan.path.split("/").map(encodeURIComponent).join("/"), lease.baseUrl);
       const frame = {kind: "frame", loaded: {baseHref: new URL(".", base).toString(), entryPath: plan.path, html, pin: plan.pin}} as const;
       rememberScreen(screenKey, frame, Date.parse(lease.expiresAt) - leaseMarginMilliseconds);
+      // The iframe renders only after this state lands, so its load and ready signals
+      // reach the slot through a ref rather than a listener attached here.
+      const settled = Promise.withResolvers<undefined>();
+      const settle = (): void => settled.resolve(undefined);
+      settleFrameRef.current = settle;
       setState(frame);
       // Hold the slot until the frame has been initialised, gives up, or this load is cancelled.
-      await Promise.race([
-        released.promise,
-        new Promise<void>((resolve) => {
-          const done = (): void => resolve();
-          setTimeout(done, frameReadyTimeoutMilliseconds);
-          frameRef.current?.addEventListener("load", () => setTimeout(done, 500), {once: true});
-        }),
-      ]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          released.promise,
+          settled.promise,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, frameReadyTimeoutMilliseconds);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        if (settleFrameRef.current === settle) settleFrameRef.current = null;
+      }
     }).catch(() => {
       if (live) setState({kind: "tile", reason: "failed"});
     });
@@ -139,6 +151,7 @@ export function ActivityThumbnail({artifactName, entry}: {readonly artifactName:
           baseHref: state.loaded.baseHref, entryPath: state.loaded.entryPath, html: state.loaded.html, isLight: frameIsLight(),
           readOnly: true, themeTokens: arkcaseFrameTokens(), type: "as-review-init", v: reviewProtocolVersion});
         if (state.loaded.pin) post({threadId: thread.id, type: "as-review-focus", v: reviewProtocolVersion});
+        settleFrameRef.current?.();
       }
       // The frame could not place this thread's anchor on the page: never show a misplaced pin.
       if (state.loaded.pin && parsed.data.type === "as-review-unanchored" && parsed.data.threadIds.includes(thread.id)) {
@@ -154,7 +167,17 @@ export function ActivityThumbnail({artifactName, entry}: {readonly artifactName:
   return (
     <div ref={rootRef} data-thumbnail-for={thread?.id}>
       {state.kind === "frame"
-        ? <iframe data-thumbnail="frame" ref={frameRef} src="/review-frame" style={frameStyle} tabIndex={-1} title={`Screen of ${artifactName}`} />
+        ? (
+          <iframe
+            data-thumbnail="frame"
+            onLoad={() => setTimeout(() => settleFrameRef.current?.(), 500)}
+            ref={frameRef}
+            src="/review-frame"
+            style={frameStyle}
+            tabIndex={-1}
+            title={`Screen of ${artifactName}`}
+          />
+        )
         : <FileTile reason={state.reason} />}
     </div>
   );

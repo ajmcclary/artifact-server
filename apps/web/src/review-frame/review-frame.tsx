@@ -192,7 +192,8 @@ export function ReviewFrame(): React.ReactNode {
     return () => {
       document.removeEventListener("load", onDocumentLoad, true);
       window.removeEventListener("message", onPageMessage);
-      channel.reset();
+      // Unmounting ends the channel: reset would re-arm a hello timer for a document that is gone.
+      channel.dispose();
       channelRef.current = null;
     };
   }, [send]);
@@ -208,6 +209,8 @@ export function ReviewFrame(): React.ReactNode {
       if (!parsed.success) return;
       const message = parsed.data;
       if (message.type === "as-review-init") {
+        // A region lookup still in flight belongs to the previous document; it must not land.
+        annotationGenerationRef.current += 1;
         applyTheme(message);
         channelRef.current?.reset();
         regionFailuresRef.current = new Map();

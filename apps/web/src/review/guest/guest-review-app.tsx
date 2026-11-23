@@ -19,6 +19,7 @@ import {formatTimestamp} from "@/lib/presentation";
 import {useThemeMode} from "@/theme/use-theme-mode";
 
 import {useReviewComments, type ReviewCommentSession} from "../review-comments.tsx";
+import {isVersionContentUrl} from "../version-content-url.ts";
 import {EndedLink} from "./ended-link.tsx";
 import {guestBanner, guestShellControls, sharePathOf} from "./guest-model.ts";
 import {GuestNameDialog} from "./guest-name-dialog.tsx";
@@ -137,12 +138,38 @@ function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
     versionId: context.version.id,
   });
 
+  // Re-read where the link stands: on a refused action, and every half minute while open.
+  const refreshContext = useCallback(async (): Promise<GuestContext | null> => {
+    try {
+      const refreshed = await guestApi.session(context.link.id);
+      onContext(refreshed);
+      return refreshed;
+    } catch (caught) {
+      if (linkEnded(caught instanceof Error ? caught : null)) onEnded();
+      return null;
+    }
+  }, [context.link.id, onContext, onEnded]);
+
   useEffect(() => {
     let current = true;
+    const versionId = context.version.id;
     const load = async () => {
       try {
         const lease = await guestApi.previewLease();
-        if (current) setPreviewUrl(lease.baseUrl);
+        if (!current) return;
+        if (lease.versionId !== versionId) {
+          // The link moved on: a new context re-runs this load for its version.
+          const refreshed = await refreshContext();
+          if (current && refreshed?.version.id === versionId) {
+            setPreviewFailure("The page could not be opened.");
+          }
+          return;
+        }
+        if (!isVersionContentUrl(lease.baseUrl, lease.baseUrl, window.location.origin)) {
+          setPreviewFailure("The page could not be opened.");
+          return;
+        }
+        setPreviewUrl(lease.baseUrl);
       } catch (caught) {
         if (!current) return;
         const failure = caught instanceof Error ? caught : null;
@@ -154,16 +181,7 @@ function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
     return () => {
       current = false;
     };
-  }, [context.version.id, onEnded]);
-
-  // Re-read where the link stands: on a refused action, and every half minute while open.
-  const refreshContext = useCallback(async () => {
-    try {
-      onContext(await guestApi.session(context.link.id));
-    } catch (caught) {
-      if (linkEnded(caught instanceof Error ? caught : null)) onEnded();
-    }
-  }, [context.link.id, onContext, onEnded]);
+  }, [context.version.id, onEnded, refreshContext]);
 
   useEffect(() => {
     if (linkEnded(session.error)) onEnded();
@@ -267,7 +285,7 @@ function GuestComments({composer, context, onContext, onEnded, session}: GuestCo
   const submit = async (body: string, idempotencyKey: string): Promise<boolean> => {
     if (!(await ensureNamed())) return false;
     return selected === null
-      ? session.submit(body, null, null)
+      ? session.submit(body, null, null, idempotencyKey)
       : session.createReply(selected, body, idempotencyKey);
   };
 

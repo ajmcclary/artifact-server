@@ -131,7 +131,7 @@ export function DetailsTab({
           title="Links"
         />
       </PanelSection>
-      <TagsEditor artifact={details.artifact} key={`tags-${details.artifact.id}`} onChange={onTagsChange} />
+      <TagsEditor artifact={details.artifact} canManage={canManage} key={`tags-${details.artifact.id}`} onChange={onTagsChange} />
       <PanelSection title="Hosting">
         <FieldGrid
           fields={[
@@ -342,10 +342,12 @@ function AccessEditor({canManage, current, onChange}: AccessEditorProps) {
 
 interface TagsEditorProps {
   readonly artifact: ArtifactDetails["artifact"];
+  /** Only artifact managers may change tags; everyone else reads them. */
+  readonly canManage: boolean;
   readonly onChange: (tags: readonly string[]) => Promise<void>;
 }
 
-function TagsEditor({artifact, onChange}: TagsEditorProps) {
+function TagsEditor({artifact, canManage, onChange}: TagsEditorProps) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [pending, setPending] = useState(false);
@@ -377,10 +379,10 @@ function TagsEditor({artifact, onChange}: TagsEditorProps) {
 
   return (
     <PanelSection
-      actions={editing ? null : <Button onClick={() => setEditing(true)} size="xs" variant="link">Edit tags</Button>}
+      actions={editing || !canManage ? null : <Button onClick={() => setEditing(true)} size="xs" variant="link">Edit tags</Button>}
       title={`Tags · ${artifact.tags.length}`}
     >
-      {editing ? (
+      {editing && canManage ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();
