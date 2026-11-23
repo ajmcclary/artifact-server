@@ -6,6 +6,7 @@ import {
   test,
 } from "vitest";
 import { createHash } from "node:crypto";
+import { request } from "node:http";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import {z} from "zod";
@@ -190,6 +191,72 @@ describe("complete-site publishing", () => {
       .toBe("https://artifacts.example.test");
     expect(plan.files.map(({uploadUrl}) => new URL(uploadUrl).origin))
       .toEqual(["https://artifacts.example.test"]);
+  });
+
+  test("foundation: a proxy that forwards Host without X-Forwarded-Proto gets the configured origin while a directly reached listener keeps its own", async () => {
+    await server.stop();
+    server = await startTestServer(installation, {
+      applicationOrigin: "https://artifacts.example.test",
+    });
+    const file = siteFixture().find(({path: filePath}) => filePath === "index.html");
+    if (file === undefined) throw new Error("The site fixture has no entry file.");
+    const planBody = JSON.stringify({
+      entryPath: file.path,
+      files: [{
+        mediaType: file.mediaType,
+        path: file.path,
+        sha256: createHash("sha256").update(file.bytes).digest("hex"),
+        size: file.bytes.byteLength,
+      }],
+    });
+    // Node's fetch replaces a caller's Host header, so send the exact Host a
+    // proxy or a Compose client would send over a raw HTTP request.
+    const planOrigin = (headers: Record<string, string>) =>
+      new Promise<string>((resolve, reject) => {
+        const outgoing = request({
+          headers: {
+            Authorization: `Bearer ${installation.apiToken}`,
+            "Content-Type": "application/json",
+            ...headers,
+          },
+          hostname: "127.0.0.1",
+          method: "POST",
+          path: "/api/v1/uploads",
+          port: server.port,
+        }, (incoming) => {
+          const chunks: Buffer[] = [];
+          incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+          incoming.on("end", () => {
+            try {
+              expect(incoming.statusCode).toBe(201);
+              const plan = z.object({commitUrl: z.url()})
+                .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+              resolve(new URL(plan.commitUrl).origin);
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)));
+            }
+          });
+        });
+        outgoing.on("error", reject);
+        outgoing.end(planBody);
+      });
+
+    // Through the configured origin: Host or X-Forwarded-Host names the
+    // trusted host, and the scheme header is absent.
+    expect(await planOrigin({Host: "artifacts.example.test"}))
+      .toBe("https://artifacts.example.test");
+    expect(await planOrigin({"X-Forwarded-Host": "artifacts.example.test"}))
+      .toBe("https://artifacts.example.test");
+    // An explicit, different scheme is not overridden.
+    expect(await planOrigin({
+      Host: "artifacts.example.test",
+      "X-Forwarded-Proto": "http",
+    })).toBe("http://artifacts.example.test");
+    // A listener reached directly, by loopback or by a Compose service name,
+    // keeps the request's own URL so direct publishing still works.
+    expect(await planOrigin({})).toBe(server.baseUrl);
+    expect(await planOrigin({Host: "artifact-server:8787"}))
+      .toBe("http://artifact-server:8787");
   });
 
   test("PUB-001-B PUB-003-B: a staged site resumes after restart and commits only after every file is verified", async () => {

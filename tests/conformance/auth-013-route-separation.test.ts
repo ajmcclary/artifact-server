@@ -1,5 +1,6 @@
 import {readFile} from "node:fs/promises";
 
+import type {OAuthMetadata} from "@modelcontextprotocol/server";
 import {afterEach, beforeEach, describe, expect, test} from "vitest";
 import {z} from "zod";
 
@@ -81,6 +82,38 @@ const sensitiveRoutes: readonly ApplicationRoute[] = [
   {method: "POST", path: "/api/v1/uploads"},
 ];
 
+const applicationOrigin = "https://artifacts.example.test";
+const remoteContentDomain = "content.example-usercontent.test";
+const oauthIssuer = "https://artifact-server.authkit.test";
+const mcpResource = `${applicationOrigin}/mcp`;
+const oauthMetadataPaths = [
+  "/.well-known/oauth-protected-resource/mcp",
+  "/.well-known/oauth-authorization-server",
+] as const;
+
+function authorizationMetadata(): OAuthMetadata {
+  return {
+    authorization_endpoint: `${oauthIssuer}/oauth2/authorize`,
+    code_challenge_methods_supported: ["S256"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    issuer: oauthIssuer,
+    response_types_supported: ["code"],
+    token_endpoint: `${oauthIssuer}/oauth2/token`,
+  };
+}
+
+/** What a probe observed, reduced to the signals a content host must never send. */
+async function observe(route: string, response: Response) {
+  await response.arrayBuffer();
+  return {
+    location: response.headers.get("location"),
+    route,
+    setCookie: response.headers.getSetCookie(),
+    status: response.status,
+    wwwAuthenticate: response.headers.get("www-authenticate"),
+  };
+}
+
 const sessionSchema = z.object({
   principal: z.object({}).loose(),
 }).loose();
@@ -115,11 +148,24 @@ describe("application and content routes stay on separate origins", () => {
     return cookie.split(";", 1)[0] ?? "";
   }
 
-  async function publishPublicFixture() {
+  /** Replace the local server with a remote-mode one that advertises MCP OAuth. */
+  async function startRemoteOAuthServer(): Promise<void> {
+    await server.stop();
+    server = await startTestServer(installation, {
+      applicationOrigin,
+      contentDomain: remoteContentDomain,
+      mcpOAuthResource: {
+        authorizationServerMetadata: authorizationMetadata(),
+        resource: mcpResource,
+      },
+    });
+  }
+
+  async function publishPublicFixture(idempotencyKey = "auth-013-route-separation") {
     return publishNew(server, installation, {
       accessSetting: "public_link",
       content: "<!doctype html><title>Route separation fixture</title>",
-      idempotencyKey: "auth-013-route-separation",
+      idempotencyKey,
     });
   }
 
@@ -164,9 +210,44 @@ describe("application and content routes stay on separate origins", () => {
     expect(write.status).toBe(405);
     expect(write.headers.get("allow")).toBe("GET, HEAD");
     await write.arrayBuffer();
+
+    // With MCP OAuth configured on a separate content domain, the OAuth
+    // metadata answers on the application host and never on a version host.
+    await startRemoteOAuthServer();
+    const remote = await publishPublicFixture("auth-013-route-separation-oauth");
+    const remoteVersion = new URL(remote.body.links.version);
+    expect(remoteVersion.hostname.endsWith(`.${remoteContentDomain}`)).toBe(true);
+    const trustedHost = new URL(applicationOrigin).hostname;
+    const onApplication = await Promise.all(oauthMetadataPaths.map(async (metadataPath) => {
+      const response = await fetchVersion(
+        server,
+        new URL(metadataPath, `http://${trustedHost}`).toString(),
+        "GET",
+        {"X-Forwarded-Proto": "https"},
+      );
+      return {
+        metadata: z.object({}).loose().safeParse(await response.json()).success,
+        status: response.status,
+      };
+    }));
+    expect(onApplication).toEqual(oauthMetadataPaths.map(() => ({metadata: true, status: 200})));
+    const onContent = [];
+    for (const metadataPath of oauthMetadataPaths) {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetchVersion(server, new URL(metadataPath, remoteVersion).toString());
+      // eslint-disable-next-line no-await-in-loop
+      onContent.push(await observe(metadataPath, response));
+    }
+    expect(onContent).toEqual(oauthMetadataPaths.map((route) => ({
+      location: null,
+      route,
+      setCookie: [],
+      status: 404,
+      wwwAuthenticate: null,
+    })));
   });
 
-  test("AUTH-013-F: no version content host exposes a login callback, OAuth, metadata mutation, administration, or MCP endpoint", async () => {
+  test("AUTH-013-F: no version content host or other content-domain host exposes a login callback, OAuth, metadata mutation, administration, or MCP endpoint", async () => {
     const routes = await applicationRoutes();
     expect(routes.length).toBeGreaterThan(100);
     const published = await publishPublicFixture();
@@ -240,5 +321,64 @@ describe("application and content routes stay on separate origins", () => {
         currentVersionId: z.literal(identities.versionId),
       }).loose(),
     }).loose().parse(await artifact.json())).toBeDefined();
+
+    // A *.localhost label that is not a content token is not the application.
+    const localStrays = [];
+    for (const host of ["stray.localhost", "a.b.localhost"]) {
+      for (const route of ["/review", "/api/v1/session", "/auth/context"]) {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await fetchVersion(server, `http://${host}${route}`, "GET", credentials);
+        // eslint-disable-next-line no-await-in-loop
+        localStrays.push(await observe(`${host}${route}`, response));
+      }
+    }
+    expect(localStrays.map(({status}) => status)).toEqual(localStrays.map(() => 404));
+    expect(localStrays.flatMap(({setCookie}) => setCookie)).toEqual([]);
+
+    // On a separate content domain with OAuth configured, the bare domain and
+    // every non-token label under it reach no application route either.
+    await startRemoteOAuthServer();
+    const strayHosts = [
+      remoteContentDomain,
+      `${remoteContentDomain}.`,
+      `stray.${remoteContentDomain}`,
+      `a.b.${remoteContentDomain}`,
+      `STRAY.${remoteContentDomain.toUpperCase()}.`,
+    ];
+    const strayProbes = [
+      {method: "GET", path: "/review"},
+      {method: "GET", path: "/auth/login"},
+      {method: "GET", path: "/auth/context"},
+      {method: "GET", path: "/api/v1/session"},
+      {method: "GET", path: "/api/v1/artifacts"},
+      {method: "POST", path: "/mcp"},
+      ...oauthMetadataPaths.map((path) => ({method: "GET", path})),
+    ];
+    const strays = [];
+    for (const host of strayHosts) {
+      for (const {method, path} of strayProbes) {
+        // eslint-disable-next-line no-await-in-loop
+        const response = await fetchVersion(server, `http://${host}${path}`, method, credentials);
+        // eslint-disable-next-line no-await-in-loop
+        strays.push(await observe(`${method} ${host}${path}`, response));
+      }
+    }
+    expect(strays).toEqual(strayHosts.flatMap((host) => strayProbes.map(({method, path}) => ({
+      location: null,
+      route: `${method} ${host}${path}`,
+      setCookie: [],
+      status: 404,
+      wwwAuthenticate: null,
+    }))));
+
+    // The application host on the same listener still answers its routes.
+    const context = await fetchVersion(
+      server,
+      `http://${new URL(applicationOrigin).hostname}/auth/context`,
+      "GET",
+      {"X-Forwarded-Proto": "https"},
+    );
+    expect(context.status).toBe(200);
+    await context.arrayBuffer();
   });
 });
