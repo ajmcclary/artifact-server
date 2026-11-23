@@ -110,7 +110,6 @@ export default {
       }
       return runtime.app.fetch(prepared, environment, context);
     } catch (cause) {
-      runtimePromise = null;
       console.error(JSON.stringify({
         error: "cloudflare_runtime_initialization_failed",
         message: cause instanceof Error ? cause.message : "Unknown initialization failure.",
@@ -124,7 +123,8 @@ export default {
   scheduled(
     _controller: ScheduledController,
     environment: WorkerEnvironment,
-    context: ExecutionContext,
+    // The cron path only extends its invocation; it never forwards the context.
+    context: Pick<ExecutionContext, "waitUntil">,
   ): void {
     context.waitUntil(runScheduledCleanup(environment));
   },
@@ -137,9 +137,20 @@ async function runScheduledCleanup(
   await Promise.all([runtime.cleanupStaging(), runtime.drainGitHistory()]);
 }
 
+/**
+ * The isolate's one runtime. A failed initialization is forgotten as soon as
+ * it rejects, whichever entry point started it, so the next fetch or cron
+ * invocation retries instead of replaying a cached failure for the isolate's
+ * whole lifetime.
+ */
 function getRuntime(environment: WorkerEnvironment): Promise<CloudflareRuntime> {
-  runtimePromise ??= createCloudflareRuntime(environment);
-  return runtimePromise;
+  if (runtimePromise !== null) return runtimePromise;
+  const initializing = createCloudflareRuntime(environment);
+  runtimePromise = initializing;
+  initializing.catch(() => {
+    if (runtimePromise === initializing) runtimePromise = null;
+  });
+  return initializing;
 }
 
 // Workers Free allows 50 subrequests and 50 D1 queries per invocation, and

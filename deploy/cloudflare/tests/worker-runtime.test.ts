@@ -40,6 +40,9 @@ const artifactListSchema = z.object({
   artifacts: z.array(z.object({artifact: z.object({id: z.string()})})),
 });
 const notReadySchema = z.object({error: z.string()});
+const uploadFailureSchema = z.object({
+  error: z.object({code: z.string()}).loose(),
+}).loose();
 const versionListSchema = z.object({
   versions: z.array(z.object({
     version: z.object({id: z.string(), number: z.number().int().positive()}),
@@ -556,6 +559,46 @@ describe("Cloudflare Worker runtime", () => {
     const replay = committedUploadSchema.parse(await retry.json());
     expect(replay.replayed).toBe(true);
     expect(replay.version.id).toBe(publication.version.id);
+  }, 30_000);
+
+  it("answers a staged R2 upload whose bytes break the declaration with 422 and keeps the slot usable", async () => {
+    // PUB-003-F / PUB-018-F on R2: the adapter shares the verified-stream
+    // error type, so a client lie is invalid input, never a 500.
+    const declared = new TextEncoder().encode("<h1>Declared R2 bytes</h1>");
+    const createUpload = await worker.fetch(`${origin}/api/v1/uploads`, {
+      body: JSON.stringify({
+        entryPath: "index.html",
+        files: [{
+          mediaType: "text/html; charset=utf-8",
+          path: "index.html",
+          sha256: createHash("sha256").update(declared).digest("hex"),
+          size: declared.byteLength,
+        }],
+      }),
+      headers: authenticatedJsonHeaders(),
+      method: "POST",
+    });
+    expect(createUpload.status).toBe(201);
+    const plannedFile = uploadPlanSchema.parse(await createUpload.json()).files[0];
+    if (plannedFile === undefined) throw new Error("The upload plan is empty.");
+
+    const sameSizeLie = new TextEncoder().encode("<h1>Tampered R2 bytes</h1>");
+    expect(sameSizeLie.byteLength).toBe(declared.byteLength);
+    const mismatched = await worker.fetch(plannedFile.uploadUrl, {
+      body: sameSizeLie,
+      headers: {Authorization: `Bearer ${apiToken}`},
+      method: "PUT",
+    });
+    expect(mismatched.status).toBe(422);
+    expect(uploadFailureSchema.parse(await mismatched.json()).error.code)
+      .toBe("INVALID_INPUT");
+
+    const exact = await worker.fetch(plannedFile.uploadUrl, {
+      body: declared,
+      headers: {Authorization: `Bearer ${apiToken}`},
+      method: "PUT",
+    });
+    expect(exact.status).toBe(200);
   }, 30_000);
 });
 

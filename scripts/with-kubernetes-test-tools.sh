@@ -67,7 +67,10 @@ verify_sha256() {
   fi
 }
 
-install_tools() {
+# The body runs in a subshell so its EXIT trap removes the staging directory on
+# every exit, including a set -e failure in curl, the checksum, or tar. A RETURN
+# trap would not fire when set -e aborts the script from inside the function.
+install_tools() (
   local artifactserver_stage
   artifactserver_stage=$(mktemp -d "${TMPDIR:-/tmp}/artifact-server-kubernetes-tools.XXXXXX")
   cleanup_tools_stage() {
@@ -80,7 +83,7 @@ install_tools() {
         ;;
     esac
   }
-  trap cleanup_tools_stage RETURN
+  trap cleanup_tools_stage EXIT
 
   local artifactserver_helm_archive="$artifactserver_stage/helm.tar.gz"
   local artifactserver_kind_binary="$artifactserver_stage/kind"
@@ -99,7 +102,7 @@ install_tools() {
     "$artifactserver_stage/${artifactserver_os}-${artifactserver_arch}/helm" \
     "$artifactserver_helm"
   install -m 0755 "$artifactserver_kind_binary" "$artifactserver_kind"
-}
+)
 
 if [[ ! -x "$artifactserver_helm" || ! -x "$artifactserver_kind" ]]; then
   install_tools

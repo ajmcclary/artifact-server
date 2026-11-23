@@ -258,6 +258,22 @@ export function defineGcpStack(
     },
   );
 
+  // An operator-owned WorkOS key secret is read by both the service and the
+  // cleanup job, so the workload needs the same accessor grant as the
+  // generated secrets; AWS grants it through the execution-role policy.
+  const workosApiKeyAccess = input.workosApiKeySecretRef === undefined
+    ? []
+    : [new gcp.secretmanager.SecretIamMember(
+      `${name}-workos-api-key-access`,
+      {
+        member: workloadMember,
+        project: projectId,
+        role: "roles/secretmanager.secretAccessor",
+        secretId: input.workosApiKeySecretRef,
+      },
+      {dependsOn: services},
+    )];
+
   const runtimeEnvironment = gcpRuntimeEnvironment(
     input,
     installationId.result,
@@ -370,6 +386,7 @@ export function defineGcpStack(
       databaseUrlAccess,
       databaseUrlVersion,
       objectAccess,
+      ...workosApiKeyAccess,
     ],
     protect: input.deletionProtection,
   });
@@ -427,6 +444,7 @@ export function defineGcpStack(
       databaseUrlAccess,
       databaseUrlVersion,
       objectAccess,
+      ...workosApiKeyAccess,
       runtime,
     ],
     protect: input.deletionProtection,
@@ -619,10 +637,19 @@ function defineGcpPublicEdge(input: {
     defaultService: backend.id,
     project: input.projectId,
   });
+  // The default Google policy still negotiates TLS 1.0 and 1.1. MODERN with a
+  // TLS 1.2 floor matches the ALB policy the AWS package pins.
+  const sslPolicy = new gcp.compute.SSLPolicy(`${input.name}-application`, {
+    description: "Artifact Server public edge: TLS 1.2 or newer",
+    minTlsVersion: "TLS_1_2",
+    profile: "MODERN",
+    project: input.projectId,
+  }, {dependsOn: [...input.services]});
   const proxy = new gcp.compute.TargetHttpsProxy(`${input.name}-application`, {
     certificateMap: pulumi.interpolate`//certificatemanager.googleapis.com/${certificateMap.id}`,
     project: input.projectId,
     quicOverride: "ENABLE",
+    sslPolicy: sslPolicy.id,
     urlMap: urlMap.id,
   }, {dependsOn: [applicationEntry, contentEntry]});
   const address = new gcp.compute.GlobalAddress(`${input.name}-application`, {

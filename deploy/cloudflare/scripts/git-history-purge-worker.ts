@@ -10,6 +10,7 @@ import {
   ArtifactsBindingGitHistoryProvider,
   type ArtifactsBinding,
 } from "../src/artifacts-binding-git-history-provider.js";
+import {authorizedOperatorRequest} from "../src/operator-authorization.js";
 import {
   applyGitHistoryPurge,
   planGitHistoryPurge,
@@ -21,7 +22,8 @@ interface PurgeEnvironment {
   readonly ARTIFACT_SERVER_D1_DATABASE: D1Database;
   readonly ARTIFACT_SERVER_INSTALLATION_ID: string;
   readonly ARTIFACT_SERVER_NAMESPACE: string;
-  readonly PURGE_KEY: string;
+  /** A `.dev.vars` secret; absent or short refuses every request. */
+  readonly PURGE_KEY?: string;
 }
 
 const purgeRequestSchema = z.object({
@@ -34,7 +36,7 @@ export default {
   async fetch(request: Request, environment: PurgeEnvironment): Promise<Response> {
     if (
       request.method !== "POST" ||
-      request.headers.get("Authorization") !== `Bearer ${environment.PURGE_KEY}`
+      !authorizedOperatorRequest(request, environment.PURGE_KEY)
     ) {
       return new Response(null, {status: 404});
     }

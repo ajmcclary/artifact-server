@@ -20,6 +20,7 @@ import {DatabaseSync} from "node:sqlite";
 import {z} from "zod";
 import {unstable_dev, type Unstable_DevWorker} from "wrangler";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import {maximumDispatchBundleSize} from "../../../src/core/publishing-limits.js";
 import {requiredD1SchemaVersion} from "../src/d1-migrations.js";
 
 /**
@@ -388,6 +389,65 @@ describe("Cloudflare D1 agent dispatch", () => {
     expect((await getDispatch(worker, dispatchId, projectId)).state)
       .toBe("addressed");
   }, 180_000);
+
+  it("sends a full-size bundle and bulk-clears it through D1's 100-parameter statement cap", async () => {
+    // DSP/PRS-005 on D1: a bundle of maximumDispatchBundleSize threads once
+    // bound 2 + N parameters in the send check and one statement per thread
+    // in the send and clear batches. Both now pass the ids as one JSON value.
+    const agent = await registerAgent(worker, {
+      connectionKey: "connection-key-full-bundle",
+      displayName: "full bundle",
+      workingDirectory: "/work/full-bundle",
+    });
+    const published = await publishArtifact(worker, "dispatch-full-bundle-pub-1");
+    const projectId = published.artifact.projectId;
+    const threadIds: string[] = [];
+    for (let offset = 0; offset < maximumDispatchBundleSize; offset += 10) {
+      // Ten concurrent creations at a time keep the local Worker responsive.
+      // eslint-disable-next-line no-await-in-loop
+      threadIds.push(...await Promise.all(
+        Array.from({length: 10}, (_, index) => createThread(
+          worker,
+          published,
+          `Full bundle annotation ${offset + index}.`,
+        )),
+      ));
+    }
+
+    const sent = await sendDispatch(worker, {
+      agentId: agent.id,
+      idempotencyKey: "dispatch-full-bundle",
+      projectId,
+      threadIds,
+    });
+    expect(sent.status).toBe(201);
+    const dispatch = (await readBody(sent, dispatchCreationSchema)).dispatch;
+    expect(dispatch.threadIds).toEqual(threadIds);
+    expect(await listThreadIds(worker, published)).toEqual([]);
+
+    // A held bundle survives a bulk clear and is reported as skipped.
+    expect(await clearThreads(worker, published, "all"))
+      .toEqual({deleted: 0, skippedDispatched: maximumDispatchBundleSize});
+
+    const canceled = await cancelDispatch(worker, dispatch.id, projectId);
+    expect(canceled.status).toBe(200);
+    expect(await clearThreads(worker, published, "all"))
+      .toEqual({deleted: maximumDispatchBundleSize, skippedDispatched: 0});
+    expect(await listThreadIds(worker, published, "include")).toEqual([]);
+
+    const d1File = await findD1DatabaseFile(persistPath);
+    const database = new DatabaseSync(d1File, {readOnly: true});
+    try {
+      const recorded = z.object({count: z.number().int()}).parse(database.prepare(`
+        SELECT COUNT(*) AS count FROM actions
+        WHERE action = 'comment_delete' AND artifact_id = ?
+          AND idempotency_key = 'comment:' || thread_id || ':' || id
+      `).get(published.artifact.id));
+      expect(recorded.count).toBe(maximumDispatchBundleSize);
+    } finally {
+      database.close();
+    }
+  }, 60_000);
 
   it("holds one claim poll open for its full wait on the Worker runtime and answers it early when a bundle arrives", async () => {
     // Spec section 13 open item: "that a 25 s held request is acceptable on the
