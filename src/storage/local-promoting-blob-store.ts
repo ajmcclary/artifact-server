@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {createHash, randomUUID} from "node:crypto";
 import {link, mkdir, open, rm, stat} from "node:fs/promises";
 import path from "node:path";
 
@@ -110,26 +110,36 @@ export class LocalPromotingBlobStore implements BlobStore {
       const finalPath = this.#blobs.blobPath(digest);
       const directory = path.dirname(finalPath);
       await mkdir(directory, {recursive: true, mode: 0o700});
+      // Link first under a private name in the blob directory. The final name
+      // is only ever created from an inode proven to be the sealed one, so a
+      // concurrent reader or a concurrent promotion never observes unverified
+      // bytes there and this attempt never has to remove a final blob.
+      const temporaryPath = path.join(
+        directory,
+        `.${digest}.${randomUUID()}.promote`,
+      );
       try {
-        await link(stagedPath, finalPath);
-      } catch (error) {
-        const parsed = systemErrorSchema.safeParse(error);
-        if (!parsed.success || parsed.data.code !== "EEXIST") throw error;
-        await verifyExistingBlob(finalPath, digest, source.size);
-        return "reused";
+        await link(stagedPath, temporaryPath);
+        const linked = await stat(temporaryPath);
+        const sealed = await handle.stat();
+        if (linked.dev !== sealed.dev || linked.ino !== sealed.ino) {
+          // The staged slot was renamed over between the seal and the link,
+          // so the linked bytes were never verified. Re-seal from the slot.
+          return "swapped";
+        }
+        try {
+          await link(temporaryPath, finalPath);
+        } catch (error) {
+          const parsed = systemErrorSchema.safeParse(error);
+          if (!parsed.success || parsed.data.code !== "EEXIST") throw error;
+          await verifyExistingBlob(finalPath, digest, source.size);
+          return "reused";
+        }
+        await syncDirectory(directory);
+        return "installed";
+      } finally {
+        await rm(temporaryPath, {force: true});
       }
-
-      const linked = await stat(finalPath);
-      const sealed = await handle.stat();
-      if (linked.dev !== sealed.dev || linked.ino !== sealed.ino) {
-        // The staged slot was renamed over between the seal and the link, so
-        // the linked bytes were never verified. Remove only this attempt's
-        // link and re-seal from the current slot.
-        await rm(finalPath);
-        return "swapped";
-      }
-      await syncDirectory(directory);
-      return "installed";
     } finally {
       await handle.close();
     }

@@ -187,6 +187,25 @@ export function defineNativeObjectStorageContract(
         .rejects.toBeDefined();
     });
 
+    test("a reused object whose recorded fingerprint matches but whose size does not is refused", async () => {
+      const installationId = "installation-reuse-size-corruption";
+      const storage = contract.create(installationId);
+      const bytes = new TextEncoder().encode("full-length immutable bytes for reuse");
+      const fingerprint = digest(bytes);
+      await contract.corrupt({
+        bytes: bytes.subarray(0, 8),
+        installationId,
+        kind: "blob",
+        objectDigest: fingerprint,
+        recordedDigest: fingerprint,
+      });
+      await expect(storage.blobs.put({
+        body: chunkedBody(bytes, 7),
+        sha256: fingerprint,
+        size: bytes.byteLength,
+      })).rejects.toThrow(/recorded 8 bytes/u);
+    });
+
     test("missing, wrong-kind, and wrong-digest metadata fail closed", async () => {
       const installationId = "installation-metadata-corruption";
       const storage = contract.create(installationId);

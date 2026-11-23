@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 
-import {Clock, Duration, Effect, Fiber, Schedule} from "effect";
+import {Cause, Clock, Duration, Effect, Fiber, Random, Schedule} from "effect";
 
 import type {BlobStore} from "../core/ports.js";
 import {type ArtifactVersion, isAcceptedVersionState} from "../core/model.js";
@@ -207,6 +207,23 @@ const utf8 = new TextEncoder();
 const jobLease = Duration.seconds(45);
 const renewalInterval = Duration.seconds(15);
 const retrySchedule = Schedule.exponential("1 second", 2).pipe(Schedule.jittered);
+const loopFailureBaseMilliseconds = 1_000;
+const loopFailureCeilingMilliseconds = 30_000;
+
+/**
+ * Run one store or provider promise. A lost lease keeps its identity so the
+ * pass can recognize it; any other rejection is wrapped as an unknown error.
+ */
+function attempt<A>(
+  evaluate: () => PromiseLike<A>,
+): Effect.Effect<A, GitHistoryLeaseLost | Cause.UnknownError> {
+  return Effect.tryPromise({
+    catch: (cause) => cause instanceof GitHistoryLeaseLost
+      ? cause
+      : new Cause.UnknownError(cause),
+    try: evaluate,
+  });
+}
 
 /** Create the provider-neutral, one-job-at-a-time mirror worker. */
 export function makeGitHistoryMirrorWorker(
@@ -218,7 +235,7 @@ export function makeGitHistoryMirrorWorker(
     }
     const now = yield* Clock.currentTimeMillis;
     const claimedAt = new Date(now).toISOString();
-    const job = yield* Effect.tryPromise(() =>
+    const job = yield* attempt(() =>
       dependencies.store.claimGitHistoryJob(
         claimedAt,
         new Date(now + Duration.toMillis(jobLease)).toISOString(),
@@ -244,7 +261,7 @@ export function makeGitHistoryMirrorWorker(
     }
     const failedAt = yield* Clock.currentTimeMillis;
     const delay = yield* retryDelay(job.attempts, failedAt);
-    yield* Effect.tryPromise(() => dependencies.store.releaseGitHistoryJob(
+    yield* attempt(() => dependencies.store.releaseGitHistoryJob(
       job,
       classifyMirrorFailure(result.cause),
       new Date(failedAt + Math.max(delay, 1_000)).toISOString(),
@@ -261,7 +278,7 @@ const renewClaim = Effect.fn("GitHistoryMirrorWorker.renewClaim")(function*(
   for (;;) {
     yield* Effect.sleep(renewalInterval);
     const now = yield* Clock.currentTimeMillis;
-    const renewed = yield* Effect.tryPromise(() => store.renewGitHistoryJob(
+    const renewed = yield* attempt(() => store.renewGitHistoryJob(
       job,
       new Date(now).toISOString(),
       new Date(now + Duration.toMillis(jobLease)).toISOString(),
@@ -277,24 +294,49 @@ export async function startGitHistoryMirrorWorker(
   const worker = makeGitHistoryMirrorWorker(dependencies);
   const loop = (
     idlePasses: number,
+    consecutiveFailures: number,
   ): Effect.Effect<never, unknown> =>
     worker.runPass().pipe(
-      Effect.flatMap((pass) => {
-        const nextIdlePasses = pass.outcome === "idle"
-          ? Math.min(idlePasses + 1, 4)
-          : 0;
-        const pause = pass.outcome === "idle"
-          ? Effect.sleep(Duration.millis(Math.min(
-            30_000,
-            2_000 * (2 ** idlePasses),
-          )))
-          : Effect.yieldNow;
-        return pause.pipe(
-          Effect.andThen(Effect.suspend(() => loop(nextIdlePasses))),
-        );
+      Effect.matchCauseEffect({
+        // A transient claim or release failure must not end the drain: log
+        // it, back off with jitter up to the ceiling, and keep polling.
+        // Interruption is the only way to stop the worker.
+        onFailure: (cause) => Cause.hasInterruptsOnly(cause)
+          ? Effect.failCause(cause)
+          : Effect.gen(function*() {
+            yield* Effect.logWarning("Git history mirror pass failed.").pipe(
+              Effect.annotateLogs({
+                git_history_consecutive_failures: consecutiveFailures + 1,
+                git_history_failure: Cause.pretty(cause),
+              }),
+            );
+            const ceiling = Math.min(
+              loopFailureCeilingMilliseconds,
+              loopFailureBaseMilliseconds * (2 ** Math.min(consecutiveFailures, 5)),
+            );
+            const jitter = yield* Random.next;
+            yield* Effect.sleep(Duration.millis(Math.round(
+              ceiling / 2 + (ceiling / 2) * jitter,
+            )));
+            return yield* loop(idlePasses, consecutiveFailures + 1);
+          }),
+        onSuccess: (pass) => {
+          const nextIdlePasses = pass.outcome === "idle"
+            ? Math.min(idlePasses + 1, 4)
+            : 0;
+          const pause = pass.outcome === "idle"
+            ? Effect.sleep(Duration.millis(Math.min(
+              30_000,
+              2_000 * (2 ** idlePasses),
+            )))
+            : Effect.yieldNow;
+          return pause.pipe(
+            Effect.andThen(Effect.suspend(() => loop(nextIdlePasses, 0))),
+          );
+        },
       }),
     );
-  const fiber = Effect.runFork(loop(0));
+  const fiber = Effect.runFork(loop(0, 0));
   return {
     close: async () => {
       await Effect.runPromise(Fiber.interrupt(fiber));
@@ -307,16 +349,16 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   job: GitHistoryJob,
 ) {
   if (job.kind === gitHistoryJobKinds.deleteRepository) {
-    const coordinates = yield* Effect.tryPromise(() =>
+    const coordinates = yield* attempt(() =>
       dependencies.store.findGitHistoryRepository(job.projectId, job.artifactId)
     );
     if (coordinates !== null && coordinates.status !== "deleted") {
-      yield* Effect.tryPromise(() =>
+      yield* attempt(() =>
         dependencies.provider.deleteRepository(coordinates)
       );
     }
     const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    yield* Effect.tryPromise(() =>
+    yield* attempt(() =>
       dependencies.store.completeGitHistoryDeletion(job, completedAt)
     );
     return "deleted" as const;
@@ -326,7 +368,7 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   }
   const versionId = job.versionId;
   const limits = job.limits;
-  const existing = yield* Effect.tryPromise(() =>
+  const existing = yield* attempt(() =>
     dependencies.store.findGitHistoryMapping(
       job.projectId,
       job.artifactId,
@@ -335,12 +377,12 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   );
   if (existing !== null) {
     const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    const completion = yield* Effect.tryPromise(() =>
+    const completion = yield* attempt(() =>
       dependencies.store.completeGitHistoryMirror(job, existing, completedAt)
     );
     return completion === "artifact-deleted" ? "deleted" as const : "mirrored" as const;
   }
-  const version = yield* Effect.tryPromise(() =>
+  const version = yield* attempt(() =>
     dependencies.store.findVersionRecord(
       job.projectId,
       job.artifactId,
@@ -358,7 +400,7 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   // accepted predecessor; rejected candidates leave gaps that are skipped.
   const predecessor = version.version.number === 1
     ? null
-    : yield* Effect.tryPromise(() => dependencies.store.findGitHistoryPredecessorMapping(
+    : yield* attempt(() => dependencies.store.findGitHistoryPredecessorMapping(
       job.projectId,
       job.artifactId,
       version.version.number,
@@ -368,7 +410,7 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   }
   const plan = yield* buildCommitPlan(dependencies.blobs, version, limits);
   const reservedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-  const reservation = yield* Effect.tryPromise(() =>
+  const reservation = yield* attempt(() =>
     dependencies.store.reserveGitHistoryBudget(
       job,
       plan.copiedBytes,
@@ -378,22 +420,22 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
   );
   if (reservation._tag === "BudgetLimited") {
     const budgetLimitedAt = yield* Clock.currentTimeMillis;
-    yield* Effect.tryPromise(() => dependencies.store.releaseGitHistoryJob(
+    yield* attempt(() => dependencies.store.releaseGitHistoryJob(
       job,
       "budget_limited",
       new Date(budgetLimitedAt + 60_000).toISOString(),
     ));
     return "budget-limited" as const;
   }
-  let coordinates = yield* Effect.tryPromise(() =>
+  let coordinates = yield* attempt(() =>
     dependencies.store.findGitHistoryRepository(job.projectId, job.artifactId)
   );
   if (coordinates === null) {
-    const created = yield* Effect.tryPromise(() =>
+    const created = yield* attempt(() =>
       dependencies.provider.createRepository(job.projectId, job.artifactId)
     );
     const recordedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    coordinates = yield* Effect.tryPromise(() =>
+    coordinates = yield* attempt(() =>
       dependencies.store.recordGitHistoryRepository(job, created, recordedAt)
     );
   }
@@ -405,11 +447,11 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     return yield* Effect.fail(new Error("predecessor-repository-mismatch"));
   }
   if (repositoryCoordinates.status !== "provisioned") {
-    yield* Effect.tryPromise(() => dependencies.provider.deleteRepository(
+    yield* attempt(() => dependencies.provider.deleteRepository(
       repositoryCoordinates,
     ));
     const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryDeletion(
+    yield* attempt(() => dependencies.store.completeGitHistoryDeletion(
       job,
       completedAt,
     ));
@@ -444,14 +486,14 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     files: plan.files,
     pointers: plan.pointers,
   };
-  const adopted = yield* Effect.tryPromise(() =>
+  const adopted = yield* attempt(() =>
     dependencies.provider.lookupCommit(request)
   );
-  const commit = adopted ?? (yield* Effect.tryPromise(() =>
+  const commit = adopted ?? (yield* attempt(() =>
     dependencies.provider.commitVersion(request)
   ));
   const completedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-  const completion = yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryMirror(
+  const completion = yield* attempt(() => dependencies.store.completeGitHistoryMirror(
     job,
     {
       artifactId: job.artifactId,
@@ -464,11 +506,11 @@ const processJob = Effect.fn("GitHistoryMirrorWorker.processJob")(function*(
     completedAt,
   ));
   if (completion === "artifact-deleted") {
-    yield* Effect.tryPromise(() => dependencies.provider.deleteRepository(
+    yield* attempt(() => dependencies.provider.deleteRepository(
       repositoryCoordinates,
     ));
     const deletedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    yield* Effect.tryPromise(() => dependencies.store.completeGitHistoryDeletion(
+    yield* attempt(() => dependencies.store.completeGitHistoryDeletion(
       job,
       deletedAt,
     ));
@@ -517,8 +559,8 @@ const buildCommitPlan = Effect.fn("GitHistoryMirrorWorker.buildCommitPlan")(
         });
         continue;
       }
-      const opened = yield* Effect.tryPromise(() => blobs.open(entry.sha256));
-      const bytes = yield* Effect.tryPromise(() => readExactBytes(
+      const opened = yield* attempt(() => blobs.open(entry.sha256));
+      const bytes = yield* attempt(() => readExactBytes(
         opened.body,
         entry.size,
       ));
@@ -572,23 +614,26 @@ async function readExactBytes(
   const reader = stream.getReader();
   const result = new Uint8Array(expectedSize);
   let offset = 0;
-  const readNext = async (): Promise<void> => {
-    const next = await reader.read();
-    if (next.done) return;
-    if (offset + next.value.byteLength > result.byteLength) {
-      throw new Error("A primary blob exceeded its manifest size.");
-    }
-    result.set(next.value, offset);
-    offset += next.value.byteLength;
-    await readNext();
-  };
   try {
-    await readNext();
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop -- a stream is read in order
+      const next = await reader.read();
+      if (next.done) break;
+      if (offset + next.value.byteLength > result.byteLength) {
+        throw new Error("A primary blob exceeded its manifest size.");
+      }
+      result.set(next.value, offset);
+      offset += next.value.byteLength;
+    }
+    if (offset !== expectedSize) {
+      throw new Error("A primary blob did not match its manifest size.");
+    }
+  } catch (cause) {
+    // Stop the source instead of leaving an open blob read behind.
+    await reader.cancel(cause).catch(() => undefined);
+    throw cause;
   } finally {
     reader.releaseLock();
-  }
-  if (offset !== expectedSize) {
-    throw new Error("A primary blob did not match its manifest size.");
   }
   return result;
 }

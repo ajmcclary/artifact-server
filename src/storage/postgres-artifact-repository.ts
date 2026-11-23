@@ -1323,7 +1323,7 @@ export class PostgresArtifactRepository implements
             FROM git_history_repositories
             WHERE installation_id = $3 AND project_id = $4 AND artifact_id = $5
               AND status <> 'deleted'
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT (installation_id, id) DO NOTHING
           `, [
             gitHistoryJobId(gitHistoryJobKinds.deleteRepository, mapping.artifactId, null),
             completedAt,
@@ -3691,7 +3691,8 @@ export class PostgresArtifactRepository implements
           `SELECT dispatch.state AS "state"
            FROM comment_threads thread
            LEFT JOIN agent_dispatches dispatch
-             ON dispatch.id = thread.dispatch_id
+             ON dispatch.installation_id = thread.installation_id
+               AND dispatch.id = thread.dispatch_id
            WHERE thread.installation_id = $1 AND thread.id = $2
              AND thread.project_id = $3 AND thread.artifact_id = $4`,
           [
@@ -3752,7 +3753,8 @@ export class PostgresArtifactRepository implements
              dispatch.state AS "dispatchState"
            FROM comment_threads thread
            LEFT JOIN agent_dispatches dispatch
-             ON dispatch.id = thread.dispatch_id
+             ON dispatch.installation_id = thread.installation_id
+               AND dispatch.id = thread.dispatch_id
            WHERE thread.installation_id = $1 AND thread.project_id = $2
              AND thread.artifact_id = $3
              AND ($4::text IS NULL OR thread.version_id = $4)
@@ -4261,8 +4263,14 @@ export class PostgresArtifactRepository implements
         // Every thread must be open and unclaimed by another dispatch inside
         // the same transaction that stamps the markers, so two concurrent
         // sends can never double-book a thread and a rejected bundle leaves
-        // no partial markers behind.
-        for (const threadId of command.threadIds) {
+        // no partial markers behind. Rows are locked in sorted id order so
+        // two overlapping bundles sent in different orders cannot deadlock;
+        // validation still reports in the caller's order.
+        const lockedThreads = new Map<
+          string,
+          z.infer<typeof dispatchThreadCheckRowSchema> | null
+        >();
+        for (const threadId of [...new Set(command.threadIds)].toSorted()) {
           const checked = yield* sql`SELECT
               thread.id AS "id",
               thread.state AS "state",
@@ -4272,9 +4280,13 @@ export class PostgresArtifactRepository implements
               AND thread.project_id = ${command.projectId}
               AND thread.id = ${threadId}
             FOR UPDATE`;
-          const row = dispatchThreadCheckRowSchema.nullable().parse(
-            checked[0] ?? null,
+          lockedThreads.set(
+            threadId,
+            dispatchThreadCheckRowSchema.nullable().parse(checked[0] ?? null),
           );
+        }
+        for (const threadId of command.threadIds) {
+          const row = lockedThreads.get(threadId) ?? null;
           if (row === null) {
             return yield* new InvalidDispatch({
               message:
@@ -5167,7 +5179,7 @@ export class PostgresArtifactRepository implements
         )
         SELECT $1, $2, path, size, media_type, sha256, disposition
         FROM prepared_manifest_entries
-        WHERE upload_id = $3`,
+        WHERE installation_id = $1 AND upload_id = $3`,
         [installationId, versionId, uploadId],
       );
       const insertedRows = yield* sql.unsafe(
@@ -5182,8 +5194,9 @@ export class PostgresArtifactRepository implements
         });
       }
       yield* sql.unsafe(
-        `DELETE FROM prepared_manifest_entries WHERE upload_id = $1`,
-        [uploadId],
+        `DELETE FROM prepared_manifest_entries
+        WHERE installation_id = $1 AND upload_id = $2`,
+        [installationId, uploadId],
       );
     });
   }
@@ -5932,6 +5945,9 @@ export class PostgresArtifactRepository implements
           )
         RETURNING dispatch.id`;
       if (failed.length === 1) {
+        // The same permanent failure as #failDispatch: revision pollers must
+        // see the released threads return to the artifact surfaces.
+        yield* this.#bumpCommentRevisionForDispatch(row.id, now);
         yield* this.#clearDispatchMarkers(row.id, now);
         return;
       }

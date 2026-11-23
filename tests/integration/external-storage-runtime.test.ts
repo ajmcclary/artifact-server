@@ -640,6 +640,108 @@ describe.sequential("external-storage Postgres and S3 runtime", () => {
     }
   });
 
+  test("GIT-008 Postgres regression: deleting an artifact during its first mirror completes the job and cleans the repository", async () => {
+    const identity = {
+      apiToken: managedTestKey("postgres-mid-mirror-delete"),
+      installationId: "postgres-mid-mirror-delete",
+    };
+    const server = await startInProcessExternalStorageServer(environment, identity);
+    const database = await PostgresDatabase.inspect({
+      applicationName: "artifact-server-git-mid-mirror-delete-test",
+      maxConnections: 2,
+      url: Redacted.make(environment.databaseUrl),
+    });
+    try {
+      const published = await publishNew(server.baseUrl, identity.apiToken, {
+        content: "Deleted while mirroring",
+        idempotencyKey: "postgres-mid-mirror-delete-publish",
+        name: "Mid-mirror deletion",
+      });
+      expect(published.response.status).toBe(201);
+      const artifactId = published.body.artifact.id;
+      const store = await PostgresArtifactRepository.open(
+        database,
+        identity.installationId,
+      );
+      const enabledAt = new Date().toISOString();
+      await store.storeProjectGitHistorySetting({
+        enabled: true,
+        limits: {
+          fileCopyBytes: 10 * 1024 * 1024,
+          logicalCopiedBytes: 0,
+          logicalReservedBytes: 0,
+          storageBudgetBytes: null,
+          versionCopyBytes: 50 * 1024 * 1024,
+        },
+        projectId: defaultProjectId,
+        updatedAt: enabledAt,
+        updatedByPrincipalId: "test-mid-mirror-operator",
+      });
+      const claimedAt = new Date(Date.parse(enabledAt) + 1_000).toISOString();
+      const mirrorJob = await store.claimGitHistoryJob(
+        claimedAt,
+        new Date(Date.parse(claimedAt) + 45_000).toISOString(),
+      );
+      expect(mirrorJob).toMatchObject({kind: "mirror-version", versionId: published.body.version.id});
+      if (mirrorJob === null) throw new Error("The Postgres mirror job was not claimed.");
+
+      // The artifact is deleted before the first mirror has recorded its repository.
+      const deleted = await mutateArtifact(
+        server.baseUrl,
+        identity.apiToken,
+        `/api/v1/artifacts/${artifactId}`,
+        "DELETE",
+        "postgres-mid-mirror-delete-delete",
+        {expectedCurrentVersionId: published.body.version.id},
+      );
+      expect(deleted.status).toBe(200);
+
+      const recordedAt = new Date(Date.parse(claimedAt) + 1_000).toISOString();
+      const coordinates = {
+        artifactId,
+        defaultBranch: "main" as const,
+        projectId: defaultProjectId,
+        provider: "cloudflare-artifacts" as const,
+        remoteUrl: `https://git.example.test/${artifactId}`,
+        repositoryName: artifactId,
+        status: "provisioned" as const,
+      };
+      expect(await store.recordGitHistoryRepository(mirrorJob, coordinates, recordedAt))
+        .toMatchObject({status: "deleting"});
+      expect(await store.completeGitHistoryMirror(mirrorJob, {
+        artifactId,
+        commitId: "mid-mirror-commit",
+        copiedBytes: 0,
+        projectId: defaultProjectId,
+        repositoryName: artifactId,
+        versionId: published.body.version.id,
+      }, recordedAt)).toBe("artifact-deleted");
+      expect(await store.findGitHistoryMapping(
+        defaultProjectId,
+        artifactId,
+        published.body.version.id,
+      )).toBeNull();
+
+      const deletionAt = new Date(Date.parse(recordedAt) + 1_000).toISOString();
+      const deletionJob = await store.claimGitHistoryJob(
+        deletionAt,
+        new Date(Date.parse(deletionAt) + 45_000).toISOString(),
+      );
+      expect(deletionJob).toMatchObject({artifactId, kind: "delete-repository"});
+      if (deletionJob === null) throw new Error("The Postgres deletion job was not queued.");
+      await store.completeGitHistoryDeletion(deletionJob, deletionAt);
+      expect(await store.findGitHistoryRepository(defaultProjectId, artifactId))
+        .toMatchObject({status: "deleted"});
+      expect(await store.claimGitHistoryJob(
+        deletionAt,
+        new Date(Date.parse(deletionAt) + 45_000).toISOString(),
+      )).toBeNull();
+    } finally {
+      await database.close();
+      await server.stop();
+    }
+  });
+
   test("a populated Postgres v1 installation migrates without changing identity or bytes", async () => {
     const databaseName = `artifactserver_project_migration_${randomUUID().replaceAll("-", "")}`;
     await createPostgresDatabase(environment, databaseName);

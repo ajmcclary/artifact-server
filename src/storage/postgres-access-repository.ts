@@ -71,11 +71,13 @@ const listGrants = (where: string, values: readonly string[]) =>
     return rows.map((row) => grantFromRow(grantRowSchema.parse(row)));
   });
 
-const findShareLink = (installationId: string, linkId: string) =>
+const findShareLink = (installationId: string, linkId: string, lock = false) =>
   Effect.gen(function*() {
     const sql = yield* SqlClient;
     const rows = yield* sql.unsafe<object>(
-      `SELECT ${shareLinkSelectColumns} FROM share_links l WHERE l.installation_id = $1 AND l.id = $2`,
+      `SELECT ${shareLinkSelectColumns} FROM share_links l WHERE l.installation_id = $1 AND l.id = $2${
+        lock ? " FOR UPDATE OF l" : ""
+      }`,
       [installationId, linkId],
     );
     return rows[0] === undefined ? null : shareLinkFromRow(shareLinkRowSchema.parse(rows[0]));
@@ -100,11 +102,13 @@ const revokeLink = (
 ) =>
   Effect.gen(function*() {
     const sql = yield* SqlClient;
-    yield* sql.unsafe(
+    const revoked = yield* sql.unsafe<object>(
       `UPDATE share_links SET revoked_at = $1, revoked_by_principal_id = $2, revision = revision + 1
-       WHERE installation_id = $3 AND id = $4 AND revoked_at IS NULL`,
+       WHERE installation_id = $3 AND id = $4 AND revoked_at IS NULL RETURNING id`,
       [at, attribution.principalId ?? "system", installationId, link.id],
     );
+    // A concurrent revoke already recorded the one revoke action for this revision.
+    if (revoked.length === 0) return;
     yield* insertPostgresAction(installationId, shareLinkAction(
       "share_link_revoke",
       {...link, revision: link.revision + 1},
@@ -404,7 +408,9 @@ export class PostgresAccessRepository implements AccessRepository, ShareLinkRepo
     return this.#database.run(Effect.gen(function*() {
       const sql = yield* SqlClient;
       return yield* sql.withTransaction(Effect.gen(function*() {
-        const existing = yield* findShareLink(command.installationId, command.linkId);
+        // The row lock serializes concurrent revokes: the loser reads the
+        // committed revocation and replays it instead of racing the action insert.
+        const existing = yield* findShareLink(command.installationId, command.linkId, true);
         if (existing === null) return "missing" as const;
         if (existing.revokedAt !== null) return existing;
         yield* revokeLink(command.installationId, existing, command.versionId, command.attribution, at);

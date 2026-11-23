@@ -1,5 +1,5 @@
 import {createHash, randomUUID} from "node:crypto";
-import {mkdtemp, readdir, rm, stat, writeFile} from "node:fs/promises";
+import {mkdtemp, readFile, readdir, rename, rm, stat, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 
@@ -213,6 +213,59 @@ describe("local sealed promotion store", () => {
       .resolves.toBe("promote me without copying");
     expect(await countFiles(path.join(directory, "blobs"))).toBe(1);
   });
+
+  test("PUB-018 regression: a slot renamed over during promotion never exposes unverified bytes or leaves a temporary link", async () => {
+    // Large enough that sealing takes long enough for the swap loop to land
+    // between the seal and the link on some attempts.
+    const bytes = new Uint8Array(8 * 1024 * 1024).fill(0x61);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const source = await stage(bytes, digest);
+    const slotPath = staging.stagedFilePath(source.uploadId, source.storageToken);
+    const blobPath = path.join(directory, "blobs", digest.slice(0, 2), digest);
+    const forged = mutatedCopy(bytes);
+    const goodCopy = `${slotPath}.good`;
+    const badCopy = `${slotPath}.bad`;
+    const race = {observedForgedBlob: false, swapping: true};
+    const swapLoop = (async () => {
+      for (let round = 0; race.swapping; round += 1) {
+        const replacement = round % 2 === 0 ? badCopy : goodCopy;
+        // eslint-disable-next-line no-await-in-loop -- one swap at a time
+        await writeFile(replacement, round % 2 === 0 ? forged : bytes);
+        // eslint-disable-next-line no-await-in-loop -- one swap at a time
+        await rename(replacement, slotPath);
+      }
+      // Leave the verified bytes in the slot for the final promotion.
+      await writeFile(goodCopy, bytes);
+      await rename(goodCopy, slotPath);
+    })();
+    const readLoop = (async () => {
+      while (race.swapping) {
+        // eslint-disable-next-line no-await-in-loop -- one observation at a time
+        const observed = await readFile(blobPath).catch(() => null);
+        if (observed !== null &&
+          createHash("sha256").update(observed).digest("hex") !== digest) {
+          race.observedForgedBlob = true;
+        }
+      }
+    })();
+    const outcomes = [];
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      // eslint-disable-next-line no-await-in-loop -- promotions race the swaps, not each other
+      outcomes.push(await blobs.promote(source).then(() => "promoted", () => "refused"));
+      // eslint-disable-next-line no-await-in-loop -- reset so the next attempt installs again
+      await rm(blobPath, {force: true});
+    }
+    race.swapping = false;
+    await Promise.all([swapLoop, readLoop]);
+    expect(race.observedForgedBlob).toBe(false);
+    expect(outcomes.length).toBe(12);
+
+    expect(await blobs.promote(source)).toEqual({sha256: digest, size: bytes.byteLength});
+    const stored = await readFile(blobPath);
+    expect(createHash("sha256").update(stored).digest("hex")).toBe(digest);
+    const blobEntries = await readdir(path.dirname(blobPath));
+    expect(blobEntries).toEqual([digest]);
+  }, 60_000);
 
   test("rejects a size- or digest-mismatched or missing source without installing a blob", async () => {
     const bytes = new TextEncoder().encode("sealed bytes that will be replaced");

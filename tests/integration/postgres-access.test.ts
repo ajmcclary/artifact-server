@@ -12,6 +12,8 @@ import {requiredPostgresSchemaVersion} from "../../src/storage/postgres-migratio
 import {
   accessRepositoryCases,
   caseManager,
+  caseShareLink,
+  seedPublishedArtifact,
   shareLinkRepositoryCases,
   type AccessFixture,
 } from "../support/access-repository-cases.js";
@@ -103,6 +105,67 @@ describe("Postgres access repository", () => {
       artifacts,
       store: new PostgresAccessRepository(database, clock),
     })).resolves.toBeUndefined();
+  });
+
+  test("PRM-007 regression: revokes queued behind one row lock both answer the single revocation", async () => {
+    await fixture.seedProject("prj_access");
+    await seedPublishedArtifact(artifacts, "prj_access", "art_shared", "ver_shared");
+    const store = new PostgresAccessRepository(database, clock);
+    await store.createShareLink({
+      attribution: caseManager,
+      installationId,
+      link: caseShareLink(),
+      versionId: "ver_shared",
+    });
+    // A second replica's pool, so the two revokes hold separate connections.
+    const replica = await PostgresDatabase.inspect({url: Redacted.make(scratchUrl.toString())});
+    const replicaStore = new PostgresAccessRepository(replica, clock);
+    const revoke = (through: PostgresAccessRepository) => through.revokeShareLink({
+      attribution: caseManager,
+      installationId,
+      linkId: caseShareLink().id,
+      versionId: "ver_shared",
+    });
+    const lockHolder = await PostgresDatabase.inspect({url: Redacted.make(scratchUrl.toString())});
+    const observer = await PostgresDatabase.inspect({url: Redacted.make(scratchUrl.toString())});
+    try {
+      const release = Promise.withResolvers<void>();
+      const locked = Promise.withResolvers<void>();
+      const holding = lockHolder.run(Effect.gen(function*() {
+        const sql = yield* SqlClient;
+        yield* sql.withTransaction(Effect.gen(function*() {
+          yield* sql.unsafe(
+            "SELECT id FROM share_links WHERE installation_id = $1 AND id = $2 FOR UPDATE",
+            [installationId, caseShareLink().id],
+          );
+          locked.resolve();
+          yield* Effect.promise(() => release.promise);
+        }));
+      }));
+      await locked.promise;
+      const revokes = Promise.all([revoke(store), revoke(replicaStore)]);
+      // Both revokes reach the database and wait behind the held row lock.
+      await expect.poll(() => observer.run(Effect.gen(function*() {
+        const sql = yield* SqlClient;
+        const rows = yield* sql.unsafe<{waiting: number}>(
+          `SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        return rows[0]?.waiting ?? 0;
+      })), {timeout: 10_000}).toBe(2);
+      release.resolve();
+      await holding;
+      const results = await revokes;
+      for (const result of results) {
+        expect(result).toMatchObject({revision: 2, revokedAt: expect.any(String)});
+      }
+      const actions = await fixture.actions();
+      expect(actions.filter((action) => action.action === "share_link_revoke")).toHaveLength(1);
+    } finally {
+      await lockHolder.close();
+      await observer.close();
+      await replica.close();
+    }
   });
 
   test("the database refuses a none-role artifact grant written directly", async () => {
