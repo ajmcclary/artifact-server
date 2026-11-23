@@ -329,7 +329,7 @@ artifactserver support manifest
 artifactserver maintenance cleanup-staging --once --limit 100
 ```
 
-`config check` and `integrity check` exit `2` when the installation is not ready or not healthy. `support manifest` is credential-free and safe to attach to a bug report. `migrate apply` takes an advisory lock, so it is safe to run from one process during a rolling deploy.
+`maintenance cleanup-staging --mode external-storage` reads only database, object-storage, and cleanup-policy settings. It needs no API token, origin, content domain, or identity-provider value, and it never opens a listener, so a scheduled cleanup job can run without auth secrets. `config check` and `integrity check` exit `2` when the installation is not ready or not healthy. `support manifest` is credential-free and safe to attach to a bug report. `migrate apply` takes an advisory lock, so it is safe to run from one process during a rolling deploy.
 
 ## Claude Design exports
 

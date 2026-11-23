@@ -21,6 +21,14 @@ const allViewerOriginRequestPolicyId = "216adef6-5c7f-47e4-b989-5492eafa07d3";
 // The AWS managed prefix list holding CloudFront origin-facing addresses.
 const cloudFrontOriginFacingPrefixListName =
   "com.amazonaws.global.cloudfront.origin-facing";
+// CloudFront adds this header to every origin request with a generated secret
+// value, and the load balancer forwards only requests that carry it. The
+// prefix list alone admits every CloudFront distribution, including another
+// account's distribution pointed at this load balancer.
+const originVerificationHeaderName = "X-Artifact-Server-Origin-Verify";
+// The only path the image writes at runtime: HOME and TMPDIR both point here.
+const scratchPath = "/tmp";
+const scratchVolumeName = "scratch";
 
 export interface AwsStackConfiguration {
   readonly input: AwsCloudDeploymentInput;
@@ -328,6 +336,35 @@ export async function defineAwsStack(
     role: taskExecutionRole.id,
   });
 
+  // The cleanup task reads only the database URL: it never authenticates a
+  // caller, so its execution role cannot fetch the API token or WorkOS key.
+  const cleanupExecutionRole = new aws.iam.Role(`${name}-cleanup-execution`, {
+    assumeRolePolicy: ecsAssumeRolePolicy,
+    name: `${physicalName}-cleanup-execution`,
+    tags,
+  });
+  const cleanupExecutionRoleAttachment = new aws.iam.RolePolicyAttachment(
+    `${name}-cleanup-execution`,
+    {
+    policyArn: pulumi.interpolate`arn:${partition.partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy`,
+    role: cleanupExecutionRole.name,
+    },
+  );
+  const cleanupExecutionSecretPolicy = new aws.iam.RolePolicy(
+    `${name}-cleanup-execution-secrets`,
+    {
+    policy: pulumi.jsonStringify({
+      Statement: [{
+        Action: ["secretsmanager:GetSecretValue"],
+        Effect: "Allow",
+        Resource: [databaseUrlSecret.arn],
+      }],
+      Version: "2012-10-17",
+    }),
+    role: cleanupExecutionRole.id,
+    },
+  );
+
   const taskRole = new aws.iam.Role(`${name}-task`, {
     assumeRolePolicy: ecsAssumeRolePolicy,
     name: `${physicalName}-task`,
@@ -374,6 +411,14 @@ export async function defineAwsStack(
   });
 
   const environment = runtimeEnvironment(input, installationId.result, artifactBucket.id);
+  const cleanupEnvironment = maintenanceEnvironment(
+    input,
+    installationId.result,
+    artifactBucket.id,
+  );
+  const cleanupSecrets = [
+    {name: "ARTIFACT_SERVER_DATABASE_URL", valueFrom: databaseUrlSecret.arn},
+  ];
   const secrets: Array<{
     readonly name: string;
     readonly valueFrom: pulumi.Input<string>;
@@ -398,10 +443,11 @@ export async function defineAwsStack(
         "node dist/cli/main.js migrate apply && exec node dist/cli/main.js start-external-storage --host 0.0.0.0 --port 8787",
       ],
       entryPoint: ["/bin/sh", "-c"],
+      dependsOn: [{condition: "SUCCESS", containerName: scratchPreparationContainerName}],
       environment,
       essential: true,
       image: input.imageReference,
-      linuxParameters: {initProcessEnabled: true},
+      linuxParameters: hardenedLinuxParameters,
       logConfiguration: {
         logDriver: "awslogs",
         options: {
@@ -410,6 +456,7 @@ export async function defineAwsStack(
           "awslogs-stream-prefix": "application",
         },
       },
+      mountPoints: [scratchMountPoint],
       name: "artifact-server",
       portMappings: [{
         appProtocol: "http",
@@ -418,9 +465,10 @@ export async function defineAwsStack(
         name: "http",
         protocol: "tcp",
       }],
+      readonlyRootFilesystem: true,
       secrets,
       stopTimeout: 15,
-    }]),
+    }, scratchPreparationContainer(input.imageReference, logGroup.name, input.region, "application")]),
     cpu: String(plan.cpuUnits),
     executionRoleArn: taskExecutionRole.arn,
     family: name,
@@ -433,6 +481,7 @@ export async function defineAwsStack(
     },
     taskRoleArn: taskRole.arn,
     tags,
+    volumes: [{name: scratchVolumeName}],
   });
   const cleanupTaskDefinition = new aws.ecs.TaskDefinition(`${name}-cleanup`, {
     containerDefinitions: pulumi.jsonStringify([{
@@ -445,10 +494,11 @@ export async function defineAwsStack(
         "--limit",
         "100",
       ],
-      environment,
+      dependsOn: [{condition: "SUCCESS", containerName: scratchPreparationContainerName}],
+      environment: cleanupEnvironment,
       essential: true,
       image: input.imageReference,
-      linuxParameters: {initProcessEnabled: true},
+      linuxParameters: hardenedLinuxParameters,
       logConfiguration: {
         logDriver: "awslogs",
         options: {
@@ -457,12 +507,14 @@ export async function defineAwsStack(
           "awslogs-stream-prefix": "cleanup",
         },
       },
+      mountPoints: [scratchMountPoint],
       name: "artifact-server-cleanup",
-      secrets,
+      readonlyRootFilesystem: true,
+      secrets: cleanupSecrets,
       stopTimeout: 15,
-    }]),
+    }, scratchPreparationContainer(input.imageReference, logGroup.name, input.region, "cleanup")]),
     cpu: String(plan.cpuUnits),
-    executionRoleArn: taskExecutionRole.arn,
+    executionRoleArn: cleanupExecutionRole.arn,
     family: `${name}-cleanup`,
     memory: String(plan.memoryMiB),
     networkMode: "awsvpc",
@@ -473,6 +525,7 @@ export async function defineAwsStack(
     },
     taskRoleArn: taskRole.arn,
     tags,
+    volumes: [{name: scratchVolumeName}],
   });
 
   const loadBalancer = new aws.lb.LoadBalancer(`${name}-application`, {
@@ -506,15 +559,50 @@ export async function defineAwsStack(
     vpcId: network.vpcId,
   });
   const certificates = defineCertificates(input, name, tags);
+  // Behind CloudFront the listener refuses by default and forwards only
+  // requests that carry this distribution's generated origin secret. The value
+  // lives only in encrypted Pulumi state, the distribution, and the rule.
+  const originVerification = input.ingress === "public"
+    ? new random.RandomPassword(`${name}-origin-verification`, {
+      length: 48,
+      special: false,
+    })
+    : undefined;
+  const originVerificationSecret = originVerification === undefined
+    ? undefined
+    : pulumi.secret(originVerification.result);
   const listener = new aws.lb.Listener(`${name}-https`, {
     certificateArn: certificates.primaryArn,
-    defaultActions: [{targetGroupArn: targetGroup.arn, type: "forward"}],
+    defaultActions: [originVerificationSecret === undefined
+      ? {targetGroupArn: targetGroup.arn, type: "forward"}
+      : {
+        fixedResponse: {
+          contentType: "text/plain",
+          messageBody: "Forbidden",
+          statusCode: "403",
+        },
+        type: "fixed-response",
+      }],
     loadBalancerArn: loadBalancer.arn,
     port: 443,
     protocol: "HTTPS",
     sslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
     tags,
   });
+  const verifiedOriginRule = originVerificationSecret === undefined
+    ? undefined
+    : new aws.lb.ListenerRule(`${name}-verified-origin`, {
+      actions: [{targetGroupArn: targetGroup.arn, type: "forward"}],
+      conditions: [{
+        httpHeader: {
+          httpHeaderName: originVerificationHeaderName,
+          values: [originVerificationSecret],
+        },
+      }],
+      listenerArn: listener.arn,
+      priority: 1,
+      tags,
+    });
   let contentListenerCertificate: aws.lb.ListenerCertificate | undefined;
   if (certificates.contentArn !== undefined) {
     contentListenerCertificate = new aws.lb.ListenerCertificate(`${name}-content`, {
@@ -522,9 +610,17 @@ export async function defineAwsStack(
       listenerArn: listener.arn,
     });
   }
-  const contentDeliveryNetwork = input.ingress === "public"
-    ? defineContentDeliveryNetwork({input, listener, loadBalancer, name, physicalName, tags})
-    : undefined;
+  const contentDeliveryNetwork = originVerificationSecret === undefined
+    ? undefined
+    : defineContentDeliveryNetwork({
+      input,
+      listener,
+      loadBalancer,
+      name,
+      originVerificationSecret,
+      physicalName,
+      tags,
+    });
   const dnsAliases = defineDnsAliases(input, name, contentDeliveryNetwork === undefined
     ? {
       dnsName: loadBalancer.dnsName,
@@ -568,6 +664,7 @@ export async function defineAwsStack(
       executionRoleAttachment,
       executionSecretPolicy,
       listener,
+      ...(verifiedOriginRule === undefined ? [] : [verifiedOriginRule]),
       loadBalancerEgress,
       objectStoragePolicy,
     ],
@@ -598,7 +695,7 @@ export async function defineAwsStack(
         {
           Action: "iam:PassRole",
           Effect: "Allow",
-          Resource: [taskExecutionRole.arn, taskRole.arn],
+          Resource: [cleanupExecutionRole.arn, taskRole.arn],
         },
       ],
       Version: "2012-10-17",
@@ -630,7 +727,14 @@ export async function defineAwsStack(
     },
     roleArn: cleanupScheduleRole.arn,
     rule: cleanupSchedule.name,
-  }, {dependsOn: [cleanupSchedulePolicy, service]});
+  }, {
+    dependsOn: [
+      cleanupExecutionRoleAttachment,
+      cleanupExecutionSecretPolicy,
+      cleanupSchedulePolicy,
+      service,
+    ],
+  });
   const scalingTarget = new aws.appautoscaling.Target(`${name}-application`, {
     maxCapacity: input.capacity.maximumInstances,
     minCapacity: input.capacity.minimumInstances,
@@ -759,6 +863,93 @@ const ecsAssumeRolePolicy = JSON.stringify({
   }],
   Version: "2012-10-17",
 });
+
+const scratchPreparationContainerName = "prepare-scratch";
+
+const scratchMountPoint = {
+  containerPath: scratchPath,
+  readOnly: false,
+  sourceVolume: scratchVolumeName,
+};
+
+const hardenedLinuxParameters = {
+  capabilities: {add: [], drop: ["ALL"]},
+  initProcessEnabled: true,
+};
+
+/**
+ * A Fargate bind mount starts root-owned with mode 0755, which the image's
+ * non-root user cannot write. This short-lived container opens the task's
+ * ephemeral scratch volume as a sticky world-writable directory and exits; the
+ * application container starts only after it succeeds. It keeps the read-only
+ * root filesystem and drops every capability: the volume owner needs none to
+ * change its own mode.
+ */
+function scratchPreparationContainer(
+  imageReference: string,
+  logGroupName: pulumi.Input<string>,
+  region: string,
+  streamPrefix: string,
+) {
+  return {
+    command: [`chmod 1777 ${scratchPath}`],
+    entryPoint: ["/bin/sh", "-c"],
+    essential: false,
+    image: imageReference,
+    linuxParameters: {capabilities: {add: [], drop: ["ALL"]}},
+    logConfiguration: {
+      logDriver: "awslogs",
+      options: {
+        "awslogs-group": logGroupName,
+        "awslogs-region": region,
+        "awslogs-stream-prefix": `${streamPrefix}-scratch`,
+      },
+    },
+    mountPoints: [scratchMountPoint],
+    name: scratchPreparationContainerName,
+    readonlyRootFilesystem: true,
+    user: "0:0",
+  };
+}
+
+/**
+ * The cleanup job's complete environment: database, object storage, and
+ * cleanup policy. It carries no API token, origin, or identity-provider value.
+ */
+function maintenanceEnvironment(
+  input: AwsCloudDeploymentInput,
+  installationId: pulumi.Input<string>,
+  bucket: pulumi.Input<string>,
+): Array<{readonly name: string; readonly value: pulumi.Input<string>}> {
+  const environment: Array<{
+    readonly name: string;
+    readonly value: pulumi.Input<string>;
+  }> = [
+    {name: "ARTIFACT_SERVER_INSTALLATION_ID", value: installationId},
+    {name: "ARTIFACT_SERVER_OBJECT_STORAGE_PROVIDER", value: "s3"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_BATCH_SIZE", value: "100"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_CONCURRENCY", value: "4"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_SCHEDULE", value: "external"},
+    {name: "ARTIFACT_SERVER_STAGING_CLEANUP_SETTLE_DELAY_MS", value: "300000"},
+    {name: "ARTIFACT_SERVER_S3_BUCKET", value: bucket},
+    {name: "ARTIFACT_SERVER_S3_FORCE_PATH_STYLE", value: "false"},
+    {name: "ARTIFACT_SERVER_S3_REGION", value: input.region},
+    {
+      name: "NODE_EXTRA_CA_CERTS",
+      value: "/usr/local/share/ca-certificates/aws-rds-global-bundle.pem",
+    },
+    {name: "NODE_ENV", value: "production"},
+  ];
+  if (input.otlpEndpoint !== undefined) {
+    environment.push(
+      {name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: input.otlpEndpoint},
+      {name: "OTEL_LOGS_EXPORTER", value: "otlp"},
+      {name: "OTEL_METRICS_EXPORTER", value: "otlp"},
+      {name: "OTEL_TRACES_EXPORTER", value: "otlp"},
+    );
+  }
+  return environment;
+}
 
 function runtimeEnvironment(
   input: AwsCloudDeploymentInput,
@@ -903,6 +1094,7 @@ function defineContentDeliveryNetwork(options: {
   readonly listener: aws.lb.Listener;
   readonly loadBalancer: aws.lb.LoadBalancer;
   readonly name: string;
+  readonly originVerificationSecret: pulumi.Output<string>;
   readonly physicalName: string;
   readonly tags: Readonly<Record<string, string>>;
 }): AwsContentDeliveryNetwork {
@@ -957,6 +1149,12 @@ function defineContentDeliveryNetwork(options: {
         originReadTimeout: 60,
         originSslProtocols: ["TLSv1.2"],
       },
+      // CloudFront overwrites a viewer-supplied header of the same name, so a
+      // viewer cannot forge or learn the value.
+      customHeaders: [{
+        name: originVerificationHeaderName,
+        value: options.originVerificationSecret,
+      }],
       domainName: options.loadBalancer.dnsName,
       originId,
     }],

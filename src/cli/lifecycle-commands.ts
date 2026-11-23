@@ -8,6 +8,8 @@ import {
   createExternalStorageRuntime,
   type ExternalStorageRuntimeConfig,
 } from "../external-storage/create-external-storage-runtime.js";
+import {createExternalStorageMaintenanceRuntime} from
+  "../external-storage/create-external-storage-maintenance-runtime.js";
 import {
   startExternalStorageServer,
   type ExternalStorageServerConfig,
@@ -30,6 +32,7 @@ import {initializeCompactInstallation} from
   "../lifecycle/compact-installation.js";
 import {
   parseCompactRuntimeConfiguration,
+  parseExternalMaintenanceConfiguration,
   parseExternalMigrationConfiguration,
   parseExternalStorageRuntimeConfiguration,
   summarizeRuntimeConfiguration,
@@ -125,11 +128,14 @@ function configureMaintenance(program: Command): void {
     .addOption(hostOption())
     .addOption(portOption())
     .action(async (options: CleanupStagingOptions) => {
-      const configuration = await lifecycleConfiguration(options);
-      const runtime = configuration.deploymentMode === "compact"
-        ? await createLocalRuntime(compactMaintenanceConfig(configuration))
-        : await createExternalStorageRuntime(
-          externalMaintenanceConfig(configuration),
+      // External-storage cleanup reads only storage and database settings, so a
+      // scheduled cleanup job never needs the API token or identity secrets.
+      const runtime = options.mode === "compact"
+        ? await createLocalRuntime(compactMaintenanceConfig(
+          await compactLifecycleConfiguration(options),
+        ))
+        : await createExternalStorageMaintenanceRuntime(
+          await runCliEffect(parseExternalMaintenanceConfiguration(process.env)),
         );
       try {
         const report = await runtime.cleanupStaging(
@@ -491,13 +497,19 @@ async function lifecycleConfiguration(
   options: LifecycleOptions,
 ): Promise<CompactRuntimeConfiguration | ExternalStorageRuntimeConfiguration> {
   return options.mode === "compact"
-    ? runCliEffect(parseCompactRuntimeConfiguration({
-      dataDirectory: options.data,
-      environment: process.env,
-      hostname: options.host,
-      port: options.port,
-    }))
+    ? compactLifecycleConfiguration(options)
     : parseExternalConfiguration(options.host, options.port);
+}
+
+function compactLifecycleConfiguration(
+  options: LifecycleOptions,
+): Promise<CompactRuntimeConfiguration> {
+  return runCliEffect(parseCompactRuntimeConfiguration({
+    dataDirectory: options.data,
+    environment: process.env,
+    hostname: options.host,
+    port: options.port,
+  }));
 }
 
 function compactMaintenanceConfig(

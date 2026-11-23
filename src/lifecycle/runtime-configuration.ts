@@ -124,6 +124,20 @@ export interface ExternalStorageRuntimeConfiguration {
   readonly stagingCleanupPolicy: StagingCleanupPolicy;
 }
 
+/**
+ * Storage-only configuration for maintenance commands that never serve requests.
+ * It carries no API token, browser origin, or identity-provider secret, so a
+ * maintenance job can run with only database and object-storage access.
+ */
+export interface ExternalMaintenanceConfiguration {
+  readonly databaseUrl: Redacted.Redacted;
+  readonly deploymentMode: "external-storage";
+  readonly installationId: string;
+  readonly objectStorage: ObjectStorageProviderFactory;
+  readonly postgresMaxConnections: number;
+  readonly stagingCleanupPolicy: StagingCleanupPolicy;
+}
+
 /** Minimum external-storage configuration required by migration commands. */
 export interface ExternalMigrationConfiguration {
   readonly databaseCredentialSource: ConfiguredCredentialSource;
@@ -196,6 +210,37 @@ export const parseExternalMigrationConfiguration = Effect.fn(
       environment["ARTIFACT_SERVER_INSTALLATION_ID"],
       installationIdSchema,
     ),
+  };
+});
+
+/** Parse only the storage and database values one maintenance pass needs. */
+export const parseExternalMaintenanceConfiguration = Effect.fn(
+  "parseExternalMaintenanceConfiguration",
+)(function*(
+  environment: NodeJS.ProcessEnv,
+): Effect.fn.Return<ExternalMaintenanceConfiguration, RuntimeConfigurationError> {
+  yield* assertLinkedFilesAreLocalOnly(yield* parseLinkedFilesMode(environment));
+  const configuredObjectStorage = yield* parseObjectStorage(environment);
+  const databaseUrl = yield* readSecret(
+    environment,
+    "ARTIFACT_SERVER_DATABASE_URL",
+    postgresUrlSchema,
+  );
+  yield* assertPostgresUrl(Redacted.value(databaseUrl.value));
+  return {
+    databaseUrl: databaseUrl.value,
+    deploymentMode: "external-storage",
+    installationId: yield* parseRequiredEnvironment(
+      "ARTIFACT_SERVER_INSTALLATION_ID",
+      environment["ARTIFACT_SERVER_INSTALLATION_ID"],
+      installationIdSchema,
+    ),
+    objectStorage: configuredObjectStorage.factory,
+    postgresMaxConnections: yield* parsePostgresMaxConnections(environment),
+    stagingCleanupPolicy: {
+      ...(yield* parseStagingCleanupPolicy(environment)),
+      schedule: "external",
+    },
   };
 });
 

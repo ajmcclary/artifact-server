@@ -85,8 +85,11 @@ Deployment changes. Successful migration Jobs are removed. Failed Jobs remain
 for inspection and are removed before the next Helm attempt.
 
 The chart also creates a `CronJob` that runs one bounded expired-staging cleanup
-pass every 15 minutes. It uses the same image, Secret, service account, workload
-identity, Postgres database, and object-store configuration as the application.
+pass every 15 minutes. It uses the same image, service account, workload
+identity, Postgres database, and object-store configuration as the application,
+but it mounts only the database URL and the optional S3 keys from the Secret.
+The cleanup command never authenticates a caller or opens a listener, so the
+CronJob receives no API token, application origin, or OIDC or WorkOS value.
 Serving Pods set the cleanup schedule to `external`, so they do not run a
 second background loop. Configure or disable this trigger under `cleanup` in
 the values file. Disabling it is safe only when an operator runs the same
@@ -176,9 +179,15 @@ limit. Treat it as a starting point, observe the workload, and adjust
 `resources`, `nodeSelector`, `tolerations`, and `affinity` apply to the serving
 pods, the migration Job, and the cleanup CronJob, so a cluster that dedicates
 tainted nodes to Artifact Server schedules all three. The migration Job is a
-`pre-install` hook and runs under the namespace's default ServiceAccount with
-no token mounted, because the chart's own ServiceAccount does not exist yet
-when the hook runs.
+`pre-install` hook, so it runs before the chart's own ServiceAccount exists.
+The chart creates a separate hook-scoped ServiceAccount,
+`<release-fullname>-migrate`, as an earlier `pre-install,pre-upgrade` hook
+(weight `-20`, before the Job's `-10`) with `automountServiceAccountToken:
+false`, and the Job runs under it instead of the namespace's default
+ServiceAccount. It has no role binding and no workload-identity annotations,
+because migrations need only the database URL. Helm replaces it before each
+hook run. Helm does not delete hook resources on `helm uninstall`, so remove
+that ServiceAccount by hand after uninstalling if you want it gone.
 
 ## Uninstall and durable state
 

@@ -1,4 +1,12 @@
-import {Config, ConfigProvider, Effect, Fiber, Schedule, Schema} from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Effect,
+  Fiber,
+  type ManagedRuntime,
+  Schedule,
+  Schema,
+} from "effect";
 
 import type {ApplicationRuntime} from
   "../application/application-runtime.js";
@@ -70,9 +78,15 @@ export function loadStagingCleanupPolicy(
   );
 }
 
+/** Any runtime that provides the cleanup service, from a serving process or a maintenance job. */
+export type StagingCleanupRunner = Pick<
+  ManagedRuntime.ManagedRuntime<ExpiredStagingCleanupService, unknown>,
+  "runPromise"
+>;
+
 /** Run one bounded cleanup pass through the shared application service. */
 export function runStagingCleanupPass(
-  runtime: ApplicationRuntime,
+  runtime: StagingCleanupRunner,
   limit: number,
 ): Promise<ExpiredStagingCleanupReport> {
   return runtime.runPromise(
