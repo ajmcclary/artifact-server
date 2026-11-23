@@ -175,7 +175,10 @@ import {
   manifestPathFromUrl,
   parseManifestPath,
 } from "../manifest/create-manifest.js";
-import {createMcpHttpAdapter} from "../mcp/create-mcp-http-adapter.js";
+import {
+  createMcpHttpAdapter,
+  type McpHttpAdapterDependencies,
+} from "../mcp/create-mcp-http-adapter.js";
 import {
   artifactBrowserUrl,
   artifactReviewUrl,
@@ -666,6 +669,8 @@ export interface HttpAppDependencies {
    * the enforcing guard; this flag only shapes discovery and fast gating.
    */
   readonly linkedArtifacts?: boolean;
+  /** Waits between preparation re-runs in one MCP commit; tests shorten them. */
+  readonly mcpCommitPreparationDelays?: McpHttpAdapterDependencies["commitPreparationDelays"];
   readonly mcpOAuthResource?: McpOAuthResourceConfiguration;
   readonly readiness?: ReadinessProbe;
   readonly runtimeLifecycle?: RuntimeLifecycle;
@@ -733,7 +738,7 @@ export function createHttpApp(
   // bytes, so one reader per process serves every request and the MCP adapter.
   const versionDocuments = createVersionDocuments({blobs: dependencies.blobs});
   const linkedArtifacts = linkedArtifactsAvailable(dependencies);
-  const mcp = createMcpHttpAdapter({
+  const mcpDependencies: McpHttpAdapterDependencies = {
     allowedHostnames: mcpAllowedHostnames,
     allowedOriginHostnames: mcpAllowedHostnames,
     applicationOrigin: dependencies.trustedApplicationOrigin,
@@ -744,7 +749,15 @@ export function createHttpApp(
     mode: dependencies.trustedApplicationOrigin === null ? "local" : "remote",
     oauthResource: dependencies.mcpOAuthResource?.resource ?? null,
     versionDocuments,
-  });
+  };
+  const mcp = createMcpHttpAdapter(
+    dependencies.mcpCommitPreparationDelays === undefined
+      ? mcpDependencies
+      : {
+        ...mcpDependencies,
+        commitPreparationDelays: dependencies.mcpCommitPreparationDelays,
+      },
+  );
   const inviteLimiter = new InviteRateLimiter(dependencies.inviteRateLimit);
   const boundedJsonBody = declaredBodyLimit({
     maxSize: maximumJsonRequestBytes,

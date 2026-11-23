@@ -3520,6 +3520,20 @@ requirements:
         run: project/evidence/mcp-manifest-page-acceptance-2026-09-28.json
         recorded_at: "2026-09-28T19:01:10Z"
 
+  - id: MCP-026
+    kind: behavior
+    behavior: artifact_commit_upload re-runs bounded preparation for a bounded wait inside one tool call; when the upload is still preparing after that wait it returns UPLOAD_STILL_PREPARING with installed-of-total progress and guidance to re-run with the same uploadId and idempotency key, commits nothing, and that re-run resumes preparation and commits exactly one version.
+    owner: mcp
+    source: {file: artifact-server-mcp-baseline.md, anchor: mcp}
+    acceptance:
+      behavior: {id: MCP-026-B, description: "Force a one-file preparation pass and a short commit wait through the real MCP HTTP boundary, observe UPLOAD_STILL_PREPARING with progress and resume guidance, then re-run the same uploadId and idempotency key and receive one committed version that a further re-run replays."}
+      failure: {id: MCP-026-F, description: "An UPLOAD_STILL_PREPARING result leaves no listed artifact or version, and resuming never creates a second artifact or version."}
+    deployments: *all
+    status: implementing
+    proof_gap: MCP-026-B/F pass in a targeted local run (tests/conformance/mcp-commit-preparation.test.ts) over the real local MCP HTTP boundary with SQLite and disk storage, using the injectable commit wait in place of the production 1-2-4-8-16-30x4 second schedule. No local-foundation evidence row is attached yet, and no external-storage or deployed run has exercised it. The HTTP 409 mapping for UploadStillPreparing is unreached by any HTTP route; the HTTP commit route answers 202 preparing instead.
+    depends_on: [PUB-019, MCP-009]
+    evidence: []
+
   - id: SKL-001
     kind: behavior
     behavior: Artifact Server ships one portable artifact-server skill that routes routine artifact work and explicit server-operation work to separate internal references.

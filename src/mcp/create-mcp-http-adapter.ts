@@ -62,6 +62,7 @@ export interface McpHttpAdapterDependencies {
   readonly allowedOriginHostnames: readonly string[];
   readonly applicationOrigin: string | null;
   readonly applicationRuntime: ApplicationRuntime;
+  readonly commitPreparationDelays?: ArtifactMcpServerDependencies["commitPreparationDelays"];
   readonly contentDomain: string;
   readonly gitHistory: GitHistoryCapabilityReader;
   readonly linkedArtifacts?: boolean;
@@ -86,7 +87,7 @@ export function createMcpHttpAdapter(
       const principal = principalSchema.parse(
         context.authInfo?.extra?.["artifactServerPrincipal"],
       );
-      const serverDependencies: ArtifactMcpServerDependencies = {
+      const baseServerDependencies: ArtifactMcpServerDependencies = {
         applicationOrigin: dependencies.applicationOrigin
           ?? requestOrigin(context.requestInfo),
         applicationRuntime: dependencies.applicationRuntime,
@@ -98,6 +99,12 @@ export function createMcpHttpAdapter(
         requestMetadata: requestMetadataFrom(context),
         versionDocuments: dependencies.versionDocuments,
       };
+      const serverDependencies = dependencies.commitPreparationDelays === undefined
+        ? baseServerDependencies
+        : {
+          ...baseServerDependencies,
+          commitPreparationDelays: dependencies.commitPreparationDelays,
+        };
       return createArtifactMcpServer(
         serverDependencies,
         {principal},
