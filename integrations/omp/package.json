@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@plannotator/agent-bridge": "^0.1.1"
+    "@plannotator/agent-bridge": "^0.1.1",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "typebox": "^1.3.7"

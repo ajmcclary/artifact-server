@@ -247,7 +247,7 @@ A bridge shares a session with a human and an agent doing their own work. These 
 5. **Bounded backoff.** On any error, back off from 1 second, doubling to a 30-second ceiling, with jitter. Reset on the first successful poll. No error path may sleep longer than the ceiling, and none may spin.
 6. **Never throw into the host.** Contain every exception at the bridge boundary. Treat an invalidated host handle as the loop's shutdown signal, and let the host's next session start register again.
 7. **Tolerate at-least-once.** A dispatch may be delivered twice after a lease expiry or a lost report. Replies and resolves are idempotent by design, so the recovery is to re-run, not to invent deduplication.
-8. **Disconnect on the way out.** Fire the courtesy disconnect at session shutdown; treat its failure as unremarkable.
+8. **Disconnect on the way out.** Fire the courtesy disconnect when the host is really quitting; treat its failure as unremarkable, and bound it (5 seconds) so shutdown never waits on the server. Disconnect deletes the agent row, so never send it on a session switch or rebind: dispatches queued for that agent would fail `agent_unavailable`. A host that cannot say whether shutdown is a quit (omp sends no reason today) keeps the row and lets the server reap it once its heartbeat goes stale.
 
 ## Building an adapter
 
@@ -259,7 +259,7 @@ The whole loop, in order:
 4. On a dispatch: read its threads, sanitize, render one message, hold while the host is compacting, hand it to the host.
 5. `POST /agent-dispatches/:id/delivered` after the host accepts it, or `/failed` with a reason.
 6. Expose reply and resolve to the host, backed by the comment routes.
-7. On session shutdown, abort the in-flight poll and `POST /agents/:agentId/disconnect`.
+7. On session shutdown, abort the in-flight poll and every bridge request, and, when the host is quitting, `POST /agents/:agentId/disconnect` with a short timeout.
 
 Errors back off 1 to 30 seconds with jitter. Nothing else is required.
 

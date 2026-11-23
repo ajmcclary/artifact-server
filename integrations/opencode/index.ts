@@ -231,7 +231,9 @@ export async function ArtifactServerBridge(
   // into a task session would vanish with it.
   let targetSessionId: string | null = null;
   const childSessionIds = new Set<string>();
-  let compaction: {sessionId: string; startedAt: number} | null = null;
+  // Compaction start times keyed by session id. One slot per session, so a
+  // child session compacting can never overwrite (or end) the target's hold.
+  const compactionStartedAt = new Map<string, number>();
 
   const environment = environmentConfiguration();
   const credentials = await resolveBridgeCredentials(environment, homedir());
@@ -284,11 +286,12 @@ export async function ArtifactServerBridge(
     // message that the running loop picks up at its next boundary), so the
     // only pre-delivery hold this port needs is: no target session yet, or
     // the target is inside a bounded compaction window.
-    isCompacting: () =>
-      targetSessionId === null ||
-      (compaction !== null &&
-        compaction.sessionId === targetSessionId &&
-        Date.now() - compaction.startedAt < compactionFlagLifetimeMilliseconds),
+    isCompacting: () => {
+      if (targetSessionId === null) return true;
+      const startedAt = compactionStartedAt.get(targetSessionId);
+      return startedAt !== undefined &&
+        Date.now() - startedAt < compactionFlagLifetimeMilliseconds;
+    },
     notify: (message, kind) => notify(sanitizeBundleText(message), kind),
     sendUserMessage: async (text) => {
       const sessionId = targetSessionId;
@@ -328,6 +331,7 @@ export async function ArtifactServerBridge(
         const {id, parentID} = lifecycle.data.properties.info;
         if (lifecycle.data.type === "session.deleted") {
           childSessionIds.delete(id);
+          compactionStartedAt.delete(id);
           if (targetSessionId === id) targetSessionId = null;
         } else if (parentID !== undefined) {
           childSessionIds.add(id);
@@ -339,16 +343,13 @@ export async function ArtifactServerBridge(
         return Promise.resolve();
       }
       const compacted = sessionCompactedEventSchema.safeParse(received.event);
-      if (
-        compacted.success &&
-        compaction?.sessionId === compacted.data.properties.sessionID
-      ) {
-        compaction = null;
+      if (compacted.success) {
+        compactionStartedAt.delete(compacted.data.properties.sessionID);
       }
       return Promise.resolve();
     },
     "experimental.session.compacting": (compacting) => {
-      compaction = {sessionId: compacting.sessionID, startedAt: Date.now()};
+      compactionStartedAt.set(compacting.sessionID, Date.now());
       return Promise.resolve();
     },
     tool: {
@@ -356,41 +357,56 @@ export async function ArtifactServerBridge(
         args: artifactCommentsToolArguments(),
         description: artifactCommentsDescription,
         async execute(args) {
-          if (comments === null) {
-            throw new Error(
-              "Artifact Server is not configured; the bridge is dormant.",
-            );
+          try {
+            // Second sanitization layer: thread bodies, paths, and reply
+            // authors are untrusted human text, even when an older bridge
+            // package returned them raw.
+            return sanitizeBundleText(await runArtifactComments(comments, args));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(sanitizeBundleText(message), {cause: error});
           }
-          if (args.operation === "get_bundle") {
-            const threadIds = args.threadIds ?? [];
-            if (threadIds.length === 0) {
-              throw new Error("get_bundle requires threadIds.");
-            }
-            const details = [];
-            for (const threadId of threadIds) {
-              // eslint-disable-next-line no-await-in-loop
-              details.push(await comments.getThread(threadId));
-            }
-            return JSON.stringify(details, null, 2);
-          }
-          const threadId = args.threadId ?? "";
-          if (threadId === "") {
-            throw new Error(`${args.operation} requires threadId.`);
-          }
-          if (args.operation === "reply") {
-            const body = args.body ?? "";
-            if (body.trim() === "") {
-              throw new Error("reply requires a non-empty body.");
-            }
-            await comments.reply(threadId, body);
-            return `Replied to ${threadId}.`;
-          }
-          await comments.resolve(threadId);
-          return `Resolved ${threadId}.`;
         },
       },
     },
   };
+}
+
+async function runArtifactComments(
+  comments: CommentOperations | null,
+  args: ArtifactCommentsArguments,
+): Promise<string> {
+  if (comments === null) {
+    throw new Error(
+      "Artifact Server is not configured; the bridge is dormant.",
+    );
+  }
+  if (args.operation === "get_bundle") {
+    const threadIds = args.threadIds ?? [];
+    if (threadIds.length === 0) {
+      throw new Error("get_bundle requires threadIds.");
+    }
+    const details = [];
+    for (const threadId of threadIds) {
+      // eslint-disable-next-line no-await-in-loop
+      details.push(await comments.getThread(threadId));
+    }
+    return JSON.stringify(details, null, 2);
+  }
+  const threadId = args.threadId ?? "";
+  if (threadId === "") {
+    throw new Error(`${args.operation} requires threadId.`);
+  }
+  if (args.operation === "reply") {
+    const body = args.body ?? "";
+    if (body.trim() === "") {
+      throw new Error("reply requires a non-empty body.");
+    }
+    await comments.reply(threadId, body);
+    return `Replied to ${threadId}.`;
+  }
+  await comments.resolve(threadId);
+  return `Resolved ${threadId}.`;
 }
 
 export default ArtifactServerBridge;

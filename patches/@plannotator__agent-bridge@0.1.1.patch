@@ -1,5 +1,5 @@
 diff --git a/index.ts b/index.ts
-index 47153f0a446edfa3089c90f16c568eee67ebee2a..45370f4ee7406c80e68248a5fde5d36281cc47cb 100644
+index 47153f0a446edfa3089c90f16c568eee67ebee2a..d7662a7e9f3471adc7369fcda8718295f85da566 100644
 --- a/index.ts
 +++ b/index.ts
 @@ -185,6 +185,71 @@ export function sanitizeBundleText(text: string): string {
@@ -119,7 +119,74 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..45370f4ee7406c80e68248a5fde5d362
    body: z.string(),
    id: z.string(),
    path: z.string().nullable(),
-@@ -630,10 +702,12 @@ export async function fetchBundle(
+@@ -332,7 +404,10 @@ const threadPageSchema = z.object({
+ }).loose();
+ const threadDetailsSchema = z.object({
+   replies: z.array(z.object({
+-    author: z.object({displayName: z.string()}).loose(),
++    author: z.object({
++      displayName: z.string(),
++      principalKind: z.string().optional(),
++    }).loose(),
+     body: z.string(),
+     createdAt: z.string(),
+     id: z.string(),
+@@ -361,15 +436,38 @@ class HostHandleLostError extends Error {}
+ interface HttpSession {
+   readonly credentials: BridgeCredentials;
+   readonly fetchImplementation: typeof fetch;
++  /**
++   * Ends with the session: the bridge's stop aborts every request still in
++   * flight, so a shutdown never waits on a slow or silent server.
++   */
++  readonly signal?: AbortSignal;
+ }
+ 
+ interface ApiRequest {
+   readonly body?: string;
+   readonly idempotencyKey?: string;
+   readonly method: "GET" | "PATCH" | "POST";
++  /** Replaces the default session-plus-timeout signal for this request. */
+   readonly signal?: AbortSignal;
+ }
+ 
++/**
++ * No single request may hang longer than this. A timeout is an ordinary
++ * error: the loop backs off, and an unreported claim returns at lease expiry.
++ */
++export const requestTimeoutMilliseconds = 30_000;
++
++/** The courtesy disconnect at shutdown waits no longer than this. */
++export const disconnectTimeoutMilliseconds = 5_000;
++
++function boundedSignal(
++  lifetime: AbortSignal | undefined,
++  milliseconds: number,
++): AbortSignal {
++  const timeout = AbortSignal.timeout(milliseconds);
++  return lifetime === undefined ? timeout : AbortSignal.any([lifetime, timeout]);
++}
++
+ function apiFetch(
+   session: HttpSession,
+   pathnameAndQuery: string,
+@@ -382,9 +480,13 @@ function apiFetch(
+   if (request.idempotencyKey !== undefined) {
+     headers.set("Idempotency-Key", request.idempotencyKey);
+   }
+-  const init: RequestInit = {headers, method: request.method};
++  const init: RequestInit = {
++    headers,
++    method: request.method,
++    signal: request.signal ??
++      boundedSignal(session.signal, requestTimeoutMilliseconds),
++  };
+   if (request.body !== undefined) init.body = request.body;
+-  if (request.signal !== undefined) init.signal = request.signal;
+   return session.fetchImplementation(
+     `${session.credentials.origin}${pathnameAndQuery}`,
+     init,
+@@ -630,10 +732,12 @@ export async function fetchBundle(
        versionNumbers.set(location.artifactId, numbers);
      }
      const anchor = anchorSelectionSchema.safeParse(details.thread.anchor);
@@ -133,7 +200,131 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..45370f4ee7406c80e68248a5fde5d362
        path: details.thread.path,
        quotedSelection: anchor.success ? anchor.data.originalText : null,
        threadId,
-@@ -1099,7 +1173,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+@@ -687,16 +791,27 @@ export function createCommentOperations(
+     async getThread(threadId) {
+       const location = await locateThread(session, cache, threadId);
+       const details = await fetchThread(session, location, threadId);
++      // Everything here reaches the agent's context, exactly like a bundle:
++      // guest text carries the one genuine marker, and every human field is
++      // stripped of invisible and bidirectional controls.
+       return {
+-        body: details.thread.body,
+-        path: details.thread.path,
++        body: sanitizeBundleText(bundleItemBody(
++          details.thread.body,
++          details.thread.author?.principalKind ?? "human",
++        )),
++        path: details.thread.path === null
++          ? null
++          : sanitizeBundleText(details.thread.path),
+         replies: details.replies.map((reply) => ({
+-          authorDisplayName: reply.author.displayName,
+-          body: reply.body,
++          authorDisplayName: sanitizeBundleText(reply.author.displayName),
++          body: sanitizeBundleText(bundleItemBody(
++            reply.body,
++            reply.author.principalKind ?? "human",
++          )),
+           createdAt: reply.createdAt,
+         })),
+         state: details.thread.state,
+-        threadId,
++        threadId: sanitizeBundleText(threadId),
+       };
+     },
+     async reply(threadId, body) {
+@@ -899,7 +1014,10 @@ export interface BridgeHandle {
+    */
+   protocolVersion(): number | null;
+   /**
+-   * End the loop and abort the held poll. The courtesy disconnect (which
++   * End the loop and abort the held poll, any bundle fetch, and any host
++   * admission still pending (an uncertain delivery is left unreported for
++   * lease expiry). Bounded: the courtesy disconnect waits at most
++   * {@link disconnectTimeoutMilliseconds}. The courtesy disconnect (which
+    * deletes the registration row) is sent only when `disconnect` is true —
+    * a session replacement keeps the row so the successor reclaims the same
+    * agent id and its queued dispatches.
+@@ -939,9 +1057,13 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     };
+   }
+ 
++  const controller = new AbortController();
++  // Every request the loop makes ends with the session: stop() aborts the
++  // claim poll, a bundle fetch, a report, or a beacon still in flight.
+   const session: HttpSession = {
+     credentials: options.credentials,
+     fetchImplementation: options.fetchImplementation,
++    signal: controller.signal,
+   };
+   const timers = options.timers ?? defaultTimers;
+   const waitSeconds = Math.max(
+@@ -950,7 +1072,6 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+   );
+   const cache = options.locations ?? new ThreadLocationCache();
+   const beacon = options.beacon ?? new ActivityBeacon();
+-  const controller = new AbortController();
+   let stopped = false;
+   let agentId: string | null = null;
+   let protocolVersion: number | null = null;
+@@ -980,7 +1101,6 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+         capabilities: options.capabilities ?? clientCapabilities,
+       }),
+       method: "POST",
+-      signal: controller.signal,
+     });
+     if (response.status === 422) {
+       // A server that predates the capability handshake refuses the field
+@@ -988,7 +1108,6 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+       response = await apiFetch(session, "/api/v1/agents", {
+         body: JSON.stringify(registration),
+         method: "POST",
+-        signal: controller.signal,
+       });
+     }
+     if (!response.ok) {
+@@ -1006,7 +1125,6 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+           dispatchId === null ? {state} : {dispatchId, state},
+         ),
+         method: "POST",
+-        signal: controller.signal,
+       }).then((answered) => answered.body?.cancel(), () => undefined)
+         .catch(() => undefined);
+     });
+@@ -1017,7 +1135,14 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     const response = await apiFetch(
+       session,
+       `/api/v1/agents/${agent}/claims?wait=${waitSeconds}`,
+-      {method: "POST", signal: controller.signal},
++      {
++        method: "POST",
++        // The long poll may hold the full wait before answering.
++        signal: boundedSignal(
++          controller.signal,
++          waitSeconds * 1_000 + requestTimeoutMilliseconds,
++        ),
++      },
+     );
+     if (response.status === 204) return null;
+     if (!response.ok) {
+@@ -1052,7 +1177,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+       const response = await apiFetch(
+         session,
+         `/api/v1/agent-dispatches/${dispatchId}/${outcome}`,
+-        {body, method: "POST", signal: controller.signal},
++        {body, method: "POST"},
+       );
+       if (!response.ok) {
+         const answer = await failureDescription(response);
+@@ -1087,6 +1212,7 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     let message: string;
+     try {
+       message = renderBundleMessage(await fetchBundle(session, dispatch, cache));
++      if (stopped) return;
+       await holdWhileCompacting();
+     } catch (error) {
+       if (error instanceof BundleFetchError) {
+@@ -1099,14 +1225,21 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
      callPort(() =>
        options.host.notify(
          `Artifact Server: delivering ${dispatch.threadIds.length} ` +
@@ -142,3 +333,76 @@ index 47153f0a446edfa3089c90f16c568eee67ebee2a..45370f4ee7406c80e68248a5fde5d362
          "info",
        )
      );
+     try {
+-      await callPort(() =>
+-        options.host.sendUserMessage(message, {deliverAs: "followUp"})
++      const admission = await untilAborted(
++        callPort(() =>
++          options.host.sendUserMessage(message, {deliverAs: "followUp"})
++        ),
++        controller.signal,
+       );
++      // Stopped while the host was still deciding: the delivery is
++      // uncertain, so it is neither reported delivered nor failed. The lease
++      // expires and the server requeues it (at-least-once).
++      if (admission === "aborted") return;
+     } catch (error) {
+       if (error instanceof HostHandleLostError) throw error;
+       await reportOutcome(
+@@ -1169,9 +1302,17 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+     await loop;
+     if (agentId !== null && (stopOptions?.disconnect ?? true)) {
+       try {
+-        await apiFetch(session, `/api/v1/agents/${agentId}/disconnect`, {
+-          method: "POST",
+-        });
++        // The session signal is already aborted; the courtesy disconnect gets
++        // its own short bound so a shutdown never hangs on a silent server.
++        const response = await apiFetch(
++          session,
++          `/api/v1/agents/${agentId}/disconnect`,
++          {
++            method: "POST",
++            signal: AbortSignal.timeout(disconnectTimeoutMilliseconds),
++          },
++        );
++        await response.body?.cancel();
+       } catch (error) {
+         log(`The courtesy disconnect failed: ${describeError(error)}`);
+       }
+@@ -1186,6 +1327,35 @@ export function startBridge(options: StartBridgeOptions): BridgeHandle {
+   };
+ }
+ 
++/**
++ * Settle with the host's answer, or with "aborted" as soon as the session
++ * stops. A rejection still propagates; a late one after an abort is dropped.
++ */
++async function untilAborted(
++  admission: void | Promise<void>,
++  signal: AbortSignal,
++): Promise<"aborted" | "settled"> {
++  if (!(admission instanceof Promise)) return "settled";
++  if (signal.aborted) {
++    admission.catch(() => undefined);
++    return "aborted";
++  }
++  const aborted = Promise.withResolvers<"aborted">();
++  const onAbort = (): void => {
++    aborted.resolve("aborted");
++  };
++  signal.addEventListener("abort", onAbort, {once: true});
++  try {
++    return await Promise.race([
++      admission.then(() => "settled" as const),
++      aborted.promise,
++    ]);
++  } finally {
++    signal.removeEventListener("abort", onAbort);
++    admission.catch(() => undefined);
++  }
++}
++
+ function describeError(cause: unknown): string {
+   return cause instanceof Error ? cause.message : String(cause);
+ }

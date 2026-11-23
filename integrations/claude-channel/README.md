@@ -72,6 +72,50 @@ Two behaviors are recorded gaps rather than tests:
   adapter maps to bridge shutdown. The live round trip above is the current
   evidence; T17 tracks the gap.
 
+### Changed since the live qualification (structural proof only)
+
+These changes landed after the Claude Code 2.1.282 live run and have **not**
+been re-qualified against a live Claude Code. They are proven by spawning the
+real channel process in `tests/client/claude-channel-lifetime.test.ts`:
+
+- The channel lives exactly as long as its session. The MCP SDK's stdio
+  transport never watches stdin for end-of-file, so the channel does: stdin
+  ending or closing, a broken stdout, or the MCP connection closing stops the
+  bridge, sends the courtesy disconnect, and exits. Previously a channel whose
+  Claude Code had died kept claiming bundles and could report them
+  `delivered` into a dead pipe. A bundle whose write races the session's end
+  is left unreported for lease expiry, never reported `delivered`.
+- The close hook is the SDK's `Server.onclose`, which the SDK chains from the
+  transport handler it installs; the channel no longer replaces that handler
+  by assigning `transport.onclose`.
+- A second `SIGINT`/`SIGTERM` while the stop is pending exits immediately
+  (status 1), and any stop still pending after 10 s is abandoned.
+- `artifact_comments` sanitizes its final text and its error messages, as a
+  second layer over the bridge's own sanitization.
+
+Not proven: what a live Claude Code does to the channel process on exit
+(closing stdin, signalling, or both). The stdin and signal paths are each
+covered structurally.
+- Bridge fixes carried by this repository's patch of
+  `@plannotator/agent-bridge` 0.1.1 (`patches/@plannotator__agent-bridge@0.1.1.patch`):
+  `artifact_comments` `get_bundle` leads guest thread bodies and guest
+  replies with the guest marker and strips bidirectional and zero-width
+  controls from every field; every bridge request is bounded and aborted
+  with the session, and the courtesy disconnect gives up after 5 s, so a
+  shutdown never waits on a silent server; a stop while the host has not
+  yet admitted a bundle leaves it unreported for lease expiry. Structural
+  proof: `tests/conformance/prm-008-guest-bundles.test.ts` and
+  `tests/client/bridge-core-shutdown.test.ts`.
+- **Published npm installs do not get the patch yet.** A pnpm patch applies
+  only inside this workspace; `npm install` of this package resolves the
+  unpatched `@plannotator/agent-bridge` 0.1.1 from the registry. The release
+  workflow refuses to publish the adapters until a patched bridge is
+  released upstream and the dependency range is raised past 0.1.1
+  (`scripts/check-adapter-bridge-release.mjs`,
+  `tests/tooling/adapter-bridge-release-gate.test.ts`). The adapter's own
+  final-text sanitization still applies to an unpatched bridge; the guest
+  marker in `get_bundle` and the request bounds do not.
+
 ## Before you start
 
 Before you start, make sure that:

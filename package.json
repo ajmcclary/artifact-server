@@ -47,6 +47,7 @@
     "check:cloudflare": "pnpm --filter @artifact-server/cloudflare-deployment check",
     "check:cloudflare:prebuilt": "pnpm --dir deploy/cloudflare lint && pnpm --dir deploy/cloudflare typecheck && pnpm --dir deploy/cloudflare exec vitest run",
     "check:release-version": "node scripts/check-release-version.mjs",
+    "check:adapter-bridge-release": "node scripts/check-adapter-bridge-release.mjs",
     "conformance:tests": "ruby scripts/check-conformance-test-ids.rb",
     "conformance:validate": "ruby scripts/validate-conformance.rb project/spec/conformance.yml --report",
     "dev": "tsx scripts/run-web-development.ts",

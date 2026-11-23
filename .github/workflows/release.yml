@@ -404,6 +404,10 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Checkout the adapter bridge release gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Node.js for npm provenance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -423,10 +427,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # An adapter whose bridge range admits a version this repository
+          # patches locally would install the unpatched registry bridge.
+          gate_status=0
+          node scripts/check-adapter-bridge-release.mjs \
+            --packed release/public \
+            --version "$ARTIFACTSERVER_VERSION" || gate_status=$?
           if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            printf '%s\n' \
-              '::notice::npm publication is skipped because NPM_TOKEN is not configured. Publish the adapter tarballs from the release assets locally with npm publish --access public.'
+            if [[ "$gate_status" -ne 0 ]]; then
+              printf '%s\n' \
+                '::warning::npm publication is skipped because NPM_TOKEN is not configured, and the adapter bridge release gate refused these tarballs: do not publish them by hand until the patched @plannotator/agent-bridge is released upstream and the adapter ranges are raised past it.'
+            else
+              printf '%s\n' \
+                '::notice::npm publication is skipped because NPM_TOKEN is not configured. Publish the adapter tarballs from the release assets locally with npm publish --access public.'
+            fi
             exit 0
+          fi
+          if [[ "$gate_status" -ne 0 ]]; then
+            printf '%s\n' \
+              '::error::Refusing to publish the adapters: the adapter bridge release gate refused them (see the log above).'
+            exit 1
           fi
           provenance_args=()
           if [[ "$ARTIFACTSERVER_REPOSITORY_VISIBILITY" == public ]]; then

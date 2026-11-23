@@ -18,6 +18,7 @@ import artifactServerBridge, {
   type PiExtensionApi,
   type PiExtensionContextLike,
   type PiToolDefinitionLike,
+  unsupportedHostNotice,
 } from "../../integrations/pi/index.js";
 import {
   agentListSchema,
@@ -459,5 +460,106 @@ describe("pi bridge adapter loop", () => {
     expect(dispatchEnvelopeSchema.parse(await laterResponse.json()).dispatch)
       .toMatchObject({state: "queued"});
     expect(host.messages).toHaveLength(0);
+  });
+
+  test("a Pi build without the extension API surface stays dormant with one notice and never throws", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    const handlers: Partial<PiEventHandlers> = {};
+    let registrations = 0;
+    const partial: Partial<PiExtensionApi> = {
+      on<Event extends keyof PiEventHandlers>(
+        event: Event,
+        handler: PiEventHandlers[Event],
+      ): void {
+        registrations += 1;
+        handlers[event] = handler;
+      },
+    };
+    expect(() => {
+      artifactServerBridge({});
+    }).not.toThrow();
+    expect(() => {
+      artifactServerBridge(partial);
+    }).not.toThrow();
+    expect(registrations).toBe(1);
+    const startHandler = handlers.session_start;
+    if (startHandler === undefined) throw new Error("No session_start handler was registered.");
+    const notices: string[] = [];
+    const ctx: PiExtensionContextLike = {
+      cwd: "/work/pi-partial-host",
+      ui: {notify: (message) => { notices.push(message); }},
+    };
+    await startHandler({reason: "startup"}, ctx);
+    await startHandler({reason: "reload"}, ctx);
+    expect(notices).toEqual([unsupportedHostNotice]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const listed = agentListSchema.parse(await (await client.listAgents()).json()).items;
+    expect(listed.some((item) => item.displayName === "pi-loop-under-test")).toBe(false);
+  });
+
+  test("session handlers contain a degraded context: an unusable one stays dormant, a missing session id registers without one", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    artifactServerBridge(host);
+    // An empty working directory is not a usable session: no bridge, no throw.
+    await expect(host.start({
+      cwd: "",
+      ui: {notify: (message) => { host.notices.push(message); }},
+    })).resolves.toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(agentListSchema.parse(await (await client.listAgents()).json()).items
+      .some((item) => item.displayName === "pi-loop-under-test")).toBe(false);
+
+    // A session manager that throws costs only the optional session id.
+    await expect(host.start({
+      cwd: "/work/pi-degraded-test",
+      sessionManager: {getSessionId: () => { throw new Error("The handle is stale."); }},
+      ui: {notify: (message) => { host.notices.push(message); }},
+    })).resolves.toBeUndefined();
+    const agent = await eventually(async () => {
+      const response = await client.listAgents();
+      return agentListSchema.parse(await response.json()).items
+        .find((item) => item.displayName === "pi-loop-under-test") ?? null;
+    });
+    expect(agent.agentSessionId).toBeNull();
+  });
+
+  test("the artifact_comments tool strips hostile controls from every thread field it returns", async () => {
+    const client = new ApiClient(server, installation.apiToken);
+    const published = (await publishNew(server, installation, {
+      accessSetting: "account_required",
+      content: "<!doctype html><title>pi tool</title>",
+      idempotencyKey: "pi-tool-sanitize-publish",
+      name: "pi tool report",
+    })).body;
+    const hostile = "Ship \u202Eit\u202C now\u200B please\uFEFF.";
+    const thread = await client.openThread(published, hostile, "pi-tool-sanitize-thread");
+    const reply = await client.fetch(
+      `/api/v1/artifacts/${published.artifact.id}/comments/${thread.id}/replies` +
+        `?projectId=${published.artifact.projectId}`,
+      {
+        body: JSON.stringify({body: "Done\u2066 quietly\u2069."}),
+        idempotencyKey: "pi-tool-sanitize-reply",
+        method: "POST",
+      },
+    );
+    expect(reply.status).toBe(201);
+
+    artifactServerBridge(host);
+    await host.start({
+      cwd: "/work/pi-tool-test",
+      sessionManager: {getSessionId: () => "pi-tool-session"},
+      ui: {notify: (message) => { host.notices.push(message); }},
+    });
+    const tool = host.tool;
+    if (tool === null) throw new Error("The comment tool is missing.");
+    const result = await tool.execute(
+      "get-bundle",
+      {operation: "get_bundle", threadIds: [thread.id]},
+      undefined,
+    );
+    const text = result.content.map((part) => part.text).join("");
+    expect(text).toContain("Ship it now please.");
+    expect(text).toContain("Done quietly.");
+    expect(text).not.toMatch(/[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/u);
   });
 });
