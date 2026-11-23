@@ -1,5 +1,6 @@
 import {
   commitGitHistoryVersion,
+  GitHistoryWorkspaceHandoff,
   lookupGitHistoryCommit,
 } from "../../../src/git-history/cloudflare-artifacts-git-history-provider.js";
 import type {
@@ -48,6 +49,9 @@ export class ArtifactsBindingGitHistoryProvider implements GitHistoryProvider {
   readonly name = "cloudflare-artifacts" as const;
   private readonly artifacts: ArtifactsBinding;
   private readonly repositoryPrefix: string;
+  // A lookup that finds nothing to adopt hands its clone to the commit that
+  // follows it, so one mirror job clones the repository once.
+  private readonly workspaces = new GitHistoryWorkspaceHandoff();
 
   constructor(
     artifacts: ArtifactsBinding,
@@ -108,14 +112,14 @@ export class ArtifactsBindingGitHistoryProvider implements GitHistoryProvider {
       "write",
       300,
     );
-    return commitGitHistoryVersion(request, credential.token);
+    return commitGitHistoryVersion(request, credential.token, this.workspaces);
   }
 
   async lookupCommit(
     request: GitHistoryCommitRequest,
   ): Promise<{readonly commitId: string} | null> {
     const credential = await this.issueCredential(request.coordinates, "write", 60);
-    return lookupGitHistoryCommit(request, credential.token);
+    return lookupGitHistoryCommit(request, credential.token, this.workspaces);
   }
 
   async issueCredential(

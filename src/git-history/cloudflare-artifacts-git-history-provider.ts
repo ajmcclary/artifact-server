@@ -24,7 +24,9 @@ import {Redacted, Schema} from "effect";
 import type {GitHistoryProviderIdentity} from
   "./git-history-provider-identity.js";
 import {
+  GitHistoryLeaseLost,
   gitHistoryMetadataFiles,
+  GitHistoryRemoteIncomplete,
   type GitCloneCredential,
   type GitHistoryCommitRequest,
   type GitHistoryProvider,
@@ -43,23 +45,173 @@ const zeroOid = "0".repeat(40);
 export const gitHttpRequestTimeoutMilliseconds = 120_000;
 
 type GitHttpClient = Parameters<typeof clone>[0]["http"];
+type GitHttpResponse = Awaited<ReturnType<GitHttpClient["request"]>>;
+type GitRemoteFailure = ConstructorParameters<typeof GitHistoryRemoteIncomplete>[0];
 
-/** Bound every isomorphic-git HTTP exchange, including its streamed body. */
-export function boundedGitHttp(
+/** Transport settings for the smart-HTTP data plane. Production uses the defaults. */
+export interface GitSmartHttpOptions {
+  /** Deadline for one smart-HTTP request, including its streamed body. */
+  readonly requestTimeoutMilliseconds?: number;
+}
+
+/**
+ * Bound every isomorphic-git HTTP exchange, including its streamed body, and
+ * report any response that stalls past the deadline or ends before its
+ * framing completes. isomorphic-git's pkt-line reader turns a failed body read
+ * into end-of-stream, so a truncated ref advertisement or pack can otherwise
+ * parse as a short but apparently valid answer; the report is the only
+ * reliable signal, and {@link runGitExchange} turns it into a failure.
+ */
+function boundedGitHttp(
   timeoutMilliseconds: number,
+  onIncomplete: (failure: GitRemoteFailure) => void = () => {},
   base: GitHttpClient = webHttp,
 ): GitHttpClient {
   return {
     // The mirror never passes its own fetch options, so the deadline is the
     // whole set; the signal also bounds the streamed response body.
-    request: (request) => base.request({
-      ...request,
-      fetchOptions: {signal: AbortSignal.timeout(timeoutMilliseconds)},
-    }),
+    request: async (request) => {
+      const signal = AbortSignal.timeout(timeoutMilliseconds);
+      const failure = (): GitRemoteFailure => signal.aborted
+        ? "git_remote_deadline_exceeded"
+        : "git_remote_response_incomplete";
+      let response: GitHttpResponse;
+      try {
+        response = await base.request({...request, fetchOptions: {signal}});
+      } catch (cause) {
+        if (!signal.aborted) throw cause;
+        onIncomplete("git_remote_deadline_exceeded");
+        throw new GitHistoryRemoteIncomplete("git_remote_deadline_exceeded", {cause});
+      }
+      if (response.body === undefined) return response;
+      return {
+        ...response,
+        body: verifiedBody(response, response.body, () => onIncomplete(failure())),
+      };
+    },
   };
 }
 
-const http = boundedGitHttp(gitHttpRequestTimeoutMilliseconds);
+/**
+ * Run one isomorphic-git operation over a fresh bounded client. If any of its
+ * responses was incomplete, the operation's result or error was derived from
+ * a partial view and is replaced by a retryable failure.
+ */
+async function runGitExchange<T>(
+  options: GitSmartHttpOptions,
+  operation: (http: GitHttpClient) => Promise<T>,
+): Promise<T> {
+  const failures: GitRemoteFailure[] = [];
+  const http = boundedGitHttp(
+    options.requestTimeoutMilliseconds ?? gitHttpRequestTimeoutMilliseconds,
+    (failure) => failures.push(failure),
+  );
+  let result: T;
+  try {
+    result = await operation(http);
+  } catch (cause) {
+    const failure = failures[0];
+    // A lost durable claim is authoritative whatever the remote returned.
+    if (failure === undefined || cause instanceof GitHistoryLeaseLost) throw cause;
+    throw new GitHistoryRemoteIncomplete(failure, {cause});
+  }
+  const failure = failures[0];
+  if (failure !== undefined) throw new GitHistoryRemoteIncomplete(failure);
+  return result;
+}
+
+/**
+ * Pass a response body through unchanged while checking that it ends the way
+ * a complete smart-HTTP response must: no transport error, the declared
+ * Content-Length, and, for pkt-line framed bodies, a final flush packet at a
+ * packet boundary. A body the client abandons early is not judged.
+ */
+async function* verifiedBody(
+  response: GitHttpResponse,
+  source: AsyncIterableIterator<Uint8Array>,
+  onIncomplete: () => void,
+): AsyncIterableIterator<Uint8Array> {
+  const headers = response.headers ?? {};
+  const encoding = headers["content-encoding"];
+  const declared = encoding === undefined || encoding === "identity"
+    ? headers["content-length"]
+    : undefined;
+  const framing = response.statusCode === 200 &&
+      (headers["content-type"] ?? "").startsWith("application/x-git-")
+    ? new PktLineFraming()
+    : null;
+  let received = 0;
+  try {
+    for await (const chunk of source) {
+      received += chunk.byteLength;
+      framing?.accept(chunk);
+      yield chunk;
+    }
+  } catch (cause) {
+    onIncomplete();
+    throw cause;
+  }
+  if (
+    (declared !== undefined && Number(declared) !== received) ||
+    (framing !== null && !framing.complete())
+  ) {
+    onIncomplete();
+  }
+}
+
+/**
+ * Incremental pkt-line boundary tracker. Every smart-HTTP response the mirror
+ * reads (v1 and v2 ref advertisements, ls-refs, side-band upload-pack and
+ * receive-pack reports) ends with a flush packet. A body that stops being
+ * pkt-line framed (a pack sent without side-band) is left to transport checks.
+ */
+class PktLineFraming {
+  #framed = true;
+  #header = "";
+  #remaining = 0;
+  #endsWithFlush = false;
+
+  accept(chunk: Uint8Array): void {
+    let offset = 0;
+    while (this.#framed && offset < chunk.byteLength) {
+      if (this.#remaining > 0) {
+        const taken = Math.min(this.#remaining, chunk.byteLength - offset);
+        this.#remaining -= taken;
+        offset += taken;
+        continue;
+      }
+      this.#header += String.fromCharCode(chunk[offset] ?? 0);
+      offset += 1;
+      if (this.#header.length === 4) this.#readHeader();
+    }
+  }
+
+  complete(): boolean {
+    return !this.#framed ||
+      (this.#header === "" && this.#remaining === 0 && this.#endsWithFlush);
+  }
+
+  #readHeader(): void {
+    const header = this.#header;
+    this.#header = "";
+    if (!/^[0-9a-f]{4}$/iu.test(header)) {
+      this.#framed = false;
+      return;
+    }
+    const length = Number.parseInt(header, 16);
+    // 0000 flush, 0001 delimiter, 0002 v2 response-end.
+    if (length <= 2) {
+      this.#endsWithFlush = length !== 1;
+      return;
+    }
+    if (length === 3) {
+      this.#framed = false;
+      return;
+    }
+    this.#endsWithFlush = false;
+    this.#remaining = length - 4;
+  }
+}
 
 const repositorySchema = Schema.Struct({
   default_branch: Schema.String,
@@ -268,6 +420,7 @@ export async function commitGitHistoryVersion(
   request: GitHistoryCommitRequest,
   writeToken: string,
   workspaces?: GitHistoryWorkspaceHandoff,
+  options: GitSmartHttpOptions = {},
 ): Promise<{readonly commitId: string}> {
     const metadataPaths = new Set(
       gitHistoryMetadataFiles(request).map((file) => file.path),
@@ -278,6 +431,7 @@ export async function commitGitHistoryVersion(
     const workspace = workspaces?.take(request) ?? await openWorkspace(
       request.coordinates.remoteUrl,
       writeToken,
+      options,
     );
     const currentTip = await localMainCommit(workspace);
     if (currentTip !== request.expectedParentCommitId) {
@@ -304,6 +458,7 @@ export async function commitGitHistoryVersion(
       request.coordinates,
       tagRef,
       writeToken,
+      options,
     );
     if (existingTag !== null && existingTag !== commitId) {
       throw new Error("git_history_tag_conflict");
@@ -322,7 +477,7 @@ export async function commitGitHistoryVersion(
       ref: tagRef,
       value: commitId,
     });
-    await push({
+    await runGitExchange(options, (http) => push({
       dir: workspace.dir,
       fs: workspace.fs,
       headers: authorizationHeaders(writeToken),
@@ -337,8 +492,8 @@ export async function commitGitHistoryVersion(
         }
         return true;
       },
-    });
-    await push({
+    }));
+    await runGitExchange(options, (http) => push({
       dir: workspace.dir,
       fs: workspace.fs,
       headers: authorizationHeaders(writeToken),
@@ -353,12 +508,18 @@ export async function commitGitHistoryVersion(
         }
         return true;
       },
-    });
+    }));
     // The ref update is the last action whose success we report; re-assert
     // ownership and confirm both refs landed so a claim lost during the final
     // receive-pack call can never be reported as a successful commit.
     await request.assertOwner();
-    await assertPushedRefs(request.coordinates, tagRef, commitId, writeToken);
+    await assertPushedRefs(
+      request.coordinates,
+      tagRef,
+      commitId,
+      writeToken,
+      options,
+    );
     return {commitId};
 }
 
@@ -367,14 +528,16 @@ export async function lookupGitHistoryCommit(
   request: GitHistoryCommitRequest,
   writeToken: string,
   workspaces?: GitHistoryWorkspaceHandoff,
+  options: GitSmartHttpOptions = {},
 ): Promise<{readonly commitId: string} | null> {
   const {coordinates, metadata} = request;
   const exact = await readGitHistoryCommit(
     coordinates,
     metadata.versionId,
     writeToken,
+    options,
   );
-  const workspace = await openWorkspace(coordinates.remoteUrl, writeToken);
+  const workspace = await openWorkspace(coordinates.remoteUrl, writeToken, options);
   if (exact !== null) {
     await assertVersionCommit(workspace, exact.commitId, request);
     return exact;
@@ -408,7 +571,7 @@ export async function lookupGitHistoryCommit(
         ref: tagRef,
         value: tip,
       });
-      await push({
+      await runGitExchange(options, (http) => push({
         dir: workspace.dir,
         fs: workspace.fs,
         headers: authorizationHeaders(writeToken),
@@ -423,12 +586,13 @@ export async function lookupGitHistoryCommit(
           }
           return true;
         },
-      });
+      }));
       await request.assertOwner();
       const repaired = await readGitHistoryCommit(
         coordinates,
         metadata.versionId,
         writeToken,
+        options,
       );
       if (repaired?.commitId !== tip) {
         throw new Error("git_history_tag_repair_mismatch");
@@ -445,14 +609,15 @@ export async function readGitHistoryCommit(
   coordinates: GitRepositoryCoordinates,
   versionId: string,
   readToken: string,
+  options: GitSmartHttpOptions = {},
 ): Promise<{readonly commitId: string} | null> {
   const tagRef = `refs/tags/v/${versionId}`;
-  const refs = await listServerRefs({
+  const refs = await runGitExchange(options, (http) => listServerRefs({
     headers: authorizationHeaders(readToken),
     http,
     prefix: tagRef,
     url: coordinates.remoteUrl,
-  });
+  }));
   const exact = refs.find((candidate) => candidate.ref === tagRef);
   return exact === undefined ? null : {commitId: exact.oid};
 }
@@ -461,13 +626,14 @@ async function remoteRefOid(
   coordinates: GitRepositoryCoordinates,
   ref: string,
   token: string,
+  options: GitSmartHttpOptions,
 ): Promise<string | null> {
-  const refs = await listServerRefs({
+  const refs = await runGitExchange(options, (http) => listServerRefs({
     headers: authorizationHeaders(token),
     http,
     prefix: ref,
     url: coordinates.remoteUrl,
-  });
+  }));
   return refs.find((candidate) => candidate.ref === ref)?.oid ?? null;
 }
 
@@ -481,10 +647,11 @@ async function assertPushedRefs(
   tagRef: string,
   commitId: string,
   token: string,
+  options: GitSmartHttpOptions,
 ): Promise<void> {
-  const branch = await remoteRefOid(coordinates, "refs/heads/main", token);
+  const branch = await remoteRefOid(coordinates, "refs/heads/main", token, options);
   if (branch !== commitId) throw new Error("git_history_branch_update_mismatch");
-  const tag = await remoteRefOid(coordinates, tagRef, token);
+  const tag = await remoteRefOid(coordinates, tagRef, token, options);
   if (tag !== commitId) throw new Error("git_history_tag_update_mismatch");
 }
 
@@ -581,13 +748,14 @@ export interface MemoryWorkspace {
 async function openWorkspace(
   remoteUrl: string,
   token: string,
+  options: GitSmartHttpOptions,
 ): Promise<MemoryWorkspace> {
   const volume = new Volume();
   const fs = createFsFromVolume(volume);
   const dir = "/repository";
   await fs.promises.mkdir(dir, {recursive: true});
   try {
-    await clone({
+    await runGitExchange(options, (http) => clone({
       dir,
       fs,
       headers: authorizationHeaders(token),
@@ -595,7 +763,7 @@ async function openWorkspace(
       noTags: false,
       singleBranch: true,
       url: remoteUrl,
-    });
+    }));
     await checkout({dir, fs, ref: "main"});
   } catch (cause) {
     if (!isEmptyRemoteFailure(cause)) throw cause;

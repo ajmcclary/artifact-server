@@ -128,6 +128,21 @@ export class GitHistoryLeaseLost extends Error {
   }
 }
 
+/**
+ * A Git remote stalled past its request deadline or ended a response before
+ * its framing completed. Whatever the Git client parsed from that response is
+ * untrustworthy, so the job is retried rather than acting on a partial view.
+ */
+export class GitHistoryRemoteIncomplete extends Error {
+  constructor(
+    reason: "git_remote_deadline_exceeded" | "git_remote_response_incomplete",
+    options?: ErrorOptions,
+  ) {
+    super(reason, options);
+    this.name = "GitHistoryRemoteIncomplete";
+  }
+}
+
 /** Durable product state used by every mirror worker and persistence backend. */
 export interface GitHistoryMirrorStore {
   claimGitHistoryJob(
@@ -640,6 +655,11 @@ async function readExactBytes(
 
 function classifyMirrorFailure(cause: unknown): string {
   if (cause instanceof GitHistoryLeaseLost) return "lease_lost";
+  // Provider rejections reach here wrapped by `attempt`.
+  const thrown = Cause.isUnknownError(cause) ? cause.cause : cause;
+  if (thrown instanceof GitHistoryRemoteIncomplete) {
+    return "provider_response_incomplete";
+  }
   if (cause instanceof Error && cause.message === "version-unavailable") {
     return "version_unavailable";
   }
