@@ -4,6 +4,8 @@
  * binary, so unlike the Pi suite this spawns the binary itself rather than
  * `node dist/cli.js`.
  *
+ * omp 18.19 opens an onboarding wizard in a fresh agent home; the isolated
+ * installation turns it off in its `config.yml` (see omp-environment.ts).
  * omp 18.2.11 opens a first-run setup wizard over the welcome screen a few
  * seconds after the footer paints. Input typed while the wizard holds the
  * screen is lost to it, so startup waits for the wizard's hint line in the
@@ -127,6 +129,15 @@ export async function startLiveOmp(options: LiveOmpOptions): Promise<LiveOmp> {
     "--model",
     options.model,
     "--no-lsp",
+    // omp 18.19 discovers skills outside the isolated agent home (for
+    // example ~/.agents/skills) and, at startup, asks the model to compress
+    // every discovered skill into a routing hint: one model request per
+    // skill before the first prompt, which the scripted model counts as
+    // turns. Skills, rules and context files are not under test here, so
+    // keep the host hermetic.
+    "--no-skills",
+    "--no-rules",
+    "--no-context-files",
     "--no-title",
     "--cwd",
     options.projectDirectory,

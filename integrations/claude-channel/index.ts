@@ -159,6 +159,13 @@ async function main(): Promise<void> {
 
   mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: [{
+      // Claude Code defers MCP tools behind its ToolSearch step by default
+      // (2.1.304+, also behind ANTHROPIC_BASE_URL gateways). Every bundle
+      // this channel pushes tells the model to call artifact_comments, so
+      // keep that one small tool loaded up front instead of making each
+      // close-out depend on a search round trip. A user who sets
+      // `alwaysLoad: false` on the server still gets the deferred path.
+      _meta: {"anthropic/alwaysLoad": true},
       description:
         "Read, reply to, and resolve Artifact Server comment threads that " +
         "were sent to this session. Use get_bundle to read threads, reply " +

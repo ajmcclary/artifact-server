@@ -39,7 +39,9 @@ real Artifact Server with a scripted Pi surface:
   thread.
 
 Live-host qualification against Pi 0.84.4 is recorded in
-`project/evidence/pi-live.json` (`pnpm test:pi-live`), 6/6:
+`project/evidence/pi-live.json` (`pnpm test:pi-live`). The last run was
+6/6 on 2026-11-23 against `main` at `d2dfdbb`, with the merged bridge fixes
+below in place. The first was 6/6 on 2026-09-25.
 
 - Round trip, FIFO drain, and session rebind (PI-LIVE 1–3).
 - Lost acknowledgement (`tests/pi-live/lost-acknowledgement.test.ts`,
@@ -57,11 +59,15 @@ The 1 s → 30 s jittered backoff cap with fail-open dormancy is covered by
 `tests/conformance/dsp-012-bridge-fail-open.test.ts` and measured live once
 via the OpenCode suite, shared by the common bridge core.
 
-### Changed since the live qualification (structural proof only)
+### Changed since the 2026-09-25 qualification
 
-These changes landed after the Pi 0.84.4 live run and have **not** been
-re-qualified against a live Pi. They are proven by the scripted Pi surface in
-`tests/client/pi-bridge-core.test.ts` against a real Artifact Server:
+These changes landed after the first Pi 0.84.4 live run. The 2026-11-23
+re-run had all of them in place and passed 6/6, so they no longer break the
+live paths. The failure paths they target (a missing API surface, a throwing
+session manager, a superseded start, guest markers, request bounds, a stop
+before admission) are not driven by the live suite. They are still proven
+only by the scripted Pi surface in `tests/client/pi-bridge-core.test.ts`
+against a real Artifact Server:
 
 - The factory validates the extension API surface (`on`, `registerTool`,
   `sendUserMessage`) before registering anything. A build that lacks it stays

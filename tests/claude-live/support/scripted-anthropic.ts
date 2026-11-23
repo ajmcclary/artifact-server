@@ -32,7 +32,7 @@ export interface ModelTurn {
 
 /** One tool use the scripted model asks Claude to run. */
 export interface ScriptedToolUse {
-  readonly input: Readonly<Record<string, string | readonly string[]>>;
+  readonly input: Readonly<Record<string, number | string | readonly string[]>>;
   readonly name: string;
 }
 
@@ -294,4 +294,22 @@ export function bundleMessages(turn: ModelTurn): readonly string[] {
 export function latestUserMessage(turn: ModelTurn): string {
   const users = turn.messages.filter((message) => message.role === "user");
   return users.at(-1)?.text ?? "";
+}
+
+/**
+ * The fully qualified name of a deferred tool, read from the deferred-tool
+ * list Claude Code puts into the conversation when it holds MCP tools behind
+ * ToolSearch (null when the conversation never names it). A deferred tool is
+ * absent from the request's `tools`, so a model must load it before calling.
+ */
+export function deferredToolName(
+  turn: ModelTurn,
+  suffix: string,
+): string | null {
+  const pattern = new RegExp(`mcp__[A-Za-z0-9_-]+__${suffix}`, "u");
+  for (const message of turn.messages) {
+    const match = pattern.exec(message.text);
+    if (match !== null) return match[0];
+  }
+  return null;
 }

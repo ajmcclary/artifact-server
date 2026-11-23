@@ -128,6 +128,17 @@ describe("claude channel bridge", () => {
     expect(agent.kind).toBe("claude");
     expect(agent.capabilities).toEqual({beacon: true, evidence: "channel"});
 
+    // Claude Code defers MCP tools behind ToolSearch unless the server marks
+    // them always-loaded. Every bundle tells the model to call
+    // artifact_comments, so the tool must be in the request from the start
+    // (proven live by CLAUDE-LIVE 1).
+    const listed = await mcpClient.listTools();
+    expect(listed.tools).toHaveLength(1);
+    expect(listed.tools).toMatchObject([{
+      _meta: {"anthropic/alwaysLoad": true},
+      name: "artifact_comments",
+    }]);
+
     const sent = await client.sendDispatch({
       agentId: agent.id,
       idempotencyKey: "claude-channel-dispatch-0001",
