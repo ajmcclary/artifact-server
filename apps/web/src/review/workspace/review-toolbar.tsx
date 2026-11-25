@@ -19,6 +19,7 @@ import {
 import {sourceDriftDescription} from "@/lib/presentation";
 import {ArtifactBreadcrumb, PageMenu, VersionMenu} from "@/ui/review-ui";
 
+import {makeCurrentMessage} from "./candidate-model.ts";
 import {htmlPages} from "./page-inventory.ts";
 import {scenarioFailureText} from "./scenario-model.ts";
 import {useScenarioSession} from "./scenario-session.tsx";
@@ -175,6 +176,8 @@ export function ReviewToolbar({
   const currentVersionId = details?.artifact.currentVersionId ?? null;
   const current = versions.find(({version}) => version.id === currentVersionId)?.version ?? null;
   const historical = shown !== null && current !== null && shown.id !== current.id;
+  // A candidate becomes current only by promotion; restore refuses one that was not promoted.
+  const candidateShown = shown !== null && shown.state !== "mainline" && shown.state !== "promoted";
   const pages = selectedVersion === null
     ? []
     : htmlPages(selectedVersion.manifest.entryPath, selectedVersion.manifest.entries);
@@ -383,7 +386,7 @@ export function ReviewToolbar({
         ) : null}
         {historical && current !== null ? (
           <>
-            <span style={inlineStyle}><StatusPill label="Preview" tone="neutral" /></span>
+            <span style={inlineStyle}><StatusPill label={candidateShown ? "Candidate" : "Preview"} tone="neutral" /></span>
             <Button
               icon="bi-arrow-counterclockwise"
               onClick={() => onSelectVersion(current.id)}
@@ -392,7 +395,7 @@ export function ReviewToolbar({
             >
               {`Back to v${current.number}`}
             </Button>
-            {canManage ? (
+            {canManage && !candidateShown ? (
               <Button onClick={() => setMakeCurrentAsk(true)} outline size="sm" variant="secondary">
                 Make Current
               </Button>
@@ -480,7 +483,7 @@ export function ReviewToolbar({
         <ConfirmDialog
           confirmIcon="bi-bookmark-check"
           confirmLabel="Make Current"
-          message={`The stable artifact link will point to Version ${shown.number}. No saved version is changed or duplicated.`}
+          message={makeCurrentMessage(shown.number)}
           onClose={() => setMakeCurrentAsk(false)}
           onConfirm={() => void onMakeCurrent(shown.id, current.id)}
           open={makeCurrentAsk}

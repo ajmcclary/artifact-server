@@ -876,8 +876,9 @@ test.describe("Artifact Server frontend MVP", () => {
       // One link, chosen by what it opens: this exact version (the default) or the latest.
       await expect(share.getByRole("radio", {name: /^This version · v1/u})).toBeChecked();
       await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(exactReviewLink.toString()));
+      // The line under Copy Link names who can use the link chosen above it.
       await expect(share.getByText(
-        "People with access to this Artifact Server can review it.",
+        "Opens version 1 with review controls for people who can open this project. Guests need a guest link.",
         {exact: true},
       )).toBeVisible();
       await waitForSettledPaint(fixture.page);
@@ -895,6 +896,7 @@ test.describe("Artifact Server frontend MVP", () => {
       }
       await share.getByRole("radio", {name: /^Latest/u}).click();
       await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(published.body.links.artifact));
+      await expect(share.getByText("Opens the current version for people who can open this project.", {exact: true})).toBeVisible();
       if (canInspectClipboard) {
         await share.getByRole("button", {name: /^Copy Link$|^Link copied$/u}).click();
         await expect.poll(() => fixture.page.evaluate(() => navigator.clipboard.readText())).toBe(
@@ -969,7 +971,13 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(share.getByRole("textbox", {name: "Link"})).toHaveValue(withoutScheme(exactReviewLink.toString()));
       await expect(share.getByRole("textbox", {name: "Link"})).not.toHaveValue(new RegExp(latest.body.version.id, "u"));
       await expect(share.getByText(
-        "Anyone with the latest link can open it. People with access to this Artifact Server can review it.",
+        "Opens version 1 with review controls for people who can open this project. Guests need a guest link.",
+        {exact: true},
+      )).toBeVisible();
+      // A public artifact's latest link needs no account; the line follows the chosen target.
+      await share.getByRole("radio", {name: /^Latest/u}).check();
+      await expect(share.getByText(
+        "Anyone with this link can open the current version, without an account.",
         {exact: true},
       )).toBeVisible();
       await fixture.page.keyboard.press("Escape");

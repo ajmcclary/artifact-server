@@ -101,7 +101,7 @@ test.describe("WMC-002 WebMCP authority", () => {
       await page.reload();
       await openInspectorTab(page, "Comments");
       await expect(
-        page.getByText("Comments are read-only for this account or archived project."),
+        page.getByText(/ is archived, so its conversations are read-only\.$/u),
       ).toBeVisible();
       // The DS names each resolve action "Resolve comment by <author>", which keeps
       // the read-only assertion apart from the always-available "Resolved" filter.

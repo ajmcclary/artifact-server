@@ -78,7 +78,7 @@ test.describe("Share links from Share and Settings", () => {
       const {page} = opened;
       await page.getByRole("button", {name: "Share this version"}).first().click();
       const share = page.getByRole("dialog", {name: "Share this version"});
-      await share.getByRole("button", {exact: true, name: "Manage"}).click();
+      await share.getByRole("button", {exact: true, name: "Manage Guest Links"}).click();
       await expect(share.getByText("No active share links open this artifact.")).toBeVisible();
       await share.getByRole("button", {name: "New Link"}).click();
       await share.getByLabel("Label").fill("Client review");
@@ -118,9 +118,10 @@ test.describe("Share links from Share and Settings", () => {
       await page.goto(`${server.server.baseUrl}${fixture.review}`);
       await page.getByRole("button", {name: "Share this version"}).first().click();
       const share = page.getByRole("dialog", {name: "Share this version"});
-      await expect(share.getByText("1 share link")).toBeVisible();
-      await share.getByRole("button", {exact: true, name: "Manage"}).click();
-      await share.getByRole("button", {name: "Revoke", exact: true}).click();
+      await expect(share.getByText("1 guest link")).toBeVisible();
+      await share.getByRole("button", {exact: true, name: "Manage Guest Links"}).click();
+      // Revoke names the link it ends, as Copy does.
+      await share.getByRole("button", {name: "Revoke Agency preview link", exact: true}).click();
       await expect(share.getByText("People with this link lose access now. Their comments stay.")).toBeVisible();
       await share.getByRole("button", {name: "Revoke Link"}).click();
       await expect(share.getByText("No active share links open this artifact.")).toBeVisible();

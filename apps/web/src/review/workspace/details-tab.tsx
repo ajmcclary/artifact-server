@@ -125,7 +125,7 @@ export function DetailsTab({
           onCopy={(text, label) => <CopyAction label={`Copy ${label} link`} text={text} />}
           rows={[
             {description: "This version and page, with review and comments.", label: `Review · v${version.version.number}`, url: reviewLink},
-            {description: "Moves when a new version is published.", label: "Latest", url: details.links.artifact},
+            {description: "Follows the current version.", label: "Latest", url: details.links.artifact},
             {description: "This version without review controls.", label: "Raw", url: version.links.version},
           ]}
           title="Links"

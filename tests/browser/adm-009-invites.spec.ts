@@ -124,7 +124,7 @@ test.describe("Invites", () => {
       };
       await page.goto(`${server.server.baseUrl}/auth/login?returnTo=${encodeURIComponent(`/review?project=${published.projectId}&artifact=${published.artifactId}`)}`);
       await page.getByRole("button", {name: "Share this version"}).click();
-      await page.getByRole("button", {name: "Invite"}).click();
+      await page.getByRole("button", {name: "Invite to Server"}).click();
       await page.getByRole("radio", {name: /Anyone with the link/u}).click();
       await page.getByLabel("Uses").fill("5");
       await page.getByRole("button", {name: "Create Invite Link"}).click();
@@ -178,7 +178,7 @@ test.describe("Invites", () => {
       await expect(page.getByRole("heading", {name: "Welcome to Artifact Server"})).toBeVisible();
       await page.goto(`${server.server.baseUrl}/review?project=${published.projectId}&artifact=${published.artifactId}`);
       await page.getByRole("button", {name: "Share this version"}).click();
-      await expect(page.getByRole("button", {name: "Invite"})).toHaveCount(0);
+      await expect(page.getByRole("button", {name: "Invite to Server"})).toHaveCount(0);
       await page.goto(`${server.server.baseUrl}/review/settings/invites`);
       await expect(page.getByText("Administrator permission required")).toBeVisible();
     } finally {

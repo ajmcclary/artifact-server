@@ -111,7 +111,7 @@ export function ShareLinkForm({details, onCancel, onCreated, policy, selectedVer
         }}
         options={[
           {description: `Version ${selectedVersion.version.number}, even after new ones`, id: "pinned", title: "This version"},
-          {description: "Moves when a new version is published", id: "latest", title: "Latest"},
+          {description: "Follows the current version", id: "latest", title: "Latest"},
         ]}
         value={target}
       />

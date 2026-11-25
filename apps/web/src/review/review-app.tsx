@@ -29,6 +29,7 @@ import {Button, dismissInnermost, IconButton, previewPresets, SurfaceState, useE
 import {useAnnounce} from "@/ui/announcer";
 import {changeArtifactAccess} from "./workspace/artifact-access.ts";
 import {ArtifactListPanel} from "./workspace/artifact-list-panel.tsx";
+import {commentLockReason} from "./workspace/comment-lock.ts";
 import {CommentsComposer, CommentsTab, type CommentsTabHandle} from "./workspace/comments-tab.tsx";
 import {ComparisonView} from "./workspace/comparison-view.tsx";
 import {useDesignGalleryCanvas} from "./workspace/design-gallery-canvas.tsx";
@@ -43,6 +44,7 @@ import {exactReviewLink, SharePopover} from "./workspace/share-popover.tsx";
 import {useEffectiveAccess} from "./workspace/use-effective-access.ts";
 import {VersionsTab} from "./workspace/versions-tab.tsx";
 import {CandidateBanner} from "./workspace/candidate-banner.tsx";
+import {rejectedAnnouncement, showsCandidateBanner} from "./workspace/candidate-model.ts";
 import {catalogPanelId, inspectorPanelId, usePanelPreference} from "./workspace/panel-preferences.ts";
 import {useArtifactCatalog} from "./workspace/use-artifact-catalog.ts";
 import {useArtifactActivity, useVersionComparison} from "./workspace/use-artifact-history.ts";
@@ -649,6 +651,10 @@ function ProjectReview({
 
   // Controls follow the server's effective access for this artifact (ADR 0033); the server still refuses.
   const canComment = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("comment.write");
+  // Read-only says why: the archived project, or the role that decided (UX-10).
+  const commentReadOnlyReason = canComment || selectedProject === null || effectiveAccess.status !== "ready"
+    ? null
+    : commentLockReason(effectiveAccess, selectedProject.name, selectedProject.archivedAt !== null);
   const canManageArtifacts = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("artifact.edit");
   // Candidate decisions are publication authority on the server (CND-004), not edit authority.
   const canPublishVersions = selectedProject?.archivedAt === null && effectiveAccess.permissions.has("artifact.publish");
@@ -769,8 +775,15 @@ function ProjectReview({
         crypto.randomUUID(),
       );
       updateArtifact(decided.artifact);
-      await record.reload();
-      setSelectedVersionId(action === "promote" ? decided.version.id : decided.artifact.currentVersionId);
+      record.patchVersion(decided.version);
+      const reloaded = await record.reload();
+      // Either way the reviewer stays on the decided version: promoted, it is current; rejected,
+      // its banner says it closed and current is unchanged (UX-12).
+      setSelectedVersionId(decided.version.id);
+      if (action === "reject") {
+        const current = reloaded?.details.current.version.number ?? details.current.version.number;
+        announce(rejectedAnnouncement(decided.version.number, current));
+      }
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught : new Error("The candidate decision failed."));
     } finally {
@@ -1146,6 +1159,7 @@ function ProjectReview({
         agentControlsOpen={agentControlsOpen}
         canComment={canComment}
         canDeleteAny={canDeleteAnyComment}
+        readOnlyReason={commentReadOnlyReason}
         onShowInArtifact={showThreadInArtifact}
         handleRef={commentsInspectorRef}
         principalId={session.principal.id}
@@ -1370,17 +1384,21 @@ function ProjectReview({
                 />
               )}
               <div ref={canvasSlotRef} style={{...canvasSlotStyle, display: comparisonOpen ? "none" : "flex"}}>
-                {selectedVersion?.version.state === "candidate" && details !== null ? (
+                {selectedVersion !== null && showsCandidateBanner(selectedVersion.version.state) && details !== null ? (
                   <CandidateBanner
                     baseVersionNumber={versions.find(({version}) => version.id === selectedVersion.version.baseVersionId)
                       ?.version.number ?? null}
                     canPromote={canPublishVersions && session.principal.kind === "human" &&
                       session.principal.authorizedByPrincipalId === null}
                     canReject={canPublishVersions}
+                    currentVersionNumber={details.current.version.number}
+                    key={`${selectedVersion.version.id}:${selectedVersion.version.state}`}
                     onPromote={() => void decideCandidate("promote")}
                     onReject={() => void decideCandidate("reject")}
                     pending={candidatePending}
                     stale={details.artifact.currentVersionId !== selectedVersion.version.baseVersionId}
+                    state={selectedVersion.version.state}
+                    versionNumber={selectedVersion.version.number}
                   />
                 ) : null}
                 <PreviewCanvas

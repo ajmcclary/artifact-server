@@ -20,11 +20,15 @@ import {
 import {AccessExplainer} from "./access-explainer.tsx";
 import {PermissionOverridePopover} from "./permission-override-popover.tsx";
 import {
+  archivedAccessNotice,
+  archivedOpenHelp,
+  archivedRoleHelp,
   type Permission,
   projectRoleOrder,
   type ProjectRole,
   restrictConfirmation,
-  roleLabel,
+  type RoleChoice,
+  roleChoices,
 } from "./project-access-model.ts";
 
 export interface ProjectAccessPanelProps {
@@ -34,11 +38,12 @@ export interface ProjectAccessPanelProps {
 
 type AccessMember = ProjectAccessDetails["members"][number];
 
-const modeOptions = [
-  {label: "Open to all members", value: "open"},
-  {label: "Restricted to people listed", value: "restricted"},
-];
-const roleOptions = projectRoleOrder.map((role) => ({label: roleLabel(role), value: role}));
+/** Native options, so a choice an archived project refuses stays listed but disabled. */
+function choiceOptions(choices: readonly {readonly disabled: boolean; readonly label: string; readonly value: string}[]) {
+  return choices.map((choice) => (
+    <option disabled={choice.disabled || undefined} key={choice.value} value={choice.value}>{choice.label}</option>
+  ));
+}
 
 const isRole = (value: string): value is ProjectRole =>
   projectRoleOrder.some((role) => role === value);
@@ -48,6 +53,8 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
   const [details, setDetails] = useState<ProjectAccessDetails | null>(null);
   const [actor, setActor] = useState<ReadonlySet<Permission>>(new Set());
   const [ceiling, setCeiling] = useState<readonly Permission[] | null>(null);
+  // An archived project keeps Project → Access for narrowing only (PRJ-003).
+  const [archived, setArchived] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [pending, setPending] = useState(false);
@@ -64,6 +71,7 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
       ]);
       setDetails(read);
       setActor(new Set(mine.permissions));
+      setArchived(mine.sources.some((source) => source.layer === "state" && source.reason === "archived"));
       setMode(read.access.accessMode);
       setDefaultRole(read.access.defaultMemberRole);
       setHidden(false);
@@ -147,10 +155,11 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
                 const role = event.currentTarget.value;
                 if (isRole(role)) setRole(member, role);
               }}
-              options={roleOptions}
               size="sm"
               value={member.effectiveRole}
-            />
+            >
+              {choiceOptions(roleChoices(archived ? member.effectiveRole : null))}
+            </Select>
           ),
         };
       },
@@ -191,6 +200,10 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
     },
   ];
 
+  // Archived: opening a restricted project and raising the saved role are listed but refused.
+  const openRefused = archived && details.access.accessMode === "restricted";
+  const defaultRoleChoices: readonly RoleChoice[] =
+    roleChoices(archived && details.access.accessMode === "open" ? details.access.defaultMemberRole : null);
   const customGrant = customizing === null ? null : grantFor(customizing.memberId);
   const customRole: ProjectRole = customGrant?.role ??
     (customizing === null || customizing.effectiveRole === "administrator" ? "viewer" : customizing.effectiveRole);
@@ -203,27 +216,35 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
       subtitle="Who can open and change this project"
     >
       <AdminStack>
+        {archived ? <AdminNote>{archivedAccessNotice(projectName)}</AdminNote> : null}
         {error === null ? null : <RequestFailure error={error} />}
         <Select
           disabled={pending}
+          {...(openRefused ? {helper: archivedOpenHelp} : {})}
           label="Who can open this project"
           onChange={(event) => setMode(event.currentTarget.value === "restricted" ? "restricted" : "open")}
-          options={modeOptions}
           size="sm"
           value={mode}
-        />
+        >
+          {choiceOptions([
+            {disabled: openRefused, label: "Open to all members", value: "open"},
+            {disabled: false, label: "Restricted to people listed", value: "restricted"},
+          ])}
+        </Select>
         {mode === "open" ? (
           <Select
             disabled={pending}
+            {...(archived ? {helper: archivedRoleHelp} : {})}
             label="Role for every member"
             onChange={(event) => {
               const role = event.currentTarget.value;
               if (isRole(role)) setDefaultRole(role);
             }}
-            options={roleOptions}
             size="sm"
             value={defaultRole}
-          />
+          >
+            {choiceOptions(defaultRoleChoices)}
+          </Select>
         ) : (
           <AdminNote>Only the people listed with a role, and administrators, can open this project.</AdminNote>
         )}

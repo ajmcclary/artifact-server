@@ -3,6 +3,7 @@ import {useState} from "react";
 import {ConfirmDialog} from "@/arkcase";
 import {VersionList} from "@/ui/review-ui";
 
+import {makeCurrentMessage} from "./candidate-model.ts";
 import {versionListEntries} from "./version-entries.ts";
 import type {VersionListItem} from "./workspace-types.ts";
 
@@ -85,7 +86,7 @@ export function VersionsTab({
       <ConfirmDialog
         confirmIcon="bi-bookmark-check"
         confirmLabel="Make Current"
-        message={`The stable artifact link will point to Version ${pendingCurrent ?? ""}. No saved version is changed or duplicated.`}
+        message={makeCurrentMessage(pendingCurrent ?? "")}
         onClose={() => setPendingCurrent(null)}
         onConfirm={() => {
           const id = pendingCurrent === null ? undefined : idOf.get(pendingCurrent);

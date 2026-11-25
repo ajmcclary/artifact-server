@@ -1,9 +1,11 @@
 import {describe, expect, it} from "vitest";
 
 import {
+  archivedAccessNotice,
   overrideRows,
   permissionLabel,
   restrictConfirmation,
+  roleChoices,
   rolePermissions,
 } from "@/review/settings/project-access-model";
 
@@ -41,5 +43,21 @@ describe("project access model", () => {
   it("names every permission in plain words", () => {
     expect(permissionLabel("comment.moderate")).toBe("Delete anyone's comments");
     expect(permissionLabel("project.manage")).toBe("Manage the project and its access");
+  });
+});
+
+describe("archived project role choices", () => {
+  it("lists every role but disables those above the saved one, so only lowering saves", () => {
+    expect(roleChoices("commenter").map(({disabled, value}) => [value, disabled])).toEqual([
+      ["none", false], ["viewer", false], ["commenter", false], ["editor", true], ["manager", true],
+    ]);
+    expect(roleChoices(null).every(({disabled}) => !disabled)).toBe(true);
+    expect(roleChoices("editor").find(({value}) => value === "manager")?.label).toBe("Manager");
+  });
+
+  it("says what an archived project still allows", () => {
+    expect(archivedAccessNotice("Records")).toBe(
+      "Records is archived. You can restrict it, lower roles and remove people; nothing can be opened or widened.",
+    );
   });
 });

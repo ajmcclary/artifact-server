@@ -92,6 +92,8 @@ export interface PublishVersionInput {
   readonly mediaType?: string;
   readonly path?: string;
   readonly projectId?: string;
+  /** Stage a candidate instead of moving current (CND-001). */
+  readonly stage?: boolean;
 }
 
 export async function publishNew(
@@ -139,16 +141,14 @@ export async function publishVersion(
   await requireSuccessfulUploads(
     uploadEveryStagedFile(installation, upload.body, [file]),
   );
-  return commitStagedUpload(
-    installation,
-    upload.body,
-    input.idempotencyKey,
-    {
-      artifactId: input.artifactId,
-      expectedCurrentVersionId: input.expectedCurrentVersionId,
-      kind: "new_version",
-    },
-  );
+  const target: z.input<typeof commitTargetSchema> = {
+    artifactId: input.artifactId,
+    expectedCurrentVersionId: input.expectedCurrentVersionId,
+    kind: "new_version",
+  };
+  // Only a staged publish names `stage`, so an ordinary one sends the same body as before.
+  if (input.stage === true) target.stage = true;
+  return commitStagedUpload(installation, upload.body, input.idempotencyKey, target);
 }
 
 export async function createStagedUpload(

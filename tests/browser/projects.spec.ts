@@ -185,4 +185,33 @@ test.describe("Projects screen", () => {
       await stopBrowserFixture(fixture);
     }
   });
+
+  test("PRJ-003-B: an archived project's Access offers only narrowing and still saves a lower role", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const archivedId = await createProject(fixture, "Records Retention", "prj-003-archived-access");
+      await archiveProject(fixture, archivedId);
+      await localLogin(fixture);
+      const page = fixture.page;
+      await page.goto(`${fixture.server.baseUrl}/review/projects?project=${archivedId}`);
+      await expect(page.getByText(
+        "Records Retention is archived. You can restrict it, lower roles and remove people; nothing can be opened or widened.",
+      )).toBeVisible();
+      // Raising the role is listed but cannot be chosen, and the helper says why.
+      const role = page.getByLabel("Role for every member");
+      await expect(role.locator("option[value=\"manager\"]")).toBeDisabled();
+      await expect(role.locator("option[value=\"viewer\"]")).toBeEnabled();
+      await expect(role).toHaveAccessibleDescription("An archived project can only lower roles.");
+      await role.selectOption("viewer");
+      await page.getByRole("button", {name: "Save access"}).click();
+      await expect.poll(async () => {
+        const response = await fetch(`${fixture.server.baseUrl}/api/v1/projects/${archivedId}/access`, {
+          headers: apiHeaders(fixture.installation, "prj-003-read-access"),
+        });
+        return z.object({access: z.object({defaultMemberRole: z.string()})}).parse(await response.json()).access.defaultMemberRole;
+      }).toBe("viewer");
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
 });

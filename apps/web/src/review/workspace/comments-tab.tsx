@@ -65,6 +65,8 @@ export interface CommentsTabProps {
   readonly canDeleteAny: boolean;
   readonly handleRef: RefObject<CommentsTabHandle | null>;
   readonly principalId: string;
+  /** Why comments are read-only, naming the archived project or the deciding role; null for the generic note. */
+  readonly readOnlyReason: string | null;
   readonly session: ReviewCommentSession;
   readonly versionId: string | null;
 }
@@ -113,6 +115,7 @@ export function CommentsTab({
   onShowInArtifact,
   handleRef,
   principalId,
+  readOnlyReason,
   session,
   versionId,
 }: CommentsTabProps) {
@@ -377,7 +380,9 @@ export function CommentsTab({
         </div>
       ) : null}
       </div>
-      {!canComment ? <p style={noteStyle}>Comments are read-only for this account or archived project.</p> : null}
+      {!canComment ? (
+        <p style={noteStyle}>{readOnlyReason ?? "Comments are read-only for this account or archived project."}</p>
+      ) : null}
       {session.error === null ? null : <Alert variant="danger">{session.error.message}</Alert>}
       {sentError === null ? null : <Alert variant="danger">{sentError.message}</Alert>}
       <SegmentedControl

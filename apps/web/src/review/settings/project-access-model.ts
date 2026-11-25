@@ -116,3 +116,29 @@ export function overrideRows(
 export function restrictConfirmation(membersLosingAccess: number): string {
   return `${membersLosingAccess} ${membersLosingAccess === 1 ? "member" : "members"} will lose access to this project.`;
 }
+
+/** The helper under a role picker on an archived project, where only narrowing saves. */
+export const archivedRoleHelp = "An archived project can only lower roles.";
+/** The helper under "Who can open this project" on an archived restricted project. */
+export const archivedOpenHelp = "An archived project cannot be opened to all members.";
+
+/** The note above Project → Access on an archived project. */
+export function archivedAccessNotice(projectName: string): string {
+  return `${projectName} is archived. You can restrict it, lower roles and remove people; nothing can be opened or widened.`;
+}
+
+/** A role choice; a disabled one stays listed so the whole range reads, but cannot be picked. */
+export interface RoleChoice {
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly value: ProjectRole;
+}
+
+/**
+ * Every role, with those above `ceiling` disabled. An archived project passes the saved
+ * role as the ceiling, so a picker offers only lowering (UX-09); null leaves all open.
+ */
+export function roleChoices(ceiling: ProjectRole | null): readonly RoleChoice[] {
+  const limit = ceiling === null ? projectRoleOrder.length - 1 : projectRoleOrder.indexOf(ceiling);
+  return projectRoleOrder.map((role, index) => ({disabled: index > limit, label: roleLabel(role), value: role}));
+}

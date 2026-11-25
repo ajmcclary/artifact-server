@@ -15,6 +15,8 @@ export interface ArtifactRecord {
   readonly loading: boolean;
   /** Replace the artifact inside the shown details after an edit made here. */
   readonly patchArtifact: (artifact: ArtifactDetails["artifact"]) => void;
+  /** Replace the shown version's record after a decision made here, such as rejecting a candidate. */
+  readonly patchVersion: (version: ArtifactVersion["version"]) => void;
   /**
    * Re-read details and versions after a change made here. The record is
    * shown only if the reviewer is still on that artifact; `shown` says whether.
@@ -156,5 +158,9 @@ export function useArtifactRecord({
     setFetchedDetails((current) => current?.artifact.id === artifact.id ? {...current, artifact} : current);
   }, []);
 
-  return {details, error, loading, patchArtifact, reload, setError, setLoading, version, versions};
+  const patchVersion = useCallback((next: ArtifactVersion["version"]): void => {
+    setFetchedVersion((current) => current?.version.id === next.id ? {...current, version: next} : current);
+  }, []);
+
+  return {details, error, loading, patchArtifact, patchVersion, reload, setError, setLoading, version, versions};
 }

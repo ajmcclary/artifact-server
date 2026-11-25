@@ -1,4 +1,8 @@
-import {Button, ModeBanner} from "@/arkcase";
+import {useState} from "react";
+
+import {Alert, Button, ModeBanner} from "@/arkcase";
+
+import {candidateBannerCopy, type CandidateState} from "./candidate-model.ts";
 
 /** What the banner needs to know about the version on screen. */
 export interface CandidateBannerProps {
@@ -7,51 +11,84 @@ export interface CandidateBannerProps {
   /** Promote is offered only to a person signed in directly with edit authority (CND-004). */
   readonly canPromote: boolean;
   readonly canReject: boolean;
+  /** The artifact's current version number, named when the candidate is stale. */
+  readonly currentVersionNumber: number;
   readonly onPromote: () => void;
   readonly onReject: () => void;
   readonly pending: boolean;
-  /** True when current has moved past the base, so promotion would be refused (CND-003). */
+  /** True when current is no longer the base, so promotion would be refused (CND-003). */
   readonly stale: boolean;
+  readonly state: CandidateState;
+  readonly versionNumber: number;
 }
 
 /**
- * Names an open candidate opened by its exact-version link: it is staged
- * output, not what the artifact shows, until a person promotes it.
+ * Names a candidate opened by its exact-version link: staged output, not what
+ * the artifact shows, until a person promotes it. A closed candidate keeps its
+ * banner without actions. Reject cannot be undone (the server has no reopen),
+ * so it asks in place first.
  */
 export function CandidateBanner({
   baseVersionNumber,
   canPromote,
   canReject,
+  currentVersionNumber,
   onPromote,
   onReject,
   pending,
   stale,
+  state,
+  versionNumber,
 }: CandidateBannerProps) {
-  const base = baseVersionNumber === null ? "an earlier version" : `version ${baseVersionNumber}`;
+  const [asking, setAsking] = useState(false);
+  const copy = candidateBannerCopy({baseVersionNumber, currentVersionNumber, stale, state, versionNumber});
+  const open = state === "candidate";
   return (
     <ModeBanner
-      actions={
+      actions={open ? (
         <>
           {canReject ? (
-            <Button disabled={pending} icon="bi-x-circle" onClick={onReject} size="sm" variant="secondary">
+            <Button disabled={pending || asking} icon="bi-x-circle" onClick={() => setAsking(true)} size="sm" variant="secondary">
               Reject
             </Button>
           ) : null}
           {canPromote ? (
-            <Button disabled={pending || stale} icon="bi-check2-circle" onClick={onPromote} size="sm" variant="primary">
+            <Button disabled={pending || stale || asking} icon="bi-check2-circle" onClick={onPromote} size="sm" variant="primary">
               Promote
             </Button>
           ) : null}
         </>
-      }
+      ) : null}
+      aria-label={`Candidate version ${versionNumber}`}
       data-testid="candidate-banner"
       icon="bi-git"
-      title={`Candidate · based on ${base}`}
+      title={copy.title}
       variant="card"
     >
-      {stale
-        ? "The current version has moved past this candidate's base, so it can no longer be promoted. Stage a new candidate on the current version."
-        : "This version is waiting for review. Promoting makes this exact version current; rejecting keeps it and its comments."}
+      {copy.body}
+      {open && asking ? (
+        <Alert variant="warning">
+          <span style={{display: "flex", flexDirection: "column", gap: 6}}>
+            <span>{copy.rejectQuestion}</span>
+            <span style={{alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8}}>
+              <Button disabled={pending} onClick={() => setAsking(false)} outline size="xs" variant="secondary">
+                Cancel
+              </Button>
+              <Button
+                disabled={pending}
+                onClick={() => {
+                  setAsking(false);
+                  onReject();
+                }}
+                size="xs"
+                variant="danger"
+              >
+                Reject Candidate
+              </Button>
+            </span>
+          </span>
+        </Alert>
+      ) : null}
     </ModeBanner>
   );
 }

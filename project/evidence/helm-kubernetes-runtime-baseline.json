@@ -1,18 +1,18 @@
 {
-  "clusterReadyMilliseconds": 28180.789249999998,
+  "clusterReadyMilliseconds": 28442.346541,
   "helmVersion": "v4.2.3+g43e8b7f",
-  "imageRevision": "8411246170de541d955c4f7f8e46fd831b089847",
+  "imageRevision": "783a3739d4968077c1158b29c874ee1edbb4dbc8",
   "kindNodeImage": "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5",
   "kindVersion": "kind v0.32.0 go1.26.3 darwin/arm64",
   "kubernetesVersion": {
     "clientVersion": {
       "major": "1",
-      "minor": "36",
-      "gitVersion": "v1.36.2",
-      "gitCommit": "24e2b02af5543d7910c2bb074c7264df5a8f0467",
+      "minor": "37",
+      "gitVersion": "v1.37.2",
+      "gitCommit": "c50e5395f1ae2d4a2c05f28fdcc38c0916cc1a32",
       "gitTreeState": "clean",
-      "buildDate": "2026-06-11T18:09:07Z",
-      "goVersion": "go1.26.4",
+      "buildDate": "2026-10-27T12:01:04Z",
+      "goVersion": "go1.26.10",
       "compiler": "gc",
       "platform": "darwin/arm64"
     },
@@ -33,16 +33,16 @@
       "platform": "linux/arm64"
     }
   },
-  "measuredAt": "2026-10-26T22:48:24.553Z",
-  "providerReadyMilliseconds": 3269.6085420000018,
+  "measuredAt": "2026-11-25T10:47:28.627Z",
+  "providerReadyMilliseconds": 1925.158792000002,
   "readBaseline": {
     "completedRequests": 40,
-    "elapsedMilliseconds": 111.29433400000562,
-    "p95Milliseconds": 107.68712499999674,
-    "requestsPerSecond": 359.407335147879
+    "elapsedMilliseconds": 110.96441700001014,
+    "p95Milliseconds": 108.24158299999544,
+    "requestsPerSecond": 360.4759172482864
   },
-  "replacementMilliseconds": 6835.434250000006,
+  "replacementMilliseconds": 5794.220125000007,
   "replicas": 2,
-  "rolloutMilliseconds": 19042.939709,
-  "startupMilliseconds": 12432.545041999998
+  "rolloutMilliseconds": 17405.268624999997,
+  "startupMilliseconds": 10908.525708000001
 }

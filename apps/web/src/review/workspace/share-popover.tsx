@@ -48,7 +48,7 @@ interface ExplainableMember {
   readonly displayName: string;
   readonly memberId: string;
 }
-type ShareTarget = "latest" | "version";
+export type ShareTarget = "latest" | "version";
 
 export interface SharePopoverProps {
   /** Administrators on a team installation can invite people. */
@@ -308,7 +308,7 @@ export function SharePopover({
                   id: "version",
                   title: `This version · v${selectedVersion?.version.number ?? "—"}`,
                 },
-                {description: "Moves when a new version is published", id: "latest", title: "Latest"},
+                {description: "Follows the current version", id: "latest", title: "Latest"},
               ]}
               value={target}
             />
@@ -336,9 +336,7 @@ export function SharePopover({
             <div style={accessLineStyle}>
               <i aria-hidden="true" className="bi bi-people" style={accessIconStyle} />
               <span style={headerTextStyle}>
-                {publicArtifact
-                  ? "Anyone with the latest link can open it. People with access to this Artifact Server can review it."
-                  : "People with access to this Artifact Server can review it."}
+                {copyLinkAudience(target, publicArtifact, selectedVersion?.version.number ?? null)}
               </span>
               <Button disabled={details === null} onClick={openAccess} size="xs" variant="link">
                 Manage Access
@@ -359,10 +357,10 @@ export function SharePopover({
                 <span style={bandTextStyle}>
                   <span style={bandTitleStyle}>
                     {shareLinks.length === 0
-                      ? "Share links"
-                      : `${shareLinks.length} share ${shareLinks.length === 1 ? "link" : "links"}`}
+                      ? "Guest links"
+                      : `${shareLinks.length} guest ${shareLinks.length === 1 ? "link" : "links"}`}
                   </span>
-                  <span style={subtleStyle}>People without an account review and comment through a link.</span>
+                  <span style={subtleStyle}>Guests without an account open and comment through a share link.</span>
                 </span>
                 <Button
                   onClick={() => {
@@ -373,7 +371,7 @@ export function SharePopover({
                   size="sm"
                   variant="primary"
                 >
-                  Manage
+                  Manage Guest Links
                 </Button>
               </div>
             </PanelSection>
@@ -383,11 +381,15 @@ export function SharePopover({
               <div style={inviteRowStyle}>
                 <i aria-hidden="true" className="bi bi-people" />
                 <span style={bandTextStyle}>
-                  <span style={bandTitleStyle}>{memberCount === null ? "Members" : `${memberCount} members`}</span>
-                  <span style={subtleStyle}>Invite someone with a link they redeem by signing in.</span>
+                  <span style={bandTitleStyle}>
+                    {memberCount === null
+                      ? "Server members"
+                      : `${memberCount} server ${memberCount === 1 ? "member" : "members"}`}
+                  </span>
+                  <span style={subtleStyle}>Invite someone to this Artifact Server. They join by signing in.</span>
                 </span>
                 <Button icon="bi-person-plus" onClick={() => setScreen("invite")} outline size="sm" variant="primary">
-                  Invite
+                  Invite to Server
                 </Button>
               </div>
             </PanelSection>
@@ -441,7 +443,13 @@ export function SharePopover({
                     <CopyAction copiedLabel="Link copied" label={`Copy ${link.label} link`} text={link.url} variant="outline">
                       Copy Link
                     </CopyAction>
-                    <Button disabled={pending} onClick={() => setRevoking(link.id)} size="sm" variant="link">
+                    <Button
+                      aria-label={`Revoke ${link.label} link`}
+                      disabled={pending}
+                      onClick={() => setRevoking(link.id)}
+                      size="sm"
+                      variant="link"
+                    >
                       Revoke
                     </Button>
                   </div>
@@ -607,6 +615,20 @@ export function AgentLogos() {
       ))}
     </span>
   );
+}
+
+/**
+ * Who can use the URL Copy Link copies, for the target chosen above it (UX-13): the exact
+ * Review link needs project access, and the latest link is open to anyone only when public.
+ */
+export function copyLinkAudience(target: ShareTarget, publicArtifact: boolean, versionNumber: number | null): string {
+  if (target === "latest") {
+    return publicArtifact
+      ? "Anyone with this link can open the current version, without an account."
+      : "Opens the current version for people who can open this project.";
+  }
+  const version = versionNumber === null ? "this version" : `version ${versionNumber}`;
+  return `Opens ${version} with review controls for people who can open this project. Guests need a guest link.`;
 }
 
 function copyRefusal(subject: string): string {
