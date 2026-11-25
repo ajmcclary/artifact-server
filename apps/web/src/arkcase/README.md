@@ -9,7 +9,9 @@ directory: change the design system upstream, commit it, and re-run the sync.
 - `SOURCE.json` records the pinned commit and a SHA-256 for every file here.
 
 The sync copies the entry components with their `.d.ts` declarations, the
-project-owned review UI, the token sheets and fonts, and the brand marks. It
+project-owned review UI, the token sheets and fonts, and the brand marks. The
+review UI may import design-system modules; those come along under `components/`
+and its import paths are rewritten to reach them there. It
 routes runtime style injection through `akStyleDocument`
 (`apps/web/src/arkcase-style.ts`), which adopts constructable stylesheets that
 the application's `style-src 'self'` policy allows. It prunes

@@ -1,3 +1,4 @@
+import { fmt } from '../components/utilities/format.jsx';
 import { createToolbarUI } from './toolbar-ui.jsx';
 import { groupByDay, groupByArtifact, usTime, timeRange, bylineTime, listPreview, sentenceOf, versionChange, TYPE_FILTERS, SEGMENTS } from './activity-model.js';
 
@@ -7,6 +8,7 @@ const MARKERS = {
   comment: { icon: 'bi-chat-left-text', bg: 'var(--pill-primary-bg, #e0f2fe)', fg: 'var(--pill-primary-fg, #0369a1)' },
   resolution: { icon: 'bi-check2-circle', bg: 'var(--pill-success-bg, #dcfce7)', fg: 'var(--pill-success-fg, #15803d)' },
   version: { icon: 'bi-upload', bg: 'var(--surface-navy-subtle, #eaf1f6)' },
+  candidate: { icon: 'bi-git', bg: 'var(--surface-navy-subtle, #eaf1f6)' },
   access: { icon: 'bi-link-45deg', bg: 'var(--surface-tertiary, #e9ecef)' },
   agent: { icon: 'bi-cpu', bg: 'var(--pill-warning-bg, #fef3c7)', fg: 'var(--pill-warning-fg, #92400e)' },
   admin: { icon: 'bi-activity', bg: 'var(--surface-tertiary, #e9ecef)' },
@@ -25,13 +27,13 @@ const TEXT = {
 };
 const THREAD_TYPES = ['comment', 'resolution'];
 
-const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const plural = fmt.plural;
 
 // The host supplies its React runtime and ArkCase exports; no duplicated primitives.
 export function createActivityUI(React, DS) {
   const { CommentThread, StatusPill, Button, SegmentedControl, SurfaceState, Avatar, SectionHeading,
-    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator } = DS;
-  const { PageToolbar, FilterGroup, FilterMenu, FilterSummary, ToolbarSearch } = createToolbarUI(React, DS);
+    MetricCard, AutoGrid, ScrollDock, AnnotationPin, LoadMore, ToolbarSeparator, ToolbarGroup, FilterMenu, ActiveFilters } = DS;
+  const { PageToolbar, ToolbarSearch } = createToolbarUI(React, DS);
   const folder = (size = 'var(--icon-sm, 0.875rem)') => <i className="bi bi-folder2" aria-hidden="true" style={{ fontSize: size }} />;
 
   function Marker({ kind, icon, size = 32 }) {
@@ -68,7 +70,7 @@ export function createActivityUI(React, DS) {
   }
 
   function ActivityFeed({ events, now, hasMore, remaining, onShowOlder, expandedIds = [], onToggleReplies, openGroups = [], onToggleGroup, onOpen, onCompare,
-    onReply, onResolve, renderReplyComposer, onClearFilters, filtered, label = 'Activity', stickyTop = 0, renderThumbnail, density = 'comfortable' }) {
+    onReply, onResolve, renderReplyComposer, readOnlyReason, onOpenThread, onClearFilters, filtered, label = 'Activity', stickyTop = 0, renderThumbnail, density = 'comfortable' }) {
     const compact = density === 'compact';
     const thumbnails = !compact && renderThumbnail;
     const rootRef = React.useRef(null);
@@ -126,14 +128,25 @@ export function createActivityUI(React, DS) {
 
     function artifactCard(e) {
       const newest = e.threads[0].thread;
-      const where = ['v' + (newest.version != null ? newest.version : ''), newest.path || (newest.kind === 'point' ? null : 'whole version')]
+      /* A card can gather conversations from several pages or versions; it then says so, and each
+         conversation carries its own location, which opens that page and selects it (UX-04). */
+      const locationOf = (t) => ['v' + (t.version != null ? t.version : ''), t.path || (t.kind === 'point' ? null : 'whole version')]
         .filter((x) => x && x !== 'v').join(' · ');
+      const pages = new Set(e.threads.map(({ thread: t }) => t.path || ''));
+      const versions = new Set(e.threads.map(({ thread: t }) => t.version));
+      const spans = pages.size > 1 || versions.size > 1;
+      const where = !spans ? locationOf(newest)
+        : [versions.size > 1 ? plural(versions.size, 'version', 'versions') : 'v' + newest.version, pages.size > 1 ? 'across ' + plural(pages.size, 'page', 'pages') : null]
+          .filter(Boolean).join(' · ');
       const openCount = e.threads.filter((t) => !t.thread.isResolved).length;
       const resolved = e.threads.length - openCount;
       const replies = e.threads.reduce((n, t) => n + (t.thread.replies || []).length, 0);
       const facts = [openCount ? plural(openCount, 'open conversation', 'open conversations') : null, resolved ? resolved + ' resolved' : null,
         replies ? plural(replies, 'reply', 'replies') : null].filter(Boolean).join(' · ');
-      const comments = e.threads.map(({ thread: t }) => ({ id: t.key, author: t.author, time: bylineTime(t.atMs, e.at) || null, text: t.body, resolved: !!t.isResolved,
+      const located = (t) => (!spans || !onOpenThread ? t.body : <>{t.body}
+        <span style={{ display: 'block', marginTop: 2 }}><Button variant="link" size="xs" flush icon="bi-geo-alt" aria-label={`Open this conversation at ${locationOf(t)}`}
+          onClick={() => onOpenThread(e, t)} style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'left', maxWidth: '100%' }}>{locationOf(t)}</Button></span></>);
+      const comments = e.threads.map(({ thread: t }) => ({ id: t.key, author: t.author, time: bylineTime(t.atMs, e.at) || null, text: located(t), resolved: !!t.isResolved,
         replies: (t.replies || []).map((r, i) => ({ id: r.id || t.key + ':r' + i, author: r.author, time: bylineTime(r.atMs, e.at) || null, text: r.body })) }));
       /* The card's head is a smart header: at rest it shows the screen and the conversation's
          facts; carried to the top it compacts to one line under the day cap. */
@@ -142,7 +155,8 @@ export function createActivityUI(React, DS) {
         {({ docked }) => docked
           ? <div data-conversation-head="docked" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', minWidth: 0 }}>
               <span style={{ flex: '0 1 auto', minWidth: 0, fontWeight: 600, color: 'var(--text-strong, #111827)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.artifactName}</span>
-              <span style={{ flex: '1 1 auto', ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)', whiteSpace: 'nowrap' }}>{where}</span>
+              {/* A long page path truncates rather than pushing the pill and Open past the edge. */}
+              <span title={where} style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)', whiteSpace: 'nowrap' }}>{where}</span>
               {e.needsYou && <StatusPill tone="warning" label="Your turn" />}
               {openLink(e)}
             </div>
@@ -151,18 +165,23 @@ export function createActivityUI(React, DS) {
               {thumbnails && <ScreenThumbnail entry={e} page={renderThumbnail(e)} onOpen={onOpen} />}
               <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-dense, 13px)', fontWeight: 500, color: 'var(--text-emphasis, #374151)' }}>{folder()}{e.projectName}</span>
-                <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)' }}>{where}</span>
+                <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)', overflowWrap: 'anywhere' }}>{where}</span>
                 <span style={{ fontSize: 'var(--font-size-dense, 13px)', color: 'var(--text-secondary, #5a6268)' }}>{facts}</span>
               </div>
               <Button variant="secondary" outline size="sm" icon="bi-box-arrow-up-right" aria-label={`Open ${e.artifactName} in review`} onClick={() => onOpen(e)}>Open</Button>
             </div>}
       </ScrollDock>;
       const agent = e.agent;
+      const locked = readOnlyReason ? readOnlyReason(e) : null;
       return <div data-artifact-card={e.artifactId} style={{ marginTop: compact ? 4 : 10, border: compact ? 0 : STRONG_RULE, borderRadius: compact ? 0 : RADIUS, background: 'var(--surface-card, #fff)' }}>
         {head}
         <div style={{ padding: '4px 0' }}>
+          {/* The review's own access decides whether Reply and Resolve appear here; read-only says why. */}
           <CommentThread comments={comments} density="compact" visibleReplies={2} expandedIds={expandedIds} onToggleReplies={onToggleReplies}
-            onReply={onReply} onResolve={onResolve} renderReplyComposer={renderReplyComposer} aria-label={`Conversations on ${e.artifactName}`} />
+            onReply={locked ? undefined : onReply} onResolve={locked ? undefined : onResolve} renderReplyComposer={locked ? undefined : renderReplyComposer}
+            aria-label={`Conversations on ${e.artifactName}`} />
+          {locked && <p data-read-only-reason="" style={{ margin: '4px 14px 8px', fontSize: 'var(--font-size-xs, 12px)', lineHeight: 1.45, color: 'var(--text-secondary, #5a6268)' }}>
+            <i className="bi bi-lock" aria-hidden="true" style={{ marginRight: 6 }} />{locked}</p>}
         </div>
         {agent && <div data-agent-handoff="" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid var(--border-color, #dee2e6)' }}>
           <span aria-hidden="true" style={{ display: 'inline-flex' }}><Marker kind="agent" size={26} /></span>
@@ -181,6 +200,15 @@ export function createActivityUI(React, DS) {
       if (e.type === 'version') {
         return metaRow(<>{project(e)}
           {e.fromVersion && onCompare && <Button variant="link" size="xs" icon="bi-arrow-left-right" onClick={() => onCompare(e)}>{`Compare v${e.fromVersion} → v${e.version}`}</Button>}
+          {openLink(e)}</>);
+      }
+      if (e.type === 'candidate') {
+        /* The staging entry carries where the candidate stands now; a decision entry needs no pill. */
+        const pill = e.verb !== 'staged' ? null : e.state === 'candidate'
+          ? <StatusPill tone={e.stale ? 'neutral' : 'warning'} label={e.stale ? 'Stale' : 'Waiting for review'} />
+          : <StatusPill tone={e.state === 'promoted' ? 'success' : 'neutral'} label={e.state === 'promoted' ? 'Promoted' : e.state === 'superseded' ? 'Superseded' : 'Rejected'} />;
+        return metaRow(<>{pill}{project(e)}
+          <span style={{ ...DATA, fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-data, #495057)' }}>{`based on v${e.baseVersion}`}</span>
           {openLink(e)}</>);
       }
       if (e.type === 'agent') return metaRow(<><StatusPill tone="warning" label={e.state} />{project(e)}{openLink(e)}</>);
@@ -264,18 +292,18 @@ export function createActivityUI(React, DS) {
     const filter = (id, icon, text, items, minWidth, ref) => <FilterMenu open={menu === id} onOpenChange={(next) => setMenu(next ? id : null)}
       icon={icon} label={text} menuLabel={id[0].toUpperCase() + id.slice(1)} density="comfortable" items={items} minWidth={minWidth} triggerRef={ref}
       presentation={phone ? 'sheet' : 'popover'} />;
-    const chips = selectedPeople.map((id) => { const p = people.find((x) => x.id === id); return { key: 'person:' + id, label: p ? p.name : id, icon: p && p.agent ? 'bi-cpu' : 'bi-person', remove: () => onPeople(selectedPeople.filter((x) => x !== id)) }; })
-      .concat(selectedProjects.map((id) => { const p = projects.find((x) => x.id === id); return { key: 'project:' + id, label: p ? p.name : id, icon: 'bi-folder2', remove: () => onProjects(selectedProjects.filter((x) => x !== id)) }; }))
-      .concat(types.map((id) => { const f = TYPE_FILTERS.find((x) => x.id === id); return { key: 'type:' + id, label: f ? f.label : id, icon: TYPE_ICONS[id], remove: () => onTypes(types.filter((x) => x !== id)) }; }));
+    const chips = selectedPeople.map((id) => { const p = people.find((x) => x.id === id); return { id: 'person:' + id, label: p ? p.name : id, icon: p && p.agent ? 'bi-cpu' : 'bi-person', onRemove: () => onPeople(selectedPeople.filter((x) => x !== id)) }; })
+      .concat(selectedProjects.map((id) => { const p = projects.find((x) => x.id === id); return { id: 'project:' + id, label: p ? p.name : id, icon: 'bi-folder2', onRemove: () => onProjects(selectedProjects.filter((x) => x !== id)) }; }))
+      .concat(types.map((id) => { const f = TYPE_FILTERS.find((x) => x.id === id); return { id: 'type:' + id, label: f ? f.label : id, icon: TYPE_ICONS[id], onRemove: () => onTypes(types.filter((x) => x !== id)) }; }));
     const counted = typeof shown === 'number' && typeof total === 'number';
     const n = (v) => <span style={{ ...DATA, color: 'var(--text-data, #495057)' }}>{v}</span>;
     return <>
       <PageToolbar title={title} label="Activity filters" gutter={phone ? 16 : 20} phone={phone} top={top} onHeight={onHeight}
-        end={<ToolbarSearch label="Search activity" placeholder="Search activity" value={query} onChange={(ev) => onQuery(ev.target.value)} />}>
+        end={<ToolbarSearch label="Search activity" placeholder="Search activity" value={query} onChange={onQuery} />}>
         <SegmentedControl label="Show" mode="radio" value={segment} onChange={onSegment}
           options={SEGMENTS.map((id) => ({ id, label: id, count: id === 'All' ? undefined : counts[id] }))} />
         {!phone && <ToolbarSeparator style={{ margin: '0 4px', height: 24 }} />}
-        <FilterGroup label="Filters" phone={phone}>
+        <ToolbarGroup label="Filters" variant="flush" overflow={phone ? 'scroll' : 'wrap'}>
           {onPeople && filter('people', 'bi-people', label('People', selectedPeople.length, 'Everyone'), peopleItems, 288, peopleRef)}
           {filter('projects', 'bi-folder2', label('Projects', selectedProjects.length, 'All projects'),
             projects.map((p) => ({ type: 'checkbox', label: p.name, icon: p.archived ? 'bi-archive' : 'bi-folder2', description: p.archived ? 'Archived' : undefined,
@@ -283,10 +311,10 @@ export function createActivityUI(React, DS) {
           {filter('types', 'bi-funnel', label('Types', types.length, 'All types'),
             TYPE_FILTERS.map((f) => ({ type: 'checkbox', label: f.label, icon: TYPE_ICONS[f.id], meta: typeCounts ? typeCounts[f.id] : undefined, checked: types.includes(f.id), keepOpen: true,
               onClick: () => onTypes(toggle(types, f.id)) })), 220)}
-        </FilterGroup>
+        </ToolbarGroup>
       </PageToolbar>
-      {counted && <FilterSummary live filtered={filtered} status={<>Showing {n(shown)} of {n(total)} entries</>} restStatus={`Showing all ${total} entries`}
-        chips={chips} onClear={onClearFilters} fallbackRef={peopleRef} />}
+      {counted && <ActiveFilters live filtered={filtered} status={<>Showing {n(shown)} of {n(total)} entries</>} restStatus={`Showing all ${total} entries`}
+        filters={chips} onClear={onClearFilters} returnFocusRef={peopleRef} />}
     </>;
   }
 

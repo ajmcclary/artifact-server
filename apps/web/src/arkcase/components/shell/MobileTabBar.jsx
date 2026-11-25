@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationIcon } from '../navigation/NavigationIcon.jsx';
-import { countText, leftToBrowser } from '../navigation/nav-helpers.jsx';
+import { countText } from '../navigation/nav-helpers.jsx';
+import { isModifiedClick } from '../utilities/link-click.jsx';
 
 /**
  * ArkCase MobileTabBar — the phone's primary navigation. Up to five 44px+
@@ -38,7 +39,7 @@ export function MobileTabBar({
           'aria-label': item.ariaLabel || name,
           'data-ak-tab': item.id,
           onClick: (e) => {
-            if (item.link != null && leftToBrowser(e)) return;
+            if (item.link != null && isModifiedClick(e)) return;
             if (item.link != null) e.preventDefault();
             if (onSelect) onSelect(item);
           },

@@ -2,45 +2,30 @@
 // no clock reads. Artifact Server keeps no unified activity log, so every event here is
 // read from a record the server does hold: versions, threads, dispatches, access, members, keys.
 
+import { fmt } from '../components/utilities/format.jsx';
+
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
 const pad = (n) => String(n).padStart(2, '0');
 
+/* Dates and times are the design system's local `fmt` members (the reader's time zone); these
+   named exports stay for the App and existing hosts. */
+
 /** Epoch ms for an ISO string, `MM/DD HH:mm` (local, in `year`) or `MM/DD/YYYY` (local noon); NaN when unreadable. */
 export function instantOf(value, year) {
-  if (typeof value === 'number') return value;
-  if (typeof value !== 'string' || !value.trim()) return NaN;
-  const s = value.trim();
-  let m = /^(\d{2})\/(\d{2}) (\d{2}):(\d{2})$/.exec(s);
-  if (m) return new Date(year, +m[1] - 1, +m[2], +m[3], +m[4]).getTime();
-  m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
-  if (m) return new Date(+m[3], +m[1] - 1, +m[2], 12, 0).getTime();
-  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return NaN;
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? NaN : t;
+  return fmt.instant(value, { year, hour: 12 });
 }
 
 /** Local wall clock, `HH:mm`. */
 export function clock(ms) {
-  const d = new Date(ms);
-  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  return fmt.localTime(ms, { hour12: false }) || '';
 }
 
 /* US display formats, in local time: MM/DD/YYYY and a 12-hour clock. Unreadable instants print nothing. */
-export function usDate(ms) {
-  if (typeof ms !== 'number' || Number.isNaN(ms)) return '';
-  const d = new Date(ms);
-  return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + d.getFullYear();
-}
-export function usTime(ms) {
-  if (typeof ms !== 'number' || Number.isNaN(ms)) return '';
-  const d = new Date(ms);
-  const h = d.getHours();
-  return ((h % 12) || 12) + ':' + pad(d.getMinutes()) + ' ' + (h < 12 ? 'AM' : 'PM');
-}
-export function usDateTime(ms) {
-  return usDate(ms) && usDate(ms) + ' ' + usTime(ms);
-}
+const local = (format) => (ms) => (typeof ms === 'number' && !Number.isNaN(ms) ? format(ms) : '');
+export const usDate = local(fmt.localDate);
+export const usTime = local((ms) => fmt.localTime(ms));
+export const usDateTime = local(fmt.localDateTime);
 
 const ROTATION = ['Claude', 'Dana Okonkwo', 'Codex'];
 
@@ -75,7 +60,7 @@ export function sortEvents(events) {
   });
 }
 
-export function buildEvents({ artifacts, threadsFor, versionsFor, dispatches = {}, accessLog = [], adminLog = [], groupOf, year }) {
+export function buildEvents({ artifacts, threadsFor, versionsFor, candidatesFor = () => [], dispatches = {}, accessLog = [], adminLog = [], groupOf, year }) {
   const events = [];
   const byId = new Map(artifacts.map((a) => [a.id, a]));
   const about = (a) => ({ artifactId: a.id, artifactName: a.name, projectId: a.projectId, projectName: a.projectName, archived: !!a.archived });
@@ -101,7 +86,19 @@ export function buildEvents({ artifacts, threadsFor, versionsFor, dispatches = {
         });
       }
     });
-    versionsFor(a).forEach((v) => {
+    /* A candidate (Artifact Server 11/04/2026) is staged, then promoted or closed. A promoted one
+       joins the accepted history, so its version entry is the staging entry rather than a second one. */
+    const candidates = candidatesFor(a);
+    const staged = new Set(candidates.map((c) => c.n));
+    candidates.forEach((c) => {
+      const base = { type: 'candidate', ...about(a), version: c.n, baseVersion: c.base, needsYou: false, withAgent: false, adminOnly: false };
+      events.push({ ...base, id: 'candidate:' + a.id + ':' + c.n, at: instantOf(c.at, year), actor: c.by, verb: 'staged', state: c.state, stale: !!c.stale });
+      if (c.state !== 'candidate' && c.decidedAt) {
+        events.push({ ...base, id: 'candidate:' + a.id + ':' + c.n + ':' + c.state, at: instantOf(c.decidedAt, year), actor: c.decidedBy,
+          verb: c.state === 'promoted' ? 'promoted' : 'closed', state: c.state, stale: false });
+      }
+    });
+    versionsFor(a).filter((v) => !staged.has(v.n)).forEach((v) => {
       events.push({
         id: 'version:' + a.id + ':' + v.n, type: 'version', at: instantOf(v.at, year), actor: v.by, verb: 'published',
         ...about(a), version: v.n, fromVersion: v.n > 1 ? v.n - 1 : null, needsYou: false, withAgent: false, adminOnly: false,
@@ -135,7 +132,7 @@ export function buildEvents({ artifacts, threadsFor, versionsFor, dispatches = {
 
 export const TYPE_FILTERS = [
   { id: 'comments', label: 'Comments', types: ['comment', 'resolution'] },
-  { id: 'versions', label: 'Versions', types: ['version'] },
+  { id: 'versions', label: 'Versions', types: ['version', 'candidate'] },
   { id: 'agents', label: 'Agents', types: ['agent'] },
   { id: 'access', label: 'Access', types: ['access', 'admin'] },
 ];
@@ -238,7 +235,7 @@ export function groupBursts(events, { windowMs = BURST_WINDOW } = {}) {
     run = null;
   };
   events.forEach((e) => {
-    const burstable = BURST_TYPES.includes(e.type) && !Number.isNaN(e.at);
+    const burstable = BURST_TYPES.includes(e.type) && Number.isFinite(e.at);
     const lead = run && run[0];
     if (lead && burstable && e.type === lead.type && e.actor === lead.actor
       && lead.at - e.at <= windowMs && dayKey(e.at) === dayKey(lead.at)) {
@@ -270,7 +267,7 @@ export function groupByArtifact(dayEvents) {
     let g = groups.get(e.artifactId);
     if (!g) {
       g = {
-        id: 'artifact:' + e.artifactId + ':' + (Number.isNaN(e.at) ? 'undated' : dayKey(e.at)), kind: 'artifact', type: 'comment',
+        id: 'artifact:' + e.artifactId + ':' + dayOf(e.at), kind: 'artifact', type: 'comment',
         artifactId: e.artifactId, artifactName: e.artifactName, projectId: e.projectId, projectName: e.projectName, archived: e.archived,
         actors: [], threads: [], agent: null, events: [], at: e.at, needsYou: false, withAgent: false, adminOnly: false,
       };
@@ -293,7 +290,7 @@ export function groupEntries(events, { windowMs = BURST_WINDOW } = {}) {
   let day = [];
   let key = null;
   groupBursts(events, { windowMs }).forEach((e) => {
-    const k = Number.isNaN(e.at) ? 'undated' : dayKey(e.at);
+    const k = dayOf(e.at);
     if (k !== key) { out.push(...groupByArtifact(day)); day = []; key = k; }
     day.push(e);
   });
@@ -301,7 +298,7 @@ export function groupEntries(events, { windowMs = BURST_WINDOW } = {}) {
   return out;
 }
 
-const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const plural = fmt.plural;
 const versionSpan = (e) => (e.count > 1 ? 'v' + e.firstVersion + '–v' + e.version : 'v' + e.version);
 
 /** A version event's change in the data face: `v4 → v5`, `v5–v7`, or `v1 · new`. */
@@ -311,18 +308,10 @@ export function versionChange(e) {
 }
 
 /** "A and B", or "A, B and 2 more". */
-export function listPreview(names, shown = 2) {
-  if (names.length <= shown) return names.join(' and ');
-  return names.slice(0, shown).join(', ') + ' and ' + (names.length - shown) + ' more';
-}
+export const listPreview = (names, shown = 2) => fmt.listPreview(names, shown);
 
 /** A clock span on one day: `10:00–10:12 AM`, `11:50 AM–12:10 PM`, or one time when they agree. */
-export function timeRange(from, to) {
-  const a = usTime(from); const b = usTime(to);
-  if (!a || !b || a === b) return b || a;
-  const [ta, pa] = a.split(' '); const [, pb] = b.split(' ');
-  return pa === pb ? ta + '–' + b : a + '–' + b;
-}
+export const timeRange = (from, to) => fmt.timeRange(from, to) || '';
 
 /** A byline's time: the clock alone on the entry's own day, the full date and time otherwise. */
 export function bylineTime(ms, entryAt) {
@@ -356,6 +345,7 @@ export function sentenceOf(e) {
     return [...who, P('verb', verb), P('name', e.artifactName)];
   }
   if (e.type === 'version') return [P('actor', e.actor), P('verb', 'published'), P('code', versionSpan(e)), P('verb', 'of'), P('name', e.artifactName)];
+  if (e.type === 'candidate') return [P('actor', e.actor), P('verb', e.verb + ' candidate'), P('code', 'v' + e.version), P('verb', 'of'), P('name', e.artifactName)];
   if (e.type === 'agent') return [P('actor', e.actor), P('verb', e.verb), P('name', e.artifactName), P('verb', 'to'), P('actor', e.agent)];
   if (e.type === 'admin') return [P('actor', e.actor), P('verb', e.verb), P('plain', e.detail)];
   return [P('actor', e.actor), P('verb', e.verb), P('name', e.artifactName)];
@@ -368,17 +358,16 @@ export function segmentCounts(events, { isAdmin = true } = {}) {
 }
 
 export function dayKey(ms) {
-  const d = new Date(ms);
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  return fmt.dayKey(ms);
 }
+
+/* The day an event groups under: its local `YYYY-MM-DD`, or `undated` when its time is missing
+   or unreadable (NaN, undefined, free text) — dayKey is null then, never a group key. */
+const dayOf = (at) => dayKey(at) || 'undated';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-function relativeDay(key, now) {
-  if (key === dayKey(now)) return 'Today';
-  const y = new Date(now); y.setDate(y.getDate() - 1);
-  return key === dayKey(y.getTime()) ? 'Yesterday' : null;
-}
+const relativeDay = (key, now) => fmt.relativeDay(key, now);
 export function dayLabel(key, now) {
   const near = relativeDay(key, now);
   if (near) return near;
@@ -396,7 +385,7 @@ export function dayParts(key, now) {
 export function groupByDay(events, now) {
   const groups = [];
   events.forEach((e) => {
-    const key = Number.isNaN(e.at) ? 'undated' : dayKey(e.at);
+    const key = dayOf(e.at);
     let group = groups[groups.length - 1];
     if (!group || group.key !== key) {
       group = { key, label: key === 'undated' ? 'Undated' : dayLabel(key, now), ...dayParts(key, now), events: [] };

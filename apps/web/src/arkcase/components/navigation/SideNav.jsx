@@ -4,7 +4,8 @@ import { NavigationIcon } from './NavigationIcon.jsx';
 import { displayProfileContext } from '../shell/DisplayProfile.jsx';
 import { useResizeSeam } from '../panel/resize-seam.jsx';
 import { Tooltip } from '../feedback/Tooltip.jsx';
-import { matchesMedia, countText, leftToBrowser } from './nav-helpers.jsx';
+import { matchesMedia, countText } from './nav-helpers.jsx';
+import { isModifiedClick } from '../utilities/link-click.jsx';
 
 const RAIL_WIDTH = 'var(--navigator-rail-width, 52px)';
 const GROUP_LABEL = { fontSize: 'var(--font-size-label, 11px)', fontWeight: 700, letterSpacing: 'var(--letter-spacing-wide, .025em)', textTransform: 'uppercase', color: 'var(--ac-nav-secondary, var(--text-secondary, #5a6268))', whiteSpace: 'nowrap' };
@@ -140,7 +141,7 @@ export function SideNav({
   const select = (item) => { onSelect && onSelect(item); if (isPeek) closePeek(); };
   /* A link row leaves a modified click to the browser — no onSelect, and the peek stays open. */
   const onItemClick = (item) => (e) => {
-    if (item.link != null && leftToBrowser(e)) return;
+    if (item.link != null && isModifiedClick(e)) return;
     e.preventDefault(); select(item);
   };
 

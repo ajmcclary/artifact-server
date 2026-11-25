@@ -45,7 +45,8 @@ declare module "@/arkcase/review-ui/activity-model.js" {
     events: readonly Event[],
     options?: {readonly windowMs?: number},
   ): ActivityEntryOf<Event>[];
-  export function dayKey(ms: number): string;
+  /** The local `YYYY-MM-DD` an instant falls on; null when the time is NaN, infinite or unreadable. */
+  export function dayKey(ms: number): string | null;
   export function dayLabel(key: string, now: number): string;
   export function groupByDay<Event extends ActivityEvent>(events: readonly Event[], now: number): ActivityDayGroup<Event>[];
 }

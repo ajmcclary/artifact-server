@@ -1,4 +1,6 @@
+import { fmt } from '../components/utilities/format.jsx';
 import { usDate } from './activity-model.js';
+import { brandingTemplates, brandingPages } from './branding-catalog.js';
 
 // Browser-local compatibility fixtures. Example URLs and digests are not publication evidence.
 export const exampleOrigin = 'https://artifacts.example.invalid';
@@ -11,9 +13,20 @@ export function safePagePath(path) {
     && !path.split('/').some((part) => !part || part === '.' || part === '..');
 }
 
-const entry = (path, size = 1024, sha256 = digest) => ({ path, size, sha256, disposition: 'inline',
-  mediaType: /\.html?$/i.test(path) ? 'text/html; charset=utf-8' : path.endsWith('.md') ? 'text/markdown; charset=utf-8'
-    : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'application/json' });
+/* Office and PDF files are published beside their pages; a browser downloads them rather than
+   rendering them, so they are attachments. */
+const officeTypes = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  pdf: 'application/pdf',
+};
+const entry = (path, size = 1024, sha256 = digest) => {
+  const office = officeTypes[path.split('.').at(-1).toLowerCase()];
+  return { path, size, sha256, disposition: office ? 'attachment' : 'inline',
+    mediaType: office || (/\.html?$/i.test(path) ? 'text/html; charset=utf-8' : path.endsWith('.md') ? 'text/markdown; charset=utf-8'
+      : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'application/json') };
+};
 
 export function fixtureManifest(artifact, number, fixture = 'Standard') {
   // Design publications carry their own inventory whatever example inventory is chosen.
@@ -174,25 +187,8 @@ export const librarySorts = [
 /** Name reads A to Z by default; either date reads newest first. */
 export const defaultSortDir = (sortBy) => (sortBy === 'name' ? 'asc' : 'desc');
 export const libraryDateField = (sortBy) => (sortBy === 'created' ? 'createdAt' : 'activityAt');
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const midnight = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d; };
-const daysBefore = (day, n) => { const d = new Date(day); d.setDate(d.getDate() - n); return d; };
-
-/** Today, Yesterday, Earlier this week (weeks start Monday), Last week, then the month. */
-export function dateBucket(ms, now) {
-  if (!Number.isFinite(ms)) return { key: 'undated', label: 'Undated', start: -Infinity };
-  const today = midnight(now);
-  const day = midnight(ms);
-  const yesterday = daysBefore(today, 1);
-  const week = daysBefore(today, (today.getDay() + 6) % 7);
-  const lastWeek = daysBefore(week, 7);
-  if (day >= today) return { key: 'today', label: 'Today', start: today.getTime() };
-  if (day >= yesterday) return { key: 'yesterday', label: 'Yesterday', start: yesterday.getTime() };
-  if (day >= week) return { key: 'week', label: 'Earlier this week', start: week.getTime() };
-  if (day >= lastWeek) return { key: 'last-week', label: 'Last week', start: lastWeek.getTime() };
-  const month = new Date(day.getFullYear(), day.getMonth(), 1);
-  return { key: `month-${month.getFullYear()}-${month.getMonth() + 1}`, label: `${MONTHS[month.getMonth()]} ${month.getFullYear()}`, start: month.getTime() };
-}
+/** Upcoming (a later local day, e.g. clock skew), Today, Yesterday, Earlier this week (weeks start Monday), Last week, then the month — the design system's `fmt.dateBucket`, in local days. */
+export const dateBucket = (ms, now) => fmt.dateBucket(ms, now);
 
 export function filterLibrary(items, query = '', types = [], projects = []) {
   const q = query.trim().toLocaleLowerCase();
@@ -223,7 +219,7 @@ export function groupLibrary(items, { groupBy = 'date', sortBy = 'activity', dir
     return [...new Set(sorted.map((item) => item.project))].sort((a, b) => String(a).localeCompare(String(b))).map((project) => {
       const inProject = sorted.filter((item) => item.project === project);
       const galleries = new Set(inProject.map((item) => item.gallery)).size;
-      return { key: `project:${project}`, label: project, note: `${galleries} ${galleries === 1 ? 'gallery' : 'galleries'}`, banded: true, items: inProject };
+      return { key: `project:${project}`, label: project, note: fmt.plural(galleries, 'gallery', 'galleries'), banded: true, items: inProject };
     });
   }
   if (groupBy === 'section') {
@@ -339,6 +335,46 @@ const revisionDigest = (path, revision) => {
 const guide = (title, lead) => `# ${title}\n\n${lead}\n\nThis guide is a local fixture; a published version serves`
   + ' the producer\'s own text.\n';
 
+/* Office pages. Each catalog template publishes one HTML edition, the page Review shows, with
+   its native file and PDF as related downloads. The kind follows the family; the catalog's
+   category is the section. `documents` is a fixture-side presentation input for the viewer. */
+const officeFamilies = {
+  word: { kind: 'document', folder: 'Word', width: 816, height: 1056, ext: 'docx', format: 'DOCX' },
+  excel: { kind: 'spreadsheet', folder: 'Excel', width: 1280, height: 800, ext: 'xlsx', format: 'XLSX' },
+  powerpoint: { kind: 'presentation', folder: 'PowerPoint', width: 1280, height: 720, ext: 'pptx', format: 'PPTX' },
+};
+function brandingFixture() {
+  const items = [];
+  const sizes = {};
+  const documents = {};
+  brandingPages.forEach((group) => group.entries.forEach(([file, name, description]) => items.push(group.kind === 'guideline'
+    ? galleryItem('guideline', group.section, name, `project/${file}`, 1280, 900, description, [], [1, 12])
+    : galleryItem(group.kind, group.section, name, `project/${file}`, 1440, 900, description, [], [1, 11]))));
+  const taken = new Set();
+  brandingTemplates.forEach(([id, category, name, title, description, base, nativeBytes, pdfBytes]) => {
+    const familyId = id.split('-')[0];
+    const family = officeFamilies[familyId];
+    const folder = `branding-center/${family.folder}`;
+    // A name can repeat within a family; the catalog id keeps the page path unique.
+    const path = taken.has(`${folder}/${name}.html`) ? `${folder}/${name} (${id.slice(familyId.length + 1)}).html` : `${folder}/${name}.html`;
+    taken.add(path);
+    const native = `${folder}/files/${base}.${family.ext}`;
+    const pdf = `${folder}/files/${base}.pdf`;
+    sizes[native] = nativeBytes;
+    sizes[pdf] = pdfBytes;
+    documents[path] = { family: familyId, id, title, category, format: family.format };
+    items.push(galleryItem(family.kind, category, name, path, family.width, family.height, description,
+      [[`${name} (${family.format})`, native], [`${name} (PDF)`, pdf]], [13]));
+  });
+  return { since: 1, title: 'ArkCase Branding', description: 'Brand guides, the Office template catalog and the arkcase.com website.',
+    items, texts: {}, sizes, documents };
+}
+
+/** The Office document a page shows, or null: family, catalog id, document title and category. */
+export function officeDocument(manifest, path) {
+  return manifest.officeDocuments?.[path] || null;
+}
+
 /* Design publications. `since` is the first version that carried a preview index;
    earlier versions keep their original catalog as their first page. */
 const galleryFixtures = {
@@ -409,6 +445,8 @@ const galleryFixtures = {
     ],
     texts: {},
   },
+  // The Branding Center: the arkcase-branding guides and website, then in v13 the Office catalog.
+  branding: brandingFixture(),
   // An index this Review cannot read: the version falls back to its original catalog.
   unreadable: {
     since: 1, title: 'Correspondence', description: '', version: 3,
@@ -426,8 +464,9 @@ function galleryManifest(fixture, number) {
   const paths = [...new Set(items.flatMap((preview) => [preview.path, ...preview.related.map((link) => link.path)])
     .concat(Object.keys(fixture.texts)))];
   const entries = [entry(catalogPath), ...(indexed ? [entry(previewIndexPath, 2600)] : []),
-    ...paths.map((path) => entry(path, 1024, revision.has(path) ? revisionDigest(path, revision.get(path)) : digest))];
+    ...paths.map((path) => entry(path, fixture.sizes?.[path] || 1024, revision.has(path) ? revisionDigest(path, revision.get(path)) : digest))];
   return { digest, entryPath: catalogPath, routingMode: 'static', entries, texts: fixture.texts,
+    officeDocuments: fixture.documents ? Object.fromEntries(Object.entries(fixture.documents).filter(([path]) => revision.has(path))) : undefined,
     previewIndex: indexed ? { format: 'artifact-server.preview-index', version: fixture.version || 2, origin: 'producer',
       title: fixture.title, description: fixture.description, cover: null,
       items: items.map(({ revisions, ...preview }) => preview) } : undefined };

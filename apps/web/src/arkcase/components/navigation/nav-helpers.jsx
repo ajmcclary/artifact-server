@@ -7,7 +7,5 @@ export const matchesMedia = (q) => (typeof window !== 'undefined' && window.matc
 /* A navigation count caps at 99+. */
 export const countText = (n) => (Number(n) > 99 ? '99+' : String(n));
 
-/* A modified or non-primary click on a link row — Cmd/Ctrl for a new tab, Shift for a new window,
-   Alt to download — belongs to the browser: it follows the href natively, selects nothing and
-   leaves any drawer or peek open. */
-export const leftToBrowser = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+/* The link-click test (a modified or non-primary click belongs to the browser) is the public
+   `isModifiedClick` in utilities/link-click.jsx. */

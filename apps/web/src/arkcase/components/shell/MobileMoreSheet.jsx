@@ -1,7 +1,8 @@
 import React from 'react';
 import { BottomSheet } from '../overlays/BottomSheet.jsx';
 import { NavigationIcon } from '../navigation/NavigationIcon.jsx';
-import { countText, leftToBrowser } from '../navigation/nav-helpers.jsx';
+import { countText } from '../navigation/nav-helpers.jsx';
+import { isModifiedClick } from '../utilities/link-click.jsx';
 
 const GROUP_LABEL = {
   fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', lineHeight: '16px',
@@ -56,7 +57,7 @@ export function MobileMoreSheet({
                 'aria-current': active ? 'page' : undefined,
                 'aria-label': count ? `${item.label}, ${count}` : undefined,
                 onClick: (e) => {
-                  if (item.link != null && leftToBrowser(e)) return;
+                  if (item.link != null && isModifiedClick(e)) return;
                   if (item.link != null) e.preventDefault();
                   if (onSelect) onSelect(item);
                   if (onClose) onClose();

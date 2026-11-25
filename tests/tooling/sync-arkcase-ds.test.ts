@@ -324,6 +324,56 @@ describe("ArkCase design-system sync", () => {
     expect(refused.output).toContain("icon classes the design system does not define: bi-alhpa");
   });
 
+  test("a review UI import of a design-system module vendors it under components/ and rewrites the path", () => {
+    const reviewUi = "workspace/projects/arkcase-artifacts";
+    const components = "arkcase/project/components";
+    write(workspace.design, `${components}/utilities/format.jsx`,
+      "import { Spinner } from '../feedback/Spinner.jsx';\nexport const fmt = { plural: (n) => String(n), Spinner };\n");
+    write(workspace.design, `${components}/utilities/format.d.ts`, "export const fmt: { plural(n: number): string };\n");
+    write(workspace.design, `${reviewUi}/review-ui.jsx`, [
+      "import { fmt } from '../../../arkcase/project/components/utilities/format.jsx';",
+      "import { filterPages } from './page-model.js';",
+      "export function createReviewUI() { return { filterPages, fmt }; }",
+      "",
+    ].join("\n"));
+    write(workspace.design, `${reviewUi}/review-ui.d.ts`, [
+      "import type { ButtonProps } from '../../../arkcase/project/components/actions/Button';",
+      "export function createReviewUI(): { props?: ButtonProps };",
+      "",
+    ].join("\n"));
+    commitDesign(workspace.design);
+
+    expect(runSync(workspace)).toMatchObject({status: 0});
+    expect(vendored(workspace, "review-ui/review-ui.jsx"))
+      .toContain("import { fmt } from '../components/utilities/format.jsx';\nimport { filterPages } from './page-model.js';");
+    expect(vendored(workspace, "review-ui/review-ui.d.ts"))
+      .toContain("import type { ButtonProps } from '../components/actions/Button';");
+    expect(vendoredFiles(workspace)).toEqual(expect.arrayContaining([
+      "components/feedback/Spinner.jsx", "components/utilities/format.d.ts", "components/utilities/format.jsx",
+    ]));
+    expect(readRecord(workspace).files["review-ui/review-ui.jsx"]?.source).toBe(`${reviewUi}/review-ui.jsx`);
+    expect(vendored(workspace, "index.ts")).toContain("export {fmt} from \"./components/utilities/format.jsx\";");
+    expect(runSync(workspace, ["--check"])).toMatchObject({status: 0});
+  });
+
+  test("a review UI import outside both trees, or of a design-system file that is not a module, is refused", () => {
+    const reviewUi = "workspace/projects/arkcase-artifacts/review-ui.jsx";
+    write(workspace.design, "workspace/shared/helpers.js", "export const helper = 1;\n");
+    write(workspace.design, reviewUi, "import { helper } from '../../shared/helpers.js';\nexport function createReviewUI() { return helper; }\n");
+    commitDesign(workspace.design);
+    const escaped = runSync(workspace);
+    expect(escaped.status).toBe(1);
+    expect(escaped.output).toContain(
+      "imports ../../shared/helpers.js, which is outside workspace/projects/arkcase-artifacts and arkcase/project/components",
+    );
+
+    write(workspace.design, reviewUi, "import '../../../arkcase/project/tokens/../components/actions/Button.d.ts';\nexport function createReviewUI() {}\n");
+    commitDesign(workspace.design);
+    const declaration = runSync(workspace);
+    expect(declaration.status).toBe(1);
+    expect(declaration.output).toContain("components/actions/Button.d.ts, which is outside");
+  });
+
   test("imports outside the component tree and uncommitted design changes are refused", () => {
     writeEntries(workspace.repository, ["escape/Outside.jsx"]);
     const escaped = runSync(workspace);

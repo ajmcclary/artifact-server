@@ -13,6 +13,7 @@ import {useToasts} from "@/ui/toasts";
 
 import {feedEntries, mergedFeed, openTarget, thumbnailEntry, toFeedEvents} from "./activity-adapter";
 import type {ActivityFeedState} from "./use-activity-feed";
+import {useCommentLocks} from "./use-comment-locks";
 
 const expandedKey = "activity-expanded-threads";
 const openGroupsKey = "activity-open-groups";
@@ -109,6 +110,7 @@ export function ActivityFeedPanel({density = "comfortable", feed, filtered, labe
   const entries = useMemo(() => feedEntries(events), [events]);
   const byThread = useMemo(() => threadContexts(feed.entries), [feed.entries]);
   const byEvent = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+  const commentLock = useCommentLocks(feed.entries);
 
   // The snapshot holds the newest two replies, and the vendored fold counts only loaded replies,
   // so each longer conversation's replies are read once per reply count and reused across refreshes.
@@ -147,6 +149,15 @@ export function ActivityFeedPanel({density = "comfortable", feed, filtered, labe
     const target = openTarget(entry, byEvent);
     if (target !== null) navigateReview(workspaceHref({...target, view: null}));
   };
+  // One conversation on a card that spans pages or versions opens at its own version and page (UX-04).
+  const openThread = (threadKey: string): void => {
+    const context = byThread.get(threadKey);
+    if (context === undefined) return;
+    navigateReview(workspaceHref({
+      artifactId: context.artifact.id, path: context.thread.path, projectId: context.projectId,
+      threadId: context.thread.id, versionId: context.thread.versionId, view: null,
+    }));
+  };
   const resolve = async (threadKey: string, next: boolean): Promise<void> => {
     const context = byThread.get(threadKey);
     if (context === undefined) return;
@@ -171,12 +182,17 @@ export function ActivityFeedPanel({density = "comfortable", feed, filtered, labe
       now={Date.now()}
       onClearFilters={onClearFilters}
       onOpen={open}
+      onOpenThread={(_card, thread) => openThread(thread.key)}
       onReply={(threadKey) => setReplying((current) => current === threadKey ? null : threadKey)}
       onResolve={(threadKey, next) => void resolve(threadKey, next)}
       onShowOlder={feed.loadOlder}
       onToggleGroup={(id, isOpen) => setOpenGroups((current) => toggled(current, id, isOpen, openGroupsKey))}
       onToggleReplies={(threadKey, isOpen) => setExpanded((current) => toggled(current, threadKey, isOpen, expandedKey))}
       openGroups={openGroups}
+      // A card whose artifact the viewer may only read hides Reply and Resolve and says why (UX-01).
+      readOnlyReason={(card) => "projectId" in card && card.projectId !== undefined && card.artifactId !== undefined
+        ? commentLock(card.projectId, card.artifactId)
+        : null}
       remaining={0}
       renderReplyComposer={(threadKey) => {
         const context = byThread.get(threadKey);

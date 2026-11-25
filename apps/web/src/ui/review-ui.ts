@@ -1,6 +1,7 @@
 import React from "react";
 
 import {
+  ActiveFilters,
   AnnotationPin,
   AutoGrid,
   Avatar,
@@ -11,6 +12,7 @@ import {
   Disclosure,
   Eyebrow,
   FileList,
+  FilterMenu,
   fileTypeIcon,
   GroupBand,
   IconButton,
@@ -26,6 +28,7 @@ import {
   RowActions,
   ScrollDock,
   SearchableList,
+  SearchField,
   SectionHeading,
   SegmentedControl,
   SelectableRow,
@@ -33,6 +36,7 @@ import {
   SurfaceState,
   Timeline,
   Toolbar,
+  ToolbarGroup,
   ToolbarSeparator,
   ToolbarSpacer,
   TreeView,
@@ -45,6 +49,7 @@ import {createReviewUI} from "@/arkcase/review-ui/review-ui.jsx";
  * the application's React and the vendored ArkCase components.
  */
 const controls = {
+  ActiveFilters,
   AnnotationPin,
   AutoGrid,
   Avatar,
@@ -55,6 +60,7 @@ const controls = {
   Disclosure,
   Eyebrow,
   FileList,
+  FilterMenu,
   GroupBand,
   IconButton,
   Input,
@@ -69,6 +75,7 @@ const controls = {
   RowActions,
   ScrollDock,
   SearchableList,
+  SearchField,
   SectionHeading,
   SegmentedControl,
   SelectableRow,
@@ -76,6 +83,7 @@ const controls = {
   SurfaceState,
   Timeline,
   Toolbar,
+  ToolbarGroup,
   ToolbarSeparator,
   ToolbarSpacer,
   TreeView,
