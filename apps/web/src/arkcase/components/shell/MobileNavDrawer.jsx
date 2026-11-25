@@ -1,7 +1,8 @@
 import React from 'react';
 import { NavigationIcon } from '../navigation/NavigationIcon.jsx';
 import { displayProfileContext } from './DisplayProfile.jsx';
-import { matchesMedia, countText, leftToBrowser } from '../navigation/nav-helpers.jsx';
+import { matchesMedia, countText } from '../navigation/nav-helpers.jsx';
+import { isModifiedClick } from '../utilities/link-click.jsx';
 import { useEscapeLayer, lockScroll, trapLayerTab } from '../overlays/overlay-layer.jsx';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -149,7 +150,7 @@ export function MobileNavDrawer({
                 <a
                   href={m.link}
                   aria-current={active ? 'page' : undefined}
-                  onClick={(e) => { if (m.link != null && leftToBrowser(e)) return; e.preventDefault(); onSelect && onSelect(m); close(); }}
+                  onClick={(e) => { if (m.link != null && isModifiedClick(e)) return; e.preventDefault(); onSelect && onSelect(m); close(); }}
                   onMouseEnter={() => setHover(i)}
                   onMouseLeave={() => setHover(null)}
                   style={{

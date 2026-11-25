@@ -1,6 +1,12 @@
+import { fmt } from '../components/utilities/format.jsx';
 import { filterPages } from './page-model.js';
 import { createActivityUI } from './activity-ui.jsx';
 import { createLibraryUI } from './library-ui.jsx';
+import { createOfficeUI } from './office-ui.jsx';
+import { createReviewPaneUI } from './review-pane-ui.jsx';
+import { createAdminUI } from './admin-ui.jsx';
+import { createProjectsUI } from './projects-ui.jsx';
+import { createAccessUI } from './access-ui.jsx';
 
 // The host supplies its existing React runtime and ArkCase exports; no duplicated primitives.
 export function createReviewUI(React, DS) {
@@ -116,7 +122,7 @@ export function createReviewUI(React, DS) {
     });
     const finish = (nodes) => nodes.map((node) => (node.file ? node : {
       id: node.id, label: node.label, icon: open.includes(node.id) ? 'bi-folder2-open' : 'bi-folder2',
-      meta: node.leaves + (node.leaves === 1 ? ' file' : ' files'), children: finish(node.children),
+      meta: fmt.plural(node.leaves, 'file'), children: finish(node.children),
     }));
     /* Top-level files first, then folders, as the inventory reads. */
     const done = finish(root);
@@ -264,7 +270,7 @@ export function createReviewUI(React, DS) {
     const n = Math.min(step || remaining, remaining);
     const lo = oldest - n;
     const hi = oldest - 1;
-    const title = label || `Show ${n} older ${n === 1 ? 'version' : 'versions'}`;
+    const title = label || `Show ${fmt.plural(n, 'older version')}`;
     return <LinkRow tone="link" onSelect={onShowOlder} ariaLabel={title}
       title={<span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ minWidth: 28, display: 'inline-flex', justifyContent: 'center' }}><i className="bi bi-chevron-down" aria-hidden="true" /></span>
@@ -273,10 +279,16 @@ export function createReviewUI(React, DS) {
         {lo === hi ? `v${lo}` : `v${lo} – v${hi}`}{remaining > n ? ` · ${remaining} older in all` : ''}</span>} />;
   }
 
-  function VersionList({ versions, shown, onPreview, menuItems, label = 'Versions', remaining = 0, olderStep, olderLabel, onShowOlder, phone = false }) {
+  /* A candidate row (`v.state`) carries its state where the current row carries Current. `heading`
+     names a second list, such as the candidates under the accepted history. */
+  const CANDIDATE_TONES = { candidate: 'warning', promoted: 'success', rejected: 'neutral', superseded: 'neutral' };
+  function VersionList({ versions, shown, onPreview, menuItems, label = 'Versions', heading, remaining = 0, olderStep, olderLabel, onShowOlder, phone = false }) {
     return <section aria-label={label}>
+      {heading && <h3 style={{ margin: '16px 0 6px', padding: '0 4px', fontSize: 'var(--font-size-xs, 12px)', fontWeight: 600, letterSpacing: '0.04em',
+        textTransform: 'uppercase', color: 'var(--text-secondary, #5a6268)' }}>{heading}</h3>}
       {versions.map((v) => <RowActions key={v.n} always={phone} menuLabel={`More actions for v${v.n}`} items={menuItems(v)}
-        persistent={v.current ? <StatusPill tone="primary" label="Current" /> : null}
+        persistent={v.current ? <StatusPill tone="primary" label="Current" />
+          : v.state ? <StatusPill tone={CANDIDATE_TONES[v.state] || 'neutral'} label={v.stateLabel || v.state} /> : null}
         quick={v.n !== shown ? <IconButton icon="bi-eye" size="xs" ariaLabel={`Preview v${v.n}`} onClick={() => onPreview(v.n)} /> : null}>
         {(actions) => <LinkRow tone="body" selected={v.n === shown} rail
           title={<span style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
@@ -289,5 +301,9 @@ export function createReviewUI(React, DS) {
         remaining={remaining} step={olderStep} label={olderLabel} onShowOlder={onShowOlder} />}
     </section>;
   }
-  return { PagePicker, ArtifactLinks, FileGroups, VersionPageMenu, ArtifactBreadcrumb, VersionMenu, PageMenu, VersionList, MentionComposer, MentionText, ...createActivityUI(React, DS), ...createLibraryUI(React, DS) };
+  const office = createOfficeUI(React, DS);
+  return { PagePicker, ArtifactLinks, FileGroups, VersionPageMenu, ArtifactBreadcrumb, VersionMenu, PageMenu, VersionList, MentionComposer, MentionText,
+    ...createActivityUI(React, DS), ...createLibraryUI(React, DS), ...office,
+    ...createReviewPaneUI(React, DS, { OfficeViewer: office.OfficeViewer, ArtifactLinks, FileGroups }),
+    ...createAdminUI(React, DS), ...createProjectsUI(React, DS), ...createAccessUI(React, DS) };
 }

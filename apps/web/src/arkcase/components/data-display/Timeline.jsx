@@ -1,6 +1,8 @@
 import { akStyleDocument } from '@/arkcase-style';
 import React from 'react';
 import { Button } from '../actions/Button.jsx';
+import { visuallyHiddenStyle } from '../utilities/VisuallyHidden.jsx';
+import { useElementSize } from '../utilities/element-size.jsx';
 
 const DATA_FONT = 'var(--font-data, "Source Code Pro", ui-monospace, monospace)';
 const MARKER = 'calc(var(--space-1, 4px) * 6)';
@@ -55,37 +57,57 @@ function TimelineLedgerMarker({ item, index }) {
   );
 }
 
-/* A per-item `onSelect` makes the title a link; its hover needs a pseudo-class, injected once. */
+/* A per-item `onSelect` makes the title a link, and a compact ledger row a button; their hover
+   and focus need pseudo-classes, injected once. An attention row keeps its inline wash. */
 function ensureTimelineLinkStyles() {
   if (typeof document === 'undefined' || akStyleDocument.getElementById('ak-timeline-link-css')) return;
   const s = akStyleDocument.createElement('style');
   s.id = 'ak-timeline-link-css';
-  s.textContent = '[data-ak-timeline-link]:hover{color:var(--text-link, #0079a8) !important;text-decoration:underline}';
+  s.textContent = '[data-ak-timeline-link]:hover{color:var(--text-link, #0079a8) !important;text-decoration:underline}'
+    /* !important: the row's inline transparent fill would otherwise win over :hover. */
+    + '[data-ak-timeline-row]:not(:disabled):not([data-attention]):hover{background-color:var(--tint-primary-hover, rgba(0, 121, 168, 0.05)) !important}'
+    + '[data-ak-timeline-row]:focus-visible{outline:var(--focus-outline, 2px solid #0079a8);outline-offset:-2px}';
   akStyleDocument.head.appendChild(s);
 }
 
-function Marker({ item, index, markerStyle }) {
+/* An item's own `data-*` keys (data-step-row…) land on its row, so host hooks survive. */
+function timelineItemAttrs(item) {
+  const out = {};
+  Object.keys(item).forEach((k) => { if (k.indexOf('data-') === 0) out[k] = item[k]; });
+  return out;
+}
+
+/* The marker's state as words, after the title: the marker itself is decorative. */
+function MarkerLabel({ item }) {
+  return item.markerLabel ? <span data-timeline-marker-label="" style={visuallyHiddenStyle}>{', ' + item.markerLabel}</span> : null;
+}
+
+function Marker({ item, index, markerStyle: listStyle }) {
   const color = TONES[item.tone] || TONES.primary;
   const kind = item.marker || 'dot';
   if (kind === 'dot') {
     return <span style={{ width: DOT, height: DOT, flex: 'none', borderRadius: '50%', background: color }} />;
   }
+  const markerStyle = item.markerStyle || listStyle;
   const soft = markerStyle === 'soft' ? SOFT_GROUNDS[item.tone] || SOFT_GROUNDS.primary : null;
   const solid = markerStyle === 'solid';
-  const ink = soft ? soft.fg : solid ? 'var(--text-on-primary, #ffffff)' : color;
+  /* `dashed` is a step not yet reached: an empty disc in a dashed strong hairline. */
+  const dashed = markerStyle === 'dashed';
+  const ink = soft ? soft.fg : solid ? 'var(--text-on-primary, #ffffff)' : dashed ? 'var(--text-secondary, #5a6268)' : color;
   return (
     <span
       data-icon-tone="current"
-      data-timeline-marker={soft ? 'soft' : solid ? 'solid' : 'ring'}
+      data-timeline-marker={soft ? 'soft' : solid ? 'solid' : dashed ? 'dashed' : 'ring'}
       style={{
         width: MARKER, height: MARKER, flex: 'none', boxSizing: 'border-box',
         display: 'grid', placeItems: 'center', borderRadius: '50%',
-        border: soft ? 0 : `${LINE} solid ${color}`, background: soft ? soft.bg : solid ? color : 'var(--surface-card, #ffffff)', color: ink,
+        border: soft ? 0 : dashed ? `1.5px dashed ${LINE_COLOR}` : `${LINE} solid ${color}`,
+        background: soft ? soft.bg : solid ? color : dashed ? 'transparent' : 'var(--surface-card, #ffffff)', color: ink,
         fontFamily: DATA_FONT, fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)',
         fontSize: 'var(--font-size-label, 11px)', fontWeight: 'var(--bs-font-weight-semibold, 600)', lineHeight: 1,
       }}
     >
-      {kind === 'icon' ? <i className={`bi ${item.icon || 'bi-circle'}`} style={{ color: ink, fontSize: 'var(--font-size-xs, 12px)' }} /> : (item.number ?? index + 1)}
+      {kind === 'icon' ? (item.icon || !dashed ? <i className={`bi ${item.icon || 'bi-circle'}`} style={{ color: ink, fontSize: 'var(--font-size-xs, 12px)' }} /> : null) : (item.number ?? index + 1)}
     </span>
   );
 }
@@ -105,8 +127,8 @@ function Heading({ item, index, ledger }) {
             aria-current={item.current ? 'step' : undefined}
             onClick={() => item.onSelect(item, index)}
             style={{ font: 'inherit', ...titleType, padding: 0, margin: 0, border: 0, background: 'none', textAlign: 'left', color: 'var(--text-link-hover, #005a7d)', cursor: 'pointer' }}
-          >{item.title}</button>
-        ) : <span style={titleType}>{item.title}</span>}
+          >{item.title}<MarkerLabel item={item} /></button>
+        ) : <span style={titleType}>{item.title}<MarkerLabel item={item} /></span>}
         {item.tag != null && <span style={{ flex: 'none', display: 'inline-flex' }}>{item.tag}</span>}
       </span>
       {item.meta != null && (item.metaTone && item.metaTone !== 'default' ? (
@@ -125,6 +147,96 @@ function Heading({ item, index, ledger }) {
   );
 }
 
+/* The compact ledger's one line per step: state mark, number and name in a fixed column, what
+   happened, the trailing aside and a chevron. With `onSelect` the whole row is a native button
+   (disabled while the step is not reached); `stacked` folds name and body into one column and
+   drops the aside, for a narrow container. */
+function TimelineCompactRow({ item, index, stacked, titleWidth, markerStyle }) {
+  const selectable = typeof item.onSelect === 'function';
+  const disabled = !!item.disabled;
+  const marker = (item.marker || 'dot') === 'dot' ? { ...item, marker: 'icon' } : item;
+  const mark = (
+    <span aria-hidden="true" style={{ display: 'flex', ...(stacked ? { gridRow: '1 / span 2', alignSelf: 'start' } : null) }}>
+      <Marker item={marker} index={index} markerStyle={markerStyle} />
+    </span>
+  );
+  const title = (
+    <span data-timeline-title="" style={{
+      minWidth: 0, fontSize: 'var(--font-size-sm, 14px)', lineHeight: 'var(--line-height-normal, 1.5)', fontWeight: 'var(--bs-font-weight-semibold, 600)',
+      color: disabled ? 'var(--text-secondary, #5a6268)' : 'var(--text-strong, #111827)', overflowWrap: 'anywhere', ...(stacked ? { gridColumn: 2 } : null),
+    }}>
+      {item.number != null && item.marker !== 'number' && (
+        <span style={{ marginRight: 'var(--space-input-padding-y, 6px)', fontFamily: DATA_FONT, fontVariantNumeric: 'var(--font-numeric-feature, tabular-nums)', fontSize: 'var(--font-size-label, 11px)', fontWeight: 400, color: 'var(--text-secondary, #5a6268)' }}>{item.number}</span>
+      )}
+      {item.title}
+      <MarkerLabel item={item} />
+    </span>
+  );
+  const body = item.children != null ? (
+    <span data-timeline-body="" style={{ display: 'block', minWidth: 0, fontSize: 'var(--font-size-dense, 13px)', lineHeight: 'var(--line-height-normal, 1.5)', color: 'var(--text-body, #212529)', ...(stacked ? { gridColumn: 2 } : null) }}>{item.children}</span>
+  ) : <span />;
+  const aside = stacked ? null : (
+    <span data-timeline-aside="" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2, 8px)', justifySelf: 'end', fontSize: 'var(--font-size-xs, 12px)', color: 'var(--text-secondary, #5a6268)', whiteSpace: 'nowrap' }}>
+      {item.tag != null && item.tag}{item.aside}
+    </span>
+  );
+  const chevron = selectable ? (
+    <span aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', ...(stacked ? { gridColumn: 3, gridRow: '1 / span 2' } : null) }}>
+      {disabled ? null : <i className="bi bi-chevron-right" style={{ fontSize: 'var(--icon-sm, 14px)', color: 'var(--text-secondary, #5a6268)' }} />}
+    </span>
+  ) : null;
+  const columns = stacked
+    ? `${MARKER} minmax(0, 1fr)${selectable ? ' 14px' : ''}`
+    : `${MARKER} ${typeof titleWidth === 'number' ? titleWidth + 'px' : titleWidth} minmax(0, 1fr) auto${selectable ? ' 14px' : ''}`;
+  const rowStyle = {
+    display: 'grid', gridTemplateColumns: columns, alignItems: 'center', columnGap: stacked ? 10 : 'var(--space-3, 12px)', rowGap: 2,
+    width: '100%', boxSizing: 'border-box', margin: 0, padding: '11px 16px', border: 0, borderRadius: 0,
+    background: item.attention ? 'var(--pill-warning-bg, #fef3c7)' : 'transparent',
+    font: 'inherit', color: 'inherit', textAlign: 'left', cursor: selectable && !disabled ? 'pointer' : 'default',
+  };
+  const parts = <>{mark}{title}{body}{aside}{chevron}</>;
+  return selectable ? (
+    <button
+      type="button"
+      data-ak-timeline-row=""
+      data-attention={item.attention ? '' : undefined}
+      disabled={disabled || undefined}
+      aria-current={item.current ? 'step' : undefined}
+      onClick={() => item.onSelect(item, index)}
+      style={rowStyle}
+      {...timelineItemAttrs(item)}
+    >{parts}</button>
+  ) : <div data-attention={item.attention ? '' : undefined} style={rowStyle} {...timelineItemAttrs(item)}>{parts}</div>;
+}
+
+function TimelineCompactLedger({ items, label, List, markerStyle, titleWidth, stackBelow, style, rest }) {
+  const ref = React.useRef(null);
+  const size = useElementSize(ref);
+  const stacked = stackBelow != null && size.width > 0 && size.width < stackBelow;
+  return (
+    <List
+      ref={ref}
+      aria-label={label}
+      data-timeline-variant="ledger"
+      data-timeline-density="compact"
+      data-stacked={stacked ? '' : undefined}
+      style={{
+        listStyle: 'none', margin: 0, padding: 0, background: 'var(--surface-card, #ffffff)',
+        fontFamily: 'var(--font-body, "Public Sans", system-ui, sans-serif)', color: 'var(--text-body, #212529)',
+        ...style,
+      }}
+      {...rest}
+    >
+      {items.map((item, i) => (
+        <li key={item.id ?? i} aria-current={typeof item.onSelect !== 'function' && item.current ? 'step' : undefined}
+          style={{ borderTop: i > 0 ? 'var(--border-width, 1px) solid var(--list-divider, #e9ecef)' : 0 }}>
+          <TimelineCompactRow item={item} index={i} stacked={stacked} titleWidth={titleWidth} markerStyle={markerStyle} />
+        </li>
+      ))}
+    </List>
+  );
+}
+
 /**
  * ArkCase Timeline — a vertical list of events or steps, each with a dot,
  * number or icon marker on a hairline connector, a title, data-face meta, an
@@ -137,14 +249,23 @@ function Heading({ item, index, ledger }) {
  * Opt-in additions for record steppers: an item's `metaTone` turns its meta into a
  * 12px/600 sans status line in the tone's ink ("Overdue — was due 08/12/2026"); an
  * item's `action` puts a button at the row's end (or below its body); the list's
- * `markerStyle="soft"` grounds icon and number markers in the pill tint, `solid` fills them.
+ * `markerStyle="soft"` grounds icon and number markers in the pill tint, `solid` fills them,
+ * `dashed` draws an empty dashed disc; an item's own `markerStyle` overrides the list's. An
+ * item's `markerLabel` says the marker's state in words after the title (the marker is
+ * decorative). `density="compact"` on the ledger is the pipeline as one line per step: the
+ * round state marker, the number and name, what happened, an `aside` and a chevron, the whole
+ * row a button (natively `disabled` for a step not reached, washed for `attention`).
  */
-export function Timeline({ items = [], connected = true, onSelect, as = 'ol', label, variant = 'rail', markerStyle = 'ring', style, ...rest }) {
+export function Timeline({ items = [], connected = true, onSelect, as = 'ol', label, variant = 'rail', markerStyle = 'ring', density = 'default', titleWidth = 128, stackBelow = 600, style, ...rest }) {
   const List = as === 'ul' ? 'ul' : 'ol';
   const last = items.length - 1;
   const ledger = variant === 'ledger';
+  const compact = ledger && density === 'compact';
   const links = items.some((it) => typeof it.onSelect === 'function');
   React.useEffect(() => { if (links) ensureTimelineLinkStyles(); }, [links]);
+  if (compact) {
+    return <TimelineCompactLedger items={items} label={label} List={List} markerStyle={markerStyle === 'ring' ? 'soft' : markerStyle} titleWidth={titleWidth} stackBelow={stackBelow} style={style} rest={rest} />;
+  }
   const body = (item) => item.children != null && (
     <div style={{ marginTop: 'var(--space-2, 8px)', fontSize: 'var(--font-size-dense, 13px)', lineHeight: 'var(--line-height-normal, 1.5)', color: 'var(--text-body, #212529)' }}>
       {item.children}

@@ -135,8 +135,12 @@ function importSpecifiers(text) {
   return [...text.matchAll(IMPORT_SPECIFIER)].map((match) => match[1] ?? match[2]);
 }
 
-/** Walks relative imports from the entries; every file must stay inside `root`. */
-function importClosure(root, entries, label) {
+/**
+ * Walks relative imports from the entries; every file must stay inside `root`.
+ * With `shared`, an import that resolves inside `shared.root` instead is recorded
+ * in `shared.found` (relative to that root) and not walked here.
+ */
+function importClosure(root, entries, label, shared = null) {
   const files = new Set();
   const pending = [...entries];
   while (pending.length > 0) {
@@ -152,14 +156,49 @@ function importClosure(root, entries, label) {
         }
         continue;
       }
-      const target = toPosix(path.relative(root, path.resolve(path.dirname(absolute), specifier)));
+      const resolved = path.resolve(path.dirname(absolute), specifier);
+      const target = toPosix(path.relative(root, resolved));
       if (target.startsWith("..") || path.isAbsolute(target)) {
-        fail(`${label}/${relative} imports ${specifier}, which is outside ${label}.`);
+        const sharedTarget = shared === null ? null : insideRoot(shared.root, resolved);
+        if (sharedTarget === null || !RUNTIME_MODULE.test(sharedTarget)) {
+          fail(`${label}/${relative} imports ${specifier}, which is outside ${label}${shared === null ? "" : ` and ${shared.label}`}.`);
+        }
+        shared.found.add(sharedTarget);
+        continue;
       }
       pending.push(target);
     }
   }
   return [...files].toSorted(byText);
+}
+
+/** The path of `absolute` relative to `root`, or null when it lies outside. */
+function insideRoot(root, absolute) {
+  const relative = toPosix(path.relative(root, absolute));
+  return relative.startsWith("..") || path.isAbsolute(relative) || relative === "" ? null : relative;
+}
+
+/**
+ * Review UI files may import design-system components; the vendored tree puts
+ * those under components/, so each such specifier is rewritten to reach them
+ * from review-ui/. A declaration's extensionless specifier must name a
+ * vendored .d.ts.
+ */
+function rewriteSharedImports(text, vendoredFile, sourceFile, sharedRoot, vendored) {
+  return text.replace(IMPORT_SPECIFIER, (statement, staticSpecifier, dynamicSpecifier) => {
+    const specifier = staticSpecifier ?? dynamicSpecifier;
+    if (!specifier.startsWith(".")) return statement;
+    const shared = insideRoot(sharedRoot, path.resolve(path.dirname(sourceFile), specifier));
+    if (shared === null) return statement;
+    const target = `components/${shared}`;
+    if (!vendored.has(target) && !vendored.has(`${target}.d.ts`)) {
+      fail(`${vendoredFile} imports ${specifier}, which the sync does not vendor.`);
+    }
+    let rewritten = toPosix(path.posix.relative(path.posix.dirname(vendoredFile), target));
+    if (!rewritten.startsWith(".")) rewritten = `./${rewritten}`;
+    const at = statement.lastIndexOf(specifier);
+    return statement.slice(0, at) + rewritten + statement.slice(at + specifier.length);
+  });
 }
 
 /** Contract correction 3: runtime style injection goes through akStyleDocument. */
@@ -316,7 +355,9 @@ function readme(source) {
     "- `SOURCE.json` records the pinned commit and a SHA-256 for every file here.",
     "",
     "The sync copies the entry components with their `.d.ts` declarations, the",
-    "project-owned review UI, the token sheets and fonts, and the brand marks. It",
+    "project-owned review UI, the token sheets and fonts, and the brand marks. The",
+    "review UI may import design-system modules; those come along under `components/`",
+    "and its import paths are rewritten to reach them there. It",
     "routes runtime style injection through `akStyleDocument`",
     "(`apps/web/src/arkcase-style.ts`), which adopts constructable stylesheets that",
     "the application's `style-src 'self'` policy allows. It prunes",
@@ -361,7 +402,16 @@ function generate(repository, source, entries, entriesSha256) {
     origins.set(file, origin);
   };
   const componentsRoot = path.join(source.root, COMPONENTS_ROOT);
-  for (const relative of importClosure(componentsRoot, entries.components, COMPONENTS_ROOT)) {
+  const reviewUiDirectory = path.posix.dirname(entries.reviewUi);
+  const reviewUiRoot = path.join(source.root, reviewUiDirectory);
+  const reviewUiEntry = path.posix.basename(entries.reviewUi);
+  const sharedComponents = {found: new Set(), label: COMPONENTS_ROOT, root: componentsRoot};
+  const reviewUiFiles = [
+    ...importClosure(reviewUiRoot, [reviewUiEntry], reviewUiDirectory, sharedComponents),
+    reviewUiEntry.replace(RUNTIME_MODULE, ".d.ts"),
+  ];
+  const componentEntries = [...new Set([...entries.components, ...sharedComponents.found])].toSorted(byText);
+  for (const relative of importClosure(componentsRoot, componentEntries, COMPONENTS_ROOT)) {
     const text = readFileSync(path.join(componentsRoot, relative), "utf8");
     add(`components/${relative}`, rewriteStyleInjection(text), `${COMPONENTS_ROOT}/${relative}`);
     const declaration = relative.replace(RUNTIME_MODULE, ".d.ts");
@@ -370,16 +420,11 @@ function generate(repository, source, entries, entriesSha256) {
         `${COMPONENTS_ROOT}/${declaration}`);
     }
   }
-  const reviewUiDirectory = path.posix.dirname(entries.reviewUi);
-  const reviewUiRoot = path.join(source.root, reviewUiDirectory);
-  const reviewUiEntry = path.posix.basename(entries.reviewUi);
-  const reviewUiFiles = [
-    ...importClosure(reviewUiRoot, [reviewUiEntry], reviewUiDirectory),
-    reviewUiEntry.replace(RUNTIME_MODULE, ".d.ts"),
-  ];
   for (const relative of reviewUiFiles) {
-    add(`review-ui/${relative}`, readFileSync(path.join(reviewUiRoot, relative), "utf8"),
-      `${reviewUiDirectory}/${relative}`);
+    const sourceFile = path.join(reviewUiRoot, relative);
+    const vendoredFile = `review-ui/${relative}`;
+    const text = rewriteSharedImports(readFileSync(sourceFile, "utf8"), vendoredFile, sourceFile, componentsRoot, files);
+    add(vendoredFile, text, `${reviewUiDirectory}/${relative}`);
   }
   const tokensRoot = path.join(source.root, TOKENS_ROOT);
   for (const sheet of TOKEN_SHEETS) {

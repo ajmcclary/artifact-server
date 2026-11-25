@@ -4,8 +4,10 @@
     "favicon.svg"
   ],
   "components": [
+    "actions/ActiveFilters.jsx",
     "actions/Button.jsx",
     "actions/CopyButton.jsx",
+    "actions/FilterMenu.jsx",
     "actions/IconButton.jsx",
     "actions/LoadMore.jsx",
     "actions/RowActions.jsx",
@@ -53,6 +55,7 @@
     "forms/CommentComposer.jsx",
     "forms/Input.jsx",
     "forms/MentionComposer.jsx",
+    "forms/SearchField.jsx",
     "forms/Select.jsx",
     "forms/Switch.jsx",
     "forms/Textarea.jsx",

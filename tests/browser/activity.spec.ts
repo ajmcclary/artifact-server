@@ -244,6 +244,32 @@ test.describe("Activity", () => {
       await stopBrowserFixture(fixture);
     }
   });
+
+  test("ACT-005-B: a card whose conversations span versions opens each conversation at its own version and page", async ({browser}) => {
+    const fixture = await startBrowserFixture(browser);
+    try {
+      const first = await publish(fixture, "Activity span fixture", "span-1");
+      await thread(fixture, first, "On the first version.", "span-thread-1");
+      const second = (await publishVersion(fixture.server, fixture.installation, {
+        artifactId: first.artifact.id, content: "<!doctype html><html lang=\"en\"><title>v2</title><h1>v2</h1></html>",
+        expectedCurrentVersionId: first.version.id, idempotencyKey: key("span-2"),
+      })).body;
+      await thread(fixture, {...first, version: second.version}, "On the second version.", "span-thread-2");
+      await localLogin(fixture);
+      await fixture.page.goto(`${fixture.server.baseUrl}/review`);
+      const card = fixture.page.getByLabel("Conversations on Activity span fixture");
+      await expect(card.getByText("On the second version.")).toBeVisible();
+      await card.getByRole("button", {name: "Open this conversation at v1 · index.html"}).click();
+      // The workspace opens the first version's page and selects that conversation, then drops `thread=`.
+      await expect(fixture.page).toHaveURL((url) => url.pathname === "/review"
+        && url.searchParams.get("artifact") === first.artifact.id && url.searchParams.get("version") === first.version.id
+        && url.searchParams.get("path") === "index.html");
+      await expect(inspectorTabButton(fixture.page, "Comments")).toHaveAttribute("aria-pressed", "true");
+      await expect(fixture.page.locator("[aria-current='true']").filter({hasText: "On the first version."}).first()).toBeVisible();
+    } finally {
+      await stopBrowserFixture(fixture);
+    }
+  });
 });
 
 test.describe("Activity people", () => {

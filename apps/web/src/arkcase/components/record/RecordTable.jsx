@@ -85,8 +85,10 @@ function recordTableFromControl(e) {
 export function RecordTable({
   columns = [], rows = [], footer, ariaLabel, stickyHeader = false, maxHeight, minWidth, empty,
   rowKey, selectedKey, onRowSelect, rowProps, renderDetail, style,
-  striped = false, rowTone, totals, headerRule = 'default', stickyFirstColumn = false, stackBelow, ...rest
+  striped = false, rowTone, totals, headerRule = 'default', stickyFirstColumn = false, stackBelow, cellWrap = 'normal', ...rest
 }) {
+  /* `cellWrap="anywhere"`: a digest or a path breaks inside its own cell rather than over the next. */
+  const wrapAnywhere = cellWrap === 'anywhere' ? { minWidth: 0, overflowWrap: 'anywhere' } : null;
   const baseId = React.useId();
   const rootRef = React.useRef(null);
   const size = useElementSize(rootRef);
@@ -186,6 +188,7 @@ export function RecordTable({
               data-ak-record-table-sticky={pin ? '' : undefined}
               style={{
                 ...pin,
+                ...wrapAnywhere,
                 padding: '7px 12px',
                 borderBottom: lastRow ? 'none' : '1px solid ' + (toned ? toned.rule : 'var(--bs-light, #f1f5f7)'),
                 fontFamily: mono ? 'var(--font-data, "Source Code Pro", ui-monospace, monospace)' : undefined,

@@ -7,8 +7,10 @@ export interface ToolbarProps {
   orientation?: 'horizontal' | 'vertical';
   /** `light` sits on the host surface; `navy` is the app-chrome bar (`surface-header` fill, `text-on-navy` ink, tonal icons). @default "light" */
   variant?: 'light' | 'navy';
-  /** `pane-top` rules a toolbar under a pane header; `pane-footer` docks it at the pane's foot with the upward shadow. @default "inline" */
-  placement?: 'inline' | 'pane-top' | 'pane-footer';
+  /** `pane-top` rules a toolbar under a pane header; `pane-footer` docks it at the pane's foot with the upward shadow; `floating` is a viewer's control pill, centred 16px above the foot of its positioned container (card ground, hairline, `radius-pill`, `shadow-lg`, z-index 50). @default "inline" */
+  placement?: 'inline' | 'pane-top' | 'pane-footer' | 'floating';
+  /** With `placement="floating"`: dims the pill to 40% opacity while true (the host sets it while the content scrolls), except while the pointer is over it or focus is inside it. Ignored by other placements. @default false */
+  quiet?: boolean;
   /** Space between controls, in pixels or any CSS length. @default 4 */
   gap?: number | string;
   /** Lets the controls wrap onto further rows when the toolbar is too narrow, instead of overflowing; row gap equals `gap`. @default false */
@@ -45,13 +47,17 @@ export interface ToolbarSpacerProps {
 export function ToolbarSpacer(props: ToolbarSpacerProps): React.JSX.Element;
 
 export interface ToolbarGroupProps {
-  /** Accessible name of the joined group (`role="group"`), e.g. "Zoom". */
+  /** Accessible name of the group (`role="group"`), e.g. "Zoom" or "Filters". */
   label?: string;
+  /** `joined` draws one bordered segment with hairline dividers; `flush` sets ghost controls (filter menus) shoulder to shoulder with no border, divider or gap. @default "joined" */
+  variant?: 'joined' | 'flush';
+  /** With `variant="flush"`: `wrap` keeps the group's width and wraps inside itself only when wider than the row; `scroll` makes it one row that scrolls sideways (a phone). @default "wrap" */
+  overflow?: 'wrap' | 'scroll';
   /** The joined controls — IconButtons, Buttons, a Select; a 1px `border-color` divider is drawn between each pair. */
   children?: React.ReactNode;
   /** Style overrides for the group root. */
   style?: React.CSSProperties;
 }
 
-/** A bordered, joined segment of toolbar controls with hairline dividers between them; the controls lose their own borders and inner corners. */
+/** A bordered, joined segment of toolbar controls with hairline dividers between them (the controls lose their own borders and inner corners), or with `variant="flush"` an unbordered run of ghost controls. */
 export function ToolbarGroup(props: ToolbarGroupProps): React.JSX.Element;

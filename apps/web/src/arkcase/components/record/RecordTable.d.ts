@@ -75,6 +75,8 @@ export interface RecordTableProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   stickyFirstColumn?: boolean;
   /** Below this measured width in px, rows stack: each labelled column a label/value pair, unlabelled (action) columns in a row beneath, as a list instead of a table. Omit to keep the grid at every width. */
   stackBelow?: number;
+  /** `anywhere` lets a long unbroken value (a digest, a path, an id) break inside its own cell instead of widening its column over the next: body cells take `min-width: 0` and `overflow-wrap: anywhere`. @default "normal" */
+  cellWrap?: 'normal' | 'anywhere';
 }
 
 /**

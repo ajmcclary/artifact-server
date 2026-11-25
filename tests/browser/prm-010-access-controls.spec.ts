@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 
-import {expect, test, type Browser} from "@playwright/test";
+import {expect, test, type Browser, type Page} from "@playwright/test";
 import {z} from "zod";
 
 import {
@@ -13,8 +13,11 @@ import {
   startInviteServer,
 } from "../support/invites.js";
 import {publishNew} from "../support/publishing.js";
+import {createThreadOverApi} from "./comment-api.js";
 
 const sam: Person = {displayName: "Sam Rivera", email: "sam@acme.test", subject: "workos-sam"};
+
+const conversations = (page: Page) => page.getByLabel("Conversations on Access controls");
 
 async function freshPage(browser: Browser) {
   const context = await browser.newContext({viewport: {height: 1000, width: 1700}});
@@ -102,6 +105,34 @@ test.describe("Access-driven Review controls", () => {
       await manager.page.getByRole("group", {name: "Inspector"}).getByRole("button", {name: "Comments"}).click();
       await expect(manager.page.getByLabel("Comment filters").first()).toBeVisible();
       await expect(manager.page.getByLabel("Add a comment").first()).toBeVisible();
+    } finally {
+      await manager.context.close();
+    }
+  });
+
+  test("PRM-010-B: Activity hides Reply and Resolve on an artifact the viewer may only read, and says why", async ({browser}) => {
+    const fixture = await setup();
+    await grant(fixture.projectId, fixture.memberId, "viewer");
+    await createThreadOverApi({installation: server.installation, server: server.server}, {
+      artifactId: fixture.artifactId, body: "Tighten the headline.", idempotencyKey: `activity-lock-${randomUUID()}`,
+      projectId: fixture.projectId, versionId: fixture.versionId,
+    });
+
+    const viewer = await signInBrowser(browser, sam, "/review");
+    try {
+      await expect(conversations(viewer.page).getByText("Tighten the headline.")).toBeVisible();
+      await expect(viewer.page.locator("[data-read-only-reason]"))
+        .toHaveText("You have Viewer access to Design: you can read these conversations but not write in them.");
+      await expect(conversations(viewer.page).getByRole("button", {name: "Reply"})).toHaveCount(0);
+      await expect(conversations(viewer.page).getByRole("button", {name: /^Resolve/u})).toHaveCount(0);
+    } finally {
+      await viewer.context.close();
+    }
+
+    const manager = await signInBrowser(browser, bootstrapAdministrator, "/review");
+    try {
+      await expect(conversations(manager.page).getByRole("button", {name: "Reply"}).first()).toBeVisible();
+      await expect(manager.page.locator("[data-read-only-reason]")).toHaveCount(0);
     } finally {
       await manager.context.close();
     }

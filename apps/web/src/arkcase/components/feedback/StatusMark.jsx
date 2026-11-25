@@ -1,8 +1,9 @@
 import React from 'react';
 import { toneTokens } from '../utilities/tones.jsx';
 
-/* The five pill tints a mark can take; the bg/fg pairs come from the tone registry. */
-const MARK_TONES = ['success', 'primary', 'warning', 'danger', 'neutral'];
+/* The six pill tints a mark can take; the bg/fg pairs come from the tone registry. `secondary`
+   is the queued/inactive pill (StatusPill's purple pair), so a row's mark can match its pill. */
+const MARK_TONES = ['success', 'primary', 'warning', 'danger', 'neutral', 'secondary'];
 
 /**
  * ArkCase StatusMark — the round tinted icon that heads an outcome card

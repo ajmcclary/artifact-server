@@ -46,8 +46,9 @@ export function Checkbox({ label, checked, defaultChecked, disabled = false, rad
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         transition: 'background-color .15s ease, border-color .15s ease',
       }}>
-        {on && !radio && <i className="bi bi-check" style={{ color: 'var(--text-on-primary, #fff)', fontSize: '0.9em', lineHeight: 1 }} />}
-        {on && radio && <span style={{ width: '0.4em', height: '0.4em', borderRadius: '50%', background: 'var(--bs-white, #fff)' }} />}
+        {/* The tick's masked layers paint above the transparent input; pointer-events: none keeps the input the hit target. */}
+        {on && !radio && <i className="bi bi-check" style={{ color: 'var(--text-on-primary, #fff)', fontSize: '0.9em', lineHeight: 1, pointerEvents: 'none' }} />}
+        {on && radio && <span style={{ width: '0.4em', height: '0.4em', borderRadius: '50%', background: 'var(--bs-white, #fff)', pointerEvents: 'none' }} />}
       </span>
     </span>
   );
