@@ -20,6 +20,13 @@ import {
 const at = (year: number, month: number, day: number, hour: number, minute: number): number =>
   new Date(year, month - 1, day, hour, minute).getTime();
 
+/** A readable instant's day key; these tests only pass real dates. */
+function readableDay(ms: number): string {
+  const key = dayKey(ms);
+  if (key === null) throw new Error(`${ms} has no day key`);
+  return key;
+}
+
 function versionEvent(id: string, version: number, when: number, actor = "Claude", artifact = "art_1", project = "prj_1"): ActivityEvent {
   return {
     actor, adminOnly: false, artifactId: artifact, artifactName: `Artifact ${artifact}`, at: when, fromVersion: version - 1,
@@ -66,9 +73,14 @@ describe("vendored activity model", () => {
 
   test("labels days as Today, Yesterday, then weekday and US date", () => {
     const now = at(2026, 4, 15, 10, 0);
-    expect(dayLabel(dayKey(at(2026, 4, 15, 8, 0)), now)).toBe("Today");
-    expect(dayLabel(dayKey(at(2026, 4, 14, 23, 59)), now)).toBe("Yesterday");
-    expect(dayLabel(dayKey(at(2026, 4, 13, 9, 0)), now)).toBe("Mon 04/13/2026");
+    expect(dayLabel(readableDay(at(2026, 4, 15, 8, 0)), now)).toBe("Today");
+    expect(dayLabel(readableDay(at(2026, 4, 14, 23, 59)), now)).toBe("Yesterday");
+    expect(dayLabel(readableDay(at(2026, 4, 13, 9, 0)), now)).toBe("Mon 04/13/2026");
+  });
+
+  test("an unreadable time has no day key", () => {
+    expect(dayKey(Number.NaN)).toBeNull();
+    expect(dayKey(Number.POSITIVE_INFINITY)).toBeNull();
   });
 
   test("merges one publisher's consecutive versions and groups newest-first events by day", () => {
