@@ -177,24 +177,22 @@ test.describe("Artifact review workspace layout", () => {
       await expect.poll(() => navigation.evaluate(node => Math.round(node.getBoundingClientRect().width))).toBe(248);
       await page.reload();
       await expect(navSeam).toHaveAttribute("aria-valuenow", "248");
-      await page.getByRole("button", {name: "Unpin the menu", exact: true}).click();
+      // Unpinned, the navigation stays on screen as its rail; pinning is the only way it widens, so the
+      // catalog offers no second menu opener and no navigation drawer exists.
       const menuOpener = page.getByRole("button", {name: "Open navigation menu", exact: true});
-      await menuOpener.click();
-      await expect(page.getByRole("dialog", {name: "Review and projects"})).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(page.getByRole("dialog", {name: "Review and projects"})).toHaveCount(0);
-      await expect(menuOpener).toBeFocused();
-      await page.getByRole("button", {name: "Pin the menu", exact: true}).click();
+      await page.getByRole("button", {name: "Unpin the menu", exact: true}).click();
+      await expect(navigation).toHaveAttribute("data-ac-left-nav", "rail");
+      await expect(navigation.getByRole("link", {name: /^Activity/u})).toBeVisible();
       await expect(menuOpener).toHaveCount(0);
+      await page.getByRole("button", {name: "Pin the menu", exact: true}).click();
+      await expect(navigation).toHaveAttribute("data-ac-left-nav", "expanded");
       // At 1680 px the inspector opens docked; 1280 px cannot fit an expanded nav beside both panes.
       await page.setViewportSize({height: 900, width: 1280});
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "rail");
       const catalogRail = page.getByRole("button", {name: "Show the artifact catalog", exact: true});
       await catalogRail.click();
-      await menuOpener.click();
-      await expect(page.getByRole("dialog", {name: "Review and projects"})).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(catalogRail).toBeFocused();
+      await expect(menuOpener).toHaveCount(0);
+      await expect(page.getByRole("dialog", {name: "Review and projects"})).toHaveCount(0);
       await page.getByRole("group", {name: "Inspector"}).locator('button[aria-pressed="true"]').click();
       await expect(navigation).toHaveAttribute("data-ac-left-nav", "expanded");
       await inspectorTabButton(page, "Comments").click();

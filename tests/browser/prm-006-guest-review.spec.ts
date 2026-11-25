@@ -12,6 +12,7 @@ import {
   startInviteServer,
 } from "../support/invites.js";
 import {publishNew, publishVersion} from "../support/publishing.js";
+import {interactiveScenarioFiles, publishScenarioFixture} from "./scenario-fixture.js";
 
 const linkSchema = z.object({link: z.object({id: z.string(), url: z.string()})});
 const threadPageSchema = z.object({
@@ -140,8 +141,51 @@ test.describe("Guest review through a share link", () => {
         // eslint-disable-next-line no-await-in-loop -- each tab is checked in turn
         await expect(page.getByRole("button", {exact: true, name: tab})).toHaveCount(0);
       }
-      await expect(page.getByRole("radiogroup", {name: "Platform"})).toBeVisible();
+      await expect(page.getByRole("combobox", {exact: true, name: "Preview size"})).toBeVisible();
       await expect(page.getByLabel("Appearance")).toBeVisible();
+      // Without comment access there is no Comments panel to show or hide.
+      await expect(page.getByRole("button", {name: /^(Show|Hide) comments$/u})).toHaveCount(0);
+    } finally {
+      await guest.context.close();
+    }
+  });
+
+  test("PRM-006-B: a guest configures the page from one compact header row and folds Comments away", async ({browser}) => {
+    const published = await publishScenarioFixture(
+      {installation: server.installation, server: server.server},
+      "guest-live-configurations",
+      "Live configurations",
+      interactiveScenarioFiles(),
+    );
+    const response = await call("POST", `/api/v1/projects/prj_default/artifacts/${published.artifact.id}/share-links`, JSON.stringify({
+      expiresAt: null,
+      label: "Configured review",
+      permissions: ["artifact.view", "comment.read"],
+      target: {kind: "latest"},
+    }));
+    expect(response.status).toBe(201);
+    const {link} = linkSchema.parse(await response.json());
+    const guest = await guestPage(browser, link.url);
+    try {
+      const {page} = guest;
+      const frame = page.frameLocator('iframe[title="Live configurations"]');
+      await expect(frame.getByRole("heading", {name: "Library"})).toBeVisible();
+      // The header is one compact row, as tall as the member toolbar, never a stacked label.
+      const header = page.locator("header").first();
+      await expect.poll(async () => (await header.boundingBox())?.height ?? 0).toBeLessThanOrEqual(48);
+      // The page's own designed scenario and parameter, as the member toolbar offers them.
+      const configuration = page.getByRole("group", {name: "Page configuration"});
+      await configuration.getByRole("combobox", {exact: true, name: "Platform"}).selectOption("5");
+      await expect(frame.getByRole("heading", {name: "Validation"})).toBeVisible();
+      await configuration.getByRole("combobox", {exact: true, name: "Theme"}).selectOption("0");
+      await expect(frame.locator("html")).toHaveAttribute("data-theme", "light");
+      await expect(configuration.getByRole("combobox", {exact: true, name: "Preview size"})).toHaveValue("Desktop");
+      // Comments fold away and come back.
+      await expect(page.getByRole("complementary", {name: "Comments"})).toBeVisible();
+      await page.getByRole("button", {name: "Hide comments"}).click();
+      await expect(page.getByRole("complementary", {name: "Comments"})).toHaveCount(0);
+      await page.getByRole("button", {name: "Show comments"}).click();
+      await expect(page.getByRole("complementary", {name: "Comments"})).toBeVisible();
     } finally {
       await guest.context.close();
     }
@@ -219,7 +263,7 @@ test.describe("Guest review through a share link", () => {
       await page.getByLabel("Reply to Pat").fill("Another note.");
       await page.getByRole("button", {exact: true, name: "Reply"}).click();
       await expect(page.getByText("This link now opens version 2.")).toBeVisible();
-      await expect(page.getByText("Version 2", {exact: true})).toBeVisible();
+      await expect(page.locator("header").first().getByText("v2", {exact: true})).toBeVisible();
       await expect(page.frameLocator('iframe[title="Landing page"]').getByRole("heading", {name: "Hello from version two"}))
         .toBeVisible();
     } finally {

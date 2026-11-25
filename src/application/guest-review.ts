@@ -10,7 +10,7 @@ import {
   ShareLinkNotFound,
 } from "../core/errors.js";
 import {membershipRoles, principalKinds, type Principal} from "../core/identity.js";
-import type {ArtifactRecord, CommentThreadState, ProjectRecord, VersionRecord} from "../core/model.js";
+import type {ArtifactRecord, ArtifactVersion, CommentThreadState, ProjectRecord, VersionRecord} from "../core/model.js";
 import type {Permission} from "../core/permissions.js";
 import type {IdGenerator} from "../core/ports.js";
 import {
@@ -54,6 +54,12 @@ export interface GuestReviewDependencies {
     artifactId: string,
     versionId: string,
   ) => Effect.Effect<VersionRecord | null, ArtifactRepositoryFailure>;
+  /** The saved version with its manifest, for reading the documents a page ships (its designed views). */
+  readonly findSavedVersion: (
+    projectId: string,
+    artifactId: string,
+    versionId: string,
+  ) => Effect.Effect<ArtifactVersion | null, ArtifactRepositoryFailure>;
   readonly ids: IdGenerator;
   readonly installationId: string;
   readonly secrets: IdentitySecretProvider;
@@ -72,7 +78,8 @@ export interface GuestContext {
     readonly permissions: readonly Permission[];
   };
   readonly project: {readonly id: string; readonly name: string};
-  readonly version: {readonly id: string; readonly number: number; readonly savedAt: string};
+  /** The version the link opens; `entryPath` is the page its preview starts on. */
+  readonly version: {readonly entryPath: string; readonly id: string; readonly number: number; readonly savedAt: string};
 }
 
 /** Every expected failure of guest review. */
@@ -128,6 +135,14 @@ interface GuestReviewOperations {
   readonly getThread: (
     command: GuestThreadCommand,
   ) => Effect.Effect<Effect.Success<ReturnType<ArtifactCommentService["Service"]["getThread"]>>, GuestReviewFailure>;
+  /**
+   * The exact version the link opens, with its manifest, so Review can read the page's designed
+   * views. Only the link's own target is ever returned; a page showing an older target is refused.
+   */
+  readonly viewedVersion: (command: {
+    readonly principal: Principal;
+    readonly viewingVersionId: string | null;
+  }) => Effect.Effect<ArtifactVersion, GuestReviewFailure>;
   readonly issuePreviewLease: (command: {readonly principal: Principal}) => Effect.Effect<{
     readonly expiresAt: string;
     readonly token: Redacted.Redacted;
@@ -240,7 +255,12 @@ function makeGuestReviewService(
         permissions: link.permissions,
       },
       project: {id: project.id, name: project.name},
-      version: {id: target.version.id, number: target.version.number, savedAt: target.version.createdAt},
+      version: {
+        entryPath: target.version.entryPath,
+        id: target.version.id,
+        number: target.version.number,
+        savedAt: target.version.createdAt,
+      },
     } satisfies GuestContext;
   });
 
@@ -392,6 +412,17 @@ function makeGuestReviewService(
       versionId: active.target.version.id,
     });
     return {expiresAt: lease.expiresAt, token: lease.token, versionId: lease.versionId};
+  });
+
+  const viewedVersion = Effect.fn("GuestReviewService.viewedVersion")(function*(command: {
+    readonly principal: Principal;
+    readonly viewingVersionId: string | null;
+  }) {
+    const active = yield* requireActive(command.principal);
+    yield* requireViewing(active, command.viewingVersionId);
+    const saved = yield* dependencies.findSavedVersion(active.link.projectId, active.link.artifactId, active.target.version.id);
+    if (saved === null) return yield* sessionRequired();
+    return saved;
   });
 
   /** A thread on the link's version target; any other thread is reported as missing. */
@@ -561,5 +592,6 @@ function makeGuestReviewService(
     startSession,
     updateReply,
     updateThread,
+    viewedVersion,
   });
 }

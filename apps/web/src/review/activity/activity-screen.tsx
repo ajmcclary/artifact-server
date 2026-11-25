@@ -14,7 +14,8 @@ import {useActivityFacets} from "./use-activity-facets";
 import {useActivityFeed} from "./use-activity-feed";
 import {useActivitySummary} from "./use-activity-summary";
 
-const screenStyle = {margin: "0 auto", maxWidth: 1180, padding: "0 20px 48px", width: "100%"} satisfies CSSProperties;
+// Activity fills the main area, as in the design; the feed keeps its own readable line lengths.
+const screenStyle = {padding: "0 24px 48px", width: "100%"} satisfies CSSProperties;
 const phoneScreenStyle = {...screenStyle, padding: "0 16px 32px"} satisfies CSSProperties;
 /** A phone's fixed app bar; the docked toolbar and the day caps pin beneath it. */
 const phoneAppBarHeight = 52;

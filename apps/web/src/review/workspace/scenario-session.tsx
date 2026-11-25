@@ -68,6 +68,7 @@ export function ScenarioSessionProvider({
   onSelectPath,
   path,
   projectId,
+  readViews = api.versionViews,
   versionId,
 }: {
   readonly artifactId: string | null;
@@ -76,6 +77,8 @@ export function ScenarioSessionProvider({
   readonly onSelectPath: (path: string) => void;
   readonly path: string | null;
   readonly projectId: string;
+  /** How this reader fetches a version's views; a guest reads them through its own link. */
+  readonly readViews?: (projectId: string, artifactId: string, versionId: string) => Promise<ViewsOutcome>;
   readonly versionId: string | null;
 }) {
   const [loaded, setLoaded] = useState<{readonly outcome: ViewsOutcome; readonly versionId: string} | null>(null);
@@ -95,7 +98,7 @@ export function ScenarioSessionProvider({
       for (let attempt = 0; ; attempt += 1) {
         try {
           // eslint-disable-next-line no-await-in-loop -- each retry waits for the previous read
-          outcome = await api.versionViews(projectId, artifactId, versionId);
+          outcome = await readViews(projectId, artifactId, versionId);
           break;
         } catch (cause) {
           // A refusal is final; a dropped connection or a server failure may pass.
@@ -111,7 +114,7 @@ export function ScenarioSessionProvider({
     return () => {
       current = false;
     };
-  }, [artifactId, projectId, versionId]);
+  }, [artifactId, projectId, readViews, versionId]);
 
   const outcome = loaded !== null && loaded.versionId === versionId ? loaded.outcome : null;
   const view = viewForPath(outcome, path);

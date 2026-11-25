@@ -49,13 +49,6 @@ const noControls: ShellLayoutControls = {
 };
 const ShellLayoutContext = createContext<ShellLayoutValue>({controls: noControls, screenTitle: null, state: initialShellLayout});
 
-/** Lets the catalog reopen the application's navigation without adding a second pin. */
-const ShellNavigationContext = createContext({collapsed: true, openMenu: (): void => undefined});
-export const ShellNavigationProvider = ShellNavigationContext.Provider;
-export function useShellNavigation() {
-  return useContext(ShellNavigationContext);
-}
-
 export function ShellLayoutProvider({children}: {readonly children: ReactNode}) {
   const [state, dispatch] = useReducer(shellLayoutReducer, initialShellLayout);
   const [screenTitle, setScreenTitle] = useState<ShellScreenTitle | null>(null);

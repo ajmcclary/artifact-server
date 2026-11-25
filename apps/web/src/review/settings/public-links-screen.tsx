@@ -7,11 +7,12 @@ import {
   type PublicLinkMutationResult,
   type PublicLinkPage,
 } from "@/api/client";
-import {Alert, Button, Checkbox, Modal, StatusPill, SurfaceState} from "@/arkcase";
+import {Alert, Button, Checkbox, Modal, SplitButton, StatusPill, SurfaceState} from "@/arkcase";
 import {errorMessage} from "@/lib/presentation";
 import {CopyAction} from "@/ui/copy-action";
 import {
   AdminActions,
+  AdminInset,
   AdminNote,
   AdminPanel,
   AdminStack,
@@ -429,59 +430,69 @@ export function PublicLinksScreen() {
         />
       ) : (
         <>
-          <AdminPanel label="Bulk selection" subtitle={`${selectedItems.length} selected · maximum ${maximumBulkSize}`}>
-            <AdminStack>
-              <AdminActions>
-                <Button
-                  disabled={visibleItems.length === 0}
-                  onClick={() => selectItems(visibleItems, true)}
-                  outline
-                  size="sm"
-                  variant="secondary"
-                >
-                  Select visible ({visibleItems.length})
-                </Button>
-                <Button
-                  disabled={loadedItems.length === 0 || loadedItems.length > maximumBulkSize}
-                  onClick={() => selectItems(loadedItems, true)}
-                  outline
-                  size="sm"
-                  variant="secondary"
-                >
-                  {fullyLoaded ? "Select all" : "Select all loaded"} ({loadedItems.length})
-                </Button>
-                <Button
-                  disabled={selectedKeys.size === 0}
-                  onClick={() => setSelectedKeys(new Set())}
-                  size="sm"
-                  variant="ghost"
-                >
-                  Clear selection
-                </Button>
-                <Button
-                  disabled={pending || selectedItems.length === 0}
-                  icon="bi-lock"
-                  onClick={() => setConfirmation(selectedItems)}
-                  size="sm"
-                >
-                  Make {selectedItems.length} private
-                </Button>
-              </AdminActions>
-              <AdminNote>
-                {fullyLoaded
-                  ? "All inventory pages are loaded, so Select all covers every listed public link."
-                  : "More inventory pages exist. Select all loaded never includes pages you have not visited."}
-                {loadedItems.length > maximumBulkSize
-                  ? ` Select visible or choose up to ${maximumBulkSize} links for one bulk change.`
-                  : ""}
-              </AdminNote>
-              {selectionMessage === null ? null : (
-                <Alert density={density} live="assertive" variant="warning">{selectionMessage}</Alert>
-              )}
-            </AdminStack>
-          </AdminPanel>
-
-          <AdminPanel actions={reloadButton} label="Public links" padded={false} subtitle={`${loadedItems.length} loaded`}>
+          {/* The selection controls act on the table beneath them, so they share its panel. */}
+          <AdminPanel
+            actions={reloadButton}
+            label="Public links"
+            padded={false}
+            subtitle={`${loadedItems.length} loaded · ${selectedItems.length} selected · maximum ${maximumBulkSize}`}
+          >
+            <AdminInset>
+              <AdminStack>
+                <AdminActions>
+                  <SplitButton
+                    disabled={visibleItems.length === 0}
+                    menuItems={[
+                      {
+                        icon: "bi-check2-square",
+                        label: `Visible (${visibleItems.length})`,
+                        onClick: () => selectItems(visibleItems, true),
+                      },
+                      {
+                        disabled: loadedItems.length === 0 || loadedItems.length > maximumBulkSize,
+                        icon: "bi-check2-all",
+                        label: `${fullyLoaded ? "All" : "All loaded"} (${loadedItems.length})`,
+                        onClick: () => selectItems(loadedItems, true),
+                      },
+                    ]}
+                    menuLabel="Choose which public links to select"
+                    onClick={() => selectItems(visibleItems, true)}
+                    outline
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Select ({visibleItems.length})
+                  </SplitButton>
+                  <Button
+                    disabled={selectedKeys.size === 0}
+                    onClick={() => setSelectedKeys(new Set())}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    disabled={pending || selectedItems.length === 0}
+                    icon="bi-lock"
+                    onClick={() => setConfirmation(selectedItems)}
+                    size="sm"
+                  >
+                    Make {selectedItems.length} private
+                  </Button>
+                </AdminActions>
+                <AdminNote>
+                  {fullyLoaded
+                    ? "All inventory pages are loaded, so Select › All covers every listed public link."
+                    : "More inventory pages exist. Select › All loaded never includes pages you have not visited."}
+                  {loadedItems.length > maximumBulkSize
+                    ? ` Select the visible page or choose up to ${maximumBulkSize} links for one bulk change.`
+                    : ""}
+                </AdminNote>
+                {selectionMessage === null ? null : (
+                  <Alert density={density} live="assertive" variant="warning">{selectionMessage}</Alert>
+                )}
+              </AdminStack>
+            </AdminInset>
             <Ledger
               ariaLabel="Public links inventory"
               columns={columns}

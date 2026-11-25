@@ -6,7 +6,6 @@ import {
   Button,
   IconButton,
   LeftNav,
-  MobileNavDrawer,
   Tooltip,
   useDisplayProfile,
   type NavItem,
@@ -34,7 +33,7 @@ import {useActivitySummary} from "@/review/activity/use-activity-summary";
 
 import {NAV_PANEL_ID, REVIEW_DISPLAY_LADDER, navigationWidth, reviewPanelStore} from "./shell-layout.ts";
 import {NAV_BOOT_WIDTH_KEY} from "./shell-layout-keys.ts";
-import {ShellLayoutProvider, ShellNavigationProvider, useShellLayoutState} from "./shell-layout-context.tsx";
+import {ShellLayoutProvider, useShellLayoutState} from "./shell-layout-context.tsx";
 
 interface ReviewShellProps {
   readonly aside?: ReactNode;
@@ -55,8 +54,8 @@ function selectItem(item: NavItem): void {
 const noProjects: readonly string[] = [];
 
 /**
- * Every signed-in screen's frame: the navigation rail (or, on a tablet, its
- * drawer), the main landmark and the live regions. A phone has no rail and no
+ * Every signed-in screen's frame: the navigation rail (pinned open or collapsed
+ * to icons, never hidden), the main landmark and the live regions. A phone has no rail and no
  * drawer: a bottom tab bar, a More sheet and a navy app bar, over a page the
  * document scrolls.
  */
@@ -83,7 +82,6 @@ function ReviewShellFrame({
   const layout = useShellLayoutState();
   const [navPinned, setNavPinned] = useState(() => reviewPanelStore.pinned(NAV_PANEL_ID, false));
   const [navWidth, setNavWidth] = useState<number | null>(() => reviewPanelStore.width(NAV_PANEL_ID) ?? null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   // The Needs-you badge re-reads on focus and whenever the screen changes; a failed read hides it.
   const summary = useActivitySummary(noProjects);
   const reloadSummary = summary.reload;
@@ -199,34 +197,14 @@ function ReviewShellFrame({
     />
     </div>
   );
-  // A tablet's catalog can still open the whole navigation as a drawer; a phone has the tab bar instead.
-  const drawer = focus || phone ? null : (
-    <MobileNavDrawer
-      activeLink={activeLink}
-      brand={<ArtifactServerBrand showProduct={false} />}
-      footer={<AccountMenu rail={false} session={session} />}
-      items={items}
-      label={navTitle}
-      launcher={false}
-      onAnnounce={announce}
-      onClose={() => setDrawerOpen(false)}
-      onOpen={() => setDrawerOpen(true)}
-      onSelect={selectItem}
-      open={drawerOpen}
-      returnFocusSelector={'[aria-label="Open navigation menu"], [aria-label="Show the artifact catalog"]'}
-      title="Review"
-    />
-  );
-
   return (
-    <ShellNavigationProvider value={{collapsed: !expanded, openMenu: () => setDrawerOpen(true)}}>
+    <>
       <AppShell
         alert={announcements.assertive}
         announce={announcements.polite}
         appBar={phoneBars ? phoneChrome.appBar : undefined}
         aside={aside}
         chrome="left"
-        drawer={drawer}
         ladder={REVIEW_DISPLAY_LADDER}
         // On a phone the document scrolls: main is neither a scroller nor a fixed height.
         mainStyle={phoneBars
@@ -238,9 +216,8 @@ function ReviewShellFrame({
       >
         {children}
       </AppShell>
-      {drawer}
       <ReviewPaletteHost projects={projects} />
-    </ShellNavigationProvider>
+    </>
   );
 }
 

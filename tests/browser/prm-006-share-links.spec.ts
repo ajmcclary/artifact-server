@@ -114,6 +114,21 @@ test.describe("Share links from Share and Settings", () => {
       const inventory = page.getByRole("table", {name: "Share links inventory"});
       await expect(inventory.getByText("Design · Agency preview", {exact: true})).toBeVisible();
       await expect(inventory.getByText("View only · Latest · Never expires · No guests yet")).toBeVisible();
+      // The last row's menu opens past the panel's clipped edge and is still fully shown and usable.
+      await inventory.getByRole("button", {name: "Actions for Agency preview"}).click();
+      const rowMenu = page.getByRole("menu", {name: "Actions for Agency preview"});
+      const revokeItem = rowMenu.getByRole("menuitem", {name: "Revoke"});
+      await expect(revokeItem).toBeVisible();
+      const panelBox = await page.locator("[data-record-panel]").filter({has: inventory}).boundingBox();
+      const menuBox = await rowMenu.boundingBox();
+      expect(menuBox !== null && panelBox !== null && menuBox.y + menuBox.height > panelBox.y + panelBox.height).toBe(true);
+      // Nothing covers the item: the topmost element at its centre is the item itself.
+      expect(await revokeItem.evaluate((item) => {
+        const box = item.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit !== null && item.contains(hit);
+      })).toBe(true);
+      await page.keyboard.press("Escape");
 
       await page.goto(`${server.server.baseUrl}${fixture.review}`);
       await page.getByRole("button", {name: "Share this version"}).first().click();

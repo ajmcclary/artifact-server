@@ -197,6 +197,14 @@ test.describe("Projects screen", () => {
       await expect(page.getByText(
         "Records Retention is archived. You can restrict it, lower roles and remove people; nothing can be opened or widened.",
       )).toBeVisible();
+      // The panel's forms keep its padding even though its member ledger runs edge to edge.
+      const accessPanel = page.locator("[data-record-panel]").filter({has: page.getByLabel("Who can open this project")});
+      const panelLeft = (await accessPanel.boundingBox())?.x ?? 0;
+      for (const label of ["Who can open this project", "Why can"]) {
+        // eslint-disable-next-line no-await-in-loop -- each field is measured in turn
+        const fieldLeft = (await page.getByLabel(label, {exact: true}).boundingBox())?.x ?? 0;
+        expect(fieldLeft - panelLeft).toBeGreaterThanOrEqual(12);
+      }
       // Raising the role is listed but cannot be chosen, and the helper says why.
       const role = page.getByLabel("Role for every member");
       await expect(role.locator("option[value=\"manager\"]")).toBeDisabled();

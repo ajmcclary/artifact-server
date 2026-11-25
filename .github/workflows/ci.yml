@@ -209,7 +209,11 @@ jobs:
 
   portable:
     name: macOS portability
-    if: inputs.tier != 'release' && inputs.runner != 'home'
+    # Disabled 2026-11-25 (ROADMAP T28): on GitHub's macos-15 runners the full suite
+    # times out in process-spawning tests on every run, while Linux, Windows and local
+    # macOS pass. Restore the condition below once T28 finds what those tests wait on:
+    #   if: inputs.tier != 'release' && inputs.runner != 'home'
+    if: false
     runs-on: macos-15
     # The full `pnpm check` took 7-8 minutes in September 2026; the suite has
     # since roughly doubled and macOS arm64 runners are capacity-constrained.

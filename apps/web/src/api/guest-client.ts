@@ -3,6 +3,7 @@ import {z} from "zod";
 import type {CommentsTransport} from "@/review/review-comments";
 
 import {commentSchemas, request, requestNoContent} from "./client";
+import {viewsOutcomeSchema} from "./views";
 
 const guestContextSchema = z.object({
   artifact: z.object({id: z.string(), name: z.string()}),
@@ -15,7 +16,7 @@ const guestContextSchema = z.object({
     permissions: z.array(z.string()),
   }),
   project: z.object({id: z.string(), name: z.string()}),
-  version: z.object({id: z.string(), number: z.number().int(), savedAt: z.string()}),
+  version: z.object({entryPath: z.string(), id: z.string(), number: z.number().int(), savedAt: z.string()}),
 });
 
 /** Where a guest is: the link, its one artifact and version, and the name they gave. */
@@ -94,6 +95,8 @@ export const guestApi = {
     "/api/v1/share/preview-lease",
     {headers: writeHeaders(), method: "POST"},
   ),
+  /** The designed views of the version this link opens; the server picks the version, never the guest. */
+  views: () => request(viewsOutcomeSchema, "/api/v1/share/views", {headers: readHeaders()}),
 };
 
 /** Comment calls bounded to the link's version; the server chooses the version, never the guest. */

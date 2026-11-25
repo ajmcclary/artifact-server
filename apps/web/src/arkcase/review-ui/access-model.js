@@ -356,3 +356,20 @@ export function commentLockReason({ access, projectName }) {
     ? 'You have ' + roleLabel(decided.role) + ' access to ' + projectName + ': you can read these conversations but not write in them.'
     : 'Your access lets you read these conversations but not write in them.';
 }
+
+/* ---- Adding an artifact grant (UX-08). Grants only add, so a grant the person's project access
+   already covers changes nothing; say that before Add rather than after. */
+/** The role that decides a person's project access: "Administrator", a role label, or null for none. */
+export function decidingRoleLabel(access) {
+  if (access.sources.some((s) => s.layer === 'administrator')) return 'Administrator';
+  const decided = access.sources.filter((s) => (s.layer === 'project_default' || s.layer === 'project_grant') && s.role).pop();
+  return decided && decided.role !== 'none' ? roleLabel(decided.role) : null;
+}
+/** One sentence on what adding `role` on this artifact would change for `name`, given their project access. */
+export function artifactGrantPreview({ name, role, projectAccess, projectName }) {
+  const held = new Set(projectAccess.permissions);
+  const adds = rolePermissions(role).filter((p) => !held.has(p));
+  const now = decidingRoleLabel(projectAccess);
+  if (!adds.length) return name + ' will stay ' + (now || 'as they are') + ' through ' + projectName + ': ' + roleLabel(role) + ' on this artifact adds nothing they lack.';
+  return name + ' will be able to ' + adds.map((p) => lowerFirst(permissionLabel(p))).join(', ') + ' on this artifact' + (now ? ', beyond ' + now + ' through ' + projectName : '') + '.';
+}

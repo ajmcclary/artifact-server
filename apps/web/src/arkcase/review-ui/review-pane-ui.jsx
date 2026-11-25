@@ -197,7 +197,7 @@ export function createReviewPaneUI(React, DS, parts) {
       </div>)}
       {section('Links', <ArtifactLinks title="Links" note={null} compact onCopy={onCopyLink} rows={[
         { label: 'Review · v' + viewVersion, url: reviewUrl, description: 'This version and page, with review and comments.' },
-        { label: 'Latest', url: latestUrl, description: 'Moves when a new version is published.' },
+        { label: 'Latest', url: latestUrl, description: 'Follows the current version.' },
         { label: 'Raw', url: snapshot.links.version, description: 'This version without review controls.' },
       ]} />)}
       {section('Hosting', rows([
@@ -302,7 +302,7 @@ export function createReviewPaneUI(React, DS, parts) {
         <ChoiceGroup label="Link opens" value={target} minColumnWidth={150} onChange={onTargetChange}
           options={[
             { id: 'version', title: 'This version · v' + viewVersion, description: 'Exact version, with review and comments' },
-            { id: 'latest', title: 'Latest', description: 'Moves when a new version is published' },
+            { id: 'latest', title: 'Latest', description: 'Follows the current version' },
           ]} />
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Input aria-label="Link" readOnly mono size="sm" icon="bi-link-45deg" title={url}
@@ -311,9 +311,12 @@ export function createReviewPaneUI(React, DS, parts) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 'var(--font-size-dense, 13px)', lineHeight: 1.45, color: 'var(--text-secondary, #5A6268)' }}>
           <i className="bi bi-people" aria-hidden="true" style={{ marginTop: 2 }} />
-          <span style={{ flex: '1 1 auto' }}>{access === 'Public link'
-            ? 'Anyone with the latest link can open it. People who can open this project can review it.'
-            : 'People who can open this project can review it.'}</span>
+          {/* Who can use the URL Copy Link copies, for the target chosen above (UX-13). */}
+          <span style={{ flex: '1 1 auto' }}>{target === 'latest'
+            ? (access === 'Public link'
+              ? 'Anyone with this link can open the current version, without an account.'
+              : 'Opens the current version for people who can open this project.')
+            : 'Opens version ' + viewVersion + ' with review controls for people who can open this project. Guests need a guest link.'}</span>
           <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 'none' }}>
             {btn({ variant: 'link', size: 'xs', onClick: onManageAccess }, 'Manage Access')}
             {onWhy ? btn({ variant: 'link', size: 'xs', onClick: onWhy }, 'Why can they?') : null}
@@ -325,10 +328,10 @@ export function createReviewPaneUI(React, DS, parts) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <i className="bi bi-people" aria-hidden="true" />
           <span style={{ display: 'flex', flex: '1 1 auto', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <span style={strongLine}>{fmt.plural(members, 'member')}</span>
-            <span style={subtle}>{'Invite someone with a link they redeem by signing in.'}</span>
+            <span style={strongLine}>{fmt.plural(members, 'server member')}</span>
+            <span style={subtle}>{'Invite someone to this Artifact Server. They join by signing in.'}</span>
           </span>
-          {btn({ variant: 'primary', outline: true, icon: 'bi-person-plus', onClick: onInvite }, 'Invite')}
+          {btn({ variant: 'primary', outline: true, icon: 'bi-person-plus', onClick: onInvite }, 'Invite to Server')}
         </div>
       </PanelSection>}
       <PanelSection tone="band" padding="12px 16px 16px">

@@ -95,7 +95,7 @@ export function Select({ label, value, defaultValue, options = [], children, siz
 
   const listed = options.length > 0 ? options.map((o, i) => {
     const opt = typeof o === 'string' ? { value: o, label: o } : o;
-    return <option key={i} value={opt.value} style={navy ? NAVY_OPTION : undefined}>{opt.label}</option>;
+    return <option key={i} value={opt.value} disabled={opt.disabled || undefined} style={navy ? NAVY_OPTION : undefined}>{opt.label}</option>;
   }) : children;
   const hasPlaceholder = placeholder != null && placeholder !== '';
   const renderedOptions = hasPlaceholder

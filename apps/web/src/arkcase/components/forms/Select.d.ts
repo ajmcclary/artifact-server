@@ -3,6 +3,8 @@ import React from 'react';
 export interface SelectOption {
   value: string;
   label: string;
+  /** A choice shown but not selectable (native `disabled`), e.g. one a rule refuses; say why in `helper`. */
+  disabled?: boolean;
 }
 export interface SelectProps {
   /** Visible label naming the Select; a node may carry an accessory after the text. */

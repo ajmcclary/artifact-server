@@ -5,7 +5,6 @@ import {
   Button,
   Checkbox,
   CountBadge,
-  IconButton,
   Panel,
   Popover,
   RailHeader,
@@ -15,7 +14,6 @@ import {
   SurfaceState,
 } from "@/arkcase";
 import {formatTimestamp} from "@/lib/presentation";
-import {useShellNavigation} from "@/shell/shell-layout-context";
 
 import {catalogWidth} from "./workspace-layout.ts";
 import type {
@@ -179,7 +177,6 @@ export function ArtifactListPanel({
   tagFilters,
   width,
 }: ArtifactListPanelProps) {
-  const navigation = useShellNavigation();
   const activeFilterCount = Number(commentFilter !== "all") + tagFilters.length;
   const filtered = query !== "" || activeFilterCount > 0;
   const tags = [...new Set([...knownTags, ...tagFilters])].toSorted();
@@ -220,16 +217,6 @@ export function ArtifactListPanel({
         {activeFilterCount === 0 ? null : <CountBadge count={activeFilterCount} tone="primary" />}
       </Button>
       <KeyboardShortcuts />
-      {navigation.collapsed && !sheet ? (
-        <IconButton
-          ariaLabel="Open navigation menu"
-          icon="bi-list"
-          onClick={navigation.openMenu}
-          size="sm"
-          title="Open navigation menu"
-          variant="light"
-        />
-      ) : null}
     </>
   );
 

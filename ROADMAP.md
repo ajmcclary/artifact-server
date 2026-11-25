@@ -343,6 +343,39 @@ deferred.
 attachment feature. LNK-001 and LNK-007 need route-level absence proof on
 deployed AWS and GCP instances.
 
+**T28 macOS portability CI job (deferred).** The PR-tier `macOS portability`
+job (`.github/workflows/ci.yml`, `portable`, macos-15, full `pnpm check` with two
+Vitest workers, 30-minute limit) failed on every run since PR #10, with about six
+timeouts in `tests/cli/mcp-onboarding.test.ts`,
+`tests/conformance/cnd-candidate-versions.test.ts` and
+`tests/conformance/skl-artifact-server-skill.test.ts`. The same tests pass on
+Linux, Windows and a local Mac, and fewer workers did not help, so it is not CPU
+contention. The job is disabled (`if: false`) as of November 25, 2026, so macOS
+portability currently has no CI coverage. Done when the cause on GitHub's macOS
+runners is found and fixed without raising timeouts to hide it, the job's
+original condition is restored, and it passes on two consecutive PRs.
+*Gates* V plus a green `macOS portability` job.
+
+Where the job can run (decided options, none chosen yet):
+- *Not the AMD cluster.* macOS may run only on Apple hardware (its licence covers
+  VMs too), and OSX-KVM/Docker-OSX on AMD needs patched kernels and breaks on
+  updates. It would also be a third environment that answers nothing about T28.
+- *Self-hosted Mac (preferred).* A Mac mini (M-series) registered with labels
+  `self-hosted, macOS, ARM64`, running each job in an ephemeral Tart VM (the
+  licence allows two macOS VMs per Mac; Anka or UTM also work). It would join
+  the existing `runner: home` tier as a macOS lane, for example
+  `runs-on: ${{ inputs.runner == 'home' && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-15' }}`.
+  Never on the owner's personal Mac or login Keychain; restrict which workflows
+  may use it, since a self-hosted runner executes PR code.
+- *Larger GitHub macOS runner.* `macos-15-xlarge` (M-series, more CPU and
+  memory) costs per minute, but one run cheaply tests whether T28 is purely a
+  resource limit of the 3-vCPU runner.
+- *Rented Macs.* AWS EC2 Mac (24-hour minimum allocation), MacStadium,
+  Scaleway, or Cirrus CI (Tart as a service).
+- *Partial cover on Linux.* Case-insensitive filesystems, BSD tool behaviour
+  and path handling can be tested on the cluster; Keychain and Darwin
+  process-spawning still need real macOS.
+
 **CLI credential storage (CLI-001, remaining).** macOS now seals credentials
 behind a short Keychain key. On October 8 a 6,038-character credential
 round-tripped through the real login Keychain by hand, and the hosted agent

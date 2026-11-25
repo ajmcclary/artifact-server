@@ -3349,6 +3349,21 @@ export function createHttpApp(
     }, 201);
   });
 
+  // The page's designed views, so a guest can choose a scenario the page itself declares.
+  app.get("/api/v1/share/views", async (context) => {
+    const authenticated = await authenticateGuest(context);
+    const saved = await runHttpApplicationEffect(
+      context,
+      dependencies,
+      GuestReviewService.use((guests) => guests.viewedVersion({
+        principal: authenticated.principal,
+        viewingVersionId: authenticated.viewingVersionId,
+      })),
+    );
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await versionDocuments.views(saved));
+  });
+
   app.get("/api/v1/share/threads", async (context) => {
     const authenticated = await authenticateGuest(context);
     const query = guestThreadPageQuerySchema.parse(context.req.query());

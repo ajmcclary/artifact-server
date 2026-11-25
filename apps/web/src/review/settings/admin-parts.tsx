@@ -354,8 +354,10 @@ export function AddRecordButton({label, onClick}: {readonly label: string; reado
 /** A row's kebab and its verbs; destructive verbs still confirm in their own dialog. */
 export function RowActionsMenu({items, label}: {readonly items: readonly MenuItem[]; readonly label: string}) {
   const [open, setOpen] = useState(false);
+  // Anchored to the kebab, the menu is placed in the viewport, so a panel's clipped edge never hides it.
+  const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
   return (
-    <span style={rowMenuAnchorStyle}>
+    <span ref={setAnchor} style={rowMenuAnchorStyle}>
       <IconButton
         ariaLabel={label}
         expanded={open}
@@ -365,7 +367,15 @@ export function RowActionsMenu({items, label}: {readonly items: readonly MenuIte
         size="sm"
         variant="ghost"
       />
-      <Menu align="end" items={[...items]} label={label} onClose={() => setOpen(false)} open={open} width={200} />
+      <Menu
+        align="end"
+        anchor={anchor}
+        items={[...items]}
+        label={label}
+        onClose={() => setOpen(false)}
+        open={open}
+        width={200}
+      />
     </span>
   );
 }

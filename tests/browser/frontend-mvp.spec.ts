@@ -1295,7 +1295,14 @@ test.describe("Artifact Server frontend MVP", () => {
       await expect(
         crossProjectRow.getByText("Public links project", {exact: true}),
       ).toBeVisible();
-      await expect(fixture.page.getByRole("button", {name: "Select all (3)"})).toBeVisible();
+      // Selection sits in the Public links panel itself: one Select split button, Visible or All.
+      const publicLinks = fixture.page.getByRole("region", {exact: true, name: "Public links"});
+      await expect(fixture.page.getByRole("region", {name: "Bulk selection"})).toHaveCount(0);
+      await expect(publicLinks.getByRole("button", {exact: true, name: "Select (3)"})).toBeVisible();
+      await publicLinks.getByRole("button", {name: "Choose which public links to select"}).click();
+      await fixture.page.getByRole("menuitem", {name: "All (3)"}).click();
+      await expect(publicLinks.getByRole("button", {name: "Make 3 private"})).toBeEnabled();
+      await publicLinks.getByRole("button", {name: "Clear selection"}).click();
       await expect(fixture.page.getByRole("table", {name: "Public links inventory"}).getByText("v1", {exact: true})).toHaveCount(3);
       await waitForSettledPaint(fixture.page);
       const accessibility = await new AxeBuilder({page: fixture.page})

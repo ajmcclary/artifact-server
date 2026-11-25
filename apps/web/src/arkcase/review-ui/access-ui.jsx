@@ -15,7 +15,10 @@ export function createAccessUI(React, DS) {
   const valueOf = (e) => (e && e.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e);
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
   const MODE_OPTIONS = [{ value: 'open', label: 'Open to all members' }, { value: 'restricted', label: 'Restricted to people listed' }];
-  const roleOptions = (from = 0) => ROLES.slice(from).map((r) => ({ value: r, label: roleLabel(r) }));
+  /* `ceiling`: on an archived project only narrowing saves, so roles above it stay listed but disabled. */
+  const roleOptions = (from = 0, ceiling = null) => ROLES.slice(from).map((r) => ({ value: r, label: roleLabel(r),
+    disabled: ceiling != null && ROLES.indexOf(r) > ROLES.indexOf(ceiling) }));
+  const NARROW_HELP = 'An archived project can only lower roles.';
 
   /* ---- Guest marks ---- */
   /** "Guest" beside a guest author, with the link they came through; never a guest name without it. */
@@ -110,16 +113,20 @@ export function createAccessUI(React, DS) {
    * is the host's override Popover for a row.
    */
   function ProjectAccessPanel({ mode, defaultRole, savedMode, onMode, onDefaultRole, dirty, onSave, rows, onRole, renderCustomize, onRemove,
-    candidates, addMember, addRole, onAddMember, onAddRole, onAdd, canManage, canAdd = canManage, notice, explainer }) {
+    candidates, addMember, addRole, onAddMember, onAddRole, onAdd, canManage, canAdd = canManage, notice, narrowFrom = null, explainer }) {
     const open = mode === 'open';
+    // Archived: opening a restricted project and raising a role are listed but cannot be chosen.
+    const modeOptions = MODE_OPTIONS.map((o) => ({ ...o, disabled: !!narrowFrom && narrowFrom.mode === 'restricted' && o.value === 'open' }));
     return <div style={stack(14)}>
       {notice ? <Alert variant="neutral" density="compact">{notice}</Alert> : null}
       <RecordPanel label="Access" subtitle="Who can open and change this project" padded
         actions={<StatusPill tone="neutral" label={savedMode === 'restricted' ? 'Restricted' : 'Open'} />}>
         <div style={stack(12)}>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-            <Select label="Who can open this project" size="sm" value={mode} options={MODE_OPTIONS} disabled={!canManage} onChange={(e) => onMode(valueOf(e))} />
-            {open ? <Select label="Role for every member" size="sm" value={defaultRole} options={roleOptions()} disabled={!canManage} onChange={(e) => onDefaultRole(valueOf(e))} />
+            <Select label="Who can open this project" size="sm" value={mode} options={modeOptions} disabled={!canManage} onChange={(e) => onMode(valueOf(e))}
+              helper={narrowFrom && narrowFrom.mode === 'restricted' ? 'An archived project cannot be opened to all members.' : undefined} />
+            {open ? <Select label="Role for every member" size="sm" value={defaultRole} options={roleOptions(0, narrowFrom && narrowFrom.mode === 'open' ? narrowFrom.defaultRole : null)}
+              disabled={!canManage} onChange={(e) => onDefaultRole(valueOf(e))} helper={narrowFrom ? NARROW_HELP : undefined} />
               : <p style={{ ...note, alignSelf: 'end' }}>{'Only the people listed with a role, and administrators, can open this project.'}</p>}
           </div>
           {canManage ? <div><Button size="sm" icon="bi-save" disabled={!dirty} onClick={onSave}>{'Save access'}</Button></div> : null}
@@ -134,7 +141,7 @@ export function createAccessUI(React, DS) {
             </span>
             <span style={{ flex: '0 1 200px', minWidth: 160 }}>{r.locked
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-dense, 13px)' }}><i className="bi bi-lock" aria-hidden="true" />{'Manager (administrator)'}</span>
-              : <Select aria-label={r.name + '’s role'} size="sm" value={r.role} options={roleOptions()} disabled={!canManage} onChange={(e) => onRole(r, valueOf(e))} />}</span>
+              : <Select aria-label={r.name + '’s role'} size="sm" value={r.role} options={roleOptions(0, narrowFrom ? r.role : null)} disabled={!canManage} onChange={(e) => onRole(r, valueOf(e))} />}</span>
             <span style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6, minWidth: 220, justifyContent: 'flex-end' }}>
               {r.overrides ? <Tag mono={false} title="Single permissions added or removed">{r.overrides}</Tag> : null}
               {!r.locked && canManage ? renderCustomize(r) : null}
@@ -210,7 +217,7 @@ export function createAccessUI(React, DS) {
 
   /* ---- Share: people and links ---- */
   /** Who has access through the project (summarized) and through artifact grants (add or remove). */
-  function SharePeople({ projectName, projectSummary, grants, candidates, addMember, addRole, onAddMember, onAddRole, onAdd, onRemove, canEdit, canAdd = canEdit, onOpenProject }) {
+  function SharePeople({ projectName, projectSummary, grants, candidates, addMember, addRole, onAddMember, onAddRole, onAdd, onRemove, canEdit, canAdd = canEdit, onOpenProject, addPreview }) {
     return <div style={stack(14)}>
       <section aria-label="Through the project" style={stack(6)}>
         <h3 style={{ margin: 0, fontSize: 'var(--font-size-dense, 13px)' }}>{'Through ' + projectName}</h3>
@@ -231,12 +238,16 @@ export function createAccessUI(React, DS) {
           <span style={{ flex: '0 1 120px' }}><Select label="Role" size="sm" value={addRole} options={roleOptions(1)} onChange={(e) => onAddRole(valueOf(e))} /></span>
           <Button size="sm" variant="secondary" outline disabled={!addMember} onClick={onAdd}>{'Add'}</Button>
         </div> : null}
+        {canEdit && canAdd && addPreview ? <p role="status" style={{ ...note, fontSize: 'var(--font-size-dense, 13px)' }}>{addPreview}</p> : null}
       </section>
     </div>;
   }
 
   /** Every link to this artifact: label, summary and its actions; Revoke confirms in place. */
+  /* Rotate and Revoke both end guests' sessions, so both confirm in place and say so first (UX-07).
+     Each row action names its link, as Copy does (UX-19). */
   function ShareLinksList({ links, ended, renderCopy, onEdit, onRotate, revoking, onRevoke, onConfirmRevoke, onCancelRevoke, onNew, notice, canCreate,
+    rotating = null, onConfirmRotate, onCancelRotate,
     createNote = 'Only administrators can create share links on this installation.' }) {
     return <div style={stack(10)}>
       {notice ? <Alert variant="success" density="compact">{notice}</Alert> : null}
@@ -246,10 +257,14 @@ export function createAccessUI(React, DS) {
           <span style={note}>{l.summary}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
             {renderCopy(l)}
-            <Button size="xs" variant="link" onClick={() => onEdit(l)}>{'Edit'}</Button>
-            <Button size="xs" variant="link" onClick={() => onRotate(l)}>{'Rotate'}</Button>
-            <Button size="xs" variant="link" danger onClick={() => onRevoke(l)}>{'Revoke'}</Button>
+            <Button size="xs" variant="link" aria-label={'Edit ' + l.label + ' link'} onClick={() => onEdit(l)}>{'Edit'}</Button>
+            <Button size="xs" variant="link" aria-label={'Rotate ' + l.label + ' link'} onClick={() => onRotate(l)}>{'Rotate'}</Button>
+            <Button size="xs" variant="link" danger aria-label={'Revoke ' + l.label + ' link'} onClick={() => onRevoke(l)}>{'Revoke'}</Button>
           </div>
+          {rotating === l.id && onConfirmRotate ? <Alert variant="warning" density="compact" action={[{ label: 'Cancel', variant: 'ghost', onClick: onCancelRotate },
+            { label: 'Rotate Link', variant: 'warning', onClick: () => onConfirmRotate(l) }]}>
+            {'“' + l.label + '” gets a new address. ' + (l.guestCount ? (l.guestCount === 1 ? 'The 1 guest using it is' : 'The ' + l.guestCount + ' guests using it are') : 'Anyone using it is')
+              + ' signed out and needs the new link. Their comments stay.'}</Alert> : null}
           {revoking === l.id ? <Alert variant="warning" density="compact" action={[{ label: 'Cancel', variant: 'ghost', onClick: onCancelRevoke },
             { label: 'Revoke Link', variant: 'danger', onClick: () => onConfirmRevoke(l) }]}>{'People with this link lose access now. Their comments stay.'}</Alert> : null}
         </li>)}</ul> : <p style={note}>{'No active share links open this artifact.'}</p>}
@@ -260,25 +275,31 @@ export function createAccessUI(React, DS) {
   }
 
   /** Create (or edit) a link: label, preset, the custom permissions, target, expiry. */
-  function ShareLinkForm({ form, onChange, version, maxDays, guestMax, error, editing, onCancel, onSubmit }) {
+  function ShareLinkForm({ form, onChange, version, maxDays, guestMax, error, editing, onCancel, onSubmit, narrowFrom = null, narrowNote }) {
     const set = (patch) => onChange({ ...form, ...patch });
     const allowsComments = guestMax.includes('comment.read') && guestMax.includes('comment.write');
-    const expiry = expiryOptions(maxDays);
+    /* Archived (`narrowFrom`, the saved link): only choices that reach no further stay available — a
+       subset of its permissions, its own target, an expiry no later than its own. */
+    const holds = (p) => !narrowFrom || narrowFrom.permissions.includes(p);
+    const widensPreset = (p) => !!narrowFrom && p.permissions && p.permissions.some((x) => !holds(x));
+    const expiry = expiryOptions(maxDays).filter((o) => !narrowFrom || narrowFrom.daysLeft == null || (o.days != null && o.days <= narrowFrom.daysLeft));
     return <div style={stack(14)}>
+      {narrowFrom && narrowNote ? <Alert variant="neutral" density="compact">{narrowNote}</Alert> : null}
       <Input label="Label" required size="sm" placeholder="For example, Client review" value={form.label} onChange={(e) => set({ label: valueOf(e) })} />
       <ChoiceGroup label="Guests can" value={form.preset} minColumnWidth={100} onChange={(id) => { if (id) set({ preset: id }); }}
-        options={SHARE_PRESETS.map((p) => ({ id: p.id, title: p.label, disabled: p.id === 'comment' && !allowsComments,
-          description: p.id === 'view' ? 'Open this page only' : p.id === 'comment' ? 'Read and write comments' : 'Choose below' }))} />
+        options={SHARE_PRESETS.map((p) => ({ id: p.id, title: p.label, disabled: (p.id === 'comment' && !allowsComments) || widensPreset(p),
+          description: widensPreset(p) ? 'Would give guests more than this link does'
+            : p.id === 'view' ? 'Open this page only' : p.id === 'comment' ? 'Read and write comments' : 'Choose below' }))} />
       {form.preset === 'custom' ? <div role="group" aria-label="Custom guest permissions" style={{ ...stack(6), paddingLeft: 12, borderLeft: '2px solid var(--list-divider, #E9ECEF)' }}>
         <Checkbox label="View this version" checked disabled />
-        <Checkbox label="Read comments" checked={form.custom.includes('comment.read')} disabled={!guestMax.includes('comment.read')}
+        <Checkbox label="Read comments" checked={form.custom.includes('comment.read')} disabled={!guestMax.includes('comment.read') || !holds('comment.read')}
           onChange={(e) => set({ custom: valueOf(e) ? form.custom.concat('comment.read') : form.custom.filter((p) => p !== 'comment.read' && p !== 'comment.write') })} />
-        <Checkbox label="Write comments" checked={form.custom.includes('comment.write')} disabled={!guestMax.includes('comment.write')}
+        <Checkbox label="Write comments" checked={form.custom.includes('comment.write')} disabled={!guestMax.includes('comment.write') || !holds('comment.write')}
           onChange={(e) => set({ custom: valueOf(e) ? form.custom.filter((p) => p !== 'comment.write').concat('comment.read', 'comment.write') : form.custom.filter((p) => p !== 'comment.write') })} />
       </div> : null}
       <ChoiceGroup label="Link opens" value={form.target} minColumnWidth={140} onChange={(id) => { if (id) set({ target: id }); }}
-        options={[{ id: 'version', title: 'This version', description: 'Version ' + version + ', even after new ones' },
-          { id: 'latest', title: 'Latest', description: 'Moves when a new version is published' }]} />
+        options={[{ id: 'version', title: 'This version', description: 'Version ' + version + ', even after new ones', disabled: !!narrowFrom && narrowFrom.target !== 'version' },
+          { id: 'latest', title: 'Latest', description: 'Follows the current version', disabled: !!narrowFrom && narrowFrom.target !== 'latest' }]} />
       <Select label="Expires" size="sm" value={form.expires} options={(editing && form.expires === 'keep' ? [{ value: 'keep', label: 'Keep ' + (form.keepLabel || 'the current expiry') }] : []).concat(expiry)}
         onChange={(e) => set({ expires: valueOf(e) })} />
       {error ? <Alert variant="danger">{error}</Alert> : null}
@@ -301,8 +322,9 @@ export function createAccessUI(React, DS) {
       </div>
     </PanelSection>;
     return <>
-      {onPeople ? band('bi-person-check', 'People', peopleLine, 'People', onPeople, 'people') : null}
-      {onLinks ? band('bi-link-45deg', linkCount ? plural(linkCount, 'share link') : 'Share links', 'People without an account review and comment through a link.', 'Manage', onLinks, 'links') : null}
+      {/* Each action names whom it reaches (UX-13): members of this project, or guests without an account. */}
+      {onPeople ? band('bi-person-check', 'People', peopleLine, 'Manage People', onPeople, 'people') : null}
+      {onLinks ? band('bi-link-45deg', linkCount ? plural(linkCount, 'guest link') : 'Guest links', 'Guests without an account open and comment through a share link.', 'Manage Guest Links', onLinks, 'links') : null}
     </>;
   }
 

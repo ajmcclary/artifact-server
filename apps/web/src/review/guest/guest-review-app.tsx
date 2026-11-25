@@ -6,7 +6,7 @@ import {
   Alert,
   CommentThread,
   type CommentThreadProps,
-  SegmentedControl,
+  IconButton,
   Select,
   SurfaceState,
   THEME_MODE_LABELS,
@@ -20,6 +20,9 @@ import {useThemeMode} from "@/theme/use-theme-mode";
 
 import {useReviewComments, type ReviewCommentSession} from "../review-comments.tsx";
 import {isVersionContentUrl} from "../version-content-url.ts";
+import {useLiveViewChannel} from "../workspace/live-view-channel.ts";
+import {ScenarioPickers} from "../workspace/scenario-pickers.tsx";
+import {ScenarioSessionProvider, useScenarioSession} from "../workspace/scenario-session.tsx";
 import {EndedLink} from "./ended-link.tsx";
 import {guestBanner, guestShellControls, sharePathOf} from "./guest-model.ts";
 import {GuestNameDialog} from "./guest-name-dialog.tsx";
@@ -36,6 +39,10 @@ const contextCheckMilliseconds = 30_000;
 const platforms = {Desktop: null, Phone: 390, Tablet: 820} as const;
 type Platform = keyof typeof platforms;
 const platformNames: readonly Platform[] = ["Desktop", "Tablet", "Phone"];
+
+// The guest reads only its own link's views; the server picks the version.
+const readGuestViews = () => guestApi.views();
+const stayOnEntry = (): void => undefined;
 
 /** Every refusal that means the link no longer admits this guest. */
 function linkEnded(error: Error | null): boolean {
@@ -123,8 +130,29 @@ interface GuestReviewProps {
   readonly onEnded: () => void;
 }
 
-function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
+/** The page's designed scenarios come through the guest's own link, for the page the link opens. */
+function GuestReview(props: GuestReviewProps) {
+  const {context} = props;
+  return (
+    <ScenarioSessionProvider
+      artifactId={context.artifact.id}
+      initialScenarioId={null}
+      onSelectPath={stayOnEntry}
+      path={context.version.entryPath}
+      projectId={context.project.id}
+      readViews={readGuestViews}
+      versionId={context.version.id}
+    >
+      <GuestReviewBody {...props} />
+    </ScenarioSessionProvider>
+  );
+}
+
+function GuestReviewBody({context, notice, onContext, onEnded}: GuestReviewProps) {
   const controls = guestShellControls(context.link.permissions);
+  const [commentsOpen, setCommentsOpen] = useState(true);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const scenario = useScenarioSession();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewFailure, setPreviewFailure] = useState<string | null>(null);
   const [platform, setPlatform] = useState<Platform>("Desktop");
@@ -194,38 +222,62 @@ function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
   }, [refreshContext]);
 
   const width = platforms[platform];
+  // A guest's preview is the live page, so only views that restore live offer their configuration.
+  const liveOrigin = previewUrl === null ? null : new URL(previewUrl).origin;
+  const documentLoaded = useLiveViewChannel({
+    active: previewUrl !== null,
+    documentKey: `${context.version.id}/${context.version.entryPath}`,
+    frame: frameRef,
+    origin: liveOrigin,
+    session: scenario,
+  });
+  const liveConfiguration = scenario.view?.interactive === true;
   return (
     <div style={shellStyle}>
       <header style={bannerStyle}>
-        <span style={bannerTextStyle}>
-          <i aria-hidden="true" className="bi bi-person" />
-          <span>{guestBanner(context.link.createdByName, context.link.expiresAt)}</span>
-        </span>
         <span style={bannerTitleStyle}>
-          <strong>{context.artifact.name}</strong>
-          <span style={subtleStyle}>Version {context.version.number}</span>
+          <strong style={titleStyle}>{context.artifact.name}</strong>
+          <span style={subtleStyle}>{`v${context.version.number}`}</span>
         </span>
-        <span style={controlsStyle}>
-          <SegmentedControl
-            label="Platform"
-            mode="radio"
-            onChange={(label) => {
-              const chosen = platformNames.find((name) => name === label);
+        <span style={bannerTextStyle} title={guestBanner(context.link.createdByName, context.link.expiresAt)}>
+          <i aria-hidden="true" className="bi bi-person" />
+          <span style={bannerNoteStyle}>{guestBanner(context.link.createdByName, context.link.expiresAt)}</span>
+        </span>
+        <span aria-label="Page configuration" role="group" style={controlsStyle}>
+          {liveConfiguration ? <ScenarioPickers session={scenario} /> : null}
+          <Select
+            aria-label="Preview size"
+            fit="selected"
+            onChange={(event) => {
+              const chosen = platformNames.find((name) => name === event.currentTarget.value);
               if (chosen !== undefined) setPlatform(chosen);
             }}
-            options={[...platformNames]}
+            options={platformNames.map((name) => ({label: name, value: name}))}
+            size="viewer"
             value={platform}
           />
           <Select
-            label="Appearance"
+            aria-label="Appearance"
+            fit="selected"
             onChange={(event) => {
               const chosen = THEME_MODES.find((mode) => mode === event.currentTarget.value);
               if (chosen !== undefined) appearance.setMode(chosen);
             }}
             options={THEME_MODES.map((mode) => ({label: THEME_MODE_LABELS[mode], value: mode}))}
-            size="sm"
+            size="viewer"
             value={appearance.mode}
           />
+          {controls.comments ? (
+            <IconButton
+              ariaLabel={commentsOpen ? "Hide comments" : "Show comments"}
+              icon="bi-chat-left-text"
+              onClick={() => setCommentsOpen((open) => !open)}
+              pressed={commentsOpen}
+              size="sm"
+              title={commentsOpen ? "Hide comments" : "Show comments"}
+              variant="ghost"
+            />
+          ) : null}
         </span>
       </header>
       {notice === null ? null : <Alert variant="info">{notice}</Alert>}
@@ -237,6 +289,8 @@ function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
             <SurfaceState loadingTitle="Opening the page" noun="page" phase="loading" />
           ) : (
             <iframe
+              onLoad={documentLoaded}
+              ref={frameRef}
               // Like the member preview: the page runs, but it cannot navigate or replace the guest's tab.
               referrerPolicy="no-referrer"
               sandbox="allow-scripts allow-same-origin"
@@ -246,7 +300,7 @@ function GuestReview({context, notice, onContext, onEnded}: GuestReviewProps) {
             />
           )}
         </main>
-        {controls.comments ? (
+        {controls.comments && commentsOpen ? (
           <GuestComments
             composer={controls.composer}
             context={context}
@@ -365,19 +419,29 @@ const shellStyle = {
   height: "100vh",
   minHeight: 0,
 } satisfies CSSProperties;
+// One compact row, like the member toolbar: what is shown, who shared it, then the configuration.
 const bannerStyle = {
   alignItems: "center",
   background: "var(--surface-card, #fff)",
   borderBottom: "1px solid var(--border-subtle, #dde1e6)",
   display: "flex",
-  flexWrap: "wrap",
-  gap: 16,
-  justifyContent: "space-between",
-  padding: "8px 16px",
+  gap: 12,
+  minHeight: 44,
+  padding: "4px 12px",
 } satisfies CSSProperties;
-const bannerTextStyle = {alignItems: "center", display: "inline-flex", fontSize: 13, gap: 8} satisfies CSSProperties;
-const bannerTitleStyle = {alignItems: "baseline", display: "inline-flex", gap: 8, minWidth: 0} satisfies CSSProperties;
-const controlsStyle = {alignItems: "center", display: "inline-flex", gap: 12} satisfies CSSProperties;
+const bannerTitleStyle = {alignItems: "baseline", display: "inline-flex", flex: "0 1 auto", gap: 6, minWidth: 0} satisfies CSSProperties;
+const titleStyle = {overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"} satisfies CSSProperties;
+const bannerTextStyle = {
+  alignItems: "center",
+  color: "var(--text-secondary)",
+  display: "inline-flex",
+  flex: "1 1 auto",
+  fontSize: 12,
+  gap: 6,
+  minWidth: 0,
+} satisfies CSSProperties;
+const bannerNoteStyle = {overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"} satisfies CSSProperties;
+const controlsStyle = {alignItems: "center", display: "inline-flex", flex: "none", gap: 6} satisfies CSSProperties;
 const subtleStyle = {color: "var(--text-secondary)", fontSize: 12} satisfies CSSProperties;
 const bodyStyle = {display: "flex", flex: "1 1 auto", minHeight: 0} satisfies CSSProperties;
 const stageStyle = {

@@ -9,6 +9,7 @@ import {
 import {Button, ConfirmDialog, Select, StatusPill} from "@/arkcase";
 import {
   AdminActions,
+  AdminInset,
   AdminNote,
   AdminPanel,
   AdminStack,
@@ -215,52 +216,57 @@ export function ProjectAccessPanel({projectId, projectName}: ProjectAccessPanelP
       padded={false}
       subtitle="Who can open and change this project"
     >
-      <AdminStack>
-        {archived ? <AdminNote>{archivedAccessNotice(projectName)}</AdminNote> : null}
-        {error === null ? null : <RequestFailure error={error} />}
-        <Select
-          disabled={pending}
-          {...(openRefused ? {helper: archivedOpenHelp} : {})}
-          label="Who can open this project"
-          onChange={(event) => setMode(event.currentTarget.value === "restricted" ? "restricted" : "open")}
-          size="sm"
-          value={mode}
-        >
-          {choiceOptions([
-            {disabled: openRefused, label: "Open to all members", value: "open"},
-            {disabled: false, label: "Restricted to people listed", value: "restricted"},
-          ])}
-        </Select>
-        {mode === "open" ? (
+      <AdminInset>
+        <AdminStack>
+          {archived ? <AdminNote>{archivedAccessNotice(projectName)}</AdminNote> : null}
+          {error === null ? null : <RequestFailure error={error} />}
           <Select
             disabled={pending}
-            {...(archived ? {helper: archivedRoleHelp} : {})}
-            label="Role for every member"
-            onChange={(event) => {
-              const role = event.currentTarget.value;
-              if (isRole(role)) setDefaultRole(role);
-            }}
+            {...(openRefused ? {helper: archivedOpenHelp} : {})}
+            label="Who can open this project"
+            onChange={(event) => setMode(event.currentTarget.value === "restricted" ? "restricted" : "open")}
             size="sm"
-            value={defaultRole}
+            value={mode}
           >
-            {choiceOptions(defaultRoleChoices)}
+            {choiceOptions([
+              {disabled: openRefused, label: "Open to all members", value: "open"},
+              {disabled: false, label: "Restricted to people listed", value: "restricted"},
+            ])}
           </Select>
-        ) : (
-          <AdminNote>Only the people listed with a role, and administrators, can open this project.</AdminNote>
-        )}
-        <AdminActions>
-          <Button
-            disabled={pending || (mode === details.access.accessMode && defaultRole === details.access.defaultMemberRole)}
-            icon="bi-save"
-            onClick={() => void saveAccess(null)}
-            size="sm"
-          >
-            {pending ? "Saving…" : "Save access"}
-          </Button>
-        </AdminActions>
-      </AdminStack>
+          {mode === "open" ? (
+            <Select
+              disabled={pending}
+              {...(archived ? {helper: archivedRoleHelp} : {})}
+              label="Role for every member"
+              onChange={(event) => {
+                const role = event.currentTarget.value;
+                if (isRole(role)) setDefaultRole(role);
+              }}
+              size="sm"
+              value={defaultRole}
+            >
+              {choiceOptions(defaultRoleChoices)}
+            </Select>
+          ) : (
+            <AdminNote>Only the people listed with a role, and administrators, can open this project.</AdminNote>
+          )}
+          <AdminActions>
+            <Button
+              disabled={pending || (mode === details.access.accessMode && defaultRole === details.access.defaultMemberRole)}
+              icon="bi-save"
+              onClick={() => void saveAccess(null)}
+              size="sm"
+            >
+              {pending ? "Saving…" : "Save access"}
+            </Button>
+          </AdminActions>
+        </AdminStack>
+      </AdminInset>
       <Ledger ariaLabel="Project members" columns={columns} rowKey={(member) => member.memberId} rows={details.members} />
-      <AccessExplainer artifactId={null} members={details.members} projectId={projectId} projectName={projectName} />
+      {/* The ledger runs edge to edge; the forms above and below it keep the panel's padding. */}
+      <AdminInset>
+        <AccessExplainer artifactId={null} members={details.members} projectId={projectId} projectName={projectName} />
+      </AdminInset>
       <ConfirmDialog
         confirmLabel="Restrict project"
         message={confirming === null ? null : restrictConfirmation(confirming)}

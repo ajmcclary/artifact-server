@@ -762,6 +762,8 @@ export interface ProjectAccessPanelProps {
   canAdd?: boolean;
   /** A neutral note above the panels, e.g. what an archived project still allows. */
   notice?: React.ReactNode;
+  /** On an archived project, the saved access: opening a restricted project and roles above the saved ones are listed but disabled, with the reason as helper text. */
+  narrowFrom?: { mode: 'open' | 'restricted'; defaultRole: ProjectRole } | null;
   explainer?: React.ReactNode;
 }
 export interface AccessPolicyScreenProps {
@@ -781,6 +783,8 @@ export interface SharePeopleProps {
   canEdit: boolean;
   /** Shows the add-person row; false on an archived project, where grants can only be removed. @default canEdit */
   canAdd?: boolean;
+  /** What Add would change, stated before it is pressed, e.g. "Rosa Santoro will stay Manager through …". */
+  addPreview?: React.ReactNode;
   /** Opens the project's Access tab, for a project manager. */
   onOpenProject?: (() => void) | null;
 }
@@ -793,13 +797,17 @@ export interface ShareLinkRecord {
 export interface ShareLinksListProps {
   /** Active links with their "{Preset} · {Target} · {Expiry} · {Guests}" summary. */
   links: Array<ShareLinkRecord & { summary: string }>;
-  ended?: string | null; notice?: string;
+  /** The result of the last action; may carry a control, e.g. Copy new link after a rotation. */
+  ended?: string | null; notice?: React.ReactNode;
   renderCopy: (link: ShareLinkRecord) => React.ReactNode;
   onEdit: (link: ShareLinkRecord) => void; onRotate: (link: ShareLinkRecord) => void;
   /** The link whose Revoke is being confirmed in place. */
   revoking: string | null;
   onRevoke: (link: ShareLinkRecord) => void; onConfirmRevoke: (link: ShareLinkRecord) => void; onCancelRevoke: () => void;
   onNew: () => void; canCreate: boolean;
+  /** The link whose Rotate is being confirmed in place; `onRotate` asks, `onConfirmRotate` rotates. Without `onConfirmRotate`, `onRotate` rotates at once. */
+  rotating?: string | null;
+  onConfirmRotate?: (link: ShareLinkRecord) => void; onCancelRotate?: () => void;
   /** Why New Link is missing when `canCreate` is false. @default "Only administrators can create share links on this installation." */
   createNote?: string;
 }
@@ -808,6 +816,10 @@ export interface ShareLinkFormProps {
   form: ShareLinkFormValue; onChange: (next: ShareLinkFormValue) => void; version: number;
   /** The policy's longest expiry in days; null offers Never. */
   maxDays: number | null; guestMax: Permission[]; error?: string; editing?: boolean; onCancel: () => void; onSubmit: () => void;
+  /** On an archived project, the saved link: choices that would reach further (a permission it lacks, the other target, a later or no expiry) are disabled or left out. `daysLeft` is null when it never expires. */
+  narrowFrom?: { permissions: Permission[]; target: 'version' | 'latest'; daysLeft: number | null } | null;
+  /** The note above the form while `narrowFrom` applies. */
+  narrowNote?: React.ReactNode;
 }
 export interface ShareAccessBandsProps { peopleLine: React.ReactNode; linkCount: number; onPeople?: () => void; onLinks?: () => void; }
 export interface ShareLinksGridProps {

@@ -48,6 +48,11 @@ test.describe("Activity", () => {
       await expect(page.getByRole("heading", {exact: true, level: 1, name: "Activity"})).toBeVisible();
       // The page header is the title alone: no projects-and-artifacts summary line.
       await expect(page.getByText(/\d+ projects? · /u)).toHaveCount(0);
+      // Activity fills the main area beside the navigation, with only its own side padding.
+      const mainWidth = await page.locator("main#ak-main").evaluate((element) => element.clientWidth);
+      const activityWidth = await page.locator("section[aria-label=\"Activity\"]").evaluate((element) => element.getBoundingClientRect().width);
+      expect(activityWidth).toBeGreaterThan(1180);
+      expect(mainWidth - activityWidth).toBeLessThanOrEqual(1);
       const today = page.getByRole("region", {name: /^Today \d{2}\/\d{2}\/\d{4}$/u});
       await expect(today.getByRole("heading", {exact: true, level: 2, name: "Today"})).toBeVisible();
       await expect(page.locator("[data-activity-feed]")).toContainText(/\d{1,2}:\d{2} (AM|PM)/u);

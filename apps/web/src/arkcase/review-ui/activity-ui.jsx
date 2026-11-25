@@ -149,7 +149,8 @@ export function createActivityUI(React, DS) {
       const comments = e.threads.map(({ thread: t }) => ({ id: t.key, author: t.author, time: bylineTime(t.atMs, e.at) || null, text: located(t), resolved: !!t.isResolved,
         replies: (t.replies || []).map((r, i) => ({ id: r.id || t.key + ':r' + i, author: r.author, time: bylineTime(r.atMs, e.at) || null, text: r.body })) }));
       /* The card's head is a smart header: at rest it shows the screen and the conversation's
-         facts; carried to the top it compacts to one line under the day cap. */
+         facts; carried to the top it compacts to one line under the day cap. Its shaded band keeps
+         side padding at every density, so the facts and Open never touch the band's edges. */
       const head = <ScrollDock top={stickyTop + capHeight} zIndex={2} surface="var(--surface-secondary, #f8f9fa)"
         style={{ borderBottom: '1px solid var(--border-color, #dee2e6)', borderRadius: `${RADIUS} ${RADIUS} 0 0` }}>
         {({ docked }) => docked
@@ -161,7 +162,7 @@ export function createActivityUI(React, DS) {
               {openLink(e)}
             </div>
           : <div data-conversation-head="rest" style={{ display: 'grid', gridTemplateColumns: thumbnails ? '168px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto',
-              alignItems: 'center', columnGap: compact ? 8 : 16, padding: compact ? '6px 0' : '12px 14px' }}>
+              alignItems: 'center', columnGap: compact ? 8 : 16, padding: compact ? '8px 12px' : '12px 14px' }}>
               {thumbnails && <ScreenThumbnail entry={e} page={renderThumbnail(e)} onOpen={onOpen} />}
               <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-dense, 13px)', fontWeight: 500, color: 'var(--text-emphasis, #374151)' }}>{folder()}{e.projectName}</span>

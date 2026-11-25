@@ -1485,6 +1485,10 @@ export function createApplicationLayer(
       try: () => adapters.repository.findVersionMetadata(projectId, artifactId, versionId),
       catch: (cause) => repositoryFailure("findVersionMetadata", cause),
     }),
+    findSavedVersion: (projectId, artifactId, versionId) => Effect.tryPromise({
+      try: () => adapters.repository.findVersionRecord(projectId, artifactId, versionId),
+      catch: (cause) => repositoryFailure("findVersionRecord", cause),
+    }),
     ids: adapters.ids,
     installationId: adapters.installationId,
     secrets: identitySecrets,

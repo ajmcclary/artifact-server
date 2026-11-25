@@ -16,7 +16,7 @@ import {
   signInAs,
   startInviteServer,
 } from "../support/invites.js";
-import {publishNew} from "../support/publishing.js";
+import {commitStagedUpload, createStagedUpload, publishNew, uploadEveryStagedFile} from "../support/publishing.js";
 
 interface GuestJar {
   readonly context: {readonly link: {readonly id: string}};
@@ -357,6 +357,65 @@ describe("guest review over HTTP", () => {
     const refused = await guest(null, null, "POST", "/api/v1/share/sessions", {token: link.token});
     expect(refused.status).toBe(429);
     expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
+  });
+
+  test("a guest reads the designed views of the exact version their link opens, and nothing else", async () => {
+    const created = await member("POST", "/api/v1/projects", {name: "Design"});
+    const projectId = z.object({project: z.object({id: z.string()})}).parse(await created.json()).project.id;
+    const encoder = new TextEncoder();
+    const views = {
+      format: "artifact-server.views",
+      version: 1,
+      views: [{
+        defaultScenarioId: "1a",
+        interactive: true,
+        label: "Builder",
+        parameters: [],
+        path: "index.html",
+        scenarios: [
+          {label: "Populated table", props: {scenario: "1a"}, scenarioId: "1a"},
+          {label: "Validation", props: {scenario: "5"}, scenarioId: "5"},
+        ],
+        sourceRef: {path: "forms/builder.dc.html"},
+        viewId: "forms/builder",
+      }],
+    };
+    const files = [
+      {bytes: encoder.encode("<!doctype html><title>Builder</title>"), mediaType: "text/html; charset=utf-8", path: "index.html"},
+      {bytes: encoder.encode(JSON.stringify(views)), mediaType: "application/json", path: "artifactserver.views.json"},
+    ];
+    const upload = await createStagedUpload(context.server, context.installation, "index.html", files, projectId);
+    await uploadEveryStagedFile(context.installation, upload.body, files);
+    const {body} = await commitStagedUpload(context.installation, upload.body, `guest-views-${randomUUID()}`, {
+      accessSetting: "account_required",
+      kind: "new_artifact",
+      name: "Builder",
+    });
+    const session = await join((await createLink(projectId, body.artifact.id, ["artifact.view"])).token);
+
+    const read = await guest(session, null, "GET", "/api/v1/share/views");
+    expect(read.status).toBe(200);
+    expect(read.headers.get("cache-control")).toBe("private, no-store");
+    const readBody: unknown = await read.json();
+    const outcome = z.object({status: z.literal("valid"), views: z.array(z.object({
+      scenarios: z.array(z.object({scenarioId: z.string()}).loose()),
+      viewId: z.string(),
+    }).loose())}).parse(readBody);
+    expect(outcome.views.map((view) => [view.viewId, view.scenarios.map((scenario) => scenario.scenarioId)]))
+      .toEqual([["forms/builder", ["1a", "5"]]]);
+
+    // Without the guest's session, or for a version the link no longer opens, nothing is read.
+    const anonymous = await guest(null, null, "GET", "/api/v1/share/views");
+    expect(errorSchema.parse(await anonymous.json()).error.code).toBe("GUEST_SESSION_REQUIRED");
+    const headers = browserMutationHeaders(context.server.baseUrl, null);
+    headers.set("Cookie", session.cookies);
+    headers.set("X-Share-Link", session.context.link.id);
+    headers.set("X-Share-Version", "ver_00000000000000000000000000");
+    const stale = await fetch(url("/api/v1/share/views"), {headers});
+    expect(errorSchema.parse(await stale.json()).error.code).toBe("GUEST_VERSION_CHANGED");
+    // A member's own credential does not open the guest route.
+    const asMember = await member("GET", "/api/v1/share/views");
+    expect(errorSchema.parse(await asMember.json()).error.code).toBe("GUEST_SESSION_REQUIRED");
   });
 
   test("an administrator lists and revokes share links across projects", async () => {
